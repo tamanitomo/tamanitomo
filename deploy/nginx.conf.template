@@ -1,0 +1,51 @@
+# Render BACKEND_TOKEN server-side; never place this file in the static web root.
+server {
+    listen 8080;
+    server_name companion.example.com;
+    root /usr/share/nginx/html;
+    client_max_body_size 32m;
+    auth_request /_companion_auth;
+    # Docker container addresses can change when Authelia is recreated.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    set $companion_auth_upstream http://Authelia:9091;
+    add_header Cache-Control "no-store" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    location = /_companion_auth {
+        internal;
+        auth_request off;
+        proxy_pass $companion_auth_upstream/api/authz/auth-request;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header X-Original-URL https://companion.example.com$request_uri;
+        proxy_set_header X-Original-Method $request_method;
+        proxy_set_header X-Forwarded-Method $request_method;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host companion.example.com;
+        proxy_set_header X-Forwarded-Uri $request_uri;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header Cookie $http_cookie;
+    }
+    location /api/ {
+        proxy_pass http://127.0.0.1:8770;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header X-Companion-Token "BACKEND_TOKEN";
+        proxy_set_header Host companion.example.com;
+        proxy_set_header Origin $http_origin;
+        proxy_set_header Cookie "";
+        proxy_buffering off;
+        proxy_read_timeout 650s;
+    }
+    location /media/ {
+        proxy_pass http://127.0.0.1:8770;
+        proxy_set_header X-Companion-Token "BACKEND_TOKEN";
+        proxy_set_header Host companion.example.com;
+        proxy_set_header Cookie "";
+        proxy_buffering off;
+    }
+    location /static/ { alias /usr/share/nginx/html/; }
+    location / { try_files $uri /index.html; }
+}

@@ -1,0 +1,20 @@
+[Unit]
+Description=Companion Kit web backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/projects/companion-kit
+ExecStart=%h/projects/companion-kit/.venv/bin/python -m kit.app.hosted
+Environment=HERMES_HOME=%h/.hermes
+Environment=COMPANION_PUBLIC_ORIGIN=https://companion.example.com
+Environment=COMPANION_BIND=127.0.0.1
+Environment=COMPANION_PORT=8770
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+
+[Install]
+WantedBy=default.target

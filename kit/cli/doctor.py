@@ -1,0 +1,212 @@
+"""doctor and repair — checking an install and retrying what did not land."""
+from __future__ import annotations
+import argparse
+import companion_config as cc
+import companion_platform as cp
+import companion_render as cr
+import datetime as dt
+import json
+import os
+import subprocess
+import sys
+from .common import script_job_names, KIT, _read_jobs, edit_count, load_manifest, mapping, print, resolve, write
+from .scaffold import SOUL_MARKER, ensure_vault_gitignore, install_hook, install_jobs, refresh_templates
+
+def _human_bytes(n):
+    for unit in ('B','KB','MB','GB'):
+        if n<1024 or unit=='GB':return f'{n:,.0f} {unit}' if unit=='B' else f'{n:.1f} {unit}'
+        n/=1024
+def job_model_drift(c,jobs,config):
+    """A job pinned to a model the profile no longer uses runs on the old one forever.
+
+    Hermes stores the pin on the job, so changing the profile model silently
+    leaves every pinned job behind. Report the difference rather than changing
+    anyone's deliberate choice — a cheap pulse on a small model is a pin worth
+    keeping, and only the human knows which is which.
+    """
+    default=((config.get('model') or {}) if isinstance(config.get('model'),dict) else {}).get('default') or ''
+    lines=[]
+    for job in sorted(jobs,key=lambda j:j.get('name') or ''):
+        pinned=job.get('model') or ''
+        if not pinned or not default or pinned==default:continue
+        lines.append(f"  models:  {job.get('name')} runs on {pinned}, not the profile model {default}")
+    if lines:
+        lines.append('           a deliberate pin — a cheap model for a frequent loop — is fine here;'
+                     ' this is a report, not a fault')
+    return lines
+def cmd_doctor(args):
+    c=resolve(args,require_config=True)
+    b=c.budgets();ok=True
+    print(f'{c.agent} ({c.profile or "root profile"}) at {c.home}')
+    print(f'  data:    {c.data}')
+    print(f'  model:   {c.context_tokens:,} tokens -> {c.tier} tier')
+    # The window is recorded once at setup. Switching models afterwards leaves
+    # every budget derived from a number that is no longer true.
+    try:
+        stored=json.loads((c.home/cc.CONFIG_NAME).read_text(encoding='utf-8'))
+        for key,now_is in (('pronoun_set',c.pronoun_set),('human_pronoun_set',c.human_pronoun_set)):
+            was=stored.get(key)
+            if isinstance(was,str) and was!=now_is and was not in cc.PRONOUNS:
+                print(f'  ! {key} was {was!r}, which this version no longer supports; reading it as '
+                      f'{now_is!r}')
+                print(f'    set it deliberately in {c.home/cc.CONFIG_NAME} and re-run repair')
+                ok=False
+    except (OSError,ValueError):pass
+    detected,how=cc.detect_context_tokens(c.home,c.hermes_root)
+    if detected!=c.context_tokens and cc.detected_for_real(how):
+        print(f'  ! the model now reports {detected:,} tokens ({how}), not the {c.context_tokens:,} '
+              f'recorded at setup')
+        print(f'    budgets are still being sized for the old number; run `companion repair` to update it')
+        ok=False
+    import yaml
+    config=yaml.safe_load((c.home/'config.yaml').read_text(encoding='utf-8')) or {}
+    model=config.get('model') or {}
+    if not isinstance(model,dict) or not model.get('default'):
+        print('  ! configure a Hermes model/provider before starting the agent');ok=False
+    if config.get('timezone')!=c.timezone:
+        print('  ! Hermes and companion timezones differ; run repair');ok=False
+    print(f'  budgets: injection {b["total"]} chars, SOUL cap {c.soul_cap:,} (warn {c.soul_warn:,})')
+    if c.soul.is_symlink() and not c.soul.exists():
+        print(f'  ! SOUL.md is a broken link -> {os.readlink(c.soul)}')
+        print('    the agent has NO identity until the vault is reachable');ok=False
+    soul=c.soul.read_text(encoding='utf-8') if c.soul.exists() else ''
+    if c.soul_in_vault:
+        print(f'  soul:    {c.canonical_soul}'+('  (linked)' if c.soul_linked else '  ! NOT linked'))
+        if not c.soul_linked:ok=False
+    if not soul:print('  ! SOUL.md missing');ok=False
+    else:
+        head=c.soul_warn-len(soul)
+        print(f'  SOUL.md: {len(soul):,} chars, {head:,} to the early-warning target')
+        if head<0:print('  ! approaching the SOUL budget; this warning alone does not mean truncation')
+        actual_cap=config.get('context_file_max_chars')
+        if not isinstance(actual_cap,(int,float)) or actual_cap<=0:actual_cap=c.soul_cap
+        if len(soul)>actual_cap:
+            print(f'  ! SOUL exceeds the configured/estimated Hermes cap of {int(actual_cap):,} chars');ok=False
+        if SOUL_MARKER not in soul:
+            print('  ! SOUL.md holds no rendered companion identity — setup found a SOUL already in '
+                  'place and left it alone')
+            print('    merge your own text with the kit scaffold: companion upgrade --soul append')
+            ok=False
+        if soul.count('COMPANION-SELF-AUTHORED:BEGIN')!=1 or soul.count('COMPANION-SELF-AUTHORED:END')!=1:
+            print('  ! no self-authored block — run: companion_self.py soul --init');ok=False
+        left=edit_count(soul)
+        if left:print(f'  ! {left} ✎ EDIT placeholders still in SOUL.md — see COMPANION-TODO.md');ok=False
+    hook=c.home/'hooks/companion-context.py'
+    if not hook.exists():print('  ! continuity hook missing');ok=False
+    else:
+        try:
+            r=subprocess.run([sys.executable,str(hook)],input='{}',capture_output=True,text=True,timeout=30,
+                             env={**os.environ,'HERMES_HOME':str(c.home),'COMPANION_HOME':str(c.home),'COMPANION_MEMORY_READ_ONLY':'1'})
+            if r.returncode:raise ValueError(f'hook exited {r.returncode}: {r.stderr[:200]}')
+            payload=json.loads(r.stdout or '{}')
+            if not isinstance(payload.get('context'),str):raise ValueError('hook context is not text')
+            n=len(payload['context'])
+            print(f'  hook:    {"ok" if n else "EMPTY"}, {n} chars'+('' if n<=b['total'] else '  ! over budget'))
+            if not n or n>b['total']:ok=False
+            approvals=c.home/'shell-hooks-allowlist.json'
+            allowed=json.loads(approvals.read_text(encoding='utf-8')).get('approvals',[]) if approvals.exists() else []
+            if not any(e.get('event')=='pre_llm_call' and e.get('command')==cp.python_command(hook) for e in allowed):
+                print('  ! hook consent missing; approve it in an interactive Hermes chat before unattended use')
+                target='' if c.is_root else f'-p {c.profile} '
+                print(f"    unattended: hermes {target}chat -q 'hello' --oneshot --accept-hooks");ok=False
+            import yaml
+            config=yaml.safe_load((c.home/'config.yaml').read_text(encoding='utf-8')) or {}
+            registered=(config.get('hooks') or {}).get('pre_llm_call') or []
+            if not any(isinstance(h,dict) and h.get('command')==cp.python_command(hook) for h in registered):
+                print('  ! continuity hook is not registered');ok=False
+        except Exception as e:
+            print(f'  ! hook failed: {e}');ok=False
+    jobs=[]
+    jp=c.home/'cron/jobs.json'
+    if jp.exists():
+        try:jobs=[j for j in json.loads(jp.read_text(encoding='utf-8')).get('jobs',[]) if j.get('name') in {cr.render(spec['name'],{'AGENT':c.agent}) for spec in load_manifest(c)['jobs']}]
+        except ValueError:pass
+    print(f'  jobs:    {len(jobs)} installed'+('' if jobs else '  ! none found'))
+    expected_names={cr.render(spec['name'],{'AGENT':c.agent}) for spec in load_manifest(c)['jobs']}
+    if len(jobs)!=len(expected_names) or {j.get('name') for j in jobs}!=expected_names:
+        print('  ! job set is incomplete or contains duplicate names');ok=False
+    pulse=next((job for job in jobs if job.get('name')==c.agent+' companion pulse'),None)
+    if not (c.life/'PRESENCE.md').exists() or (pulse and 'LIVED STATE v1:' not in pulse.get('prompt','')):
+        print('  ! lived-state instructions missing; run repair');ok=False
+    if not c.image_timeline:
+        stale=next((j for j in _read_jobs(jp).get('jobs',[]) if j.get('name')==c.agent+' image timeline' and j.get('enabled')),None)
+        if stale:print('  ! image timeline is active despite opt-out; run repair');ok=False
+    scripted=script_job_names(c)
+    for job in jobs:
+        if job.get('name') in scripted and not job.get('no_agent'):
+            print(f"  ! {job['name']} must run without a model");ok=False
+        if job.get('next_run_at'):
+            try:dt.datetime.fromisoformat(job['next_run_at'])
+            except (ValueError,TypeError):print('  ! invalid job timestamp');ok=False
+    if any(j.get('enabled') and not j.get('next_run_at') for j in jobs) or any(bool(j.get('enabled'))!=(True if j.get('name') in scripted else c.cron_active) for j in jobs):
+        print('  ! schedule state differs from setup choice, or an active job lacks next_run_at');ok=False
+    if (c.home/'companion-pending-jobs.json').exists():
+        print('  ! scheduled jobs pending; run repair');ok=False
+    if jobs and c.cron_active and not c.is_root:
+        import companion_gateway as cg
+        info=cg.status(c)
+        print('  gateway: '+info['mode']+' owner '+info['owner_home'])
+        if not info['pid_records'] or info['plan'].get('restart_required'):
+            print('  ! gateway execution unverified; run companion gateway --action status after applying routing')
+            ok=False
+    import companion_self as slf
+    try:
+        s=slf.summary(c);n=s['counts']
+        print(f"  ledgers: {n['facts']} facts, {n['preferences']} feelings, {n['open_questions']} open questions")
+    except Exception as e:print(f'  ! ledgers unreadable: {e}');ok=False
+    # Hermes refuses an add once a memory file passes its cap, and says so only at
+    # that moment. Report the pressure while there is still room to act on it.
+    try:
+        import companion_memory as mem
+        for row in mem.status(c):
+            note=f"  memory:  {row['file']} {row['chars']:,} / {row['cap']:,} characters ({row['fraction']:.0%})"
+            if row['archived_bytes']:note+=f", {row['archived_bytes']:,} archived"
+            print(note)
+            if row['over_warn']:
+                print(f"  ! {row['file']} is near the Hermes memory cap; new memories will start being refused")
+                print(f"    move the oldest out with: {cp.terminal_python_command(KIT/'kit/scripts/companion_memory.py','--home',c.home)} archive --apply")
+                ok=False
+    except Exception as e:print(f'  ! memory files unreadable: {e}');ok=False
+    # Storage that grows quietly. The two prunable directories and the episode
+    # ledger are what actually fill a disk on a long-running profile.
+    try:
+        import companion_prune as prune
+        for row in prune.survey(c):
+            print(f"  storage: {row['label']} {row['files']} files, {_human_bytes(row['bytes'])}"
+                  f" (pruned past {row['keep_days']} days by the hygiene job)")
+    except Exception as e:print(f'  ! staging directories unreadable: {e}')
+    episodes=sorted((c.life/'episodes').glob('*.jsonl')) if (c.life/'episodes').exists() else []
+    if episodes:
+        total=sum(p.stat().st_size for p in episodes)
+        print(f'  storage: episode ledger {len(episodes)} days, {_human_bytes(total)} (kept forever)')
+    for line in job_model_drift(c,jobs,config):
+        print(line)
+    if not c.cron_active:print('  routine: paused by choice; no recurring runs authorized yet')
+    print('\nOK' if ok else '\nIncomplete — see the ! lines above.')
+    return 0 if ok else 1
+def cmd_repair(args):
+    """Retry missing hooks and scheduled jobs without rewriting identity or ledgers."""
+    c=resolve(args,require_config=True);report=['Repair']
+    try:
+        stored=json.loads((c.home/cc.CONFIG_NAME).read_text(encoding='utf-8'))
+        for key,now_is in (('pronoun_set',c.pronoun_set),('human_pronoun_set',c.human_pronoun_set)):
+            was=stored.get(key)
+            if isinstance(was,str) and was!=now_is and was not in cc.PRONOUNS:
+                print(f'  ! {key} was {was!r}, which this version no longer supports; reading it as '
+                      f'{now_is!r}')
+                print(f'    set it deliberately in {c.home/cc.CONFIG_NAME} and re-run repair')
+    except (OSError,ValueError):pass
+    detected,how=cc.detect_context_tokens(c.home,c.hermes_root)
+    if detected!=c.context_tokens and cc.detected_for_real(how) and 2048<=detected<=10_000_000:
+        old=c.context_tokens
+        c=cc.dataclasses.replace(c,context_tokens=detected);c.save()
+        report.append(f'  context window {old:,} -> {detected:,} tokens ({how}); budgets resized')
+    ensure_vault_gitignore(c.vault,report)
+    m=mapping(c,{})
+    write(c.life/'PRESENCE.md',cr.render_template('PRESENCE.md.tmpl',m),overwrite=True)
+    install_hook(c,m,report);install_jobs(c,m,report)
+    mode=getattr(args,'prompts','auto')
+    if mode!='skip':refresh_templates(c,m,report,force=(mode=='force'))
+    for line in report:print(line)
+    args=argparse.Namespace(**{**vars(args),'home':c.home})
+    return cmd_doctor(args)

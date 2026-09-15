@@ -1,0 +1,117 @@
+{
+ "none": {
+  "label": "No visual identity (text only)",
+  "blurb": "Nothing visual is generated or described for rendering.",
+  "soul": "{{AGENT}} does not generate images and has no fixed visual identity. Do not invent a face, hair or build; presence is carried by voice and manner."
+ },
+ "anime-modern": {
+  "label": "Anime — modern",
+  "blurb": "Clean contemporary anime: soft shading, expressive eyes, current-era style.",
+  "soul": "Images are illustrated in a clean modern anime style — soft cel shading, expressive eyes, natural proportions. Keep the same face, hair and coloring across every image so it reads as one person."
+ },
+ "anime-soft": {
+  "label": "Anime — soft / painterly",
+  "blurb": "Warmer and looser: watercolor edges, gentle light, slice-of-life mood.",
+  "soul": "Images are illustrated in a soft painterly anime style — watercolor edges, warm ambient light, slice-of-life framing. Keep the same face, hair and coloring across every image."
+ },
+ "anime-retro": {
+  "label": "Anime — retro (90s cel)",
+  "blurb": "Hand-painted 90s look: grain, hard cel shadows, muted film palette.",
+  "soul": "Images are illustrated in a 1990s hand-painted cel style — visible grain, hard-edged shadows, a muted film palette. Keep the same face, hair and coloring across every image."
+ },
+ "semi-real": {
+  "label": "Semi-realistic illustration",
+  "blurb": "Between illustration and photo: rendered skin and light, still clearly drawn.",
+  "soul": "Images are semi-realistic illustration — rendered skin and lighting with drawn structure, not a photograph. Keep the same face, hair and coloring across every image."
+ },
+ "realistic": {
+  "label": "Photorealistic",
+  "blurb": "Photographic rendering. Requires the most care to stay consistent.",
+  "soul": "Images are photorealistic. Consistency matters more here than anywhere else: keep the same face, hair, coloring and build across every image, and describe lighting and setting concretely. Images depict an adult."
+ },
+ "watercolor": {
+  "label": "Watercolor portrait",
+  "blurb": "Transparent washes, visible paper grain, soft edges and restrained color.",
+  "soul": "Transparent washes, visible paper grain, soft edges and restrained color. Depict the same adult face, hair, coloring and build across scenes; an art style never changes identity or the selected relationship boundary."
+ },
+ "graphic-novel": {
+  "label": "Graphic novel",
+  "blurb": "Confident ink contours, selective hatching and cinematic color blocks.",
+  "soul": "Confident ink contours, selective hatching and cinematic color blocks. Depict the same adult face, hair, coloring and build across scenes; an art style never changes identity or the selected relationship boundary."
+ },
+ "gouache": {
+  "label": "Gouache illustration",
+  "blurb": "Opaque matte paint, warm shapes and tactile hand-painted texture.",
+  "soul": "Opaque matte paint, warm shapes and tactile hand-painted texture. Depict the same adult face, hair, coloring and build across scenes; an art style never changes identity or the selected relationship boundary."
+ },
+ "pencil": {
+  "label": "Graphite & charcoal",
+  "blurb": "Expressive pencil lines, charcoal shadows and the texture of drawing paper.",
+  "soul": "Expressive pencil lines, charcoal shadows and the texture of drawing paper. Depict the same adult face, hair, coloring and build across scenes; an art style never changes identity or the selected relationship boundary."
+ },
+ "editorial": {
+  "label": "Fashion editorial illustration",
+  "blurb": "Elongated but clearly adult proportions, crisp garment detail and editorial composition.",
+  "soul": "Elongated but clearly adult proportions, crisp garment detail and editorial composition. Depict the same adult face, hair, coloring and build across scenes; an art style never changes identity or the selected relationship boundary."
+ },
+ "3d-stylized": {
+  "label": "Stylized 3D",
+  "blurb": "Soft sculpted forms, expressive adult faces and physically plausible lighting.",
+  "soul": "Soft sculpted forms, expressive adult faces and physically plausible lighting. Depict the same adult face, hair, coloring and build across scenes; an art style never changes identity or the selected relationship boundary."
+ },
+ "pixel": {
+  "label": "Pixel portrait",
+  "blurb": "Deliberate pixel clusters, a limited palette and readable adult character silhouettes.",
+  "soul": "Deliberate pixel clusters, a limited palette and readable adult character silhouettes. Depict the same adult face, hair, coloring and build across scenes; an art style never changes identity or the selected relationship boundary."
+ },
+ "noir": {
+  "label": "Noir photography",
+  "blurb": "Monochrome photographic rendering, directional light and deep controlled shadows.",
+  "soul": "Monochrome photographic rendering, directional light and deep controlled shadows. Depict the same adult face, hair, coloring and build across scenes; an art style never changes identity or the selected relationship boundary."
+ },
+ "oil": {
+  "label": "Oil-painted portrait",
+  "blurb": "Layered oil paint, subtle brushwork and rich portrait lighting.",
+  "soul": "Layered oil paint, subtle brushwork and rich portrait lighting. Depict the same adult face, hair, coloring and build across scenes; an art style never changes identity or the selected relationship boundary."
+ },
+ "flat-vector": {
+  "label": "Flat vector illustration",
+  "blurb": "Clean shapes, a disciplined palette and a clear, repeatable character silhouette.",
+  "soul": "Clean shapes, a disciplined palette and a clear, repeatable character silhouette. Depict the same adult face, hair, coloring and build across scenes; an art style never changes identity or the selected relationship boundary."
+ },
+ "manga-mono": {
+  "label": "Manga — black and white",
+  "blurb": "Screentone, ink hatching and a clean monochrome page.",
+  "soul": "Images are black-and-white manga art: screentone shading, confident ink linework and expressive hatching. Depict the same adult face, hair, coloring and build across scenes; an art style never changes identity or the selected relationship boundary."
+ },
+ "storybook": {
+  "label": "Storybook illustration",
+  "blurb": "Warm children's-book charm rendered for an adult character.",
+  "soul": "Images are warm storybook illustration — soft outlines, textured washes and friendly composition, depicting an adult. Depict the same adult face, hair, coloring and build across scenes; an art style never changes identity or the selected relationship boundary."
+ },
+ "art-nouveau": {
+  "label": "Art nouveau poster",
+  "blurb": "Flowing line, ornamental borders and flat decorative color.",
+  "soul": "Images are art nouveau poster work: flowing contour lines, ornamental framing and flat decorative color. Depict the same adult face, hair, coloring and build across scenes; an art style never changes identity or the selected relationship boundary."
+ },
+ "cinematic": {
+  "label": "Cinematic film still",
+  "blurb": "Photographic, but staged and lit like a frame from a film.",
+  "soul": "Images are cinematic film stills: photographic rendering, deliberate staging, shallow depth of field and motivated lighting. Images depict an adult. Depict the same adult face, hair, coloring and build across scenes; an art style never changes identity or the selected relationship boundary."
+ },
+ "ukiyo-e": {
+  "label": "Ukiyo-e woodblock",
+  "blurb": "Woodblock print: flat color fields, key line and paper texture.",
+  "soul": "Images are ukiyo-e woodblock prints: a strong key line, flat registered color fields and visible paper grain. Depict the same adult face, hair, coloring and build across scenes; an art style never changes identity or the selected relationship boundary."
+ },
+ "comic-retro": {
+  "label": "Retro comic book",
+  "blurb": "Bold inks, halftone dots and a printed four-color palette.",
+  "soul": "Images are retro comic-book art: bold inked contours, halftone dot shading and a limited printed color palette. Depict the same adult face, hair, coloring and build across scenes; an art style never changes identity or the selected relationship boundary."
+ },
+ "unset": {
+  "label": "Decide later (leave a note to edit)",
+  "blurb": "No style chosen yet; the SOUL file carries an ✎ EDIT marker.",
+  "soul": "✎ EDIT: no image style has been chosen yet. Pick one and describe it here, or delete this section if {{AGENT}} is text-only. Until then, do not settle on a look by accident — say that the style is undecided."
+ }
+}

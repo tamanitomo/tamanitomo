@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+KIT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+if [ -x "$KIT_DIR/.venv/bin/python" ]; then
+  exec "$KIT_DIR/.venv/bin/python" "$KIT_DIR/launch.py" "$@"
+fi
+if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys;sys.exit(sys.version_info < (3,11))'; then
+  exec python3 "$KIT_DIR/launch.py" "$@"
+fi
+if ! [ -x "$KIT_DIR/.bootstrap/uv" ]; then
+  mkdir -p "$KIT_DIR/.bootstrap"
+  printf '%s\n' 'Installing a local Python bootstrap…'
+  curl -fLsS https://astral.sh/uv/install.sh -o "$KIT_DIR/.bootstrap/install-uv.sh"
+  UV_INSTALL_DIR="$KIT_DIR/.bootstrap" UV_NO_MODIFY_PATH=1 sh "$KIT_DIR/.bootstrap/install-uv.sh"
+fi
+exec "$KIT_DIR/.bootstrap/uv" run --no-project --python 3.11 "$KIT_DIR/launch.py" "$@"

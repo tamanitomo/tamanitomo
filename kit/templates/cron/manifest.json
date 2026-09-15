@@ -1,0 +1,285 @@
+{
+  "jobs": [
+    {
+      "key": "pulse",
+      "name": "{{AGENT}} companion pulse",
+      "file": "pulse.md.tmpl",
+      "expr": "*/15 * * * *",
+      "toolsets": [
+        "file",
+        "terminal"
+      ],
+      "tier": "loops",
+      "preread": true,
+      "continuity": true,
+      "monitor": true,
+      "types": [
+        "companion",
+        "colleague"
+      ]
+    },
+    {
+      "key": "autonomy",
+      "name": "{{AGENT}} autonomy loop",
+      "file": "autonomy.md.tmpl",
+      "expr": "12,42 * * * *",
+      "toolsets": [
+        "file",
+        "terminal",
+        "session_search"
+      ],
+      "tier": "loops",
+      "preread": true,
+      "continuity": true,
+      "monitor": true,
+      "types": [
+        "companion",
+        "colleague"
+      ]
+    },
+    {
+      "key": "daily",
+      "name": "{{AGENT}} daily journal and reflection",
+      "file": "daily.md.tmpl",
+      "expr": "0 4 * * *",
+      "toolsets": [
+        "file",
+        "terminal",
+        "session_search"
+      ],
+      "tier": "reflection",
+      "types": [
+        "companion",
+        "colleague"
+      ]
+    },
+    {
+      "key": "weekly",
+      "name": "{{AGENT}} weekly reflection",
+      "file": "weekly.md.tmpl",
+      "expr": "0 22 * * 0",
+      "toolsets": [
+        "file",
+        "terminal",
+        "session_search"
+      ],
+      "tier": "reflection",
+      "types": [
+        "companion",
+        "colleague"
+      ]
+    },
+    {
+      "key": "monthly",
+      "name": "{{AGENT}} monthly reflection",
+      "file": "monthly.md.tmpl",
+      "expr": "0 9 1 * *",
+      "toolsets": [
+        "file",
+        "terminal"
+      ],
+      "tier": "reflection",
+      "types": [
+        "companion",
+        "colleague"
+      ]
+    },
+    {
+      "key": "hygiene",
+      "name": "{{AGENT}} weekly hygiene",
+      "file": "hygiene.md.tmpl",
+      "expr": "30 21 * * 0",
+      "toolsets": [
+        "file",
+        "terminal"
+      ],
+      "tier": "reflection"
+    },
+    {
+      "key": "timeline",
+      "name": "{{AGENT}} image timeline",
+      "file": "timeline.md.tmpl",
+      "expr": "3-59/15 * * * *",
+      "toolsets": [
+        "file",
+        "terminal",
+        "image_gen"
+      ],
+      "optional": "image_timeline",
+      "types": [
+        "companion"
+      ]
+    },
+    {
+      "key": "timeline_cleanup",
+      "name": "{{AGENT}} image timeline cleanup",
+      "file": "timeline_cleanup.md.tmpl",
+      "expr": "8-59/15 * * * *",
+      "toolsets": [],
+      "optional": "timeline_cleanup",
+      "no_agent": true,
+      "script": {
+        "module": "companion_timeline",
+        "args": [
+          "prune"
+        ]
+      },
+      "types": [
+        "companion"
+      ]
+    },
+    {
+      "key": "present",
+      "name": "{{AGENT}} present advancer",
+      "file": "present.md.tmpl",
+      "expr": "10-59/15 * * * *",
+      "toolsets": [],
+      "no_agent": true,
+      "script": {
+        "module": "companion_presence",
+        "args": [
+          "advance"
+        ]
+      },
+      "types": [
+        "companion",
+        "colleague"
+      ]
+    },
+    {
+      "key": "watch",
+      "name": "{{AGENT}} health watch",
+      "file": "watch.md.tmpl",
+      "expr": "27 * * * *",
+      "toolsets": [],
+      "no_agent": true,
+      "script": {
+        "module": "companion_watch",
+        "args": []
+      }
+    },
+    {
+      "key": "dispatch",
+      "name": "{{AGENT}} outbox dispatcher",
+      "file": "dispatch.md.tmpl",
+      "expr": "*/5 * * * *",
+      "toolsets": [],
+      "no_agent": true,
+      "script": {
+        "module": "companion_dispatch",
+        "args": []
+      }
+    },
+    {
+      "key": "sensors",
+      "name": "{{AGENT}} senses",
+      "file": "sensors.md.tmpl",
+      "expr": "6-59/15 * * * *",
+      "toolsets": [],
+      "no_agent": true,
+      "script": {
+        "module": "companion_sensors",
+        "args": []
+      },
+      "types": [
+        "companion",
+        "colleague"
+      ]
+    },
+    {
+      "key": "wake",
+      "name": "{{AGENT}} morning",
+      "file": "wake.md.tmpl",
+      "expr": "{{WAKE_CRON}}",
+      "toolsets": [
+        "file",
+        "terminal"
+      ],
+      "tier": "loops",
+      "preread": true,
+      "continuity": true,
+      "types": [
+        "companion"
+      ]
+    },
+    {
+      "key": "winddown",
+      "name": "{{AGENT}} wind-down",
+      "file": "winddown.md.tmpl",
+      "expr": "{{WINDDOWN_CRON}}",
+      "toolsets": [
+        "file",
+        "terminal"
+      ],
+      "tier": "loops",
+      "preread": true,
+      "continuity": true,
+      "types": [
+        "companion"
+      ]
+    },
+    {
+      "key": "quiet",
+      "name": "{{AGENT}} quiet-hours drift",
+      "file": "quiet.md.tmpl",
+      "expr": "40 4 * * 1",
+      "toolsets": [],
+      "no_agent": true,
+      "script": {
+        "module": "companion_quiet",
+        "args": [
+          "--apply"
+        ]
+      },
+      "types": [
+        "companion"
+      ]
+    },
+    {
+      "key": "vault",
+      "name": "{{AGENT}} vault commit",
+      "file": "vault.md.tmpl",
+      "expr": "14,29,44,59 * * * *",
+      "toolsets": [],
+      "no_agent": true,
+      "script": {
+        "module": "companion_vault",
+        "args": [
+          "commit"
+        ]
+      }
+    },
+    {
+      "key": "window",
+      "name": "{{AGENT}} window",
+      "file": "window.md.tmpl",
+      "expr": "{{WINDOW_CRON}}",
+      "toolsets": [
+        "file",
+        "terminal",
+        "web_search"
+      ],
+      "tier": "reflection",
+      "preread": true,
+      "continuity": true
+    },
+    {
+      "key": "checkin",
+      "name": "{{AGENT}} check-in",
+      "file": "checkin.md.tmpl",
+      "expr": "5-59/10 * * * *",
+      "toolsets": [
+        "file",
+        "terminal"
+      ],
+      "tier": "loops",
+      "preread": true,
+      "monitor": true,
+      "monitor_module": "companion_checkin",
+      "types": [
+        "companion",
+        "colleague"
+      ]
+    }
+  ]
+}

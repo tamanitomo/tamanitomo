@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+"""companion — set up, adopt, inspect and remove Hermes companion agents.
+
+A thin entry point. The command itself lives in kit/cli/; see that package's
+docstring for what each module holds.
+"""
+import pathlib, sys
+
+sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]))
+from kit.cli.main import run
+
+if __name__=='__main__':
+    run()

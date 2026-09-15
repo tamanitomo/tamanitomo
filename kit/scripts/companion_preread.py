@@ -1,0 +1,121 @@
+#!/usr/bin/env python3
+"""What a scheduled job needs to know, printed before the model is asked anything.
+
+Hermes's `--script` injects this script's stdout into the job's prompt each run.
+That replaces the three or four tool calls a job used to spend reading its own
+state — which is most of what a scheduled run costs, and all of what it costs on
+a local model, where reading a 300 KB file is minutes rather than cents.
+
+Two modes:
+
+  preread      the present, the loops, the sensors, the queue. Fresh each run.
+  fingerprint  a deliberately STABLE summary of the same sources, for
+               `--monitor-script`: Hermes hashes the exact bytes and skips the
+               model run entirely when nothing has changed. No timestamps, no
+               ordering by clock, nothing that moves on its own — except one
+               coarse time bucket, so a quiet day still gets a few runs.
+"""
+from __future__ import annotations
+import argparse, datetime as dt, hashlib, json, pathlib, sys
+from zoneinfo import ZoneInfo
+sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
+import companion_config as cc
+
+# How coarse the clock is allowed to be inside a fingerprint. Six hours means an
+# utterly uneventful day still wakes the autonomy loop four times.
+BUCKET_HOURS=6
+
+def _tz(c):
+    try:return ZoneInfo(c.timezone)
+    except Exception:return ZoneInfo('UTC')
+
+def preread(c,now=None):
+    import companion_active, companion_presence
+    now=now or dt.datetime.now(_tz(c))
+    out=['[Pre-read — assembled from your own records before this run. Everything below is already',
+         ' read; do not spend tool calls fetching it again. Read a source only to go deeper.]','']
+    out.append(companion_active.build(c,now).strip())
+    out.append('')
+    import companion_journal
+    recent=companion_journal.tail(c,'autonomy',3000)
+    if recent['text']:
+        out.append('[Recent autonomy log tail, already read. Older entries remain in the file; '
+                   f'{recent["omitted_chars"]} earlier characters omitted.]')
+        out.append(recent['text'])
+    scene=companion_presence.current(c)
+    if scene:
+        out.append('[For a presence update, these are the current record token and worn wardrobe IDs; '
+                   'do not substitute clothing descriptions for IDs:]')
+        out.append(json.dumps({'previous_id':scene['id'],
+                               'outfit':[item['id'] for item in scene['state'].get('outfit',[])]}))
+    if scene and not scene['state'].get('confirmed',True):
+        anchor=companion_presence.last_confirmed(c)
+        when=anchor['recorded_at'][11:16] if anchor else 'unknown'
+        out.append(f'[The present above was carried forward by a script, not confirmed by anyone since '
+                   f'{when}. Re-establish it rather than narrating hours nobody watched.]')
+    out.append(f'[Local time: {now.isoformat(timespec="minutes")} ({c.timezone})]')
+    import companion_life, companion_lifestyle
+    out.append('[Routine anchors and interests — choose and record what happens; no automatic attendance]\n'+
+               json.dumps(companion_life.routine(c.life,now.astimezone(_tz(c)),c.agent),ensure_ascii=False))
+    lifestyle=companion_lifestyle.render(c,now,scene)
+    if lifestyle:out.append(lifestyle)
+    import companion_day
+    out.append(companion_day.GUIDANCE)
+    return '\n'.join(out)+'\n'
+
+def _digest(*parts):
+    return hashlib.sha256('␟'.join(str(p) for p in parts).encode('utf-8')).hexdigest()[:16]
+
+def fingerprint(c,now=None):
+    """Stable bytes. Identical output means Hermes suppresses the run."""
+    import companion_loops, companion_presence, companion_outreach, companion_dispatch
+    now=now or dt.datetime.now(_tz(c))
+    scene=companion_presence.current(c)
+    state=scene['state'] if scene else {}
+    asleep=companion_outreach.in_quiet_hours(c,now)
+    awake=asleep and companion_dispatch.recently_active(c,now,minutes=30)
+    if asleep and not awake:
+        return f"sleep {c.quiet_start}-{c.quiet_end} scene={_digest(state.get('activity'),state.get('location'))}\n"
+    open_loops=companion_loops.loops(c)
+    ambient=[]
+    folder=c.soul_dir/'ambient'
+    if folder.is_dir():
+        for path in sorted(folder.glob('*.md')):
+            try:ambient.append(path.name+':'+_digest(path.read_text(encoding='utf-8')))
+            except OSError:continue
+    outbox=c.life/'outbox.jsonl'
+    queued=0
+    if outbox.exists():
+        try:queued=sum(1 for line in outbox.read_text(encoding='utf-8').splitlines()
+                       if line.strip() and json.loads(line).get('status')=='queued')
+        except ValueError:queued=-1
+    bucket=now.strftime('%Y-%m-%d')+f'#{now.hour//BUCKET_HOURS}'
+    try:
+        import companion_missions
+        open_missions=[m['id'] for m in companion_missions.missions(c,'open',now)]
+    except (OSError,ValueError,ImportError):open_missions=[]
+    import companion_day
+    deadlines=[(item['id'],now>=companion_day.timestamp(item['starts_at'])-dt.timedelta(minutes=item['buffer_minutes']),
+                now>=companion_day.timestamp(item['ends_at'])) for item in state.get('commitments',[]) if item['status']=='planned']
+    rows=[f'bucket {bucket}',
+          f'day {_digest(json.dumps(state.get("next"),sort_keys=True),json.dumps(state.get("commitments",[]),sort_keys=True),deadlines)}',
+          f'missions {len(open_missions)} {_digest(*open_missions)}',
+          f"scene {_digest(state.get('activity'),state.get('location'),state.get('mood'),state.get('confirmed',True))}",
+          f'loops {len(open_loops)} {_digest(*[l["id"] for l in open_loops])}',
+          f'ambient {_digest(*ambient)}',
+          f'queued {queued}']
+    return '\n'.join(rows)+'\n'
+
+def main():
+    p=argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--home',type=pathlib.Path)
+    p.add_argument('mode',choices=['preread','fingerprint'],nargs='?',default='preread')
+    a=p.parse_args();c=cc.load(a.home)
+    sys.stdout.write(preread(c) if a.mode=='preread' else fingerprint(c))
+
+if __name__=='__main__':
+    try:main()
+    except (ValueError,OSError) as e:
+        # A pre-read that fails must not take the job down with it: the model can
+        # still read its own files, it just costs more.
+        print(f'[Pre-read unavailable: {e}. Read your state with companion_presence.py show.]')

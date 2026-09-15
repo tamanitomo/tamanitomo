@@ -1,0 +1,73 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environments & Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+.env
+.env.*
+*.env
+*.local
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Builds & Distributions
+build/
+dist/
+*.egg-info/
+*.whl
+wheels/
+
+# Companion runtime, state & local data
+companion.json
+companion-pending-jobs.json
+.creation-integrity.json
+.nsfw-revoked.json
+.permanent-friend.json
+.pending-update/
+.update-backups/
+.runtime.lock
+.bootstrap/
+.bootstrap.lock
+
+# User state directories if placed in workspace
+data/
+state/
+vault/
+sessions/
+photos/
+media/
+models/
+logs/
+*.log
+
+# Sensitive keys & credentials
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+auth.json
+
+# Editor & OS artifacts
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace

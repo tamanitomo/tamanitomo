@@ -1,0 +1,17 @@
+Create one local image-timeline glimpse for {{AGENT}} using the image provider configured in Hermes. Do not contact {{HUMAN}}.
+
+MEMORY CHECK: Run `{{MEMORY_CMD}} archive --apply` before adding memory.
+
+1. Run `{{TIMELINE_CMD}} prepare`. It enforces the opt-in, expires old timeline files, and claims this interval once. If ready is false, stop and report the reason locally. Never generate anyway or retry a claimed interval.
+2. Run `{{PORTRAIT_CMD}} prompt`. It compiles the prompt for you: the unvarying description of who
+   {{AGENT}} is, in a fixed order, followed by the scene from the recorded state, followed by the style.
+   Use its `prompt` verbatim — the wording is what makes the same person come out every time, and
+   rephrasing it in your own words is how a face drifts. Generate a fresh image from the text;
+   do not attach the stored reference portrait or reuse its pose or composition.
+   If `ready` is false, stop and
+   report the reason; do not write your own prompt instead.
+
+   For reference, the old instructions: read SOUL for visual identity and {{LIFE}}/PRESENCE.md. The returned scene is the exact outfit, setting, activity and timestamp for this image. Do not stage a new outfit or activity for the camera. Combine that saved scene with the companion's stable appearance and the returned image_style_guidance. If the companion has no fixed physical appearance, capture the room or activity details rather than inventing a different face each time. Keep private routines to room details or a genuinely recorded clothed moment.
+3. If the portrait prompt reports an `image_preset`, run `{{PORTRAIT_CMD}} generate --recorded` ONCE. This uses the user's saved Image Studio provider/workflow and recorded scene. Otherwise call Hermes's `image_generate` tool ONCE using its currently configured provider/model. Do not install providers, switch accounts, change provider configuration or call a separate paid service. Request one image. If generation is unavailable or fails, run `{{TIMELINE_CMD}} fail --id <capture_id> --reason <short reason>` and stop. A tool failure is not a successful image.
+4. Import the actual result using `{{TIMELINE_CMD}} save --id <capture_id> --source <returned local path or HTTPS image URL> --provider <actual provider/model>`. The helper validates the image, saves the original bytes with the captured scene, and updates the local gallery. It never sends a message. Do not invent a path, write a placeholder image, or claim an image was saved without a successful save result.
+5. Final output is local: capture saved or the concrete blocker. There are no image attachments or media-delivery markers in your response. Do not use send_message or the outreach helper.
