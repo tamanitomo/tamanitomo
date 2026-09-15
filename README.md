@@ -490,6 +490,25 @@ gets wrapped in a subscription.
 
 Contributions are welcome under the same terms.
 
+### What else is in here, and what it is licensed under
+
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) has the full account. The short version:
+
+- The interface icons derive from [Feather](https://feathericons.com) (MIT) and
+  [Lucide](https://lucide.dev) (ISC), reproduced with their notices. No fonts are bundled.
+- **Nothing else third-party ships in this repository.** Hermes (MIT), ComfyUI (GPL-3.0) and
+  Ollama (MIT) are fetched from their own publishers when you ask for them. Python dependencies
+  install from PyPI into a local `.venv`; release archives are source-only.
+- ComfyUI's GPL does not reach this project — the kit posts workflow JSON to its HTTP API and
+  names its node classes, which is interoperation, not derivation. Vendoring ComfyUI source into
+  the repo would change that.
+- `pyte`, which drives the embedded terminal, is LGPL-3.0. It is an unmodified pip dependency and
+  is never redistributed here. If you ever ship a bundle containing `site-packages`, read the note
+  in the notices file first.
+- **Model weights are licensed individually and that is the part that actually varies.** Many
+  Civitai models restrict commercial use or derivatives whatever licence this kit carries. The
+  downloader shows each model's permission flags before you fetch it; read the model card too.
+
 ---
 
 ## Status

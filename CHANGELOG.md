@@ -38,7 +38,15 @@ the fields in directly. Keyboard-answerable, skippable throughout.
 - Identity opened on a configuration warning above the page title. It now opens on a profile
   header — who they are, their personality, your frame, their age and timezone.
 
-**Tests.** 759 passing. New coverage for the appearance API, per-profile isolation and validation;
+**Licensing audit.** Added `THIRD-PARTY-NOTICES.md`. The interface icons derive from Feather
+(MIT) and Lucide (ISC) and were shipping without their required notices; both are now reproduced.
+Nothing else third-party is redistributed — Hermes (MIT), ComfyUI (GPL-3.0) and Ollama (MIT) are
+fetched from their publishers, and release archives stay source-only, which is what keeps the
+LGPL-3.0 `pyte` dependency an ordinary library import rather than a redistribution. The Civitai
+downloader already read each model's permission flags but never showed them; it now displays
+commercial-use, derivative, credit and relicensing terms before a download, marked when restricted.
+
+**Tests.** 760 passing. New coverage for the appearance API, per-profile isolation and validation;
 the full creation payload a browser actually sends; unknown-answer rejection; navigation/pin
 allowlist parity; and the interview's derivation, checked against the real persona and
 relationship-frame catalogs so it can never propose something the backend would refuse.

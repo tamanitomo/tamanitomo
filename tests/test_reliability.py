@@ -101,6 +101,16 @@ class ReliabilityTests(unittest.TestCase):
             self.skipTest('Node is needed for browser state regression tests')
         subprocess.run([node, str(Path(__file__).with_name('test_reliability_ui.js'))], check=True)
 
+    def test_model_licence_notice(self):
+        """Weights carry their publisher's terms, which are independent of this
+        project's licence. The downloader has to show them before fetching."""
+        import shutil
+        import subprocess
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('Node is needed for the model licence regression')
+        subprocess.run([node, str(Path(__file__).with_name('test_licence_ui.js'))], check=True)
+
     def test_creation_interview_stays_inside_the_catalogs(self):
         """The browser interview proposes a persona, a relationship frame and a
         set of answers on its own. Every one of them has to be something the

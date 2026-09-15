@@ -162,6 +162,24 @@ function buildModularWorkflowGraph(draft) {
 async function renderWorkflowCreator(container, onCreate) {
   const data = await api('/workflows');
   let config = data.settings, library = [], inspected = null;
+  /* A model's own terms travel with the weights, not with this kit. Civitai
+     publishes four permission flags per model; show them before downloading,
+     and say plainly that they summarise rather than replace the model card. */
+  const licenceNotice = (licence, page) => {
+    if (!licence) return '';
+    const rows = [['allowCommercialUse', 'Commercial use'], ['allowDerivatives', 'Derivatives'],
+                  ['allowNoCredit', 'Use without credit'], ['allowDifferentLicense', 'Relicensing']];
+    const read = v => Array.isArray(v) ? (v.length ? v.join(', ') : 'None') :
+                      v === true ? 'Allowed' : v === false ? 'Not allowed' : 'Not stated';
+    const restricted = v => v === false || (Array.isArray(v) && !v.length);
+    const strict = rows.some(([k]) => restricted(licence[k]));
+    return `<div class="card licence-note${strict ? ' is-restricted' : ''}">
+      <strong>The publisher's terms for these weights</strong>
+      <dl>${rows.map(([k, label]) => `<div><dt>${esc(label)}</dt><dd${restricted(licence[k]) ? ' class="bad"' : ''}>${esc(read(licence[k]))}</dd></div>`).join('')}</dl>
+      <p class="dim small">A summary published by Civitai, not the licence itself.${page ? ' Read the <a href="' + esc(page) + '" target="_blank" rel="noopener noreferrer">model card</a> before relying on it.' : ''} These terms bind your use of the weights regardless of Companion Kit's own licence.</p>
+    </div>`;
+  };
+
   let selectedArchKey = 'sdxl';
   let initialArch = COMFY_LITE_ARCHITECTURES[selectedArchKey];
 
@@ -496,6 +514,7 @@ async function renderWorkflowCreator(container, onCreate) {
           <label>Version<select id="wc-version">${options(d.versions.map(v => [String(v.id), v.name + ' · ' + v.base_model]), String(d.version_id))}</select></label>
           <label>Weight file<select id="wc-file">${options(d.files.map(f => [String(f.id), f.name + ' · ' + (f.size_bytes / 1024 ** 3).toFixed(2) + ' GB']), '')}</select></label>
           <p>Triggers: ${esc(d.trigger_words.join(', ') || 'None listed')}</p>
+          ${licenceNotice(d.license, d.page)}
           <button class="quiet" id="wc-download" ${d.files.length ? '' : 'disabled'}>Download selected weights</button>
         </div>
       `;
