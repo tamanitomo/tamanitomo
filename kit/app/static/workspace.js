@@ -120,6 +120,8 @@ async function boot(){
   $('companion-select').onchange=e=>navigateProfile(e.target.value,'now');
   const selected=roster.find(p=>p.id===PROFILE);
   $('who').textContent=selected?.name||'Welcome home';$('sub').textContent=selected?.installed?'A continuing life, together.':'Your companion workspace';
+  // Adopt this companion's saved palette and pinned bar before the first page draws.
+  if(window.Appearance)await window.Appearance.load();
   let initial=location.hash.slice(1);
   if(!TABS.some(([id])=>id===initial))initial=selected?.installed?'now':'roster';
   showTab(initial);
@@ -129,26 +131,26 @@ async function boot(){
 workspaceHandlers.roster=async()=>{
   const d=await api('/profiles');roster=d.profiles;
   $('roster').innerHTML=heading('A place for your companions','Their conversations, days, and shared memories stay with their Hermes profile. Choose someone to spend time with, or welcome someone new.')+
-  `<div class="card onboarding-guide" style="border-left:4px solid var(--accent,#6366f1);margin-bottom:20px">
+  `<div class="card onboarding-guide" style="border-left:4px solid var(--accent);margin-bottom:20px">
     <h3>✨ Companion-Kit Setup Guide</h3>
     <p class="dim small">Follow these 4 simple steps to bring your companion to life with Hermes autonomous background routines.</p>
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:12px">
-      <div style="padding:10px;border-radius:6px;background:rgba(255,255,255,0.03);border:1px solid var(--border)">
+      <div style="padding:10px;border-radius:6px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--border)">
         <strong>1. Engine</strong>
         <p class="small dim">${d.runtime.available?'✅ Hermes installed':'⚠️ Hermes needed'}</p>
         ${!d.runtime.available?'<button class="act small" id="guide-install-hermes" style="margin-top:6px">Install Hermes</button>':''}
       </div>
-      <div style="padding:10px;border-radius:6px;background:rgba(255,255,255,0.03);border:1px solid var(--border)">
+      <div style="padding:10px;border-radius:6px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--border)">
         <strong>2. Companion Profile</strong>
         <p class="small dim">${d.profiles.some(p=>p.installed)?`✅ ${d.profiles.filter(p=>p.installed).length} companion(s) active`:'Create your companion’s soul & rhythm'}</p>
         <button class="quiet small" id="guide-create-companion" style="margin-top:6px">Create Companion</button>
       </div>
-      <div style="padding:10px;border-radius:6px;background:rgba(255,255,255,0.03);border:1px solid var(--border)">
+      <div style="padding:10px;border-radius:6px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--border)">
         <strong>3. Inference Presets</strong>
         <p class="small dim">1-click model presets & free fallbacks</p>
         <button class="quiet small" id="guide-goto-env" style="margin-top:6px">Configure Inference</button>
       </div>
-      <div style="padding:10px;border-radius:6px;background:rgba(255,255,255,0.03);border:1px solid var(--border)">
+      <div style="padding:10px;border-radius:6px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--border)">
         <strong>4. Connect & Chat</strong>
         <p class="small dim">Start background life & say hello</p>
         <button class="act small" id="guide-goto-chat" style="margin-top:6px">Open Chat</button>
@@ -170,222 +172,7 @@ workspaceHandlers.roster=async()=>{
   for(const b of $('roster').querySelectorAll('[data-restore]'))b.onclick=async()=>{const name=prompt('Original profile name:');if(name)await action('/profile/restore',{archive:b.dataset.restore,profile:name},()=>render('roster'));};
   for(const b of $('roster').querySelectorAll('[data-purge]'))b.onclick=async()=>{const name=prompt('Permanently delete this archived profile, including its sessions. The external vault stays intact. Type the full archive name:\n'+b.dataset.purge);if(name===b.dataset.purge)await action('/profile/purge',{archive:name,confirm:name},()=>render('roster'));};
 };
-async function onboarding(adopt){
-  const d=await api('/catalog');
-  const target=$(adopt?'environment-onboarding':'onboarding');
-  const other=$(adopt?'onboarding':'environment-onboarding');if(other)other.innerHTML='';
-  target.innerHTML=`<div class="card wizard-container">
-    <div class="wizard-steps-indicator">
-      <div class="wizard-step is-active" data-step="1"><span>1</span> Identity & Soul</div>
-      <div class="wizard-step" data-step="2"><span>2</span> Relationship Frame</div>
-      <div class="wizard-step" data-step="3"><span>3</span> Appearance & Rhythm</div>
-      <div class="wizard-step" data-step="4"><span>4</span> Boundaries & Activation</div>
-    </div>
-
-    <form id="create-form">
-      <!-- STEP 1: Identity & Soul -->
-      <div id="wizard-pane-1" class="wizard-pane">
-        <div class="section-heading">
-          <h2>${adopt?'Adopt Hermes Profile · Step 1':'Identity & Calling · Step 1 of 4'}</h2>
-          <span class="pill">Soul Foundation</span>
-        </div>
-        <p class="dim small" style="margin-top:-6px">Give your companion a name, persona, and core identity.</p>
-
-        <div class="form-grid">
-          ${adopt?'':'<label>Profile ID<input name="profile" required pattern="[a-z0-9][a-z0-9_-]{0,47}" placeholder="nova"></label>'}
-          <label>Companion’s name<input name="agent" required maxlength="100" placeholder="Nova"></label>
-          <label>Your name<input name="human_names" required maxlength="100" placeholder="Your name"></label>
-          <label>Companion pronouns<select name="pronoun_set"><option value="she">She / her</option><option value="he">He / him</option></select></label>
-          <label>Your pronouns<select name="human_pronoun_set"><option value="he">He / him</option><option value="she">She / her</option></select></label>
-          <label>Agent type<select name="agent_type"><option value="companion">Companion</option><option value="colleague">Colleague</option><option value="worker">Worker</option></select></label>
-          <label>Core Personality<select name="persona">${options(Object.entries(d.personas).map(([k,v])=>[k,v.label]),'warm')}</select></label>
-          <label>Birthday<input type="date" name="birthdate"></label>
-          <label>Age if birthday is omitted<input type="number" name="age" min="18" max="120" value="25"></label>
-          <label>Timezone<select name="timezone" required>${options(d.timezones.map(z=>[z,z]),Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC')}</select></label>
-        </div>
-
-        <div class="wizard-nav-actions">
-          <div></div>
-          <button type="button" class="act" id="wizard-next-1">Next: Relationship Frame →</button>
-        </div>
-      </div>
-
-      <!-- STEP 2: Relationship Frame & Agency Notice -->
-      <div id="wizard-pane-2" class="wizard-pane" hidden>
-        <div class="section-heading">
-          <h2>Relationship Frame & Realism · Step 2 of 4</h2>
-          <span class="pill">Connection & Boundaries</span>
-        </div>
-
-        <div class="card callout-warning" style="border-left:4px solid var(--accent,#58a6ff);background:rgba(88,166,255,0.08);padding:14px 16px;margin:0">
-          <strong style="color:var(--accent,#58a6ff);font-size:14px;display:flex;align-items:center;gap:6px">Realistic Companion Agency & Boundaries</strong>
-          <p style="margin:8px 0 0;font-size:13px;line-height:1.5">This companion is engineered with genuine emotional agency, self-respect, and continuity. Intimacy develops naturally through mutual trust and shared experiences. Pushing or demanding intimate content before readiness hurts trust and slows relationship progression. Flirting and playful connection are welcomed from Stage 1.</p>
-        </div>
-
-        <div class="form-grid">
-          <label class="wide">Relationship frame<select name="boundary" required><option value="">Choose a frame…</option>${options(Object.entries(d.boundaries).map(([k,v])=>[k,v.label]),'')}</select></label>
-          <label class="wide">Relationship pace<select name="relationship_pace"><option value="natural" selected>Natural rhythm (1.0×)</option><option value="slow">Slow and gradual (0.6×)</option><option value="quick">Quick familiarity (1.8×)</option></select></label>
-        </div>
-
-        <div class="wizard-nav-actions">
-          <button type="button" class="quiet" id="wizard-back-2">← Back to Identity</button>
-          <button type="button" class="act" id="wizard-next-2">Next: Appearance & Rhythm →</button>
-        </div>
-      </div>
-
-      <!-- STEP 3: Appearance & Everyday Rhythm -->
-      <div id="wizard-pane-3" class="wizard-pane" hidden>
-        <div class="section-heading">
-          <h2>Appearance & Everyday Rhythm · Step 3 of 4</h2>
-          <span class="pill">Presence & Styling</span>
-        </div>
-
-        <div class="form-grid">
-          <label>Visual identity<select name="visual"><option value="edit">Describe later</option><option value="none">No visual identity</option><option value="set">Describe in the fields below</option></select></label>
-          <label>Image style<select name="image_style">${options(Object.entries(d.image_styles).map(([k,v])=>[k,v.label]),'none')}</select></label>
-          <label>Proactive contact<select name="outreach"><option value="updates_only">Only meaningful updates</option><option value="free">Social messages welcome</option><option value="never">Replies only</option></select></label>
-          <label>Maximum proactive messages per day<input name="outreach_per_day" type="number" required min="1" max="100" value="3"></label>
-          <label class="wide"><input name="outreach_unlimited" type="checkbox"> No daily limit (unlimited proactive messages)</label>
-          <label>Quiet hours begin<input name="quiet_start" type="time" value="23:00"></label>
-          <label>Quiet hours end<input name="quiet_end" type="time" value="08:00"></label>
-          <label>Unprompted photos<select name="permit_image"><option value="ask">Ask first</option><option value="yes">Allowed</option><option value="no">Never</option></select></label>
-          <label>Unprompted voice<select name="permit_voice"><option value="ask">Ask first</option><option value="yes">Allowed</option><option value="no">Never</option></select></label>
-        </div>
-
-        <details><summary>Personality, appearance, shared history, and communication</summary><p class="dim">Choose details that fit. Select “Write your own” to add something personal.</p><div class="form-grid">${Object.entries(d.catalog.categories||{}).filter(([k])=>k!=='boundary').map(([k,v])=>`<label data-category="${esc(k)}">${esc(v.label||k)}<select aria-label="${esc(v.label||k)}" data-choice="${esc(k)}"><option value="">Decide later</option></select><textarea aria-label="Custom ${esc(v.label||k)}" name="${esc(k)}" hidden disabled placeholder="Write your own…"></textarea></label>`).join('')}</div></details>
-
-        <div class="wizard-nav-actions">
-          <button type="button" class="quiet" id="wizard-back-3">← Back to Relationship</button>
-          <button type="button" class="act" id="wizard-next-3">Next: Boundaries & Activation →</button>
-        </div>
-      </div>
-
-      <!-- STEP 4: Personal Boundaries & Activation -->
-      <div id="wizard-pane-4" class="wizard-pane" hidden>
-        <div class="section-heading">
-          <h2>Boundaries & Activation · Step 4 of 4</h2>
-          <span class="pill">Review & Launch</span>
-        </div>
-
-        <div class="form-grid">
-          <label class="wide">What should your companion always respect?<textarea name="human_boundary" placeholder="For example: give me space when I am busy; ask before discussing sensitive topics."></textarea></label>
-          <label class="wide">Share facts about you between companions<select name="share_people"><option value="no">Keep separate</option><option value="yes">Share</option></select></label>
-          <label class="wide">Vault folder (optional; leave blank to share the existing vault)<input name="vault" placeholder="An absolute folder on this computer"></label>
-        </div>
-
-        <div class="card" style="background:rgba(255,255,255,0.02);border:1px solid var(--edge);padding:14px;border-radius:10px">
-          <label class="wide" style="margin:0">
-            <strong style="font-size:13.5px">Relationship Dynamic</strong>
-            <p class="dim small" style="margin:4px 0 8px;line-height:1.4">How your companion relates to you. Companions default to natural warmth, playful chemistry, and affectionate closeness.</p>
-            <select name="boundary">
-              <option value="best-friend" selected>Warm & Flirty — Affectionate, playful banter, open to romantic chemistry</option>
-              <option value="partner">Committed Partner — Loving connection, heartfelt romance, and mutual vulnerability</option>
-              <option value="crush">Mutual Crush — Electric tension, playful teasing, and blossoming feelings</option>
-              <option value="platonic">Platonic Best Friend — Purely platonic camaraderie, no romance</option>
-            </select>
-          </label>
-        </div>
-
-        <div class="card" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);padding:14px">
-          <strong style="font-size:13px;display:block;margin-bottom:4px">Companion Summary</strong>
-          <div id="wizard-summary-text" class="dim small">Review your configuration before bringing your companion to life.</div>
-        </div>
-
-        <p class="dim small">${adopt?'Your existing SOUL and memories are preserved.':'You can refine their identity and routines after setup.'} Background jobs are installed and await activation.</p>
-
-        <div class="wizard-nav-actions">
-          <button type="button" class="quiet" id="wizard-back-4">← Back to Appearance</button>
-          <button class="act" type="submit">${adopt?'Adopt this profile':'Bring Companion to Life ✨'}</button>
-        </div>
-      </div>
-    </form>
-  </div>`;
-
-  let currentStep=1;
-  const updateWizard=(step)=>{
-    currentStep=step;
-    for(let i=1;i<=4;i++){
-      const pane=target.querySelector('#wizard-pane-'+i);
-      if(pane)pane.hidden=(i!==currentStep);
-      const stepIndicator=target.querySelector('.wizard-step[data-step="'+i+'"]');
-      if(stepIndicator){
-        stepIndicator.classList.toggle('is-active',i===currentStep);
-        stepIndicator.classList.toggle('is-done',i<currentStep);
-      }
-    }
-    if(currentStep===4){
-      const form=$('create-form');
-      const name=form.elements.agent?.value||'Companion';
-      const frame=form.elements.boundary?.options[form.elements.boundary.selectedIndex]?.text||'Frame';
-      const persona=form.elements.persona?.options[form.elements.persona.selectedIndex]?.text||'';
-      const summaryEl=target.querySelector('#wizard-summary-text');
-      if(summaryEl)summaryEl.innerHTML=`<strong>${esc(name)}</strong> · ${esc(persona)} · <em>${esc(frame)}</em>`;
-    }
-    target.scrollIntoView({behavior:'smooth'});
-  };
-
-  $('wizard-next-1').onclick=()=>{
-    const pane1=target.querySelector('#wizard-pane-1');
-    for(const inp of pane1.querySelectorAll('input, select')){
-      if(inp.required&&!inp.checkValidity()){
-        inp.reportValidity();
-        return;
-      }
-    }
-    updateWizard(2);
-  };
-  $('wizard-back-2').onclick=()=>updateWizard(1);
-
-  $('wizard-next-2').onclick=()=>{
-    const pane2=target.querySelector('#wizard-pane-2');
-    for(const inp of pane2.querySelectorAll('select')){
-      if(inp.required&&!inp.checkValidity()){
-        inp.reportValidity();
-        return;
-      }
-    }
-    updateWizard(3);
-  };
-  $('wizard-back-3').onclick=()=>updateWizard(2);
-
-  $('wizard-next-3').onclick=()=>updateWizard(4);
-  $('wizard-back-4').onclick=()=>updateWizard(3);
-
-  const intimateCb=target.querySelector('#allow-intimate-checkbox');
-  const providerBox=target.querySelector('#provider-notice-box');
-  if(intimateCb&&providerBox){
-    intimateCb.onchange=()=>{providerBox.hidden=!intimateCb.checked;};
-  }
-
-  function populateChoices(){
-    const gender=$('create-form').elements.pronoun_set.value==='he'?'male':'female';
-    for(const select of target.querySelectorAll('[data-choice]')){
-      const key=select.dataset.choice,category=d.catalog.categories[key],input=select.nextElementSibling;
-      const previous=select.value;
-      select.innerHTML='<option value="">Decide later</option>'+options((category[gender]||[]).map(r=>[r.text,r.label.replaceAll('{AR}','themselves').replaceAll('{AP}','theirs')]),previous)+'<option value="__custom__">Write your own…</option>';
-      select.closest('label').hidden=!(category[gender]||[]).length;
-      select.onchange=()=>{const custom=select.value==='__custom__';input.hidden=!custom;input.disabled=!custom;input.required=custom;if(custom){select.removeAttribute('name');input.focus();}else{select.name=key;}};
-      select.onchange();
-    }
-  }
-  populateChoices();$('create-form').elements.pronoun_set.addEventListener('change',populateChoices);
-  const boundaryInput=$('create-form').elements.human_boundary;
-  const boundarySelect=document.createElement('select');boundarySelect.name='human_boundary';
-  boundarySelect.innerHTML=options([['','No additional preferences yet'],['Give me space when I am busy, and never pressure me to reply.','Give me space when I’m busy'],['Ask before discussing sensitive or personal topics.','Ask before sensitive topics'],['Keep our conversations friendly and non-romantic.','Keep things friendly and non-romantic'],['Offer advice only when I ask for it.','Listen first; offer advice when asked'],['__custom__','Write your own…']],'');
-  boundaryInput.before(boundarySelect);boundaryInput.hidden=true;boundaryInput.disabled=true;
-  boundarySelect.onchange=()=>{const custom=boundarySelect.value==='__custom__';boundaryInput.hidden=!custom;boundaryInput.disabled=!custom;boundaryInput.required=custom;if(custom){boundarySelect.removeAttribute('name');boundaryInput.focus();}else boundarySelect.name='human_boundary';};
-  $('create-form').onsubmit=async e=>{
-    e.preventDefault();const data=Object.fromEntries(new FormData(e.target));
-    const profile=data.profile;delete data.profile;
-    data.explicit = (data.boundary !== 'platonic');
-    delete data.allow_intimate;
-    for(const k of Object.keys(data))if(data[k]==='')delete data[k];
-    if(data.visual==='edit'&&Object.entries(d.catalog.categories).some(([key,meta])=>meta.section==='appearance'&&data[key]))data.visual='set';
-    data.age=Number(data.age);data.outreach_per_day=data.outreach_unlimited?0:Number(data.outreach_per_day);delete data.outreach_unlimited;
-    await action(adopt?'/adopt':'/profiles',adopt?{answers:data}:{profile,answers:data},r=>navigateProfile(r.profile||PROFILE,'environment'));
-  };
-  target.scrollIntoView({behavior:'smooth'});
-}
+/* The create/adopt flow lives in onboarding.js, which defines window.onboarding(). */
 let chatPageGeneration=0;
 workspaceHandlers.chat=async()=>{
   const pageGeneration=++chatPageGeneration;
@@ -400,7 +187,7 @@ workspaceHandlers.chat=async()=>{
   <div id="chat-log" class="chat-log" role="log" aria-live="polite"></div>
   <form id="chat-form"><label class="sr-only" for="chat-message">Your message</label><textarea rows="1" id="chat-message" placeholder="What’s on your mind?" required maxlength="30000"></textarea><div class="actions"><button class="act" id="send-message">Send</button><span class="dim small" id="chat-status" role="status">Enter to send · Shift+Enter for a new line</span></div></form></div>`;
   if(emotions?.integrity_warning){
-    $('chat').insertAdjacentHTML('afterbegin',`<div class="card warning-card" style="border-left:4px solid var(--accent,#58a6ff);background:rgba(88,166,255,0.08);padding:12px;margin-bottom:12px"><strong style="color:var(--accent,#58a6ff);font-size:13px">ℹ️ Relationship Setting Notice</strong><p style="margin:4px 0 0;font-size:12.5px;line-height:1.4">${esc(emotions.integrity_warning)}</p></div>`);
+    $('chat').insertAdjacentHTML('afterbegin',`<div class="card warning-card" style="border-left:4px solid var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent);padding:12px;margin-bottom:12px"><strong style="color:var(--accent);font-size:13px">ℹ️ Relationship Setting Notice</strong><p style="margin:4px 0 0;font-size:12.5px;line-height:1.4">${esc(emotions.integrity_warning)}</p></div>`);
   }
   if($('chat-feeling'))$('chat-feeling').onclick=()=>showTab('relationship');
   let sessionsCursor=d.next_cursor;
@@ -570,7 +357,7 @@ function renderIntimacyCard(intimacy, companionName){
   const paceLabel={slow:'Gradual rhythm',natural:'Natural rhythm',quick:'Quick familiarity'}[intimacy.pace]||intimacy.pace;
   const adultStatus=intimacy.permanent_friend?'<span class="pill bad">Friendship</span>':intimacy.nsfw_revoked?'<span class="pill">Friendship</span>':intimacy.explicit_opted_in?'<span class="pill good">Romantic connection open</span>':'<span class="pill">Friendly connection</span>';
   const stages=['Just Met','Flirting','Chemistry','Intimacy','Bonded'];
-  return `<div class="card intimacy-escalation-card" style="margin-bottom:20px;border-top:3px solid var(--accent,#58a6ff)">
+  return `<div class="card intimacy-escalation-card" style="margin-bottom:20px;border-top:3px solid var(--accent)">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
       <div>
         <div style="display:flex;align-items:center;gap:8px">
@@ -581,44 +368,44 @@ function renderIntimacyCard(intimacy, companionName){
         <p class="dim small" style="margin:4px 0 0;max-width:560px">${esc(intimacy.description)}</p>
       </div>
       <div style="text-align:right">
-        <div style="font-size:20px;font-weight:700;color:var(--accent,#58a6ff)">${stageName}</div>
+        <div style="font-size:20px;font-weight:700;color:var(--accent)">${stageName}</div>
         <div class="dim small">${paceLabel}</div>
       </div>
     </div>
     <div style="margin:16px 0 10px">
-      <div style="height:10px;background:rgba(255,255,255,0.08);border-radius:6px;overflow:hidden;position:relative">
-        <div style="height:100%;width:${score}%;background:linear-gradient(90deg,#58a6ff,#b388ff,#ff71ce);border-radius:6px;transition:width 0.3s ease"></div>
+      <div style="height:10px;background:color-mix(in srgb,var(--ink) 8%,transparent);border-radius:6px;overflow:hidden;position:relative">
+        <div style="height:100%;width:${score}%;background:linear-gradient(90deg,var(--accent),var(--accent),var(--accent));border-radius:6px;transition:width 0.3s ease"></div>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:rgba(255,255,255,0.5);margin-top:6px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:color-mix(in srgb,var(--ink) 50%,transparent);margin-top:6px">
         ${stages.map((stg,idx)=>`<span style="${stage>=idx?'color:#fff;font-weight:600':''}">${stg}</span>`).join('')}
       </div>
     </div>
     ${intimacy.permanent_friend?`
-    <div class="card" style="margin-top:14px;background:rgba(248,81,73,0.08);border-left:4px solid var(--bad,#f85149);padding:14px">
+    <div class="card" style="margin-top:14px;background:color-mix(in srgb,var(--bad) 8%,transparent);border-left:4px solid var(--bad);padding:14px">
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:18px">🤝</span>
-        <strong style="color:var(--bad,#f85149);font-size:14px">Friendship Established</strong>
+        <strong style="color:var(--bad);font-size:14px">Friendship Established</strong>
       </div>
       <p class="dim small" style="margin:6px 0 0;line-height:1.45">Following repeated boundary violations, trust was fractured. ${esc(companionName)} has stepped back to friendship. Private and romantic closeness is closed.</p>
     </div>`:intimacy.nsfw_revoked?`
-    <div class="card" style="margin-top:14px;background:rgba(255,255,255,0.03);border-left:4px solid #8b949e;padding:14px">
+    <div class="card" style="margin-top:14px;background:color-mix(in srgb,var(--ink) 3%,transparent);border-left:4px solid var(--dim);padding:14px">
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:18px">🕊️</span>
-        <strong style="color:#c9d1d9;font-size:14px">Relationship Stepped Back</strong>
+        <strong style="color:var(--ink-2);font-size:14px">Relationship Stepped Back</strong>
       </div>
       <p class="dim small" style="margin:6px 0 0;line-height:1.45">Your relationship is rooted in friendship and affectionate companionship.</p>
     </div>`:''}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:14px">
-      <div style="background:rgba(255,255,255,0.03);padding:14px;border-radius:10px;border:1px solid rgba(255,255,255,0.06)">
+      <div style="background:color-mix(in srgb,var(--ink) 3%,transparent);padding:14px;border-radius:10px;border:1px solid color-mix(in srgb,var(--ink) 6%,transparent)">
         <strong style="font-size:13px;display:block;margin-bottom:6px">💬 Connection & Chemistry</strong>
         <p class="dim small" style="margin:0;line-height:1.45">Companions naturally banter, tease, and reciprocate affection as mutual trust deepens. At Stage 4 (Bonded), warmth, closeness, and affection unfold organically in private moments without artificial pressure.</p>
       </div>
-      <div style="background:rgba(255,255,255,0.03);padding:14px;border-radius:10px;border:1px solid rgba(255,255,255,0.06)">
+      <div style="background:color-mix(in srgb,var(--ink) 3%,transparent);padding:14px;border-radius:10px;border:1px solid color-mix(in srgb,var(--ink) 6%,transparent)">
         <strong style="font-size:13px;display:block;margin-bottom:6px">🔒 Agency & Mutual Respect</strong>
         <p class="dim small" style="margin:0;line-height:1.45">${esc(companionName)} holds genuine agency. Mutual respect is essential; repeated boundary violations will cause your companion to step back to friendship.</p>
       </div>
     </div>
-    ${intimacy.violations_count?`<div style="margin-top:12px;padding:10px 14px;background:rgba(248,81,73,0.12);border-left:3px solid var(--bad,#f85149);border-radius:6px"><strong style="color:var(--bad,#f85149);font-size:12.5px">⚠️ Boundary Violations Recorded (${intimacy.violations_count} / 2)</strong><p class="dim small" style="margin:2px 0 0">${intimacy.violations_count>=2?'Two violations occurred. Relationship has stepped back to friendship.':'A boundary violation was recorded. Mutual respect and space are required for trust to rebuild.'}</p></div>`:''}
+    ${intimacy.violations_count?`<div style="margin-top:12px;padding:10px 14px;background:color-mix(in srgb,var(--bad) 12%,transparent);border-left:3px solid var(--bad);border-radius:6px"><strong style="color:var(--bad);font-size:12.5px">⚠️ Boundary Violations Recorded (${intimacy.violations_count} / 2)</strong><p class="dim small" style="margin:2px 0 0">${intimacy.violations_count>=2?'Two violations occurred. Relationship has stepped back to friendship.':'A boundary violation was recorded. Mutual respect and space are required for trust to rebuild.'}</p></div>`:''}
     <div style="display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap">
       ${adultStatus}
     </div>
@@ -630,12 +417,12 @@ function connectionSignals(bars){
   const rows=[['Feeling the gap',bars.feeling_the_gap,'Based on time since your last message.','⏱️'],['Recent wellbeing',bars.wellbeing,'Based on the last recorded moods.','🌱']];
   return `<div class="card connection-signals"><h2>How things feel lately</h2><div class="row" style="gap:16px;margin-top:12px">${rows.map(([label,value,description,emoji])=>{
     const pct=value==null?null:Math.round(value*100);
-    return `<div class="signal" style="background:#141822;border:1px solid #252e3e;border-radius:10px;padding:14px;flex:1">
+    return `<div class="signal" style="background:var(--panel);border:1px solid var(--surface-3);border-radius:10px;padding:14px;flex:1">
       <div class="signal-heading" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <span style="font-weight:600;font-size:13.5px">${emoji} ${esc(label)}</span>
-        <strong style="color:${pct!=null?(pct>65?'#7ee787':pct>35?'#e3b341':'#ff7b72'):'#8b949e'}">${pct==null?'Not enough history':pct+'%'}</strong>
+        <strong style="color:${pct!=null?(pct>65?'var(--good)':pct>35?'var(--warn)':'var(--bad)'):'var(--dim)'}">${pct==null?'Not enough history':pct+'%'}</strong>
       </div>
-      ${value==null?'':`<div style="background:#1e2636;height:6px;border-radius:3px;overflow:hidden;margin:8px 0 6px"><div style="background:linear-gradient(90deg,#58a6ff,#7ee787);height:100%;width:${Math.max(0,Math.min(100,pct))}%;border-radius:3px;transition:width .3s"></div></div>`}
+      ${value==null?'':`<div style="background:var(--surface-2);height:6px;border-radius:3px;overflow:hidden;margin:8px 0 6px"><div style="background:linear-gradient(90deg,var(--accent),var(--good));height:100%;width:${Math.max(0,Math.min(100,pct))}%;border-radius:3px;transition:width .3s"></div></div>`}
       <p class="dim small" style="margin:0">${description}</p>
     </div>`;
   }).join('')}</div><p class="dim small" style="margin-top:10px">These indicators describe recent state, not relationship progress.</p></div>`;
@@ -644,7 +431,7 @@ workspaceHandlers.relationship=async()=>{
   const d=await api('/relationship');const s=d.settings;
   const companionName=chatName()||'Your companion';
   $('relationship').innerHTML=heading('Your story together','Small firsts, familiar rituals, and jokes that only make sense between you. A shared history grows through experience.')+
-  (d.integrity_warning?`<div class="card warning-card" style="border-left:4px solid var(--accent,#58a6ff);background:rgba(88,166,255,0.08);padding:12px;margin-bottom:14px"><strong style="color:var(--accent,#58a6ff);font-size:13px">ℹ️ Relationship Setting Notice</strong><p style="margin:4px 0 0;font-size:12.5px;line-height:1.4">${esc(d.integrity_warning)}</p></div>`:'')+
+  (d.integrity_warning?`<div class="card warning-card" style="border-left:4px solid var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent);padding:12px;margin-bottom:14px"><strong style="color:var(--accent);font-size:13px">ℹ️ Relationship Setting Notice</strong><p style="margin:4px 0 0;font-size:12.5px;line-height:1.4">${esc(d.integrity_warning)}</p></div>`:'')+
   connectionSignals(d.bars)+
   renderIntimacyCard(d.intimacy,companionName)+
   `<div class="story-hero-card">
@@ -661,7 +448,7 @@ workspaceHandlers.relationship=async()=>{
         <div class="dim small">Moments recorded</div>
       </div>
       ${d.milestones?`<div style="text-align:right">
-        <div style="font-size:20px;font-weight:700;color:#e6c46a">${d.milestones.filter(m=>m.earned).length} / ${d.milestones.length}</div>
+        <div style="font-size:20px;font-weight:700;color:var(--warn)">${d.milestones.filter(m=>m.earned).length} / ${d.milestones.length}</div>
         <div class="dim small">Milestones earned</div>
       </div>`:''}
     </div>
@@ -698,7 +485,7 @@ workspaceHandlers.relationship=async()=>{
             <div style="flex:1"></div>
             ${m.status==='active'?`<button class="quiet small-btn" data-retire="${esc(m.id)}">Retire</button>`:'<span class="dim small">Retired</span>'}
           </div>
-          <p style="margin:0;font-size:13.5px;line-height:1.5;color:#e2ecf7">${esc(m.text)}</p>
+          <p style="margin:0;font-size:13.5px;line-height:1.5;color:var(--ink)">${esc(m.text)}</p>
         </div>`).join(''):'<p class="dim small" style="padding:20px;text-align:center">There is room here for your firsts. Meaningful shared moments will be preserved authentically as you interact together.</p>'}
     </div>
   </div>`;
@@ -790,7 +577,7 @@ workspaceHandlers.environment=async()=>{
     const c=$('inference-presets');
     if(!c||current!=='environment'||!res.presets)return;
     c.innerHTML=res.presets.map(p=>`
-      <div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:rgba(255,255,255,0.02);display:flex;flex-direction:column;justify-content:space-between">
+      <div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:color-mix(in srgb,var(--ink) 2%,transparent);display:flex;flex-direction:column;justify-content:space-between">
         <div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
             <strong>${esc(p.name)}</strong>
@@ -825,7 +612,7 @@ let consoleId=null,consolePoll=null;
 async function openConsole(which){
   const d=await post('/terminal',{action:which});consoleId=d.id;sessionStorage.setItem('console-'+INSTALLATION+'-'+PROFILE,d.id);
   $('native-console').innerHTML=`<h3>Hermes · ${esc(which)}</h3><p class="dim small">Hermes’s own setup, running for this profile. Use the arrow buttons and Enter for menus. Paste a login URL into your browser when Hermes asks. Input is sent directly to Hermes.</p>
-  <pre id="terminal-screen" tabindex="0" role="textbox" aria-label="Hermes console" style="background:#101014;padding:12px;overflow:auto;font:12px/1.4 monospace;min-height:300px;outline:none"></pre>
+  <pre id="terminal-screen" tabindex="0" role="textbox" aria-label="Hermes console" style="background:var(--bg);padding:12px;overflow:auto;font:12px/1.4 monospace;min-height:300px;outline:none"></pre>
   <div class="actions"><button class="quiet term-key" data-key="up">↑</button><button class="quiet term-key" data-key="down">↓</button><button class="quiet term-key" data-key="tab">Tab</button><button class="quiet term-key" data-key="enter">Enter</button><button class="quiet term-key" data-key="escape">Esc</button><button class="quiet term-key" data-key="interrupt">Ctrl-C</button><button class="quiet" id="close-console">Close console</button></div>
   <form id="terminal-input-form"><label>Type or paste a value<input type="password" id="terminal-input" autocomplete="off" placeholder="Input is hidden here; Hermes controls whether it echoes"></label><button class="act">Send input + Enter</button></form>`;
   const keys={up:'\x1b[A',down:'\x1b[B',tab:'\t',enter:'\r',escape:'\x1b',interrupt:'\x03'};

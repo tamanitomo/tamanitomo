@@ -1,10 +1,20 @@
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Companion · Your shared world</title>
 <link rel="stylesheet" href="/static/product.css">
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<script>
+/* Paint the saved palette before the first render, so the workspace never
+   flashes the default theme on the way to the chosen one. */
+(function(){var r=document.documentElement;try{
+  var s=JSON.parse(localStorage.getItem('companion-appearance')||'{}');
+  var t=s.follow_system?(matchMedia('(prefers-color-scheme: dark)').matches?s.dark_theme:s.light_theme):s.theme;
+  r.dataset.theme=t||'midnight';
+  if(s.accent)r.style.setProperty('--accent',s.accent);
+}catch(e){r.dataset.theme='midnight';}})();
+</script>
 
 <header>
   <div class="brand"><span class="brand-mark">c</span> companion<span class="dim small">kit</span></div>
@@ -94,10 +104,12 @@
   <section id="settings" hidden></section>
   <section id="identity" hidden></section>
   <section id="health" hidden></section>
+  <section id="more" hidden></section>
 </main>
+<nav id="tabbar" class="tabbar" aria-label="Primary"></nav>
 
 <script>
-const TABS=[['now','Home'],['chat','Conversation'],['timeline','Timeline'],['photos','Photos & albums'],['journals','Journal'],['creations','Creations'],['relationship','Together'],['loops','Plans & activities'],['knows','Memory'],['vault','Vault'],['identity','Identity'],['settings','Preferences'],['environment','Hermes settings'],['health','Jobs & health'],['roster','Companions']];
+const TABS=[['now','Home'],['chat','Conversation'],['timeline','Timeline'],['photos','Photos & albums'],['journals','Journal'],['creations','Creations'],['relationship','Together'],['loops','Plans & activities'],['knows','Memory'],['vault','Vault'],['identity','Identity'],['settings','Preferences'],['environment','Hermes settings'],['health','Jobs & health'],['roster','Companions'],['more','More']];
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const params=new URLSearchParams(location.search);
@@ -467,7 +479,7 @@ async function renderSettings(){
     <p class="dim">Passive contextual inputs that help your companion stay grounded in reality without requiring explicit messages.</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:14px">
       ${Object.entries(s.available_sensors).map(([k,blurb])=>`
-        <label style="background:#151922;border:1px solid #28303f;border-radius:8px;padding:12px 14px;display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer">
+        <label style="background:var(--panel);border:1px solid var(--edge);border-radius:8px;padding:12px 14px;display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer">
           <input type="checkbox" data-sensor="${k}" ${s.sensors.includes(k)?'checked':''} style="width:auto;margin-top:3px">
           <div>
             <strong style="color:var(--ink);display:block;margin-bottom:2px">${k}</strong>
@@ -483,7 +495,7 @@ async function renderSettings(){
     
     <h3 style="margin-top:20px;font-size:15px">Connection Endpoints</h3>
     <div id="network-endpoints-list" style="margin-top:10px;display:flex;flex-direction:column;gap:10px">
-      <div style="background:#151922;border:1px solid #28303f;border-radius:10px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div style="background:var(--panel);border:1px solid var(--edge);border-radius:10px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
         <div>
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
             <strong style="color:var(--ink)">On-Device (Localhost)</strong>
@@ -495,7 +507,7 @@ async function renderSettings(){
         <button class="quiet" type="button" id="copy-localhost-btn">Copy</button>
       </div>
 
-      <div id="net-lan-container" style="background:#151922;border:1px solid #28303f;border-radius:10px;padding:14px 16px">
+      <div id="net-lan-container" style="background:var(--panel);border:1px solid var(--edge);border-radius:10px;padding:14px 16px">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px">
           <div style="display:flex;align-items:center;gap:8px">
             <strong style="color:var(--ink)">Local Wi-Fi Network (LAN)</strong>
@@ -541,7 +553,7 @@ async function renderSettings(){
     if(lanList){
       if(net.lan_urls&&net.lan_urls.length){
         lanList.innerHTML=net.lan_urls.map(url=>`
-          <div style="display:flex;justify-content:space-between;align-items:center;background:#0d1117;padding:8px 12px;border-radius:6px;border:1px solid #21262d">
+          <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);padding:8px 12px;border-radius:6px;border:1px solid var(--surface-2)">
             <code style="color:var(--accent);font-size:13px">${esc(url)}</code>
             <button class="quiet" type="button" style="padding:4px 10px;font-size:12px" data-copy-lan="${esc(url)}">Copy</button>
           </div>
@@ -684,19 +696,61 @@ function wireLikeness(){
 
 async function renderIdentity(){
   const [d,p]=await Promise.all([api('/identity'),api('/portrait')]);
-  $('identity').innerHTML=(d.portrait&&!d.portrait.ready?`<div class="card"><h2>Photo setup needs attention</h2><p>${esc(d.portrait.reason)}</p><p>Use the visual creator or edit your appearance below. For an older document, restore missing identity sections first.</p></div>`:'')+likenessCard(p)+d.sections.map(s=>`
-    <div class="card"><h2>${esc(s.name)} ${s.locked?'<span class="pill">locked to her</span>':''}</h2>
-    <textarea data-section="${esc(s.name)}">${esc(s.body)}</textarea>
-    <button class="quiet" data-save="${esc(s.name)}">Save this section</button>
-    <span class="dim" data-msg="${esc(s.name)}"></span></div>`).join('')
-    +`<p class="dim">"Locked" means she cannot rewrite it. You can — it is your companion. Every save keeps a backup of the whole file.</p>`;
+  const who=d.profile||{};
+  const SECTION_TITLE={core:'Who they are',relationship:'The two of you',appearance:'How they look',
+    visual:'Visual presence',emotion:'How they feel things',voice:'How they speak',
+    boundaries:'What they will not do',continuity:'Continuity'};
+  const SECTION_NOTE={core:'The person underneath everything else.',
+    relationship:'How you know each other, and how that is written.',
+    appearance:'Concrete details. Vagueness here produces a different person in every image.',
+    visual:'Whether they have a face at all, and what carries their presence if not.',
+    emotion:'Their emotional range and what moves it.',
+    voice:'Sentence length, punctuation, the shape of how they talk.',
+    boundaries:'Lines they hold regardless of how the conversation goes.',
+    continuity:'What persists between conversations.'};
+  const pronoun=who.pronoun_set==='he'?'He / him':'She / her';
+  const facts=[
+    who.persona_label&&['Personality',who.persona_label,who.persona_blurb],
+    who.boundary_label&&['Between you',who.boundary_label,''],
+    ['Pronouns',pronoun,''],
+    [who.birthdate?'Born':'Age',who.birthdate||(who.age+' years old'),who.birthdate?who.age+' years old':'No birthday set'],
+    ['Kind of agent',(who.agent_type||'companion').replace(/^./,c=>c.toUpperCase()),''],
+    ['Their timezone',who.timezone||'—','']
+  ].filter(Boolean);
+  const hero=`<section class="identity-hero">
+    <div class="identity-avatar" aria-hidden="true">${esc((who.agent||'?').slice(0,1))}</div>
+    <div class="identity-hero-copy">
+      <span class="eyebrow">${esc(who.human?who.human+'\u2019s companion':'Companion')}</span>
+      <h2>${esc(who.agent||'Your companion')}</h2>
+      ${who.persona_blurb?`<p>${esc(who.persona_blurb)}</p>`:''}
+    </div>
+    <dl class="identity-facts">${facts.map(([k,v,note])=>
+      `<div><dt>${esc(k)}</dt><dd>${esc(v)}${note?`<small>${esc(note)}</small>`:''}</dd></div>`).join('')}</dl>
+  </section>`;
+  const warn=d.portrait&&!d.portrait.ready
+    ? `<div class="notice-strip"><p><strong>Images need an appearance first.</strong> ${esc(d.portrait.reason)}</p></div>`:'';
+  $('identity').innerHTML=hero+warn+likenessCard(p)+
+    `<div class="section-heading"><h2>Their documents</h2><span class="dim small">Plain text, exactly as Hermes reads it.</span></div>`+
+    d.sections.map(s=>`
+    <div class="card identity-section">
+      <div class="identity-section-head">
+        <div><h3>${esc(SECTION_TITLE[s.name]||s.name)} ${s.locked?'<span class="pill">theirs to write</span>':''}</h3>
+        ${SECTION_NOTE[s.name]?`<p class="dim small">${esc(SECTION_NOTE[s.name])}</p>`:''}</div>
+        <code class="section-key">${esc(s.name)}</code>
+      </div>
+      <textarea data-section="${esc(s.name)}">${esc(s.body)}</textarea>
+      <div class="identity-section-actions">
+        <button class="quiet" data-save="${esc(s.name)}">Save this section</button>
+        <span class="dim small" data-msg="${esc(s.name)}"></span>
+      </div></div>`).join('')
+    +`<p class="dim small">\u201cTheirs to write\u201d means they can change it themselves. You can too \u2014 it is your companion. Every save keeps a backup of the whole file.</p>`;
   wireLikeness();
   for(const b of $('identity').querySelectorAll('[data-save]')){
     b.onclick=async()=>{
       const name=b.dataset.save;
       const body=$('identity').querySelector(`[data-section="${name}"]`).value;
       const msg=$('identity').querySelector(`[data-msg="${name}"]`);
-      try{await api('/identity/'+name,{method:'POST',body:JSON.stringify({body})});clearEditorDirty('identity-'+name);msg.textContent='saved';}
+      try{await api('/identity/'+name,{method:'POST',body:JSON.stringify({body})});clearEditorDirty('identity-'+name);msg.textContent='Saved';}
       catch(e){msg.innerHTML=`<span class="bad">${esc(e.message)}</span>`;}
     };}
 }
@@ -726,10 +780,12 @@ async function renderHealth(){
 
 setInterval(()=>{if(current==='now'&&!$('product-dialog').open)render('now').catch(()=>{});},30000);
 </script>
+<script src="/static/appearance.js"></script>
 <script src="/static/editing.js"></script>
 <script src="/static/feelings.js"></script>
 <script src="/static/workspace.js"></script>
 <script src="/static/product.js"></script>
+<script src="/static/onboarding.js"></script>
 <script src="/static/workflows.js"></script>
 <script src="/static/studios.js"></script>
 <script src="/static/voice-chat.js"></script>

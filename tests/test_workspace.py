@@ -286,6 +286,86 @@ class WorkspaceTests(unittest.TestCase):
         self.assertTrue(home.exists())
         self.assertEqual((self.vault/'agents/mira/soul/SOUL.md').read_bytes(),before)
 
+    def test_create_accepts_the_full_payload_the_web_wizard_sends(self):
+        """The browser wizard submits every answer it collected, not a minimal
+        subset. An answer key the CLI does not know is rejected outright, so a
+        creation path that works only for a trimmed payload works for nobody."""
+        answers={'agent':'Wren','human_names':'Alex','pronoun_set':'she','human_pronoun_set':'he',
+                 'timezone':'UTC','age':29,'persona':'steady','agent_type':'companion',
+                 'boundary':'best-friend','relationship_pace':'natural',
+                 'outreach':'updates_only','outreach_per_day':3,
+                 'quiet_start':'23:00','quiet_end':'08:00',
+                 'permit_image':'ask','permit_voice':'ask',
+                 'share_people':'no','visual':'none','image_style':'none',
+                 'human_boundary':'Give me space when I am busy.',
+                 'vault':str(self.vault)}
+        created=self.wait(self.post('/api/profiles',{'profile':'wren','answers':answers}))
+        self.assertEqual(created['status'],'complete',created)
+        saved=json.loads((self.root/'profiles/wren/companion.json').read_text())
+        self.assertEqual(saved['persona'],'steady')
+        self.assertEqual(saved['boundary'],'best-friend')
+        self.assertEqual(saved['relationship_pace'],'natural')
+        # A non-romantic frame must never be recorded as permitting adult themes.
+        self.assertFalse(saved['explicit'])
+
+    def test_create_rejects_an_unknown_answer_key(self):
+        bad=self.post('/api/profiles',{'profile':'nope','answers':{'agent':'X','boundary':'best-friend','explicit':True}})
+        self.assertEqual(bad.status_code,400)
+        self.assertIn('Unknown setup answers',bad.json()['detail'])
+
+    def test_appearance_round_trips_and_validates(self):
+        d=self.get('/api/appearance').json()
+        self.assertEqual(d['appearance']['theme'],'midnight')
+        self.assertIn('daylight',d['themes']['light'])
+        saved=self.post('/api/appearance',{'theme':'nord','accent':'#FF8800',
+                                           'nav_pins':['chat','photos'],'follow_system':True}).json()
+        self.assertEqual(saved['appearance']['theme'],'nord')
+        self.assertEqual(saved['appearance']['accent'],'#ff8800')
+        self.assertEqual(saved['appearance']['nav_pins'],['chat','photos'])
+        self.assertTrue(self.get('/api/appearance').json()['appearance']['follow_system'])
+        # A partial update must not discard the rest of the record.
+        self.post('/api/appearance',{'accent':''})
+        again=self.get('/api/appearance').json()['appearance']
+        self.assertEqual(again['theme'],'nord')
+        self.assertEqual(again['accent'],'')
+
+    def test_appearance_rejects_bad_values(self):
+        for payload,fragment in (({'theme':'chartreuse'},'Unknown theme'),
+                                 ({'light_theme':'nord'},'light theme'),
+                                 ({'dark_theme':'daylight'},'dark theme'),
+                                 ({'accent':'red'},'rrggbb'),
+                                 ({'nav_pins':['chat','not-a-page']},'Cannot pin'),
+                                 ({'nav_pins':[]},'between 1 and 4'),
+                                 ({'nav_pins':['now','chat','photos','journals','vault']},'between 1 and 4')):
+            r=self.post('/api/appearance',payload)
+            self.assertEqual(r.status_code,400,payload)
+            self.assertIn(fragment,r.json()['detail'],payload)
+
+    def test_every_navigable_destination_can_be_pinned(self):
+        """The More page shows a pin control beside each destination. If the
+        server's allowlist and the client's navigation map drift apart, those
+        controls fail on click instead of at review time."""
+        import re
+        root=Path(__file__).resolve().parents[1]
+        block=re.search(r'const navGroups=\[(.*?)\n\];',
+                        (root/'kit/app/static/product.js').read_text(),re.S).group(1)
+        destinations=[]
+        for line in block.strip().split('\n'):
+            ids=re.search(r'\[([^\[\]]*)\]\s*\]',line)
+            if ids: destinations+=re.findall(r"'([a-z0-9-]+)'",ids.group(1))
+        self.assertTrue(destinations)
+        allowed=self.get('/api/appearance').json()['pinnable']
+        self.assertEqual(sorted(set(destinations)-set(allowed)),[])
+        for name in destinations[:4]:
+            r=self.post('/api/appearance',{'nav_pins':[name]})
+            self.assertEqual(r.status_code,200,f'{name}: {r.text}')
+
+    def test_appearance_is_per_profile(self):
+        self.post('/api/appearance',{'theme':'ocean'},'nova')
+        self.post('/api/appearance',{'theme':'ember'},'rowan')
+        self.assertEqual(self.get('/api/appearance','nova').json()['appearance']['theme'],'ocean')
+        self.assertEqual(self.get('/api/appearance','rowan').json()['appearance']['theme'],'ember')
+
     def test_shared_session_database_never_returns_another_profile(self):
         db=self.root/'state.db'
         with contextlib.closing(sqlite3.connect(db)) as con:

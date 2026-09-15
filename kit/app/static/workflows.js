@@ -238,7 +238,7 @@ async function renderWorkflowCreator(container, onCreate) {
         <label style="font-weight:600;margin-bottom:8px;display:block">2 · Assign Recipe to Image Lane</label>
         <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
           ${LANES.map(([laneKey, laneLabel, laneClass, laneDesc]) => `
-            <label class="card" style="padding:10px 14px;cursor:pointer;background:${draft.lane === laneKey ? '#20293a' : '#161920'};border-color:${draft.lane === laneKey ? '#4f7ad2' : '#282f3b'}">
+            <label class="card" style="padding:10px 14px;cursor:pointer;background:${draft.lane === laneKey ? 'var(--surface-3)' : 'var(--panel)'};border-color:${draft.lane === laneKey ? 'var(--accent-deep)' : 'var(--surface-3)'}">
               <input type="radio" name="comfy-lane" value="${laneKey}" ${draft.lane === laneKey ? 'checked' : ''} style="margin-right:6px">
               <strong>${esc(laneLabel)}</strong>
               <p class="dim small" style="margin:4px 0 0">${esc(laneDesc)}</p>
@@ -303,7 +303,7 @@ async function renderWorkflowCreator(container, onCreate) {
               </div>
               <label style="margin-top:4px">Trigger words & tags<input data-lora-triggers value="${esc(lora.triggers || '')}" placeholder="character_tag, outfit_style"></label>
             </div>
-          `).join('') : '<p class="dim small" style="padding:12px;background:#14171d;border-radius:8px">No LoRAs added yet. Add model-specific LoRAs to tune appearance, expressions, or artistic style.</p>'}
+          `).join('') : '<p class="dim small" style="padding:12px;background:var(--bg);border-radius:8px">No LoRAs added yet. Add model-specific LoRAs to tune appearance, expressions, or artistic style.</p>'}
         </div>
       </div>
 
@@ -327,7 +327,7 @@ async function renderWorkflowCreator(container, onCreate) {
       </div>
 
       <!-- Advanced Comfy Host & Civitai Downloader -->
-      <details style="margin-top:16px;border-top:1px solid #272d38;padding-top:14px">
+      <details style="margin-top:16px;border-top:1px solid var(--surface-3);padding-top:14px">
         <summary>Comfy host connection & Civitai weight downloader</summary>
         <div class="form-grid" style="margin-top:10px">
           <label>Where ComfyUI runs<select id="wc-mode">${options([['local', 'This Hermes host'], ['ssh', 'Another host over SSH']], config.mode)}</select></label>
@@ -414,13 +414,13 @@ async function renderWorkflowCreator(container, onCreate) {
       const combinedQuality = [draft.quality, loraTriggers].filter(Boolean).join(', ');
       const previewEl = $('lite-prompt-preview');
       previewEl.innerHTML = `
-        <div class="card" style="background:#13161c;border-color:#2a3342">
+        <div class="card" style="background:var(--bg);border-color:var(--edge)">
           <h4>Assembled Prompt Breakdown</h4>
           <p style="font-size:13px;line-height:1.6">
-            <span style="color:#719afc;font-weight:600">[Quality & Style]</span> ${esc(combinedQuality)}<br>
-            <span style="color:#edc584;font-weight:600">[Companion Identity]</span> (Included from SOUL appearance${draft.lane === 'scenery' ? ' — <em>disabled for scenery lane</em>' : ''})<br>
-            <span style="color:#9ce2b6;font-weight:600">[Scene & Wardrobe]</span> (Composed dynamically during generation)<br>
-            <span style="color:#fca5ea;font-weight:600">[Negative]</span> ${esc(draft.negative)}
+            <span style="color:var(--accent);font-weight:600">[Quality & Style]</span> ${esc(combinedQuality)}<br>
+            <span style="color:var(--warn);font-weight:600">[Companion Identity]</span> (Included from SOUL appearance${draft.lane === 'scenery' ? ' — <em>disabled for scenery lane</em>' : ''})<br>
+            <span style="color:var(--good);font-weight:600">[Scene & Wardrobe]</span> (Composed dynamically during generation)<br>
+            <span style="color:var(--ink-2);font-weight:600">[Negative]</span> ${esc(draft.negative)}
           </p>
           <p class="dim small">Resolution: ${draft.width}×${draft.height} · Sampling: ${draft.steps} steps @ CFG ${draft.cfg} · Architecture: ${esc(arch.name)}</p>
         </div>

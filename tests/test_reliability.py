@@ -100,3 +100,18 @@ class ReliabilityTests(unittest.TestCase):
         if not node:
             self.skipTest('Node is needed for browser state regression tests')
         subprocess.run([node, str(Path(__file__).with_name('test_reliability_ui.js'))], check=True)
+
+    def test_creation_interview_stays_inside_the_catalogs(self):
+        """The browser interview proposes a persona, a relationship frame and a
+        set of answers on its own. Every one of them has to be something the
+        backend will actually accept."""
+        import shutil
+        import subprocess
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('Node is needed for the creation interview regression')
+        import companion_catalog as catalog
+        from kit.cli.questions import known_answer_keys
+        subprocess.run([node, str(Path(__file__).with_name('test_onboarding_ui.js')),
+                        ','.join(catalog.BOUNDARIES), ','.join(sorted(known_answer_keys()))],
+                       check=True)

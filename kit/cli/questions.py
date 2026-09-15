@@ -244,6 +244,7 @@ def apply_answers(c,ans):
         birthdate=str(ans.get('birthdate') or ''),
         explicit=bool(ans.get('explicit',False)),cron_active=ans.get('cron_active',True),
         persona=ans.get('persona','warm'),
+        relationship_pace=ans.get('relationship_pace','natural'),
         quiet_start=ans.get('quiet_start','23:00'),quiet_end=ans.get('quiet_end','08:00'),
         soul_in_vault=c.soul_in_vault,
         agent_type=ans.get('agent_type','companion'),
@@ -260,7 +261,7 @@ SETUP_KEYS=frozenset({'agent','human','human_names','persona','image_mode','imag
     'outreach','cron_active','quiet_start','quiet_end','timezone','vault','context_tokens',
     'image_timeline','context_ok','soul','move_soul','gateway_mode','gateway_action','outreach_per_day',
     'location','sensors','adaptive_quiet','permit_image','permit_voice','content_permissions',
-    'share_people','agent_type'})
+    'share_people','agent_type','relationship_pace'})
 def known_answer_keys():return SETUP_KEYS|wiz.INTERVIEW_KEYS
 OUTREACH_CAPS=[('Once a day','1'),('Up to three times a day (recommended)','3'),
                ('Up to five times a day','5'),('Up to ten times a day','10'),

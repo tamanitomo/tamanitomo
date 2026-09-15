@@ -11,7 +11,7 @@ function feelingsSummary(state){
         <h2 style="margin:0">Emotional Atmosphere</h2>
         <span class="pill">${esc(state.personality)} temperament</span>
       </div>
-      <div class="mood-aura-pill" style="background:rgba(255,255,255,0.05);padding:4px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);font-size:12px">
+      <div class="mood-aura-pill" style="background:color-mix(in srgb,var(--ink) 5%,transparent);padding:4px 12px;border-radius:20px;border:1px solid color-mix(in srgb,var(--ink) 10%,transparent);font-size:12px">
         <span>✨ <strong>${state.mood?esc(state.mood):'Calm'}</strong></span>
         ${state.mood_at?`<span class="dim small">· ${esc(ago(state.mood_at))}</span>`:''}
       </div>
@@ -19,25 +19,25 @@ function feelingsSummary(state){
     <div class="feelings-meters-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:14px">
       ${Object.entries(state.meters).map(([key,value])=>{
         const pct=value==null?null:Math.round(value*100);
-        return `<div class="feeling-meter-card" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:12px">
+        return `<div class="feeling-meter-card" style="background:color-mix(in srgb,var(--ink) 2%,transparent);border:1px solid color-mix(in srgb,var(--ink) 6%,transparent);border-radius:10px;padding:12px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
             <span style="font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px"><span>${icons[key]||'•'}</span> ${labels[key]}</span>
-            <strong style="font-size:13px;color:${key==='hurt'&&pct>20?'#f87171':'var(--text,#d8e2ee)'}">${pct==null?'—':pct+'%'}</strong>
+            <strong style="font-size:13px;color:${key==='hurt'&&pct>20?'var(--bad)':'var(--ink-2)'}">${pct==null?'—':pct+'%'}</strong>
           </div>
-          <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden">
+          <div style="height:6px;background:color-mix(in srgb,var(--ink) 6%,transparent);border-radius:3px;overflow:hidden">
             <div style="height:100%;width:${pct||0}%;background:${colors[key]||'var(--accent)'};border-radius:3px;transition:width .3s"></div>
           </div>
         </div>`;
       }).join('')}
     </div>
-    <div style="padding:10px 14px;background:rgba(255,255,255,0.02);border-radius:8px;border:1px solid rgba(255,255,255,0.05);margin-bottom:12px">
+    <div style="padding:10px 14px;background:color-mix(in srgb,var(--ink) 2%,transparent);border-radius:8px;border:1px solid color-mix(in srgb,var(--ink) 5%,transparent);margin-bottom:12px">
       <p class="dim small" style="margin:0;line-height:1.4">
-        ${state.absence.current.length?`<strong style="color:#7ee787">Active Expected Routine:</strong> ${esc(state.absence.current.join(', '))}. `:''}
+        ${state.absence.current.length?`<strong style="color:var(--good)">Active Expected Routine:</strong> ${esc(state.absence.current.join(', '))}. `:''}
         ${away.hours==null?'Natural messaging rhythm active.':`<strong>${state.recent_return?'Recent Return':'Time Apart'}:</strong> ${Math.round(away.hours)}h elapsed (${Math.round(away.expected_hours)}h in routine windows).`}
       </p>
     </div>
     <details style="margin-top:8px"><summary class="dim small" style="cursor:pointer">What shapes these feelings?</summary>
-      <div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.7);line-height:1.5">
+      <div style="margin-top:8px;font-size:12px;color:color-mix(in srgb,var(--ink) 70%,transparent);line-height:1.5">
         <p class="dim small">${esc(state.basis)} Routines describe expectations, not live observations.</p>
         ${state.private_stance?`<p style="font-style:italic">“${esc(state.private_stance)}”</p>`:''}
         ${state.reasons.map(r=>`<p style="margin:4px 0">• ${esc(r.text)} <span class="dim">(${r.occurrence}x${r.repair?' · repaired':''})</span></p>`).join('')||'<p class="dim small">No ruptures recorded. Starting values reflect the selected emotional temperament.</p>'}

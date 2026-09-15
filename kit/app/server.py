@@ -468,7 +468,23 @@ def build(home=None,token='',state_dir=None):
         try:
             _,text=ident.read(c)
             import companion_portrait as portrait
-            return {'sections':[{**s,'body':s['body']} for s in ident.sections(text).values()], 'portrait':portrait.compile_prompt(c)}
+            import companion_render as render
+            personas=render.load_personas();boundaries=render.BOUNDARIES if hasattr(render,'BOUNDARIES') else {}
+            persona=personas.get(c.persona) or {}
+            import companion_catalog as ckat
+            frame=ckat.BOUNDARIES.get(c.boundary)
+            # A profile header for the page, so Identity opens on who they are
+            # rather than on the state of their configuration.
+            profile={'agent':c.agent,'human':c.human,'age':c.current_age(),
+                     'birthdate':c.birthdate,'pronoun_set':c.pronoun_set,
+                     'agent_type':c.agent_type,'timezone':c.timezone,
+                     'persona':c.persona,'persona_label':persona.get('label',c.persona),
+                     'persona_blurb':persona.get('blurb',''),
+                     'boundary':c.boundary,'boundary_label':frame[0] if frame else c.boundary,
+                     'relationship_pace':c.relationship_pace,
+                     'image_style':c.image_style}
+            return {'sections':[{**s,'body':s['body']} for s in ident.sections(text).values()],
+                    'portrait':portrait.compile_prompt(c),'profile':profile}
         except OSError as exc:raise HTTPException(500,str(exc))
 
     @app.post('/api/identity/{section}')

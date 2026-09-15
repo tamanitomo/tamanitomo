@@ -1,6 +1,6 @@
 # First install for a friend
 
-This is a private beta. Linux has been exercised; native Windows and Android still need device acceptance tests. Share the source release ZIP, not your working directory, Hermes home, or vault.
+Linux has been exercised; native Windows and Android still need device acceptance tests. If you are handing the kit to someone else, share a clean checkout or the release ZIP — never your own working directory, Hermes home, or vault.
 
 ## Windows first
 

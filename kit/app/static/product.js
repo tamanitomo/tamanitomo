@@ -1,26 +1,118 @@
 function mediaPrivacy(item){return item.blur?'class="concealed-media" title="Sensitive or unreviewed image · open details to reveal"':'';}
-const paths={now:'M3 11 12 3l9 8v10h-6v-7H9v7H3Z',chat:'M4 4h16v12H9l-5 4Z',timeline:'M6 3v18M10 5h10M10 12h7M10 19h10',photos:'M3 4h18v16H3ZM3 16l5-5 5 5 3-3 5 5M16 8h.01',journals:'M5 3h14v18H5ZM8 7h8M8 11h8M8 15h5',creations:'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z',relationship:'M12 20S2 14 2 8a5 5 0 0 1 10-1 5 5 0 0 1 10 1c0 6-10 12-10 12Z',loops:'M4 5h16v16H4ZM8 2v6M16 2v6M4 11h16',knows:'M12 3v18M12 6C7 1 2 5 3 10c-3 5 2 10 9 8M12 6c5-5 10-1 9 4 3 5-2 10-9 8',vault:'M3 6h7l2 3h9v12H3Z',identity:'M8 7a4 4 0 1 0 8 0 4 4 0 1 0-8 0M4 21v-3c0-6 16-6 16 0v3',settings:'M4 7h16M4 17h16M8 4v6M16 14v6','local-models':'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Zm5 3h6v6H9V9Zm-5 2h2m-2 4h2m14-4h2m-2 4h2m-9-11v2m4-2v2m-4 14v2m4-2v2',environment:'M12 2v4M12 18v4M2 12h4M18 12h4M5 5l3 3M16 16l3 3M19 5l-3 3M8 16l-3 3M7 12a5 5 0 1 0 10 0 5 5 0 1 0-10 0',health:'M2 12h5l3-8 4 16 3-8h5',roster:'M8 8a3 3 0 1 0 6 0 3 3 0 1 0-6 0M3 21v-3c0-5 14-5 14 0v3M17 5c5 0 5 6 0 6M20 15c2 1 2 3 2 6',search:'M10 3a7 7 0 1 0 0 14 7 7 0 1 0 0-14M16 16l5 5',download:'M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',album:'M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16l-8-4-8 4V5Z',shield_alert:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Zm0-14v4m0 4h.01',shield_check:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Zm-2-10 2 2 4-4',info:'M12 16v-4m0-4h.01M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z',trash:'M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',close:'M18 6 6 18M6 6l12 12',chevron_left:'M15 18l-6-6 6-6',chevron_right:'M9 18l6-6-6-6',voice:'M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Zm5 9a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z','image-studio':'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z'};
+const paths={now:'M3 11 12 3l9 8v10h-6v-7H9v7H3Z',chat:'M4 4h16v12H9l-5 4Z',timeline:'M6 3v18M10 5h10M10 12h7M10 19h10',photos:'M3 4h18v16H3ZM3 16l5-5 5 5 3-3 5 5M16 8h.01',journals:'M5 3h14v18H5ZM8 7h8M8 11h8M8 15h5',creations:'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z',relationship:'M12 20S2 14 2 8a5 5 0 0 1 10-1 5 5 0 0 1 10 1c0 6-10 12-10 12Z',loops:'M4 5h16v16H4ZM8 2v6M16 2v6M4 11h16',knows:'M12 3v18M12 6C7 1 2 5 3 10c-3 5 2 10 9 8M12 6c5-5 10-1 9 4 3 5-2 10-9 8',vault:'M3 6h7l2 3h9v12H3Z',identity:'M8 7a4 4 0 1 0 8 0 4 4 0 1 0-8 0M4 21v-3c0-6 16-6 16 0v3',settings:'M4 7h16M4 17h16M8 4v6M16 14v6','local-models':'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Zm5 3h6v6H9V9Zm-5 2h2m-2 4h2m14-4h2m-2 4h2m-9-11v2m4-2v2m-4 14v2m4-2v2',environment:'M12 2v4M12 18v4M2 12h4M18 12h4M5 5l3 3M16 16l3 3M19 5l-3 3M8 16l-3 3M7 12a5 5 0 1 0 10 0 5 5 0 1 0-10 0',health:'M2 12h5l3-8 4 16 3-8h5',roster:'M8 8a3 3 0 1 0 6 0 3 3 0 1 0-6 0M3 21v-3c0-5 14-5 14 0v3M17 5c5 0 5 6 0 6M20 15c2 1 2 3 2 6',search:'M10 3a7 7 0 1 0 0 14 7 7 0 1 0 0-14M16 16l5 5',download:'M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',album:'M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16l-8-4-8 4V5Z',shield_alert:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Zm0-14v4m0 4h.01',shield_check:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Zm-2-10 2 2 4-4',info:'M12 16v-4m0-4h.01M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z',trash:'M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',close:'M18 6 6 18M6 6l12 12',chevron_left:'M15 18l-6-6 6-6',chevron_right:'M9 18l6-6-6-6',voice:'M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Zm5 9a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z','image-studio':'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z',more:'M5 12h.01M12 12h.01M19 12h.01',pin:'M12 17v5M9 3h6l-1 7 3 3v2H7v-2l3-3-1-7Z'};
 const icon=name=>`<svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="${paths[name]||paths.creations}"/></svg>`;
 const tabLabel=id=>(TABS.find(t=>t[0]===id)?.[1])||({'image-studio':'Image studio','voice':'Voice studio','local-models':'Local models','companion-edit':'Edit companion'}[id])||id;
+/* ---------------------------------------------------------------- navigation
+   One destination map drives three surfaces: the desktop rail, the mobile
+   bottom bar (whichever destinations the person pinned), and the More
+   directory. Anything added here appears in all three. */
 const navGroups=[
-  ['Daily',['chat','now','photos','journals','timeline']],
-  ['Studios & Creation',['image-studio','voice','vault','creations']],
-  ['Memory & Life',['knows','relationship','loops','identity']],
-  ['System & Settings',['settings','local-models','health','environment','roster']]
+  ['Every day',    ['chat','now','photos','journals','timeline']],
+  ['Their life',   ['relationship','knows','loops','identity','creations','vault']],
+  ['Studios',      ['image-studio','voice','local-models']],
+  ['Setup & system',['settings','environment','health','roster']]
 ];
+/* One line each, so the More page explains itself without being read twice. */
+const navBlurb={
+  now:'Today at a glance',chat:'Talk with your companion',timeline:'Their day, hour by hour',
+  photos:'Every picture and album',journals:'The reflections they write',
+  creations:'Files and things they have made',relationship:'Feelings, milestones and repair',
+  loops:'Tasks, plans and open threads',knows:'What they remember about you',
+  vault:'Shared notes and documents',identity:'Who they are — persona and soul',
+  settings:'Boundaries, quiet hours and appearance',environment:'Models, providers and the gateway',
+  health:'Scheduled jobs and diagnostics',roster:'All of your companions',
+  'image-studio':'Compose and generate images',voice:'Voice, speech and cloning',
+  'local-models':'Run models on your own hardware'
+};
+/* The bottom bar has room for one word. */
+const navShort={now:'Home',chat:'Chat',timeline:'Timeline',photos:'Photos',journals:'Journal',
+  creations:'Files',relationship:'Together',loops:'Tasks',knows:'Memory',vault:'Vault',
+  identity:'Identity',settings:'Settings',environment:'Hermes',health:'Jobs',roster:'Companions',
+  'image-studio':'Images',voice:'Voice','local-models':'Models',more:'More'};
+const shortLabel=id=>navShort[id]||tabLabel(id);
+const navDestinations=navGroups.flatMap(([,ids])=>ids);
 const navigationButtons=ids=>ids.map(id=>`<button data-tab="${id}">${icon(id)}<span>${esc(tabLabel(id))}</span></button>`).join('');
-$('tabs').innerHTML=navGroups.map(([label,ids],i)=>`<details class="nav-group-collapsible ${i===3?'nav-more':''}" ${i<3?'open':''}><summary>${label}</summary><div class="nav-group-items">${navigationButtons(ids)}</div></details>`).join('');
+
+/* Desktop rail. */
+$('tabs').innerHTML=navGroups.map(([label,ids],i)=>`<details class="nav-group-collapsible" ${i<2?'open':''}><summary>${esc(label)}</summary><div class="nav-group-items">${navigationButtons(ids)}</div></details>`).join('');
 for(const button of $('tabs').querySelectorAll('button'))button.onclick=()=>showTab(button.dataset.tab);
-window.productNavigate=name=>{document.body.dataset.page=name;const tabs=$('tabs');if(tabs){const parentDetails=tabs.querySelector(`details:has([data-tab="${name}"])`);if(parentDetails)parentDetails.open=true;}if($('crumb-page'))$('crumb-page').textContent=tabLabel(name);if($('crumb-agent'))$('crumb-agent').textContent=$('who')?.textContent||'Companion';document.body.classList.remove('menu-open');syncNavigation();window.scrollTo({top:0});};
+
+/* Mobile bottom bar: the pinned destinations, then More, always last. */
+const navPins=()=>{
+  const saved=(window.Appearance&&window.Appearance.state.nav_pins)||[];
+  const pins=saved.filter(id=>navDestinations.includes(id)).slice(0,4);
+  return pins.length?pins:['chat','now','photos','journals'];
+};
+function renderTabbar(){
+  const bar=$('tabbar');if(!bar)return;
+  const slots=[...navPins().map(id=>[id,false]),['more',true]];
+  bar.innerHTML=slots.map(([id,fixed])=>`<button data-tab="${id}"${fixed?' class="is-more"':''} aria-current="${String(current===id)}">${icon(id)}<span>${esc(shortLabel(id))}</span></button>`).join('');
+  for(const b of bar.querySelectorAll('button'))b.onclick=()=>showTab(b.dataset.tab);
+}
+window.addEventListener('appearance-change',renderTabbar);
+
+window.productNavigate=name=>{
+  document.body.dataset.page=name;
+  for(const el of document.querySelectorAll('[data-creating]'))delete el.dataset.creating;
+  const tabs=$('tabs');
+  if(tabs){const parent=tabs.querySelector(`details:has([data-tab="${name}"])`);if(parent)parent.open=true;}
+  if($('crumb-page'))$('crumb-page').textContent=tabLabel(name);
+  if($('crumb-agent'))$('crumb-agent').textContent=$('who')?.textContent||'Companion';
+  document.body.classList.remove('menu-open');
+  for(const b of $('tabs').querySelectorAll('button[data-tab]'))b.setAttribute('aria-current',String(b.dataset.tab===name));
+  renderTabbar();syncNavigation();window.scrollTo({top:0});
+};
 const compactLayout=matchMedia('(max-width:900px)');
-function syncNavigation(){const open=document.body.classList.contains('menu-open');document.querySelector('header').inert=compactLayout.matches&&!open;$('mobile-menu').setAttribute('aria-expanded',String(open));$('navigation-backdrop').hidden=!compactLayout.matches||!open;}
-$('mobile-menu').onclick=()=>{document.body.classList.toggle('menu-open');syncNavigation();};
-$('navigation-backdrop').onclick=()=>{document.body.classList.remove('menu-open');syncNavigation();};compactLayout.addEventListener('change',syncNavigation);syncNavigation();
+function syncNavigation(){
+  const open=document.body.classList.contains('menu-open');
+  document.querySelector('header').inert=compactLayout.matches&&!open;
+  if($('mobile-menu'))$('mobile-menu').setAttribute('aria-expanded',String(open));
+  if($('navigation-backdrop'))$('navigation-backdrop').hidden=!compactLayout.matches||!open;
+}
+if($('mobile-menu'))$('mobile-menu').onclick=()=>{document.body.classList.toggle('menu-open');syncNavigation();};
+if($('navigation-backdrop'))$('navigation-backdrop').onclick=()=>{document.body.classList.remove('menu-open');syncNavigation();};
+compactLayout.addEventListener('change',()=>{syncNavigation();renderTabbar();});
+syncNavigation();renderTabbar();
+
+/* The More directory: every destination, with pin controls for the bar. */
+workspaceHandlers.more=async()=>{
+  const pins=navPins();
+  const row=id=>{
+    const pinned=pins.includes(id),full=pins.length>=4;
+    return `<div class="more-row${pinned?' is-pinned':''}">
+      <button class="more-go" data-tab="${id}">${icon(id)}<span><strong>${esc(tabLabel(id))}</strong><small>${esc(navBlurb[id]||'')}</small></span></button>
+      <button class="pin-toggle" data-pin="${id}" aria-pressed="${String(pinned)}" ${!pinned&&full?'disabled':''}
+        title="${pinned?'Remove from the bottom bar':(full?'Unpin something first — the bar holds four':'Pin to the bottom bar')}"
+        aria-label="${pinned?'Unpin '+tabLabel(id):'Pin '+tabLabel(id)+' to the bottom bar'}">${pinned?'★':'☆'}</button>
+    </div>`;
+  };
+  // On a phone the rail is hidden, so the switchers that live in it belong here.
+  const switcher=`<div class="card more-switcher">
+      <label>Your companion<select id="more-companion">${$('companion-select').innerHTML}</select></label>
+      <label>Environment<select id="more-installation">${$('installation-select').innerHTML}</select></label>
+    </div>`;
+  $('more').innerHTML=heading('More','Every part of the workspace. Star up to four to keep them on the bottom bar.')+switcher+
+    `<div class="pin-preview"><span class="eyebrow">Your bottom bar</span><div class="pin-preview-bar">${
+      [...pins,'more'].map(id=>`<span${id==='more'?' class="is-more"':''}>${icon(id)}<small>${esc(shortLabel(id))}</small></span>`).join('')
+    }</div><p class="dim small">More always keeps the last slot, so nothing is ever more than two taps away.</p></div>`+
+    navGroups.map(([label,ids])=>`<section class="more-group"><h2>${esc(label)}</h2><div class="more-list">${ids.map(row).join('')}</div></section>`).join('');
+  for(const b of $('more').querySelectorAll('[data-tab]'))b.onclick=()=>showTab(b.dataset.tab);
+  // Mirror the rail's selects rather than moving them, so both layouts keep working.
+  const mirror=(here,there)=>{const a=$(here),b=$(there);if(!a||!b)return;a.value=b.value;
+    a.onchange=()=>{b.value=a.value;b.dispatchEvent(new Event('change'));};};
+  mirror('more-companion','companion-select');mirror('more-installation','installation-select');
+  for(const b of $('more').querySelectorAll('[data-pin]'))b.onclick=async()=>{
+    const id=b.dataset.pin,next=pins.includes(id)?pins.filter(x=>x!==id):[...pins,id];
+    if(!next.length){notice('Keep at least one destination on the bar.');return;}
+    await window.Appearance.set({nav_pins:next});
+    render('more');
+  };
+};
 $('refresh-page').onclick=async()=>{if(await confirmEditorLeave(current))render(current);};
 $('close-dialog').onclick=async()=>{if(await confirmEditorLeave('dialog'))$('product-dialog').close();};
 $('product-dialog').addEventListener('cancel',async e=>{e.preventDefault();if(await confirmEditorLeave('dialog'))$('product-dialog').close();});
 function dialog(title,html){$('dialog-title').textContent=title;$('dialog-body').innerHTML=html;if(!$('product-dialog').open)$('product-dialog').showModal();}
-$('open-search').onclick=async()=>{if(!await confirmEditorLeave('dialog'))return;dialog('Find a page',`<input id="command-search" aria-label="Find a page" placeholder="Photos, providers, memories…"><div id="command-results" class="search-results"></div>`);const update=()=>{$('command-results').innerHTML=TABS.filter(t=>(t[1]+' '+t[0]+' '+({environment:'providers models gateway administration hermes',health:'cron schedules diagnostics jobs',knows:'facts memories',vault:'files notes',settings:'contact preferences quiet hours','image-studio':'images workflows','voice':'audio cloning speech','local-models':'local models llama gguf hardware vulkan server'}[t[0]]||'')).toLowerCase().includes($('command-search').value.toLowerCase())).map(([id,label])=>`<button class="quiet" data-go="${id}">${icon(id)}${label}</button>`).join('');for(const b of $('command-results').querySelectorAll('button'))b.onclick=()=>{$('product-dialog').close();showTab(b.dataset.go);};};$('command-search').oninput=update;update();$('command-search').focus();};
+$('open-search').onclick=async()=>{if(!await confirmEditorLeave('dialog'))return;dialog('Go to page',`<input id="command-search" aria-label="Find a page" placeholder="Photos, providers, memories…"><div id="command-results" class="search-results"></div>`);const update=()=>{$('command-results').innerHTML=TABS.filter(t=>t[0]!=='more').filter(t=>(t[1]+' '+t[0]+' '+({environment:'providers models gateway administration hermes',health:'cron schedules diagnostics jobs',knows:'facts memories',vault:'files notes',settings:'contact preferences quiet hours','image-studio':'images workflows','voice':'audio cloning speech','local-models':'local models llama gguf hardware vulkan server'}[t[0]]||'')).toLowerCase().includes($('command-search').value.toLowerCase())).map(([id,label])=>`<button class="quiet" data-go="${id}">${icon(id)}${label}</button>`).join('');for(const b of $('command-results').querySelectorAll('button'))b.onclick=()=>{$('product-dialog').close();showTab(b.dataset.go);};};$('command-search').oninput=update;update();$('command-search').focus();};
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();$('open-search').click();}});
 let profileTimezone;
 const stamp=(value,opts={})=>{if(!value)return 'Not recorded';const d=new Date(value);return Number.isNaN(d.getTime())?value:new Intl.DateTimeFormat(undefined,{timeZone:profileTimezone,month:'short',day:'numeric',...opts}).format(d);};
@@ -54,7 +146,7 @@ function renderWardrobeCard(closet,s){
   html+=`<div class="wardrobe-block"><div class="wardrobe-block-title"><span>Currently Wearing</span><span class="dim small">${wearing.length} piece${wearing.length===1?'':'s'}</span></div><div class="wardrobe-chip-list">${wearing.map(w=>`<span class="wardrobe-chip is-wearing" title="${esc(w.description||w.id)}">👕 ${esc(w.description||w.id)}</span>`).join('')||'<span class="dim small">No current outfit recorded</span>'}</div></div>`;
   if(laidOut&&(laidOut.items?.length||laidOut.plan?.intent)){
     const plan=laidOut.plan||{};
-    html+=`<div class="wardrobe-block" style="border-left:3px solid #e3b341"><div class="wardrobe-block-title"><span style="color:#e3b341">✨ Laid Out For Tomorrow</span><span class="dim small">${laidOut.items?.length||0} pieces</span></div>${laidOut.items?.length?`<div class="wardrobe-chip-list">${laidOut.items.map(w=>`<span class="wardrobe-chip is-laid-out" title="${esc(w.description||w.id)}">🛏️ ${esc(w.description||w.id)}</span>`).join('')}</div>`:''}${plan.intent?`<div class="laid-out-intent-quote">“${esc(plan.intent)}”</div>`:''}</div>`;
+    html+=`<div class="wardrobe-block" style="border-left:3px solid var(--warn)"><div class="wardrobe-block-title"><span style="color:var(--warn)">✨ Laid Out For Tomorrow</span><span class="dim small">${laidOut.items?.length||0} pieces</span></div>${laidOut.items?.length?`<div class="wardrobe-chip-list">${laidOut.items.map(w=>`<span class="wardrobe-chip is-laid-out" title="${esc(w.description||w.id)}">🛏️ ${esc(w.description||w.id)}</span>`).join('')}</div>`:''}${plan.intent?`<div class="laid-out-intent-quote">“${esc(plan.intent)}”</div>`:''}</div>`;
   }
   if(hamper.length||washing.length){
     html+=`<div class="wardrobe-block"><div class="wardrobe-block-title"><span>Hamper & Wash</span><span class="dim small">${hamper.length} dirty${washing.length?` · ${washing.length} in wash`:''}</span></div><div class="wardrobe-chip-list">${washing.map(w=>`<span class="wardrobe-chip is-washing" title="In the wash: ${esc(w.description||w.id)}">🫧 ${esc(w.description||w.id)}</span>`).join('')}${hamper.map(w=>`<span class="wardrobe-chip is-hamper" title="In the hamper: ${esc(w.description||w.id)}">🧺 ${esc(w.description||w.id)}</span>`).join('')}</div></div>`;
@@ -71,14 +163,14 @@ workspaceHandlers.now=async()=>{
   if(current!=='now')return;
   profileTimezone=d.timezone;$('who').textContent=d.agent;$('crumb-agent').textContent=d.agent;
   let bannerHTML=d.problems.length?`<button class="link-button small" id="header-health">${d.problems.length} item${d.problems.length===1?'':'s'} to review</button>`:'';
-  if(!bannerHTML&&updateInfo?.has_update){bannerHTML=`<button class="link-button small" id="header-update" style="color:var(--warn,#e3b341)">✨ Update v${esc(updateInfo.latest_version)} available</button>`;}
+  if(!bannerHTML&&updateInfo?.has_update){bannerHTML=`<button class="link-button small" id="header-update" style="color:var(--warn)">✨ Update v${esc(updateInfo.latest_version)} available</button>`;}
   $('banner').innerHTML=bannerHTML;
   if($('header-health'))$('header-health').onclick=()=>showTab('health');
   if($('header-update'))$('header-update').onclick=()=>showTab('environment');
   const s=d.state?.state,photo=content.items.find(x=>x.kind==='image'),entry=journal.entries[0];
   $('now').innerHTML=`<div class="home-title"><div><h2 class="page-title">${esc(d.agent)} · Overview</h2><p class="intro">${stamp(new Date().toISOString(),{weekday:'long',year:'numeric'})} <span class="dim">· ${esc(d.timezone)}</span></p></div>${jump('chat','Start a conversation',true)}</div>
   ${d.problems.length?`<div class="notice-strip"><p>${esc(d.problems[0])}${d.problems.length>1?` · ${d.problems.length-1} more to review`:''}</p>${jump('health','Review')}</div>`:''}
-  ${updateInfo?.has_update?`<div class="notice-strip" style="border-left-color:var(--warn,#e3b341);background:rgba(227,179,65,0.08)"><p><strong>Companion Kit v${esc(updateInfo.latest_version)}</strong> is available. Run <code>./update.sh</code> in your host terminal to update.</p>${jump('environment','View')}</div>`:''}
+  ${updateInfo?.has_update?`<div class="notice-strip" style="border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent)"><p><strong>Companion Kit v${esc(updateInfo.latest_version)}</strong> is available. Run <code>./update.sh</code> in your host terminal to update.</p>${jump('environment','View')}</div>`:''}
   <div class="home-hero"><div class="hero-copy"><span class="eyebrow">${s?.confirmed===false?'Last known scene · carried forward':'Current state'} ${d.state?'· '+ago(d.state.recorded_at):''}</span><h2>${esc(s?excerpt(s.activity,190):'System ready.')}</h2><p>${esc(s?excerpt(s.mood,190):'Autonomous routines, journal reflections, and media will appear here as they run.')}</p>${s?.location?`<span class="pill">${esc(excerpt(s.location,100))}</span>`:''}<div class="actions">${jump('timeline','Activity timeline')}${jump('relationship','Relationship ledger')}</div></div><div class="hero-image">${photo?`<img ${mediaPrivacy(photo)} src="${mediaUrl(photo.url)}" alt="${esc(photo.title)}"><div class="image-caption">Recent capture · ${esc(photo.title)}</div>`:`<div class="hero-empty"><div>${icon('photos')}<p>No photos or captures saved yet.</p>${jump('photos','Open photo library')}</div></div>`}</div></div>
   <div class="stat-strip"><button data-route="photos"><span>Photos & captures</span><strong>${content.items.filter(x=>x.kind==='image').length}</strong><span>${timeline.enabled?'Scheduled captures active':'Scheduled captures paused'}</span></button><button data-route="journals"><span>Journal entries</span><strong>${journal.total??journal.entries.length}</strong><span>${entry?'Latest · '+entry.day:'No entries yet'}</span></button><button data-route="creations"><span>Vault media</span><strong>${content.items.filter(x=>x.source==='creation').length}</strong><span>Files & creations</span></button><button data-route="loops"><span>Tasks & threads</span><strong>${d.loops.length+d.missions.length}</strong><span>Active queue items</span></button></div>
   ${connectionSignals(d.bars)}<div class="home-columns"><div><div class="section-heading"><h2>Latest journal entry</h2>${jump('journals','All entries')}</div>${entry?`<article class="card journal-preview"><span class="eyebrow">Journal · ${esc(entry.day)}</span><h3>Daily reflection</h3><p>${esc(excerpt(entry.text,470))}</p><button class="link-button" id="read-latest">Read the entry →</button></article>`:empty('journals','No journal entries yet','Daily summaries are saved here automatically by the scheduled journal routine.',jump('health','View routine status'))}<div class="section-heading"><h2>Recent media & files</h2>${jump('creations','View all')}</div><div class="grid">${content.items.slice(0,3).map((x,i)=>`<button class="card photo-card" data-home-file="${i}">${x.kind==='image'?`<div class="photo-wrap"><img ${mediaPrivacy(x)} src="${mediaUrl(x.url)}" loading="lazy" alt="${esc(x.title)}"></div>`:`<div class="file-art">${icon(x.kind==='writing'?'journals':'creations')}</div>`}<div class="photo-meta"><p>${esc(x.title)}</p><small>${esc(x.kind)} · ${when(x.at)}</small></div></button>`).join('')||'<p class="dim">Images and generated files appear here automatically.</p>'}</div></div>
@@ -106,7 +198,7 @@ workspaceHandlers.journals=async()=>{
     const nextEntry=currIdx<entries.length-1?entries[currIdx+1]:null;
     $('journal-page').innerHTML=`<div class="journal-nav-bar">
       <button class="journal-nav-btn" id="journal-prev-btn" ${prevEntry?'':'disabled'} style="${prevEntry?'':'opacity:0.4;cursor:default'}">← Newer (${prevEntry?esc(prevEntry.day):'none'})</button>
-      <span style="font-weight:600;font-size:13px;color:#a0b0c6">📅 ${esc(entry.day)}</span>
+      <span style="font-weight:600;font-size:13px;color:var(--ink-2)">📅 ${esc(entry.day)}</span>
       <button class="journal-nav-btn" id="journal-next-btn" ${nextEntry?'':'disabled'} style="${nextEntry?'':'opacity:0.4;cursor:default'}">Older (${nextEntry?esc(nextEntry.day):'none'}) →</button>
     </div>
     <div class="paper"><span class="eyebrow">Daily reflection · ${Math.max(1,Math.ceil(entry.words/220))} min read</span><h2>${new Intl.DateTimeFormat(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'}).format(new Date(entry.day+'T12:00:00'))}</h2><div class="prose">${richText(entry.text)}</div><p class="small dim">Source: ${esc(entry.source)} · ${entry.words.toLocaleString()} words</p></div>`;
@@ -438,7 +530,7 @@ workspaceHandlers.timeline=async()=>{
     let last='';
     $('timeline-feed').innerHTML=shown.slice(0,250).map((x,i)=>{
       const date=x.day||dayKey(x.at);
-      const head=last!==date?`<div style="font-weight:700;font-size:13px;color:#a0b0c6;margin:14px 0 6px;padding-left:4px">📅 ${esc(date)}</div>`:'';
+      const head=last!==date?`<div style="font-weight:700;font-size:13px;color:var(--ink-2);margin:14px 0 6px;padding-left:4px">📅 ${esc(date)}</div>`:'';
       last=date;
       const iconBox=x.kind==='photo'?'📸':x.kind==='journal'?'📖':'✨';
       const label=x.kind==='moment'?(x.unconfirmed?'Scene (unconfirmed)':'Scene update'):x.kind==='journal'?'Daily reflection':'Capture';
@@ -498,13 +590,13 @@ workspaceHandlers.knows=async()=>{
     <div class="card">
       <h2>Standing Guidelines (${standingTotal})</h2>
       <div id="memory-standing-list" class="memory-list" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
-        ${standingTotal?d.standing.map(r=>`<div class="memory-card"><div class="memory-card-header"><span class="pill">Guideline</span></div><p style="margin:6px 0;font-weight:500;color:#e1ecf8">${esc(r.instruction)}</p><p class="dim small" style="margin:0">Evidence: ${esc(r.evidence)}</p></div>`).join(''):'<p class="dim small">No standing guidelines recorded.</p>'}
+        ${standingTotal?d.standing.map(r=>`<div class="memory-card"><div class="memory-card-header"><span class="pill">Guideline</span></div><p style="margin:6px 0;font-weight:500;color:var(--ink)">${esc(r.instruction)}</p><p class="dim small" style="margin:0">Evidence: ${esc(r.evidence)}</p></div>`).join(''):'<p class="dim small">No standing guidelines recorded.</p>'}
       </div>
     </div>
     <div class="card">
       <h2>Open Inquiries (${questionsTotal})</h2>
       <div id="memory-questions-list" class="memory-list" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
-        ${questionsTotal?d.questions.map(q=>`<div class="memory-card"><p style="margin:0;font-weight:500;color:#e1ecf8">❓ ${esc(q.text)}</p></div>`).join(''):'<p class="dim small">No open inquiries right now.</p>'}
+        ${questionsTotal?d.questions.map(q=>`<div class="memory-card"><p style="margin:0;font-weight:500;color:var(--ink)">❓ ${esc(q.text)}</p></div>`).join(''):'<p class="dim small">No open inquiries right now.</p>'}
       </div>
     </div>
   </div>`;
@@ -604,12 +696,12 @@ workspaceHandlers.loops=async()=>{
           ${missions.length?missions.map(x=>`
             <div class="mission-card ${x.status==='open'?'is-open':''}">
               <div class="mission-header" style="display:flex;justify-content:space-between;align-items:center">
-                <strong style="font-size:14px;color:#f0f4fc">${esc(x.title)}</strong>
+                <strong style="font-size:14px;color:var(--ink)">${esc(x.title)}</strong>
                 <span class="pill ${x.status==='open'?'status-good':x.status==='dropped'?'status-bad':''}">${esc(x.status)}</span>
               </div>
-              ${x.detail?`<p class="mission-details" style="margin:8px 0;font-size:13px;color:#95a4b8">${esc(x.detail)}</p>`:''}
+              ${x.detail?`<p class="mission-details" style="margin:8px 0;font-size:13px;color:var(--dim)">${esc(x.detail)}</p>`:''}
               ${x.detail_update?`<div class="mission-update-box" style="margin:8px 0"><strong>Update:</strong> ${esc(x.detail_update)}</div>`:''}
-              <div class="mission-footer" style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:8px;border-top:1px solid #232c3d">
+              <div class="mission-footer" style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:8px;border-top:1px solid var(--surface-3)">
                 <span class="dim small">${x.wanted_by?'Target: '+esc(x.wanted_by):'No target date'}</span>
                 ${x.status==='open'?`<button class="quiet small-btn" data-drop="${esc(x.id)}">Drop task</button>`:''}
               </div>
@@ -660,69 +752,108 @@ workspaceHandlers.health=async()=>{
   $('job-search').oninput=filter;$('job-filter').onchange=filter;for(const b of $('health').querySelectorAll('[data-filter]'))b.onclick=()=>{$('job-filter').value=b.dataset.filter;filter();};bindAction('health-repair','/maintenance/repair');bindAction('all-job-history','/jobs/history');$('gateway-activity').onclick=showGatewayActivity;filter();wireRoutes($('health'));
 };
 
-const ALL_THEMES=[
-  ['midnight','Midnight Dark','#0d1117','#58a6ff'],
-  ['ocean','Deep Ocean','#0f1923','#38ef7d'],
-  ['emerald','Emerald Pine','#0a1410','#2ecc71'],
-  ['synthwave','Synthwave Cyber','#140c1f','#ff71ce'],
-  ['nord','Nordic Frost','#1e222a','#88c0d0'],
-  ['amethyst','Amethyst Slate','#130f1c','#b388ff'],
-  ['daylight','Daylight Clean','#f6f8fa','#0969da']
-];
-const savedTheme=localStorage.getItem('companion-theme')||'midnight';
-document.documentElement.dataset.theme=savedTheme;
+/* ------------------------------------------------------------- appearance UI
+   Theme, light/dark behaviour and accent colour. The swatches read their
+   colours from the live stylesheet, so a preview can never disagree with the
+   theme it is previewing. */
+const ACCENTS=[['','Theme default'],['#6c9cff','Blue'],['#8b93ff','Indigo'],['#b388ff','Violet'],
+  ['#f472b6','Pink'],['#fb7185','Rose'],['#f0b429','Amber'],['#4ade80','Green'],
+  ['#2dd4bf','Teal'],['#60d5f0','Cyan']];
+
+function themeSwatch(id,active){
+  const c=window.Appearance.swatch(id);
+  return `<button type="button" class="theme-card${active?' is-active':''}" data-theme-id="${id}"
+    style="background:${c.bg};color:${c.ink};border-color:${active?'var(--accent)':c.edge}"
+    aria-pressed="${String(active)}">
+    <span class="theme-chips"><i style="background:${c.panel}"></i><i style="background:${c.accent}"></i><i style="background:${c.ink}"></i></span>
+    <span class="theme-name">${esc(window.Appearance.name(id))}</span></button>`;
+}
+function appearancePanelHTML(){
+  const s=window.Appearance.state;
+  const mode=s.follow_system?'system':(window.Appearance.isDark(s.theme)?'dark':'light');
+  const grid=ids=>`<div class="theme-cards-grid">${ids.map(id=>themeSwatch(id,!s.follow_system&&s.theme===id)).join('')}</div>`;
+  return `
+  <h2>Appearance</h2>
+  <p class="dim">How this companion's workspace looks. Saved with the companion, so it follows them to your phone.</p>
+
+  <h3 class="section-subheading">Appearance mode</h3>
+  <div class="segmented" role="tablist" id="appearance-mode">
+    ${[['dark','Dark'],['light','Light'],['system','Match system']].map(([v,l])=>
+      `<button role="tab" type="button" data-mode="${v}" aria-selected="${String(mode===v)}">${l}</button>`).join('')}
+  </div>
+
+  <div id="appearance-themes">
+    ${s.follow_system?`
+      <h3 class="section-subheading">When your system is dark</h3>
+      <div class="theme-cards-grid">${window.Appearance.DARK.map(id=>themeSwatch(id,s.dark_theme===id).replace('data-theme-id','data-dark-theme')).join('')}</div>
+      <h3 class="section-subheading">When your system is light</h3>
+      <div class="theme-cards-grid">${window.Appearance.LIGHT.map(id=>themeSwatch(id,s.light_theme===id).replace('data-theme-id','data-light-theme')).join('')}</div>`
+    :grid(window.Appearance.isDark(s.theme)?window.Appearance.DARK:window.Appearance.LIGHT)}
+  </div>
+
+  <h3 class="section-subheading">Accent colour</h3>
+  <p class="dim small">Used for links, highlights and the active tab. Overrides the theme's own accent.</p>
+  <div class="accent-row">
+    ${ACCENTS.map(([v,l])=>`<button type="button" class="accent-dot${s.accent===v?' is-active':''}" data-accent="${v}"
+      title="${esc(l)}" aria-label="${esc(l)}" aria-pressed="${String(s.accent===v)}"
+      style="${v?`background:${v}`:''}">${v?'':'<span class="accent-auto">A</span>'}</button>`).join('')}
+    <label class="accent-custom" title="Pick any colour">
+      <input type="color" id="accent-custom" value="${esc(s.accent||'#6c9cff')}" aria-label="Custom accent colour">
+      <span>Custom</span>
+    </label>
+  </div>
+
+  <h3 class="section-subheading">Hermes runtime</h3>
+  <div style="max-width:400px">
+    <label>Environment
+      <select id="settings-installation-select">
+        <option value="existing">Existing Hermes (system host)</option>
+        <option value="managed">Kit-managed Hermes (isolated)</option>
+      </select>
+    </label>
+    <p class="dim small">Private workspace · stored locally on this machine.</p>
+  </div>`;
+}
+function wireAppearancePanel(panel){
+  const redraw=()=>{panel.innerHTML=appearancePanelHTML();wireAppearancePanel(panel);};
+  for(const b of panel.querySelectorAll('#appearance-mode button'))b.onclick=async()=>{
+    const m=b.dataset.mode,s=window.Appearance.state;
+    if(m==='system')await window.Appearance.set({follow_system:true});
+    else await window.Appearance.set({follow_system:false,
+      theme:m==='dark'?(window.Appearance.isDark(s.theme)?s.theme:s.dark_theme):(window.Appearance.isDark(s.theme)?s.light_theme:s.theme)});
+    redraw();
+  };
+  for(const t of panel.querySelectorAll('[data-theme-id]'))t.onclick=async()=>{
+    await window.Appearance.set({theme:t.dataset.themeId,
+      [window.Appearance.isDark(t.dataset.themeId)?'dark_theme':'light_theme']:t.dataset.themeId});
+    redraw();
+  };
+  for(const t of panel.querySelectorAll('[data-dark-theme]'))t.onclick=async()=>{await window.Appearance.set({dark_theme:t.dataset.darkTheme});redraw();};
+  for(const t of panel.querySelectorAll('[data-light-theme]'))t.onclick=async()=>{await window.Appearance.set({light_theme:t.dataset.lightTheme});redraw();};
+  for(const a of panel.querySelectorAll('[data-accent]'))a.onclick=async()=>{await window.Appearance.set({accent:a.dataset.accent});redraw();};
+  const custom=panel.querySelector('#accent-custom');
+  if(custom)custom.oninput=()=>window.Appearance.set({accent:custom.value});
+  const setInst=panel.querySelector('#settings-installation-select');
+  if(setInst&&$('installation-select')){
+    setInst.value=$('installation-select').value;
+    setInst.onchange=()=>{$('installation-select').value=setInst.value;$('installation-select').dispatchEvent(new Event('change'));};
+  }
+}
 
 const settingsPage=workspaceHandlers.settings||(typeof renderSettings==='function'?renderSettings:null);
 workspaceHandlers.settings=async()=>{
   if(settingsPage)await settingsPage();if(current!=='settings')return;
   const page=$('settings');
-  if(!page.querySelector('.page-title'))page.insertAdjacentHTML('afterbegin',heading('Preferences','Operating boundaries, routine quiet hours, workspace themes, and system settings.'));
+  if(!page.querySelector('.page-title'))page.insertAdjacentHTML('afterbegin',heading('Preferences','Boundaries, quiet hours, appearance, and how this workspace runs.'));
   let workspacePanel=page.querySelector('[data-preference-panel="workspace"]');
   if(!workspacePanel){
     workspacePanel=document.createElement('div');
     workspacePanel.className='card';
     workspacePanel.dataset.preferencePanel='workspace';
-    const activeTheme=document.documentElement.dataset.theme||localStorage.getItem('companion-theme')||'midnight';
-    workspacePanel.innerHTML=`
-      <h2>Workspace Appearance & Environment</h2>
-      <p class="dim">Customize your workspace visual theme and manage your companion runtime environment.</p>
-      <h3 style="margin-top:16px;font-size:14px">Color Theme</h3>
-      <div class="theme-cards-grid" id="settings-theme-grid">
-        ${ALL_THEMES.map(([id,label,bg,accent])=>`
-          <div class="theme-card ${activeTheme===id?'is-active':''}" data-theme-id="${id}" style="background:${bg};color:${id==='daylight'?'#24292f':'#e6edf3'}">
-            <div class="theme-preview-dot" style="background:${accent}"></div>
-            <span>${label}</span>
-          </div>`).join('')}
-      </div>
-      <h3 style="margin-top:24px;font-size:14px">Environment Mode</h3>
-      <div style="max-width:400px;margin-top:8px">
-        <label>Hermes Runtime
-          <select id="settings-installation-select">
-            <option value="existing">Existing Hermes (system host)</option>
-            <option value="managed">Kit-managed Hermes (isolated)</option>
-          </select>
-        </label>
-        <p class="dim small">Private workspace · stored locally on this machine.</p>
-      </div>`;
     page.append(workspacePanel);
-    for(const tc of workspacePanel.querySelectorAll('[data-theme-id]')){
-      tc.onclick=()=>{
-        const id=tc.dataset.themeId;
-        document.documentElement.dataset.theme=id;
-        localStorage.setItem('companion-theme',id);
-        for(const other of workspacePanel.querySelectorAll('[data-theme-id]'))other.classList.toggle('is-active',other.dataset.themeId===id);
-        if($('theme-choice'))$('theme-choice').value=id;
-      };
-    }
-    const setInst=$('settings-installation-select');
-    if(setInst&&$('installation-select')){
-      setInst.value=$('installation-select').value;
-      setInst.onchange=()=>{
-        $('installation-select').value=setInst.value;
-        $('installation-select').dispatchEvent(new Event('change'));
-      };
-    }
   }
+  workspacePanel.innerHTML=appearancePanelHTML();
+  wireAppearancePanel(workspacePanel);
 
   const allCards=[...page.querySelectorAll('[data-preference-panel]')];
   const oldTabs=page.querySelector('.segmented[aria-label="Preference categories"]');
@@ -731,7 +862,7 @@ workspaceHandlers.settings=async()=>{
   tabs.className='segmented';
   tabs.setAttribute('role','tablist');
   tabs.setAttribute('aria-label','Preference categories');
-  tabs.innerHTML=[['contact','Contact'],['photos','Photo sessions'],['routine','Daily rhythm'],['relationship','Relationship'],['senses','Awareness'],['network','Network & PIN'],['workspace','Workspace & Themes']].map(([id,label])=>`<button role="tab" data-preference="${id}">${label}</button>`).join('');
+  tabs.innerHTML=[['contact','Contact'],['photos','Photo sessions'],['routine','Daily rhythm'],['relationship','Relationship'],['senses','Awareness'],['network','Network & PIN'],['workspace','Appearance']].map(([id,label])=>`<button role="tab" data-preference="${id}">${label}</button>`).join('');
   page.insertBefore(tabs,allCards[0]);
   const pick=name=>{
     preferencePanel=name;
@@ -745,20 +876,23 @@ workspaceHandlers.settings=async()=>{
 const identityBase=workspaceHandlers.identity;
 workspaceHandlers.identity=async()=>{
   await identityBase();if(current!=='identity')return;
-  const companionName=chatName()||'Your companion';
-  $('identity').insertAdjacentHTML('afterbegin',`
+  // Tools belong under the profile header, not above the companion's name.
+  const bar=`
     <div class="identity-actions-bar">
-      <div style="flex:1;min-width:200px">
-        <strong style="font-size:14px;color:#f0f4fc">Persona & Soul Architecture for ${esc(companionName)}</strong>
-        <p class="dim small" style="margin:2px 0 0">Raw text specifications remain fully Hermes-compatible. Every save keeps an automatic backup.</p>
+      <div class="identity-actions-copy">
+        <strong>Edit their documents</strong>
+        <p class="dim small">Plain text, exactly as Hermes reads it. Every save keeps an automatic backup.</p>
       </div>
-      <div class="actions" style="margin:0">
+      <div class="actions">
         <button class="act" id="edit-full-soul">Edit full documents</button>
         <button class="quiet" id="repair-sections">Restore missing sections</button>
         <button class="quiet" id="album-reference">Album reference</button>
         <button class="quiet" id="visual-builder">Visual creator</button>
       </div>
-    </div>`);
+    </div>`;
+  const hero=$('identity').querySelector('.identity-hero');
+  if(hero)hero.insertAdjacentHTML('afterend',bar);
+  else $('identity').insertAdjacentHTML('afterbegin',bar);
   $('edit-full-soul').onclick=async()=>{if(!await confirmEditorLeave('identity'))return;const list=await api('/documents');let selected='SOUL.md',revision='';dialog('Edit companion documents',`<p>Every save keeps a backup. Edit the complete document, including writing created outside the kit. Other vault documents can be edited in Vault.</p><label>Document<select id="full-document">${options(list.documents.map(x=>[x,x]),selected)}</select></label><textarea id="full-soul" style="height:55vh"></textarea><button class="act" id="save-full-soul">Save document</button>`);const read=async()=>{if(!await confirmEditorLeave('dialog')){$('full-document').value=selected;return;}selected=$('full-document').value;const d=await api('/soul-document?document='+encodeURIComponent(selected));revision=d.revision;$('full-soul').value=d.text;};await read();$('full-document').onchange=read;$('save-full-soul').onclick=async()=>{await post('/soul-document',{document:selected,text:$('full-soul').value,revision});clearEditorDirty('dialog');$('product-dialog').close();await render('identity');notice('Document saved with a backup.');};};
   $('repair-sections').onclick=async()=>{if(!await confirmEditorLeave('identity'))return;await post('/identity-repair');await render('identity');notice('Missing sections restored. Add an appearance below, or use the visual creator. Existing writing was preserved.');};
   $('album-reference').onclick=async()=>{if(!await confirmEditorLeave('identity'))return;const d=await api('/content');const images=d.items.filter(x=>x.kind==='image');dialog('Choose a reference photo',`<div class="photo-grid">${images.map((x,i)=>`<button class="card" data-reference="${i}"><img ${mediaPrivacy(x)} style="width:100%;height:150px;object-fit:cover" src="${mediaUrl(x.url)}" alt="${esc(x.title)}"><span>${esc(x.title)} · ${esc(x.generation||x.source)}${x.blur?" · NSFW":""}</span></button>`).join('')||'<p>No saved photos yet. Upload a photo in Identity to get started.</p>'}</div>`);for(const b of $('dialog-body').querySelectorAll('[data-reference]'))b.onclick=async()=>{const r=await fetch(rawMediaUrl(images[+b.dataset.reference].url));if(!r.ok)throw Error('Photo could not be loaded');await uploadPortrait(await r.blob());$('product-dialog').close();await render('identity');};};
@@ -768,7 +902,7 @@ TABS.push(['voice','Voice studio']);const voiceSection=document.createElement('s
 const voiceChoices={edge:['en-US-AriaNeural','en-US-GuyNeural','en-GB-SoniaNeural'],piper:['en_US-lessac-medium'],kittentts:['Jasper','Bella','Luna','Bruno','Rosie','Hugo','Kiki','Leo'],openai:['alloy','echo','fable','onyx','nova','shimmer'],xai:['eve','ara','rex','sal','leo'],gemini:['Kore','Puck','Charon','Aoede'],neutts:[],elevenlabs:[],minimax:['English_expressive_narrator'],mistral:[]};
 workspaceHandlers.voice=async()=>{
  const d=await api('/voice'),tts=d.tts;
- $('voice').innerHTML=heading('Voice studio','Choose how your companion sounds. Local engines run on the computer hosting the kit; cloud engines use their connected accounts.')+`<div class="card"><form id="voice-form"><div class="form-grid"><label>Speech engine<select id="voice-provider">${options([['edge','Edge · online, no API key'],['piper','Piper · local'],['kittentts','KittenTTS · local'],['neutts','NeuTTS · local reference voice'],['openai','OpenAI'],['xai','xAI / Grok'],['elevenlabs','ElevenLabs'],['minimax','MiniMax'],['gemini','Gemini'],['mistral','Mistral']],tts.provider||'edge')}</select></label><label id="voice-picker-label">Voice<select id="voice-picker" aria-label="Voice"></select><input id="voice-custom" aria-label="Custom voice name or ID" hidden placeholder="Voice name or ID"></label><label id="voice-speed-label">Speaking speed <output id="speed-value">1</output>×<input id="voice-speed" type="range" min="0.7" max="1.5" step="0.05" value="1"></label></div><label id="voice-pitch-label" hidden>Pitch <output id="pitch-value">0</output><input id="voice-pitch" type="range" min="-12" max="12" step="1" value="0"></label><div id="voice-reference" hidden><p>Use a clear WAV recording, 1–30 seconds, and the exact words spoken. Choose a voice you have permission to use.</p><label>Reference audio<input id="voice-clip" type="file" accept=".wav,audio/wav"></label><label>Words spoken in the clip<textarea id="voice-transcript">${esc(tts.neutts?.ref_text||'')}</textarea></label><p>${tts.neutts?.ref_audio?'A reference clip is configured.':'No reference clip configured; Hermes uses its default sample.'}</p></div><div class="actions"><button class="act">Save voice</button><button type="button" class="quiet" id="install-local-voice">Install selected local engine</button><button type="button" class="quiet" id="voice-install">Full speech setup</button></div></form></div><div class="card"><h2>Try the saved voice</h2><label>Speech verification phrase<input id="voice-sample" type="text" readonly value="Hello! It’s really good to spend a little time together." style="background:rgba(255,255,255,0.03);color:var(--text,#d8e2ee);cursor:default"></label><button class="act" id="preview-voice">Generate preview</button><div id="voice-player"></div><p class="dim">Cloud previews may use account credits. Missing local dependencies appear as an error; use Install / configure engines to install them through Hermes setup.</p></div>`;
+ $('voice').innerHTML=heading('Voice studio','Choose how your companion sounds. Local engines run on the computer hosting the kit; cloud engines use their connected accounts.')+`<div class="card"><form id="voice-form"><div class="form-grid"><label>Speech engine<select id="voice-provider">${options([['edge','Edge · online, no API key'],['piper','Piper · local'],['kittentts','KittenTTS · local'],['neutts','NeuTTS · local reference voice'],['openai','OpenAI'],['xai','xAI / Grok'],['elevenlabs','ElevenLabs'],['minimax','MiniMax'],['gemini','Gemini'],['mistral','Mistral']],tts.provider||'edge')}</select></label><label id="voice-picker-label">Voice<select id="voice-picker" aria-label="Voice"></select><input id="voice-custom" aria-label="Custom voice name or ID" hidden placeholder="Voice name or ID"></label><label id="voice-speed-label">Speaking speed <output id="speed-value">1</output>×<input id="voice-speed" type="range" min="0.7" max="1.5" step="0.05" value="1"></label></div><label id="voice-pitch-label" hidden>Pitch <output id="pitch-value">0</output><input id="voice-pitch" type="range" min="-12" max="12" step="1" value="0"></label><div id="voice-reference" hidden><p>Use a clear WAV recording, 1–30 seconds, and the exact words spoken. Choose a voice you have permission to use.</p><label>Reference audio<input id="voice-clip" type="file" accept=".wav,audio/wav"></label><label>Words spoken in the clip<textarea id="voice-transcript">${esc(tts.neutts?.ref_text||'')}</textarea></label><p>${tts.neutts?.ref_audio?'A reference clip is configured.':'No reference clip configured; Hermes uses its default sample.'}</p></div><div class="actions"><button class="act">Save voice</button><button type="button" class="quiet" id="install-local-voice">Install selected local engine</button><button type="button" class="quiet" id="voice-install">Full speech setup</button></div></form></div><div class="card"><h2>Try the saved voice</h2><label>Speech verification phrase<input id="voice-sample" type="text" readonly value="Hello! It’s really good to spend a little time together." style="background:color-mix(in srgb,var(--ink) 3%,transparent);color:var(--ink-2);cursor:default"></label><button class="act" id="preview-voice">Generate preview</button><div id="voice-player"></div><p class="dim">Cloud previews may use account credits. Missing local dependencies appear as an error; use Install / configure engines to install them through Hermes setup.</p></div>`;
  const update=()=>{const provider=$('voice-provider').value,cfg=tts[provider]||{},value=cfg.voice||cfg.voice_id||voiceChoices[provider][0]||'';const known=voiceChoices[provider].includes(value);$('voice-picker').innerHTML=options(voiceChoices[provider].map(v=>[v,v]),value)+'<option value="__custom__">Write your own…</option>';$('voice-picker').value=known?value:'__custom__';$('voice-custom').value=known?'':value;$('voice-custom').hidden=known;$('voice-picker-label').hidden=provider==='neutts';$('voice-reference').hidden=provider!=='neutts';$('voice-speed-label').hidden=!['edge','openai','xai','minimax','kittentts'].includes(provider);$('voice-pitch-label').hidden=provider!=='minimax';$('voice-pitch').value=cfg.pitch||0;$('pitch-value').textContent=$('voice-pitch').value;$('install-local-voice').hidden=!['piper','neutts','kittentts'].includes(provider);$('voice-speed').value=cfg.speed||1;$('speed-value').textContent=$('voice-speed').value;};update();$('voice-provider').onchange=update;$('voice-picker').onchange=()=>{$('voice-custom').hidden=$('voice-picker').value!=='__custom__';};$('voice-speed').oninput=()=>{$('speed-value').textContent=$('voice-speed').value;};
  $('voice-pitch').oninput=()=>{$('pitch-value').textContent=$('voice-pitch').value;};$('install-local-voice').onclick=()=>action('/voice/install',{provider:$('voice-provider').value});
  $('voice-form').onsubmit=async e=>{e.preventDefault();const file=$('voice-clip').files[0];if(file&&$('voice-provider').value==='neutts'){const r=await fetch(scoped('/api/voice/reference'),{method:'POST',headers:{'content-type':'application/octet-stream',...(token?{'x-companion-token':token}:{})},body:file});if(!r.ok)throw Error((await r.json()).detail);}await action('/voice',{provider:$('voice-provider').value,voice:$('voice-picker').value==='__custom__'?$('voice-custom').value:$('voice-picker').value,speed:+$('voice-speed').value,pitch:+$('voice-pitch').value,transcript:$('voice-transcript').value});};
@@ -811,15 +945,15 @@ workspaceHandlers.environment=async()=>{
     <h2 style="margin:0">Companion Kit Updates · v${esc(d.version)}</h2>
     ${d.has_update?`<span class="pill status-warn">Update v${esc(d.latest_version)} Available</span>`:`<span class="pill status-good">Up to Date</span>`}
   </div>
-  ${d.has_update?`<div style="background:rgba(238,186,83,0.1);border-left:3px solid var(--warn,#e3b341);padding:12px 14px;border-radius:6px;margin-bottom:14px">
-    <strong style="color:var(--warn,#e3b341)">A new release (v${esc(d.latest_version)}) is available on GitHub!</strong>
+  ${d.has_update?`<div style="background:color-mix(in srgb,var(--warn) 10%,transparent);border-left:3px solid var(--warn);padding:12px 14px;border-radius:6px;margin-bottom:14px">
+    <strong style="color:var(--warn)">A new release (v${esc(d.latest_version)}) is available on GitHub!</strong>
     <p class="dim small" style="margin:4px 0 0">To apply this update cleanly and verify all dependencies, run the turnkey updater on your host machine:</p>
-    <pre style="background:#11151c;padding:8px 12px;border-radius:6px;margin:8px 0;font-size:12.5px;color:#7ee787">./update.sh</pre>
-    ${d.release_url?`<a href="${esc(d.release_url)}" target="_blank" class="small" style="color:var(--accent,#58a6ff);display:inline-block">View Release Notes on GitHub →</a>`:''}
+    <pre style="background:var(--bg);padding:8px 12px;border-radius:6px;margin:8px 0;font-size:12.5px;color:var(--good)">./update.sh</pre>
+    ${d.release_url?`<a href="${esc(d.release_url)}" target="_blank" class="small" style="color:var(--accent);display:inline-block">View Release Notes on GitHub →</a>`:''}
   </div>`:`<p class="dim small" style="margin:0 0 10px">You are running the latest version of Companion Kit.</p>`}
   <details style="margin-top:14px">
     <summary class="small dim">Terminal update commands</summary>
-    <pre style="background:#11151c;padding:10px 12px;border-radius:6px;margin:6px 0;font-size:12px">./update.sh          # Updates Companion Kit, dependencies, and restarts service\n./update.sh --hermes # Also updates Hermes agent runtime</pre>
+    <pre style="background:var(--bg);padding:10px 12px;border-radius:6px;margin:6px 0;font-size:12px">./update.sh          # Updates Companion Kit, dependencies, and restarts service\n./update.sh --hermes # Also updates Hermes agent runtime</pre>
   </details>`;
   $('environment').append(box);
 };

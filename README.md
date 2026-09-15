@@ -1,27 +1,80 @@
-# Start here
+<h1 align="center">companion-kit</h1>
 
-For the private Windows beta, begin with [START_HERE.md](START_HERE.md). It covers installation, features, voice, images, updates and troubleshooting.
+<p align="center">
+  <strong>Give your local AI a life that continues when you close the window.</strong><br>
+  A companion workspace built on <a href="https://hermes-agent.nousresearch.com/">Hermes</a> —
+  runs on your hardware, keeps its memory on your disk, and cannot message you at 3am.
+</p>
 
-# companion-kit
-
-Turns a [Hermes](https://hermes-agent.nousresearch.com/) agent into someone with a continuing life:
-a present it can be honest about, a memory that keeps evidence separate from fiction, and limits on
-when it may contact you that are enforced in code rather than requested in a prompt.
-
-The desktop workspace brings companions, chat, lived-state timeline, memories, vault browsing,
-provider configuration, and native Hermes management into one local app.
-
-```sh
-./companion             # Linux: bootstrap dependencies and open the app
-```
-
-On Windows, double-click `companion.cmd`. Choose an existing Hermes installation or install a
-separate kit-managed one in the app. See [the desktop guide](docs/DESKTOP.md) for onboarding,
-private remote access, and the explicit beta verification limits.
-
-The CLI workflows below remain available for advanced setup.
+<p align="center">
+  <a href="LICENSE"><img alt="License: PolyForm Noncommercial 1.0.0" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-6c9cff"></a>
+  <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-4ade80">
+  <img alt="Runs locally" src="https://img.shields.io/badge/runs-locally-b388ff">
+  <img alt="No telemetry" src="https://img.shields.io/badge/telemetry-none-2dd4bf">
+</p>
 
 ---
+
+Character apps give you someone to talk to, and keep them. The conversation lives on their servers,
+the memory is theirs, the model is theirs, and the character can be changed or removed without you.
+
+companion-kit is the other arrangement. The companion lives in a folder you own, on a machine you
+control, backed by whichever model you point it at — a 26B on your own GPU, or a cloud API, or a
+local model with a cloud fallback for when the hardware is busy. Nothing here phones home. There is
+no account, no telemetry, and no server component you do not run yourself.
+
+What you get is not a chatbot with a persona field. It is a companion with a **present** it can be
+honest about, a **memory that keeps evidence separate from fiction**, and **limits on when it may
+contact you that are enforced in code rather than requested in a prompt**.
+
+## Start here
+
+Two doors, depending on where you are:
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### I'm new to all this
+
+You need Hermes, and the app can install it for you.
+
+```sh
+git clone https://github.com/YOUR-ACCOUNT/companion-kit
+cd companion-kit
+./companion
+```
+
+The workspace opens in your browser. Choose **Kit-managed Hermes**, let it install, then
+**Create a companion**. The interview asks seven questions about how you want things to feel and
+proposes the rest — and shows you every setting it chose before anything is written.
+
+On Windows, double-click `companion.cmd` instead.
+
+</td>
+<td width="50%" valign="top">
+
+### I already run Hermes
+
+Adopt the agent you have. Your `SOUL.md` is left byte-for-byte alone.
+
+```sh
+git clone https://github.com/YOUR-ACCOUNT/companion-kit
+cd companion-kit
+./companion
+```
+
+Choose **Existing Hermes**, pick the profile, and **Adopt**. Your memories, session history and
+vault stay exactly where they are; the continuity machinery is installed around them.
+
+Prefer the terminal? `./companion --home ~/.hermes upgrade --soul keep`
+
+</td>
+</tr>
+</table>
+
+Either way the first launch bootstraps its own `.venv` and dependencies. Nothing is installed
+system-wide.
 
 ## Contents
 
@@ -34,7 +87,9 @@ The CLI workflows below remain available for advanced setup.
 [Commands](#commands) ·
 [The local page](#the-local-page) ·
 [What gets written where](#what-gets-written-where) ·
+[Running it entirely on your own hardware](#running-it-entirely-on-your-own-hardware) ·
 [Development](#development) ·
+[License](#license) ·
 [Status](#status)
 
 **Going deeper:** [docs/CONCEPTS.md](docs/CONCEPTS.md) is the nine ideas the rest follows from ·
@@ -126,7 +181,7 @@ Optional, and each one degrades to simply not existing: a messaging platform con
 ### Linux / macOS / WSL
 
 ```sh
-git clone <this repo> companion-kit && cd companion-kit
+git clone https://github.com/YOUR-ACCOUNT/companion-kit && cd companion-kit
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 ./companion
@@ -356,6 +411,37 @@ user's files. Keep real secrets in a credential manager.
 
 ---
 
+## Running it entirely on your own hardware
+
+This is the arrangement the kit is built for, and the reason several of its design choices look the
+way they do.
+
+**The cheap loops are the point.** A companion runs sixteen scheduled jobs. Six of them use no model
+at all — the present advancer, health watch, outbox dispatcher, senses, quiet-hours drift and vault
+commit — so they keep working when inference is unavailable, and cost nothing when it is not. The
+rest are handed a pre-assembled read of their own state instead of spending tool calls fetching it,
+and the autonomy loop is fingerprinted so the model does not run when nothing has changed. That is
+what makes a 26B companion on a consumer GPU workable rather than theoretical.
+
+**Point it at whatever you run.** Any OpenAI-compatible endpoint works: llama.cpp's server, Ollama,
+LM Studio, vLLM, or a box on your LAN. Set it as the primary in **Hermes settings → Models**, and
+give it a fallback for when the GPU is busy or the box is asleep. The fallback chain is probed, not
+assumed — use **Test saved model chain** before trusting it.
+
+**Images and speech are local too, if you want them.** The image provider can be a ComfyUI instance
+on your own machine; TTS can be a local engine driven through a command adapter. Both degrade to
+simply not existing if you skip them.
+
+**What a phone can and cannot do.** Hermes documents Termux as best-effort. A spare plugged-in
+handset is a reasonable host for a core-feature pilot; it is not a verified desktop-equivalent
+environment, and Android will suspend background work. See
+[docs/ANDROID_TERMUX_SETUP_GUIDE.md](docs/ANDROID_TERMUX_SETUP_GUIDE.md) before committing to it.
+
+If you are here because you would rather your companion lived on your hardware than someone else's:
+that is the whole idea. Bring your own weights.
+
+---
+
 ## Development
 
 ```sh
@@ -383,6 +469,26 @@ The release builder uses `release-files.json`, an explicit allowlist. It exclude
 virtualenvs, caches, installed profiles, vaults, logs and credentials, rejects symlinks and likely
 embedded secrets, and ships a SHA-256 manifest. **Share the generated ZIP rather than the working
 directory or its git history** — old commits can retain removed examples and identifiers.
+
+---
+
+## License
+
+[PolyForm Noncommercial 1.0.0](LICENSE). Use it, change it, share it, build on it — for any
+noncommercial purpose. Personal use, hobby projects, study, research, and use by charities,
+schools, public research bodies and government institutions are all permitted purposes.
+
+What is not permitted is commercial use: selling it, or running it as part of a paid product or
+service. If you want to do that, ask.
+
+A note on what this means, plainly: **PolyForm Noncommercial is not an OSI-approved open source
+license**, because the noncommercial restriction fails the "no discrimination against fields of
+endeavour" criterion. The source is public and you may fork it, but GitHub will not label this
+repository "open source", and it is not compatible with GPL-licensed code. That trade was made on
+purpose — this is meant to stay something the local-AI community keeps, rather than something that
+gets wrapped in a subscription.
+
+Contributions are welcome under the same terms.
 
 ---
 

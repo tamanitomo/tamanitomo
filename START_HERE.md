@@ -1,17 +1,21 @@
-# Companion Kit — private Windows beta
+# Start here
 
-Companion Kit is a browser workspace for a persistent Hermes companion: conversation, identity, memories, daily life, photos and voice. This package contains application code and guides. It contains no preconfigured person, credentials, private images, model weights or cloned voices. Set up your own companion and use your own model/provider accounts.
+Companion Kit is a browser workspace for a persistent Hermes companion: conversation, identity, memories, daily life, photos and voice. It contains no preconfigured person, credentials, private images, model weights or cloned voices. You set up your own companion and use your own model accounts — or your own hardware.
+
+For the project overview and the two-minute install, see [README.md](README.md). This page is the longer walkthrough for a first install.
 
 ## Before you start
 
-Use a Windows PC with internet access, a modern browser and space for Hermes and optional model downloads. Keep the PC awake when you expect schedules, Telegram or remote access to work. Cloud model usage can cost money; local image/conversation models can need substantial RAM, VRAM and disk. Start with one working conversation model, then add optional images and voice. Windows/Android device acceptance is still required: the current release was developed and tested on Linux, not certified on your exact PC.
+Any machine with internet access, a modern browser and room for Hermes plus optional model downloads. Keep it awake when you expect schedules, Telegram or remote access to work. Cloud model usage can cost money; local image and conversation models can need substantial RAM, VRAM and disk. Start with one working conversation model, then add images and voice.
+
+**What is actually verified.** Development and testing happen on Linux. Windows and Android hosting are exercised but not certified on every configuration — see [docs/REVIEW.md](docs/REVIEW.md) for what has been demonstrated and what has not.
 
 ## Install
 
-1. Extract the ZIP to a permanent writable folder such as `C:\CompanionKit`. Do not run it inside the ZIP or put your vault inside the application code folder.
-2. Double-click **companion.cmd**. The launcher provisions Python when needed, installs Kit dependencies and opens your browser. Keep its terminal window open. First launch needs internet; errors remain visible there.
+1. Put the kit somewhere permanent and writable — `git clone` it, or extract the release ZIP into a folder such as `C:\CompanionKit`. Do not run it from inside the ZIP, and do not put your vault inside the application code folder.
+2. Run **`./companion`** (Linux, macOS, WSL) or double-click **companion.cmd** (Windows). The launcher provisions Python when needed, installs dependencies into its own `.venv` and opens your browser. Keep the terminal window open — first launch needs internet, and errors stay visible there.
 3. Select **Kit-managed Hermes** for a new Hermes installation, or **Existing Hermes** if you already use Hermes. Complete installation and provider sign-in under **Hermes settings**.
-4. Open **Companions → Create a companion**. Choose a name, identity, timezone, relationship preferences and a separate vault directory. Your writing remains editable later.
+4. Open **Companions → Create a companion**. A short guided interview asks how you want things to feel and proposes a personality and a set of boundaries, then shows you every value it chose before anything is written — you can edit any of them, or skip the questions and fill the fields in directly. Already running Hermes? Use **Adopt** instead; your existing `SOUL.md` is left byte-for-byte alone.
 5. Configure a primary model and only the fallback providers you want to pay for/use. Test the saved model chain. Open **Conversation**, send a short message and verify it appears in history.
 6. Review the proposed hooks and scheduled jobs before enabling them. Telegram is optional. Configure its credentials with Hermes if wanted; test gateway startup and Windows reboot recovery before relying on unattended schedules.
 7. Add optional image and voice providers using the guide below. Keep scheduled photos off until manual previews and the image reviewer work.

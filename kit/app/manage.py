@@ -17,6 +17,19 @@ from . import runtime as hr
 import companion_config as cc
 import companion_platform as cp
 
+# Workspace appearance. Themes are defined in static/product.css; this list is the
+# validation allowlist, and the two groups decide what "match system" switches between.
+DARK_THEMES=['midnight','nord','ocean','emerald','amethyst','synthwave','ember','sakura','carbon']
+LIGHT_THEMES=['daylight','parchment','mist']
+THEMES=DARK_THEMES+LIGHT_THEMES
+# Destinations a person may pin to the mobile bar. "more" is fixed and never pinned.
+PINNABLE=['now','chat','timeline','photos','journals','creations','relationship','loops',
+          'knows','vault','identity','settings','environment','health','roster',
+          'image-studio','voice','local-models']
+APPEARANCE_DEFAULT={'theme':'midnight','accent':'','follow_system':False,
+                    'dark_theme':'midnight','light_theme':'daylight',
+                    'nav_pins':['chat','now','photos','journals']}
+
 FALLBACK_CATALOG=[
  {'slug':'openrouter','label':'OpenRouter','api_key_env_vars':['OPENROUTER_API_KEY'],'auth_type':'api_key'},
  {'slug':'deepseek','label':'DeepSeek','api_key_env_vars':['DEEPSEEK_API_KEY'],'auth_type':'api_key'},
@@ -194,6 +207,55 @@ def register(app, select, load, operations):
             cp.atomic_write(target,json.dumps({'name':name.strip()},ensure_ascii=False)+'\n')
             return {'name':name.strip(),'note':'Workspace name saved. Hermes identity, profile paths, and jobs are unchanged.'}
         return op('Rename workspace profile',run)
+
+    def appearance_file(home):
+        target=home/'companion-appearance.json'
+        if target.is_symlink():raise ValueError('Appearance file must not be a symlink')
+        return target
+
+    @app.get('/api/appearance')
+    def appearance():
+        rt,p,h=context()
+        stored=hr.read_json(appearance_file(h),{})
+        out=dict(APPEARANCE_DEFAULT)
+        if isinstance(stored,dict):
+            for k,v in stored.items():
+                if k in out:out[k]=v
+        return {'appearance':out,'themes':{'dark':DARK_THEMES,'light':LIGHT_THEMES},'pinnable':PINNABLE}
+
+    @app.post('/api/appearance')
+    def appearance_save(payload:dict):
+        rt,p,h=context()
+        if not isinstance(payload,dict):raise ValueError('Invalid appearance payload')
+        current=hr.read_json(appearance_file(h),{})
+        out=dict(APPEARANCE_DEFAULT)
+        if isinstance(current,dict):
+            for k,v in current.items():
+                if k in out:out[k]=v
+        for key in ('theme','dark_theme','light_theme'):
+            if key in payload:
+                value=payload[key]
+                if value not in THEMES:raise ValueError(f'Unknown theme for {key}')
+                if key=='dark_theme' and value not in DARK_THEMES:raise ValueError('Choose a dark theme')
+                if key=='light_theme' and value not in LIGHT_THEMES:raise ValueError('Choose a light theme')
+                out[key]=value
+        if 'accent' in payload:
+            accent=payload['accent'] or ''
+            if accent and not re.fullmatch(r'#[0-9a-fA-F]{6}',str(accent)):
+                raise ValueError('Accent must be a #rrggbb colour, or empty for the theme default')
+            out['accent']=str(accent).lower()
+        if 'follow_system' in payload:out['follow_system']=bool(payload['follow_system'])
+        if 'nav_pins' in payload:
+            pins=payload['nav_pins']
+            if not isinstance(pins,list):raise ValueError('nav_pins must be a list')
+            clean=[]
+            for item in pins:
+                if item not in PINNABLE:raise ValueError(f'Cannot pin unknown destination: {item}')
+                if item not in clean:clean.append(item)
+            if not 1<=len(clean)<=4:raise ValueError('Pin between 1 and 4 destinations')
+            out['nav_pins']=clean
+        cp.atomic_write(appearance_file(h),json.dumps(out,ensure_ascii=False,indent=2)+'\n')
+        return {'appearance':out,'saved':True}
 
     @app.get('/api/catalog')
     def catalog():

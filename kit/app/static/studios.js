@@ -28,7 +28,15 @@ workspaceHandlers['companion-edit']=async()=>{
  const result=await post('/profile/editor',{revision:d.revision,config,soul:$('editor-soul').value,display_name:$('editor-display-name').value});clearEditorDirty('companion-edit');if(result.operation){const row=await followOperation(result.operation);if(row.status!=='complete')return;}await boot();notice('Companion saved with a backup.'+(result.operation?' Background jobs synchronized.':''));};
 };
 const identityStudioBase=workspaceHandlers.identity;
-workspaceHandlers.identity=async()=>{await identityStudioBase();$('identity').insertAdjacentHTML('afterbegin',`<div class="card studio-entry"><div><h2>Image studio</h2><p class="dim">Tune the exact identity prompt, pair providers, and choose a workflow for each kind of image.</p></div><button class="act" id="open-image-studio">Open image studio →</button></div>`);$('open-image-studio').onclick=()=>showTab('image-studio');};
+workspaceHandlers.identity=async()=>{
+ await identityStudioBase();
+ // Sits with the other identity tools, below the companion's profile header.
+ const card=`<div class="card studio-entry"><div><h2>Image studio</h2><p class="dim">Tune the exact identity prompt, pair providers, and choose a workflow for each kind of image.</p></div><button class="act" id="open-image-studio">Open image studio →</button></div>`;
+ const anchor=$('identity').querySelector('.identity-actions-bar')||$('identity').querySelector('.identity-hero');
+ if(anchor)anchor.insertAdjacentHTML('afterend',card);
+ else $('identity').insertAdjacentHTML('afterbegin',card);
+ $('open-image-studio').onclick=()=>showTab('image-studio');
+};
 
 // Obsidian-like Knowledge Vault: hierarchical tree, live markdown preview/split, TOC outline, wikilinks.
 let vaultTreeData=new Map(),vaultExpanded=new Set(['notes','journal','soul']),vaultFilter='all',vaultQuery='',vaultViewMode='preview';
@@ -341,7 +349,7 @@ showNote=function(note,edit=false){
    <a class="quiet" href="${mediaUrl('/api/vault/download?path='+encodeURIComponent(note.path))}" download>Download</a>
   </div>
  </div>
- ${note.protected?`<div style="padding:10px 18px;background:rgba(237,197,132,0.1);border-bottom:1px solid rgba(237,197,132,0.25);color:#edc584;display:flex;align-items:center;justify-content:space-between;font-size:13px"><span>🔒 <strong>Protected companion record</strong> · ${esc(note.protection_reason||'Read-only in Vault.')}</span><button class="quiet" id="vault-edit-companion-btn" style="font-size:12px;padding:3px 8px">Edit in companion settings →</button></div>`:''}
+ ${note.protected?`<div style="padding:10px 18px;background:color-mix(in srgb,var(--warn) 10%,transparent);border-bottom:1px solid color-mix(in srgb,var(--warn) 25%,transparent);color:var(--warn);display:flex;align-items:center;justify-content:space-between;font-size:13px"><span>🔒 <strong>Protected companion record</strong> · ${esc(note.protection_reason||'Read-only in Vault.')}</span><button class="quiet" id="vault-edit-companion-btn" style="font-size:12px;padding:3px 8px">Edit in companion settings →</button></div>`:''}
  <div class="vault-toolbar-editor" id="vault-toolbar" ${mode==='preview'?'hidden':''}>
   <button class="vault-tool-btn" data-tool="bold" title="Bold (**)"><b>B</b></button>
   <button class="vault-tool-btn" data-tool="italic" title="Italic (*)"><i>I</i></button>
@@ -565,7 +573,7 @@ workspaceHandlers.voice=async()=>{
       return `<div class="engine-card ${isSelected?'is-selected':''}" data-engine="${key}" data-cat="${info.cat}">
        <div class="engine-card-title"><span>${esc(info.name)}</span><span class="engine-tag">${esc(info.badge)}</span></div>
        <p class="engine-card-desc">${esc(info.desc)}</p>
-       <div style="font-size:11px;color:${isSelected?'#85b4ff':'#7d8b9e'}">${isSelected?'✓ Active engine':'Click to select'}</div>
+       <div style="font-size:11px;color:${isSelected?'var(--accent)':'var(--faint)'}">${isSelected?'✓ Active engine':'Click to select'}</div>
       </div>`;
     }).join('')}
    </div>
@@ -594,7 +602,7 @@ workspaceHandlers.voice=async()=>{
    <button type="button" class="voice-sample-chip" data-sample="Between you and me, you make every single day feel a lot brighter.">💭 Whisper</button>
    <button type="button" class="voice-sample-chip" data-sample="All systems are online, synchronized, and ready whenever you are.">⚡ Tech check</button>
   </div>
-  <textarea id="studio-voice-text" class="composer-textarea" readonly style="min-height:75px;background:rgba(255,255,255,0.03);cursor:default">Hello! It’s really wonderful to spend some quiet time together.</textarea>
+  <textarea id="studio-voice-text" class="composer-textarea" readonly style="min-height:75px;background:color-mix(in srgb,var(--ink) 3%,transparent);cursor:default">Hello! It’s really wonderful to spend some quiet time together.</textarea>
   <div class="actions" style="margin-top:12px">
    <button class="act" id="studio-preview-voice">Generate preview</button>
    <span class="dim small">Local weights download on first use. Cloud previews use connected provider accounts.</span>
@@ -745,18 +753,18 @@ workspaceHandlers['image-studio']=async()=>{
       </label>
       <button type="button" class="link-btn" id="reset-scene-btn">Reset to lane default</button>
      </div>
-     <textarea id="prompt-part-scene" data-shot-part="scene" class="composer-textarea" rows="3" readonly style="background:rgba(255,255,255,0.03);cursor:default"></textarea>
+     <textarea id="prompt-part-scene" data-shot-part="scene" class="composer-textarea" rows="3" readonly style="background:color-mix(in srgb,var(--ink) 3%,transparent);cursor:default"></textarea>
      <div class="inspiration-tags-strip" style="margin-top:10px">
       <span class="dim small">Benchmark scenes:</span>
       <div id="lane-test-chips" style="display:inline-flex;gap:6px;flex-wrap:wrap"></div>
      </div>
     </div>
 
-    <div class="card" style="background:rgba(88,166,255,0.05);border:1px solid rgba(88,166,255,0.2);padding:14px;border-radius:10px;margin-top:14px">
+    <div class="card" style="background:color-mix(in srgb,var(--accent) 5%,transparent);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);padding:14px;border-radius:10px;margin-top:14px">
       <div style="display:flex;align-items:flex-start;gap:10px">
         <span style="font-size:1.2rem">🛡️</span>
         <div>
-          <strong style="color:var(--accent,#58a6ff);font-size:13px;display:block">Companion Agency & Realism Policy</strong>
+          <strong style="color:var(--accent);font-size:13px;display:block">Companion Agency & Realism Policy</strong>
           <p class="dim small" style="margin:4px 0 0;line-height:1.45">Image studio test generations verify model workflows, lighting, and rendering using standard benchmark scenes. Guided generation of intimate or unconsented imagery without companion agency is disabled. Intimate photos are shared authentically through mutual relationship progression.</p>
         </div>
       </div>
@@ -784,7 +792,7 @@ workspaceHandlers['image-studio']=async()=>{
        <div class="idle-icon-ring">
         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
        </div>
-       <h4 style="margin:0 0 4px;color:#d8e2ee">Studio Canvas Ready</h4>
+       <h4 style="margin:0 0 4px;color:var(--ink-2)">Studio Canvas Ready</h4>
        <p class="dim small" style="margin:0">Choose a lane, shape your prompt, and click Generate Photo.</p>
       </div>
      </div>
@@ -870,7 +878,7 @@ workspaceHandlers['image-studio']=async()=>{
     <span class="switch-label">Follow the appearance in SOUL</span>
    </label>
    <textarea id="image-identity" aria-label="Image identity prompt" class="composer-textarea">${esc(d.identity)}</textarea>
-   <details style="margin-top:12px"><summary>Current SOUL appearance</summary><pre style="white-space:pre-wrap;background:#0d1017;padding:12px;border-radius:8px">${esc(d.appearance||'No appearance section yet. Add one in Identity.')}</pre></details>
+   <details style="margin-top:12px"><summary>Current SOUL appearance</summary><pre style="white-space:pre-wrap;background:var(--bg);padding:12px;border-radius:8px">${esc(d.appearance||'No appearance section yet. Add one in Identity.')}</pre></details>
    ${PROFILE!=='default'?`<label class="inline-label switch-container" style="margin-top:12px"><input id="image-inherit" type="checkbox" ${settings.inherit?'checked':''}><span class="switch-slider"></span><span class="switch-label">Inherit image settings from the installation’s default profile</span></label>`:''}
    <div class="actions" style="margin-top:14px">
     <button class="act" id="save-identity-settings">Save identity settings</button>
@@ -1211,7 +1219,7 @@ workspaceHandlers['local-models']=async()=>{
              <span class="small dim">${m.size_gb} GB</span>
            </div>
            <h3 style="font-size:14px;word-break:break-all;margin:6px 0 10px">${esc(m.name)}</h3>
-           ${m.mmproj ? '<p class="small" style="color:#78b5e6;margin:0 0 6px">👁 Multimodal Vision mmproj included</p>' : ''}
+           ${m.mmproj ? '<p class="small" style="color:var(--accent);margin:0 0 6px">👁 Multimodal Vision mmproj included</p>' : ''}
          </div>
          <div style="margin-top:12px">
            ${m.active

@@ -1,3 +1,48 @@
+## Unreleased — interface overhaul
+
+**Licence.** Relicensed from AGPL-3.0 to PolyForm Noncommercial 1.0.0. Any noncommercial
+purpose is permitted; commercial use is not. Fill in the `Required Notice:` line in `LICENSE`
+with your name before publishing.
+
+**Theming actually works now.** The stylesheet carried 492 hardcoded colours and 95 hardcoded
+`rgba()` values that ignored the seven theme variables entirely, so every theme except the
+default rendered partly in the default palette. All of them, plus 113 in inline styles, are now
+design tokens, and themes derive the rest with `color-mix()`. Twelve themes (nine dark, three
+light), a live accent-colour picker, and a Match-system mode. Appearance is stored per companion
+on the server and mirrored to `localStorage`, so a companion looks the same on every device and
+the first paint never flashes.
+
+**Navigation.** Phones get a bottom bar instead of a hamburger drawer: four destinations you
+choose, with More permanently in the last slot opening a directory of everything, each entry
+explained in a line and starrable straight onto the bar. The desktop rail keeps its groups.
+
+**Creating a companion is an interview.** Seven situational questions, one per screen, propose a
+personality, a relationship frame, a pace and contact limits, then show every value they chose in
+plain language. From there: save, edit, start over, or start over without the questions and fill
+the fields in directly. Keyboard-answerable, skippable throughout.
+
+**Fixed while rebuilding it:**
+- Creating a companion from the browser always failed. The form submitted `explicit` and
+  `relationship_pace`, which `POST /api/profiles` rejects as unknown setup answers. The existing
+  test only ever sent a five-key subset, so nothing caught it. `relationship_pace` is now a real
+  setup answer and reaches the saved config; `explicit` is no longer sent at all.
+- The wizard had two `<select name="boundary">` controls, so the relationship frame chosen on
+  step 2 was silently discarded on submit.
+- Step 4's frames (`partner`, `crush`, `platonic`) were not real catalog keys, and its
+  `explicit = boundary !== 'platonic'` rule set adult themes on frames that forbid them.
+- The Profile ID field's `pattern` never validated anything: browsers compile `pattern` with the
+  regex `v` flag, where its unescaped `-` is a syntax error.
+- `.section-subheading` was used in the markup but never defined in the stylesheet.
+- Theme preview swatches were hardcoded and disagreed with the themes they previewed; they now
+  read the live token values.
+- Identity opened on a configuration warning above the page title. It now opens on a profile
+  header — who they are, their personality, your frame, their age and timezone.
+
+**Tests.** 759 passing. New coverage for the appearance API, per-profile isolation and validation;
+the full creation payload a browser actually sends; unknown-answer rejection; navigation/pin
+allowlist parity; and the interview's derivation, checked against the real persona and
+relationship-frame catalogs so it can never propose something the backend would refuse.
+
 ## 0.9.0-beta.1 — friend deployment beta
 
 - Opening photo details never reveals an NSFW image; reveal is explicit inside the viewer. Unreviewed photos are no longer blurred automatically.
