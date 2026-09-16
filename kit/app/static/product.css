@@ -149,17 +149,10 @@ body[data-page="journals"] .paper{max-width:850px;margin:auto}body[data-page="jo
  body[data-page="chat"] .conversation-history{padding:4px 12px}
  body[data-page="chat"] .conversation-history[open]{max-height:30%;overflow:auto;flex-shrink:1}
  
- body[data-page="chat"] .voice-chat-panel{margin-top:0;padding:0 12px}
- body[data-page="chat"] .voice-chat-panel .actions{gap:6px;margin:4px 0}
  
- body[data-page="chat"] #chat-form .actions{display:contents}
- body[data-page="chat"] #chat-form #chat-message{min-height:44px;max-height:80px;height:44px}
- body[data-page="chat"] #send-message{align-self:end;min-height:44px}
- body[data-page="chat"] #chat-status{grid-column:1/-1;margin:0}
 }
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
-@media(max-height:550px){body[data-page="chat"] #chat-message{grid-column:1;grid-row:1}body[data-page="chat"] #send-message{grid-column:2;grid-row:1}}
-@media(max-width:600px){.top-actions button,#mobile-menu{min-width:44px;min-height:44px}body[data-page="chat"] .voice-chat-panel button{min-height:44px}}
+@media(max-width:600px){.top-actions button,#mobile-menu{min-width:44px;min-height:44px}}
 .breadcrumb{min-width:0}.breadcrumb #crumb-agent{max-width:18vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.breadcrumb #crumb-page{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.top-actions{flex:none}
 #journal-page{scroll-margin-top:80px}
 
@@ -1838,18 +1831,14 @@ body[data-page="chat"] main{padding:0}
   box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 14%,transparent)
 }
 #chat-message{
-  flex:1;min-width:0;min-height:36px;max-height:190px;resize:none;
-  padding:8px 4px;font-size:15px;line-height:1.45;
+  flex:1 1 auto;min-width:0;min-height:36px;max-height:190px;resize:none;
+  padding:8px 4px;font-size:15px;line-height:1.45;align-self:stretch;
   background:none;border:0;border-radius:0
 }
 #chat-message:focus{outline:none;box-shadow:none}
 #chat-message{scrollbar-width:none}
 #chat-message::-webkit-scrollbar{width:0;height:0}
-.chat-send{
-  flex:none;width:34px;height:34px;border-radius:50%;padding:0;align-self:flex-end;margin-bottom:1px;
-  display:grid;place-items:center;border:0;cursor:pointer;
-  background:var(--accent);color:var(--on-accent)
-}
+.chat-send{background:var(--accent);color:var(--on-accent)}
 .chat-send:disabled{opacity:.45;cursor:default}
 .chat-send svg.icon{width:17px;height:17px;stroke-width:2.4}
 .chat-hint{flex:none;padding:0 20px 10px;text-align:center;font-size:11px}
@@ -1858,11 +1847,12 @@ body[data-page="chat"] main{padding:0}
    window should be mostly conversation. */
 /* The voice controls are part of the composer, not a panel above it. */
 .voice-chat-panel{display:contents}
-.chat-icon-btn{
-  flex:none;width:34px;height:34px;border-radius:50%;padding:0;border:0;cursor:pointer;
-  display:grid;place-items:center;background:none;color:var(--dim);
-  align-self:flex-end;margin-bottom:1px
+.chat-icon-btn,.chat-send{
+  flex:0 0 auto;width:36px;height:36px;min-height:36px;max-height:36px;
+  border-radius:50%;padding:0;border:0;cursor:pointer;
+  display:grid;place-items:center;align-self:flex-end;margin-bottom:0
 }
+.chat-icon-btn{background:none;color:var(--dim)}
 .chat-icon-btn:hover{background:var(--surface-3);color:var(--ink)}
 .chat-icon-btn[hidden]{display:none}
 .chat-icon-btn::before{content:'';width:18px;height:18px;background:currentColor;
