@@ -38,18 +38,21 @@ $('tabs').innerHTML=`<div class="nav-primary-section">${navigationButtons(primar
   navGroups.map(([label,ids],i)=>`<details class="nav-group-collapsible" ${i<1?'open':''}><summary>${esc(label)}</summary><div class="nav-group-items">${navigationButtons(ids)}</div></details>`).join('');
 for(const button of $('tabs').querySelectorAll('button'))button.onclick=()=>showTab(button.dataset.tab);
 
-/* Mobile bottom bar: the pinned destinations, then More, always last. */
+/* Mobile bottom bar. Home holds the left corner and More the right; between
+   them are up to four slots the person chooses, so nothing they rely on is ever
+   more than one tap away and the two fixed ends never move. */
+const NAV_FREE_SLOTS=4;
 const navPins=()=>{
-  let saved=(window.Appearance&&window.Appearance.state.nav_pins)||[];
-  if(!saved.length)return ['now','chat','photos','journals'];
-  saved=['now',...saved.filter(x=>x!=='now')];
-  const pins=saved.filter(id=>navDestinations.includes(id)).slice(0,4);
-  return pins.length?pins:['now','chat','photos','journals'];
+  const saved=(window.Appearance&&window.Appearance.state.nav_pins)||[];
+  const chosen=saved.filter(id=>id!=='now'&&id!=='more'&&navDestinations.includes(id));
+  // An older setting counted Home as one of the four. Dropping it here just
+  // frees the slot it used to occupy.
+  return chosen.slice(0,NAV_FREE_SLOTS);
 };
 function renderTabbar(){
   const bar=$('tabbar');if(!bar)return;
-  const slots=[...navPins().map(id=>[id,false]),['more',true]];
-  bar.innerHTML=slots.map(([id,fixed])=>`<button data-tab="${id}"${fixed?' class="is-more"':''} aria-current="${String(current===id)}">${icon(id)}<span>${esc(shortLabel(id))}</span></button>`).join('');
+  const slots=[['now',true],...navPins().map(id=>[id,false]),['more',true]];
+  bar.innerHTML=slots.map(([id,fixed])=>`<button data-tab="${id}"${fixed?' class="is-fixed"':''} aria-current="${String(current===id)}">${icon(id)}<span>${esc(shortLabel(id))}</span></button>`).join('');
   for(const b of bar.querySelectorAll('button'))b.onclick=()=>showTab(b.dataset.tab);
 }
 window.addEventListener('appearance-change',renderTabbar);
@@ -81,36 +84,43 @@ syncNavigation();renderTabbar();
 workspaceHandlers.more=async()=>{
   const pins=navPins();
   const row=id=>{
-    const pinned=pins.includes(id),full=pins.length>=4;
+    if(id==='now')return '';
+    const pinned=pins.includes(id),full=pins.length>=NAV_FREE_SLOTS;
     return `<div class="more-row${pinned?' is-pinned':''}">
       <button class="more-go" data-tab="${id}">${icon(id)}<span><strong>${esc(tabLabel(id))}</strong><small>${esc(navBlurb[id]||'')}</small></span></button>
       <button class="pin-toggle" data-pin="${id}" aria-pressed="${String(pinned)}" ${!pinned&&full?'disabled':''}
-        title="${pinned?'Remove from the bottom bar':(full?'Unpin something first — the bar holds four':'Pin to the bottom bar')}"
+        title="${pinned?'Remove from the bottom bar':(full?'Unstar something first \u2014 the bar holds four':'Add to the bottom bar')}"
         aria-label="${pinned?'Unpin '+tabLabel(id):'Pin '+tabLabel(id)+' to the bottom bar'}">${pinned?'★':'☆'}</button>
     </div>`;
   };
-  // On a phone the rail is hidden, so the switchers that live in it belong here.
-  const switcher=`<div class="card more-switcher">
-      <label>Your companion<select id="more-companion">${$('companion-select').innerHTML}</select></label>
-      <label>Environment<select id="more-installation">${$('installation-select').innerHTML}</select></label>
-    </div>`;
   const allNavGroups=[
     ['Core pages', primaryDestinations],
     ...navGroups
   ];
-  $('more').innerHTML=heading('More','Every part of the workspace. Star up to four to keep them on the bottom bar.')+switcher+
-    `<div class="pin-preview"><span class="eyebrow">Your bottom bar</span><div class="pin-preview-bar">${
-      [...pins,'more'].map(id=>`<span${id==='more'?' class="is-more"':''}>${icon(id)}<small>${esc(shortLabel(id))}</small></span>`).join('')
-    }</div><p class="dim small">More always keeps the last slot, so nothing is ever more than two taps away.</p></div>`+
-    allNavGroups.map(([label,ids])=>`<section class="more-group"><h2>${esc(label)}</h2><div class="more-list">${ids.map(row).join('')}</div></section>`).join('');
+  const HINT_KEY='bottom-bar-hint-dismissed';
+  let hintSeen=false;
+  try{hintSeen=localStorage.getItem(HINT_KEY)==='1';}catch(error){hintSeen=false;}
+  const hint=hintSeen?'':`<div class="more-hint" id="more-hint">
+      <div>
+        <strong>The bottom bar is yours</strong>
+        <p class="dim small">Star anything below and it appears on the bar; unstar it and it goes.
+        Home and More keep the two ends, leaving four slots in between.</p>
+      </div>
+      <button class="icon-button" id="more-hint-close" aria-label="Got it, hide this">\u2715</button>
+    </div>`;
+  $('more').innerHTML=heading('More','Every part of the workspace.')+hint+
+    allNavGroups.map(([label,ids])=>{
+      const rows=ids.map(row).join('');
+      return rows.trim()?`<section class="more-group"><h2>${esc(label)}</h2><div class="more-list">${rows}</div></section>`:'';
+    }).join('');
+  if($('more-hint-close'))$('more-hint-close').onclick=()=>{
+    try{localStorage.setItem(HINT_KEY,'1');}catch(error){}
+    $('more-hint').remove();
+  };
   for(const b of $('more').querySelectorAll('[data-tab]'))b.onclick=()=>showTab(b.dataset.tab);
-  // Mirror the rail's selects rather than moving them, so both layouts keep working.
-  const mirror=(here,there)=>{const a=$(here),b=$(there);if(!a||!b)return;a.value=b.value;
-    a.onchange=()=>{b.value=a.value;b.dispatchEvent(new Event('change'));};};
-  mirror('more-companion','companion-select');mirror('more-installation','installation-select');
   for(const b of $('more').querySelectorAll('[data-pin]'))b.onclick=async()=>{
     const id=b.dataset.pin,next=pins.includes(id)?pins.filter(x=>x!==id):[...pins,id];
-    if(!next.length){notice('Keep at least one destination on the bar.');return;}
+    if(next.length>NAV_FREE_SLOTS){notice('The bar holds four. Unstar one first.');return;}
     await window.Appearance.set({nav_pins:next});
     render('more');
   };
@@ -449,6 +459,7 @@ workspaceHandlers.now=async()=>{
         <div class="presence-identity-column">
           <div class="presence-name-header">
             <h1 class="presence-name">${esc(d.agent)}</h1>
+            ${(roster||[]).length>1?`<button type="button" class="quiet small presence-switch" id="presence-switch">\u21c4 Switch</button>`:''}
           </div>
 
           <div class="presence-status-stack">
@@ -532,6 +543,7 @@ workspaceHandlers.now=async()=>{
   </div>`;
 
   wireRoutes($('now'));
+  if($('presence-switch'))$('presence-switch').onclick=openCompanionSwitchDialog;
   wireCalendarComponent($('now'), d.missions, d.agent, () => render('now'), 'home-cal');
   if($('read-latest'))$('read-latest').onclick=()=>{if(entry?.id)selectedJournal=entry.id;showTab('journals');};
   for(const b of $('now').querySelectorAll('[data-home-file]'))b.onclick=()=>openContent(content.items[Number(b.dataset.homeFile)]);

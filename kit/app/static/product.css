@@ -752,7 +752,7 @@ dialog.pin-dialog::backdrop {
     content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);
     width:26px;height:2.5px;border-radius:0 0 3px 3px;background:var(--accent);
   }
-  .tabbar button.is-more .icon{stroke-width:2.6}
+  .tabbar button.is-fixed .icon{stroke-width:2.6}
   /* The rail and its hamburger are desktop-only once the bar exists. */
   #mobile-menu{display:none}
   header{display:none}
@@ -764,12 +764,6 @@ dialog.pin-dialog::backdrop {
 }
 
 /* Preview of the bar, shown at the top of More while pinning. */
-.pin-preview{background:var(--surface-2);border:1px solid var(--edge);border-radius:var(--r-md);padding:16px 18px;margin-bottom:22px}
-.pin-preview-bar{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:12px 0 10px;background:var(--panel);border:1px solid var(--edge);border-radius:var(--r-sm);padding:9px 4px}
-.pin-preview-bar span{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--accent);font-size:10.5px;font-weight:600;min-width:0}
-.pin-preview-bar span.is-more{color:var(--dim)}
-.pin-preview-bar small{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pin-preview p{margin:0}
 
 .more-group{margin-bottom:26px}
 .more-group h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:0 0 10px}
@@ -786,9 +780,6 @@ dialog.pin-dialog::backdrop {
 .pin-toggle[aria-pressed=true]{color:var(--warn);background:var(--warn-soft)}
 .pin-toggle:disabled{opacity:.3;cursor:not-allowed}
 @media(max-width:480px){.more-go{padding:13px 14px;gap:11px}.more-go small{font-size:12px}}
-.more-switcher{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
-.more-switcher label{margin:0}
-@media(max-width:600px){.more-switcher{grid-template-columns:1fr;gap:10px}}
 
 /* ------------------------------------------------------------- appearance */
 .section-subheading{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);margin:26px 0 10px}
@@ -1921,3 +1912,21 @@ body[data-page="chat"] main{padding:0}
   .journal-day-shot{width:80px;height:80px}
   .journal-day-photos{margin-top:20px}
 }
+
+/* The bottom bar explains itself once. Closing it is permanent, so it has to
+   say the whole thing the first time. */
+.more-hint{
+  display:flex;align-items:flex-start;gap:14px;margin-bottom:22px;
+  padding:16px 14px 16px 18px;border-radius:var(--r-md);
+  border:1px solid var(--accent-line);background:var(--accent-soft)
+}
+.more-hint>div{flex:1;min-width:0}
+.more-hint strong{display:block;font-size:14.5px;margin-bottom:4px}
+.more-hint p{margin:0;max-width:60ch}
+.more-hint .icon-button{flex:none;padding:4px 8px;font-size:13px;color:var(--dim);border:0;background:none}
+.more-hint .icon-button:hover{color:var(--ink)}
+
+/* Switching companions belongs beside the name it changes; the rail that used
+   to carry it is off-canvas on a phone. */
+.presence-switch{flex:none;padding:4px 11px;font-size:12px;border-radius:999px}
+.presence-name-header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
