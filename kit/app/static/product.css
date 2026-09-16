@@ -617,6 +617,7 @@ dialog.photo-viewer::backdrop{background:rgba(0,0,0,0.94)}
 }
 .journal-nav-btn:hover:not(:disabled){background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
 .journal-nav-btn:active:not(:disabled){transform:scale(.96)}
+.journal-nav-btn svg.icon{width:19px;height:19px;stroke-width:2.1;flex:none}
 
 /* Theme Picker Cards */
 .theme-cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin:12px 0}
@@ -1642,7 +1643,8 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
   body[data-page="journals"] main{padding-top:10px}
   .reader-shell{margin-top:0}
   .journal-nav-bar{padding:7px 8px;gap:8px}
-  .journal-nav-btn{padding:9px 16px;font-size:17px;line-height:1}
+  .journal-nav-btn{padding:10px 17px;line-height:1}
+  .journal-nav-btn svg.icon{width:24px;height:24px;stroke-width:2.3}
   .journal-nav-btn .nav-word{display:none}
   .reader-browse-btn{flex:1;justify-content:center}
   .reader-picker{width:calc(100vw - 36px)}
