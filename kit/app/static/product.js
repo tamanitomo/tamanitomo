@@ -209,7 +209,6 @@ const empty=(symbol,title,body,button='')=>`<div class="empty-state">${icon(symb
 /* A link to another page. `panel` names a panel of the Settings page, which
    is one page with many panels rather than a page of its own. */
 const jump=(id,label,primary=false,panel='')=>`<button class="${primary?'act':'link-button'}" data-route="${id}"${panel?` data-settings-panel="${panel}"`:''}>${esc(label)} ${icon(id)}</button>`;
-let preferencePanel='contact';
 function wireRoutes(root){
   for(const b of root.querySelectorAll('[data-route]'))
     b.onclick=()=>{if(b.dataset.settingsPanel)return openSettings(null,b.dataset.settingsPanel);showTab(b.dataset.route);};
@@ -1052,10 +1051,11 @@ let photoPageGeneration=0;
 /* The photos panel in Preferences owns every photo setting, including the blur
    toggles and the local scanner. The gear goes there rather than opening a
    smaller, separate copy of it. */
-function openPhotoSettings(){
-  preferencePanel='photos';
-  showTab('settings');
-}
+/* The gear beside the collections. It opens the panel that owns these
+   settings; `preferencePanel` was the old page's variable and stopped meaning
+   anything when Settings became one page, so the gear was landing on whatever
+   panel happened to be open last. */
+function openPhotoSettings(){openSettings(null,'photos');}
 
 workspaceHandlers.photos=async()=>{
   const generation=++photoPageGeneration;

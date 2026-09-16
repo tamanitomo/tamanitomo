@@ -228,42 +228,57 @@ const settingsPanels=[
     </label>
   </div>
 
-  <h3 class="section-subheading">Privacy &amp; review</h3>
-  <div class="notice-strip">
-    <p><strong>Private image scanner</strong> — NudeNet runs on this host. About 12&nbsp;MB of model, roughly 150&nbsp;MB of memory while scanning. It detects exposed intimate anatomy; it does not judge scene accuracy or clothed content.<br>
-    <span class="dim small">${scanner.installed?'Installed':'Not installed · downloading it needs internet'}${scanner.selected?' · in use for this companion':''}</span></p>
-    <div class="actions">
-      <button class="quiet" id="install-local-scanner">${scanner.installed?'Check installation':'Install scanner'}</button>
-      <button class="act" id="use-local-scanner" ${scanner.installed?'':'disabled'}>Use for this companion</button>
+  <h3 class="section-subheading">Before a picture reaches you</h3>
+  <label>Who checks it
+    <select id="media-review-mode">${options([
+      ['none','Nobody — deliver as generated'],
+      ['local','This machine, privately (NudeNet)'],
+      ['remote','A vision model']],
+      !prefs.review_before_delivery?'none':(prefs.review_provider==='local-nsfw'?'local':'remote'))}</select>
+  </label>
+  <div id="media-review-local" hidden>
+    <p class="dim small">NudeNet runs here and nothing leaves the machine. About 12&nbsp;MB of model and roughly
+      150&nbsp;MB of memory while scanning. It finds exposed intimate anatomy; it does not judge scene accuracy
+      or clothed content.</p>
+    <p class="dim small">${scanner.installed?'<span class="good">Installed.</span>':'<span class="warn">Not installed yet</span> — downloading it needs internet.'}</p>
+    <div class="actions"><button class="quiet" id="install-local-scanner">${scanner.installed?'Check installation':'Install it'}</button></div>
+  </div>
+  <div id="media-review-remote" hidden>
+    <p class="dim small">A vision model can also judge scene and clothing, but the picture is sent to it.</p>
+    <div class="form-grid">
+      <label>Provider<input id="media-review-provider" value="${esc(prefs.review_provider==='local-nsfw'?'':prefs.review_provider)}" placeholder="openai, anthropic…"></label>
+      <label>Model<input id="media-review-model" value="${esc(prefs.review_model)}" placeholder="Leave empty for the compression model"></label>
     </div>
   </div>
-  ${toggleRow('media-blur','Blur sensitive images until opened','',prefs.blur_nsfw_initially)}
-  ${toggleRow('media-blur-unknown','Blur unreviewed images and failed scans',
-    'A scan that could not run leaves the image blurred rather than assuming it is fine.',prefs.blur_unknown_initially!==false)}
-  ${toggleRow('media-review','Review generated images before they are delivered','',prefs.review_before_delivery)}
-  <div class="form-grid">
-    <label>Review provider<input id="media-review-provider" value="${esc(prefs.review_provider)}" placeholder="local-nsfw"></label>
-    <label>Review model<input id="media-review-model" value="${esc(prefs.review_model)}" placeholder="Unused for local-nsfw"></label>
-  </div>
+
+  <h3 class="section-subheading">What stays blurred</h3>
+  ${toggleRow('media-blur','Pictures found to be sensitive','Open one to reveal it.',prefs.blur_nsfw_initially)}
+  ${toggleRow('media-blur-unknown','Pictures nothing has checked',
+    'Includes scans that failed, so a check that could not run never passes as a clean one.',prefs.blur_unknown_initially!==false)}
+
   ${settingsFooter('Save photo settings')}`;
   wireToggles(host);
-  host.querySelector('#install-local-scanner').onclick=()=>action('/media/scanner/install',{},()=>openSettings(null,'photos'));
-  host.querySelector('#use-local-scanner').onclick=async()=>{
-    await post('/media/scanner/use',{});
-    notice('Private scanning enabled. Failed scans stay blurred.');
-    openSettings(null,'photos');
+  /* One question — who checks a picture — decides which details are relevant. */
+  const mode=host.querySelector('#media-review-mode');
+  const showMode=()=>{
+    host.querySelector('#media-review-local').hidden=mode.value!=='local';
+    host.querySelector('#media-review-remote').hidden=mode.value!=='remote';
   };
+  mode.onchange=showMode;showMode();
+  host.querySelector('#install-local-scanner').onclick=()=>
+    action('/media/scanner/install',{},()=>openSettings(null,'photos'));
   wireSave(host,async()=>{
     const result=await saveSettings({
       image_timeline:host.querySelector('#tl').checked,
       image_style:host.querySelector('#image-style').value,
       timeline_budget_gb:Number(host.querySelector('#gb').value)});
+    const choice=host.querySelector('#media-review-mode').value;
     await post('/media/preferences',{
       blur_nsfw_initially:host.querySelector('#media-blur').checked,
       blur_unknown_initially:host.querySelector('#media-blur-unknown').checked,
-      review_before_delivery:host.querySelector('#media-review').checked,
-      review_provider:host.querySelector('#media-review-provider').value,
-      review_model:host.querySelector('#media-review-model').value});
+      review_before_delivery:choice!=='none',
+      review_provider:choice==='local'?'local-nsfw':(choice==='remote'?host.querySelector('#media-review-provider').value:''),
+      review_model:choice==='remote'?host.querySelector('#media-review-model').value:''});
     return result;
   });
  }},
