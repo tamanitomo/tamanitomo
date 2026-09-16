@@ -259,3 +259,32 @@ class ReleaseManifestTests(unittest.TestCase):
         names = json.loads((root / 'release-files.json').read_text())
         self.assertEqual(sorted(n for n in names if not (root / n).exists()), [])
         self.assertEqual(len(names), len(set(names)), 'the manifest lists something twice')
+
+    def test_every_static_asset_index_html_references_is_shipped(self):
+        """A script tag in index.html that has no matching manifest entry.
+
+        settings.js was that: the release ZIP carried an index.html asking for
+        it and no file to answer with, so a fresh install would have opened a
+        Settings page that could not draw. Imports are already checked above;
+        the browser's own dependencies were not.
+        """
+        import json, re, pathlib
+        root = pathlib.Path(__file__).resolve().parent.parent
+        shipped = set(json.loads((root / 'release-files.json').read_text(encoding='utf-8')))
+        html = (root / 'kit/app/static/index.html').read_text(encoding='utf-8')
+        # server.py rewrites every src/href under /static/ with a content hash,
+        # reading each file to do it — so an unshipped one is not a missing icon,
+        # it is a 500 on the home page of a fresh install. site.webmanifest was
+        # exactly that, and had been since the icons landed.
+        wanted = sorted(set(re.findall(r'(?:src|href)="/static/([^"?]+)"', html)))
+        self.assertTrue(wanted, 'index.html references no static assets; the regex has gone stale')
+        missing = [n for n in wanted if f'kit/app/static/{n}' not in shipped]
+        self.assertEqual(missing, [], 'index.html references these but they do not ship: ' + ', '.join(missing))
+
+        # Whatever the web manifest promises has to ship with it, or an installed
+        # kit offers an icon the browser cannot fetch.
+        manifest = root / 'kit/app/static/site.webmanifest'
+        if manifest.exists():
+            icons = [i['src'] for i in json.loads(manifest.read_text(encoding='utf-8')).get('icons', [])]
+            absent = [i for i in icons if f'kit/app/static/{i}' not in shipped]
+            self.assertEqual(absent, [], 'site.webmanifest names icons that do not ship: ' + ', '.join(absent))
