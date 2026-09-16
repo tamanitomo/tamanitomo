@@ -2057,17 +2057,6 @@ body[data-page="chat"] main{padding:0}
 .studio-builder .comfy-lite-container{border:0;margin:0}
 
 /* --------------------------------------------- manage workflows: the three ways in */
-.workflow-modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:18px}
-.workflow-mode{
-  display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;
-  padding:14px 16px;border-radius:var(--r-md);cursor:pointer;
-  background:var(--surface);border:1px solid var(--edge);color:var(--ink)
-}
-.workflow-mode:hover{background:var(--surface-2);border-color:var(--edge-2)}
-.workflow-mode.is-on{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
-.workflow-mode strong{font-size:14px;font-weight:650}
-.workflow-mode span{font-size:12.5px;color:var(--dim);line-height:1.35}
-.workflow-mode.is-on span{color:var(--accent-ink)}
 .workflow-mode-panel[hidden]{display:none}
 
 /* What the picture gave up, before anything is kept. */
@@ -2078,8 +2067,6 @@ body[data-page="chat"] main{padding:0}
 .import-report .actions{margin:12px 0 0}
 
 @media(max-width:700px){
-  .workflow-modes{grid-template-columns:1fr;gap:8px}
-  .workflow-mode{padding:12px 14px}
   .import-report dl{grid-template-columns:1fr 1fr}
 }
 
@@ -2177,4 +2164,25 @@ body[data-page="chat"] main{padding:0}
 @media(max-width:700px){
   .lora-line input[type=number]{width:50px}
   .lora-line select{font-size:12px}
+}
+
+/* The studio is one page: lanes, then the workflows that serve them. */
+.studio-view-pane+.studio-view-pane{margin-top:26px}
+.workflow-new-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.workflow-new-head h3{margin:0;font-size:15px}
+.lanes-header{gap:12px}
+.lanes-header h3{font-size:15px}
+
+/* A lane is a name and the workflow that serves it. */
+.fallback-row{display:flex;align-items:center;gap:12px;margin:0}
+.fallback-row>span{flex:none;font-size:13.5px;font-weight:600;min-width:72px}
+.fallback-row select{flex:1;min-width:0}
+.lane-cards-grid{display:flex;flex-direction:column;gap:6px}
+.lane-row{display:flex;align-items:center;gap:12px;margin:0;padding:7px 10px;
+  border:1px solid var(--edge);border-radius:8px;background:var(--surface)}
+.lane-row-name{flex:none;min-width:72px;font-size:13px;font-weight:600;color:var(--ink)}
+.lane-row select{flex:1;min-width:0;padding:7px 9px;font-size:12.5px}
+@media(max-width:700px){
+  .fallback-row,.lane-row{flex-wrap:wrap;row-gap:6px}
+  .fallback-row>span,.lane-row-name{min-width:0;flex-basis:100%}
 }

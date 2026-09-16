@@ -842,62 +842,35 @@ workspaceHandlers['image-studio']=async()=>{
  let activeCategory='portrait';
 
  $('image-studio').innerHTML=`
- <div class="home-title" style="margin-bottom:12px">
-  <div>
-   <h2 class="page-title">Image Studio</h2>
-   <p class="intro">One companion, many ways to picture them.</p>
-  </div>
-  <details class="studio-setup">
-   <summary class="quiet">Setup &amp; tools</summary>
-   <div class="studio-setup-body">
-    <button class="quiet" id="image-back-identity">← Identity</button>
-    <button class="quiet" id="image-template-download">Download template</button>
-    <button class="quiet" id="image-import">Import preset</button>
-    <input id="image-import-file" type="file" accept=".json,application/json" hidden>
-    <button class="quiet" id="image-install-comfy">Install ComfyUI</button>
-    <button class="quiet" id="image-start-comfy">Start ComfyUI</button>
-    <label class="inline-label switch-container"><input type="checkbox" id="comfy-cpu"><span class="switch-slider"></span><span class="switch-label">CPU mode</span></label>
-   </div>
-  </details>
- </div>
 
- <nav class="studio-subnav" id="image-subnav" aria-label="Image studio navigation">
-  <button type="button" class="studio-subnav-btn is-active" data-view="presets">⚡ Workflows</button>
-  <button type="button" class="studio-subnav-btn" data-view="assignments">🔀 Lanes</button>
-  <button type="button" class="studio-subnav-btn" data-view="identity">👤 Appearance</button>
- </nav>
+ <!-- The setup controls still exist for the wiring below; Preferences owns them. -->
+ <div hidden>
+  <button class="quiet" id="image-back-identity"></button>
+  <button class="quiet" id="image-template-download"></button>
+  <button class="quiet" id="image-import"></button>
+  <input id="image-import-file" type="file" accept=".json,application/json" hidden>
+  <button class="quiet" id="image-install-comfy"></button>
+  <button class="quiet" id="image-start-comfy"></button>
+  <label><input type="checkbox" id="comfy-cpu"></label>
+ </div>
 
 
  <!-- VIEW 2: Assigned Workflows & Lanes (Dedicated Routing Deck) -->
- <div id="view-assignments" class="studio-view-pane" hidden>
+ <div id="view-assignments" class="studio-view-pane">
   <div class="card lanes-dashboard">
    <div class="lanes-header">
-    <div>
-     <h3 style="margin:0 0 4px">Workflow Assignments & Fallbacks</h3>
-     <p class="dim" style="margin:0">Assign which workflow generates each image type. Change your mappings anytime without creating a new workflow.</p>
-    </div>
+    <h3 style="margin:0">Lanes</h3>
     <div class="actions">
      <button class="act" id="save-assignments-btn">Save lane assignments</button>
      <button class="quiet" id="assignments-goto-creator">+ Build new workflow</button>
     </div>
    </div>
 
-   <!-- Global Fallback Card -->
-   <div class="fallback-hero-card">
-    <div class="fallback-hero-icon">🌟</div>
-    <div class="fallback-hero-body">
-     <h4>Global Fallback Workflow</h4>
-     <p class="dim small">Runs whenever an image request has no specific lane assigned or the assigned preset is unavailable.</p>
-     <label class="fallback-select-label">
-      <select id="image-default-preset" class="prominent-select"></select>
-     </label>
-    </div>
-   </div>
-
-   <h4 style="margin:20px 0 10px;font-size:15px;display:flex;align-items:center;gap:8px">
-    <span>Image Type Lanes</span>
-    <span class="dim small">(${d.categories.length} lanes)</span>
-   </h4>
+   <label class="fallback-row">
+    <span>Fallback</span>
+    <select id="image-default-preset"></select>
+   </label>
+   <p class="dim small" style="margin:6px 2px 16px">Used when a lane has nothing assigned.</p>
 
    <div class="lane-cards-grid" id="image-routes">
     <!-- Rendered dynamically -->
@@ -908,22 +881,17 @@ workspaceHandlers['image-studio']=async()=>{
  <!-- VIEW 3: ComfyUI Lite Workflow Creator -->
 
  <!-- Workflows: create one, edit one, or read one out of a picture -->
- <div id="view-presets" class="studio-view-pane" hidden>
-  <div class="workflow-modes" id="workflow-modes">
-   <button type="button" class="workflow-mode is-on" data-mode="edit" aria-pressed="true">
-     <strong>Edit a workflow</strong><span>Change one you already have</span></button>
-   <button type="button" class="workflow-mode" data-mode="create" aria-pressed="false">
-     <strong>Create a workflow</strong><span>Start from a template</span></button>
-   <button type="button" class="workflow-mode" data-mode="import" aria-pressed="false">
-     <strong>Import from an image</strong><span>Read the settings out of a picture</span></button>
-  </div>
-
+ <div id="view-presets" class="studio-view-pane">
   <div class="card workflow-mode-panel" id="workflow-create-panel" hidden>
+   <div class="workflow-new-head">
+    <h3>New workflow</h3>
+    <button type="button" class="quiet" id="workflow-show-import">Import from an image</button>
+   </div>
    <div id="workflow-creator-root"></div>
   </div>
 
   <div class="card workflow-mode-panel" id="workflow-import-panel" hidden>
-   <h2>Import from an image</h2>
+   <h3>Import from an image</h3>
    <p class="dim">A picture rendered by ComfyUI carries its whole workflow. One downloaded from
     <a href="https://civitai.com" target="_blank" rel="noopener">civitai.com</a> or civitai.red usually
     carries its prompt and settings instead. Whatever is there gets read; whatever is not, you finish by hand.</p>
@@ -939,7 +907,7 @@ workspaceHandlers['image-studio']=async()=>{
   </div>
 
   <div class="card workflow-mode-panel" id="workflow-edit-panel">
-   <label style="margin:0 0 12px;display:block">Which workflow
+   <label style="margin:0 0 12px;display:block">Workflow
     <select id="image-preset-select" style="margin-top:4px"></select>
    </label>
    <div id="image-preset-editor"></div>
@@ -989,11 +957,11 @@ workspaceHandlers['image-studio']=async()=>{
  // Subnav Switching
  const showStudioView=(viewName)=>{
   imageStudioView=viewName;
-  for(const btn of $('image-subnav').querySelectorAll('.studio-subnav-btn')){btn.classList.toggle('is-active',btn.dataset.view===viewName);}
-  for(const id of ['view-assignments','view-presets','view-identity']){const el=$(id);if(el)el.hidden=id!==('view-'+viewName);}
+  const target=$('view-'+viewName);
+  if(target&&target.scrollIntoView)target.scrollIntoView({block:'start',behavior:'smooth'});
  };
  showStudioView(imageStudioView);
- for(const btn of $('image-subnav').querySelectorAll('.studio-subnav-btn')){btn.onclick=()=>showStudioView(btn.dataset.view);}
+
  $('assignments-goto-creator').onclick=()=>{showStudioView('presets');setWorkflowMode('create');};
  $('image-back-identity').onclick=()=>showTab('identity');
  wirePortrait();
@@ -1032,7 +1000,8 @@ workspaceHandlers['image-studio']=async()=>{
   const draftCount=settings.presets.filter(p=>p.incomplete).length;
   const allRows=[['', 'Choose a workflow'], ...rows];
   $('image-preset-select').innerHTML=options(
-    settings.presets.map((p,i)=>[String(i),p.name+(p.incomplete?' \u00b7 draft':'')]),String(presetIndex));
+    [...settings.presets.map((p,i)=>[String(i),p.name+(p.incomplete?' \u00b7 draft':'')]),
+     ['__new__','\u002b Create a new workflow\u2026']],String(presetIndex));
   $('image-default-preset').innerHTML=options(allRows,defaultId);
   $('image-default-preset').onchange=e=>{defaultId=e.target.value;menus();updateActiveLaneBadge();};
 
@@ -1041,20 +1010,13 @@ workspaceHandlers['image-studio']=async()=>{
 
   $('image-routes').innerHTML=d.categories.map(k=>{
    const assigned=routeValues[k]||'';
-   const isCustom=Boolean(assigned);
    return `
-   <div class="lane-card">
-    <div class="lane-card-top">
-     <div>
-      <h4 class="lane-title">${formLabel(k)}</h4>
-      <p class="dim small" style="margin:2px 0 0">${k==='scenery'?'Environments & landscapes (excludes companion identity)':k==='portrait'?'Character portraits and closeups':k==='anime'?'Stylized anime & illustration':k==='realistic'?'Photorealistic captures':'Everyday companion moments'}</p>
-     </div>
-     <span class="lane-badge ${isCustom?'lane-portrait':'dim'}" style="font-size:10px">${isCustom?'Custom':'Fallback'}</span>
-    </div>
+   <label class="lane-row">
+    <span class="lane-row-name">${formLabel(k)}</span>
     <select class="lane-select" data-image-route="${k}">
-     ${options([['','🌟 Use fallback ('+fallbackLabel+')'],...rows],assigned)}
+     ${options([['','Fallback · '+fallbackLabel],...rows],assigned)}
     </select>
-   </div>`;
+   </label>`;
   }).join('');
 
   for(const s of $('image-routes').querySelectorAll('[data-image-route]')){
@@ -1411,20 +1373,19 @@ workspaceHandlers['image-studio']=async()=>{
  }
 
  await drawPreset();
- $('image-preset-select').onchange=e=>{readPreset();presetIndex=Number(e.target.value);drawPreset();};
+ $('image-preset-select').onchange=e=>{
+  readPreset();
+  if(e.target.value==='__new__'){setWorkflowMode('create');menus();return;}
+  presetIndex=Number(e.target.value);setWorkflowMode('edit');drawPreset();
+ };
  /* Create, edit or import: one of three, and only one on screen. */
+ /* Edit what exists, or make a new one; importing is a way of making one. */
  function setWorkflowMode(mode){
-  for(const button of $('workflow-modes').querySelectorAll('.workflow-mode')){
-   const on=button.dataset.mode===mode;
-   button.classList.toggle('is-on',on);
-   button.setAttribute('aria-pressed',String(on));
-  }
   for(const [name,id] of [['edit','workflow-edit-panel'],['create','workflow-create-panel'],['import','workflow-import-panel']]){
    const panel=$(id);if(panel)panel.hidden=name!==mode;
   }
  }
- for(const button of $('workflow-modes').querySelectorAll('.workflow-mode'))
-  button.onclick=()=>setWorkflowMode(button.dataset.mode);
+ if($('workflow-show-import'))$('workflow-show-import').onclick=()=>setWorkflowMode('import');
 
  /* Reading a workflow back out of a picture. What cannot be read is reported
     rather than guessed, and the result is saved either way. */
