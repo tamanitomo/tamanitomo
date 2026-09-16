@@ -8,12 +8,34 @@ import re
 import sys
 import secrets
 
+def is_blacklisted_undergarment(it) -> bool:
+    """Strict undergarment blacklist (panties, thong, lingerie, underpants, boxers, briefs). Only visible at Stage 4 (Bonded)."""
+    desc = it.get('description', '') if isinstance(it, dict) else str(it or '')
+    wid = it.get('id', '') if isinstance(it, dict) else ''
+    text = f"{wid} {desc}".lower()
+    return bool(re.search(r'\b(panties|panty|thong|thongs|lingerie|underpants|undies|boxers|boxer|briefs|brief)\b', text))
+
 def is_intimate_garment(it) -> bool:
-    if isinstance(it, dict):
-        desc = f"{it.get('id', '')} {it.get('description', '')}"
-    else:
-        desc = str(it or '')
-    return bool(re.search(r'\b(panties|panty|bra|bras|bralette|underwear|undergarment|undergarments|boxers|boxer|briefs|brief|thong|thongs|lingerie|underpants|undies)\b', desc, re.I))
+    """General undergarment detection. Sports bras are excluded (allowed as athletic tops)."""
+    desc = it.get('description', '') if isinstance(it, dict) else str(it or '')
+    wid = it.get('id', '') if isinstance(it, dict) else ''
+    text = f"{wid} {desc}".lower()
+    if 'sports bra' in text or 'sports-bra' in text or 'sports_bra' in text:
+        return False
+    return bool(re.search(r'\b(panties|panty|bra|bras|bralette|underwear|undergarment|undergarments|boxers|boxer|briefs|brief|thong|thongs|lingerie|underpants|undies)\b', text))
+
+def filter_wardrobe_items(items, stage: int):
+    """Tiered wardrobe visibility:
+    - Stage < 2 (Just Met / Flirting): hides all undergarments; sports bras allowed as athletic tops.
+    - Stage 2-3 (Chemistry / Intimacy): shows all wardrobe items EXCEPT blacklisted undergarments.
+    - Stage >= 4 (Bonded): shows all wardrobe items without restriction.
+    """
+    if stage >= 4:
+        return items or []
+    if stage >= 2:
+        return [it for it in (items or []) if not is_blacklisted_undergarment(it)]
+    return [it for it in (items or []) if not is_intimate_garment(it)]
+
 
 from contextvars import ContextVar
 from starlette.requests import Request
@@ -169,12 +191,13 @@ def build(home=None,token='',state_dir=None):
         anchor=presence.last_confirmed(c)
         import companion_intimacy
         intimacy=companion_intimacy.compute(c,now)
-        is_bonded = (intimacy.get('stage', 0) >= 4) or bool(intimacy.get('can_intimate'))
+        stage = intimacy.get('stage', 0)
+        if intimacy.get('can_intimate'): stage = max(stage, 4)
         display_scene = scene
-        if scene and not is_bonded and isinstance(scene.get('state'), dict):
+        if scene and isinstance(scene.get('state'), dict):
             raw_outfit = scene['state'].get('outfit', [])
             if isinstance(raw_outfit, list):
-                filtered_outfit = [i for i in raw_outfit if not is_intimate_garment(i)]
+                filtered_outfit = filter_wardrobe_items(raw_outfit, stage)
                 display_scene = {**scene, 'state': {**scene['state'], 'outfit': filtered_outfit}}
         return {'agent':c.agent,'human':c.human,'type':c.agent_type,'home':str(c.home),
                 'timezone':c.timezone,'age':c.current_age(),'birthday_in':c.birthday_in(),
@@ -194,7 +217,8 @@ def build(home=None,token='',state_dir=None):
         c=load()
         import companion_timeline as tl, companion_intimacy
         intimacy=companion_intimacy.compute(c)
-        is_bonded = (intimacy.get('stage', 0) >= 4) or bool(intimacy.get('can_intimate'))
+        stage = intimacy.get('stage', 0)
+        if intimacy.get('can_intimate'): stage = max(stage, 4)
         rows=[];attempts=[]
         for _,row in sorted(tl.records(c),key=lambda item:item[1]['created_at'],reverse=True):
             if row.get('status')!='saved':
@@ -203,8 +227,8 @@ def build(home=None,token='',state_dir=None):
                 continue
             state=row.get('scene',{}).get('state',{})
             raw_outfit = state.get('outfit',[])
-            if not is_bonded and isinstance(raw_outfit, list):
-                raw_outfit = [i for i in raw_outfit if not is_intimate_garment(i)]
+            if isinstance(raw_outfit, list):
+                raw_outfit = filter_wardrobe_items(raw_outfit, stage)
             rows.append({'id':row['id'],'at':row['scene'].get('recorded_at'),
                          'image':f"/media/timeline/{row['filename']}",
                          'activity':state.get('activity',''),'location':state.get('location',''),
@@ -269,19 +293,17 @@ def build(home=None,token='',state_dir=None):
             else:eff='clean'
             items.append({**w,'status':eff})
         intimacy = companion_intimacy.compute(c, now)
-        is_bonded = (intimacy.get('stage', 0) >= 4) or bool(intimacy.get('can_intimate'))
-        def filter_items(lst):
-            if is_bonded: return lst
-            return [it for it in (lst or []) if not is_intimate_garment(it)]
+        stage = intimacy.get('stage', 0)
+        if intimacy.get('can_intimate'): stage = max(stage, 4)
 
         return {
             'enabled':lifestyle.enabled(c),
-            'items':filter_items(items),
-            'wearing':filter_items([i for i in items if i['status']=='wearing']),
-            'laid_out':{'plan':tomorrow,'items':filter_items([i for i in items if i['status']=='laid_out'])} if tomorrow else None,
-            'hamper':filter_items([i for i in items if i['status']=='hamper']),
-            'washing':filter_items([i for i in items if i['status']=='washing']),
-            'clean':filter_items([i for i in items if i['status']=='clean']),
+            'items':filter_wardrobe_items(items, stage),
+            'wearing':filter_wardrobe_items([i for i in items if i['status']=='wearing'], stage),
+            'laid_out':{'plan':tomorrow,'items':filter_wardrobe_items([i for i in items if i['status']=='laid_out'], stage)} if tomorrow else None,
+            'hamper':filter_wardrobe_items([i for i in items if i['status']=='hamper'], stage),
+            'washing':filter_wardrobe_items([i for i in items if i['status']=='washing'], stage),
+            'clean':filter_wardrobe_items([i for i in items if i['status']=='clean'], stage),
             'laundry_in_progress':init_st.get('laundry')
         }
 

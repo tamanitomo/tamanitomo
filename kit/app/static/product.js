@@ -1,16 +1,16 @@
 function mediaPrivacy(item){return item.blur?'class="concealed-media" title="Sensitive or unreviewed image · open details to reveal"':'';}
 const paths={now:'M3 11 12 3l9 8v10h-6v-7H9v7H3Z',chat:'M4 4h16v12H9l-5 4Z',timeline:'M6 3v18M10 5h10M10 12h7M10 19h10',photos:'M3 4h18v16H3ZM3 16l5-5 5 5 3-3 5 5M16 8h.01',journals:'M5 3h14v18H5ZM8 7h8M8 11h8M8 15h5',creations:'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z',relationship:'M12 20S2 14 2 8a5 5 0 0 1 10-1 5 5 0 0 1 10 1c0 6-10 12-10 12Z',loops:'M4 5h16v16H4ZM8 2v6M16 2v6M4 11h16',knows:'M12 3v18M12 6C7 1 2 5 3 10c-3 5 2 10 9 8M12 6c5-5 10-1 9 4 3 5-2 10-9 8',vault:'M3 6h7l2 3h9v12H3Z',identity:'M8 7a4 4 0 1 0 8 0 4 4 0 1 0-8 0M4 21v-3c0-6 16-6 16 0v3',settings:'M4 7h16M4 17h16M8 4v6M16 14v6','local-models':'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Zm5 3h6v6H9V9Zm-5 2h2m-2 4h2m14-4h2m-2 4h2m-9-11v2m4-2v2m-4 14v2m4-2v2',environment:'M12 2v4M12 18v4M2 12h4M18 12h4M5 5l3 3M16 16l3 3M19 5l-3 3M8 16l-3 3M7 12a5 5 0 1 0 10 0 5 5 0 1 0-10 0',health:'M2 12h5l3-8 4 16 3-8h5',roster:'M8 8a3 3 0 1 0 6 0 3 3 0 1 0-6 0M3 21v-3c0-5 14-5 14 0v3M17 5c5 0 5 6 0 6M20 15c2 1 2 3 2 6',search:'M10 3a7 7 0 1 0 0 14 7 7 0 1 0 0-14M16 16l5 5',download:'M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',album:'M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16l-8-4-8 4V5Z',shield_alert:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Zm0-14v4m0 4h.01',shield_check:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Zm-2-10 2 2 4-4',info:'M12 16v-4m0-4h.01M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z',trash:'M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',close:'M18 6 6 18M6 6l12 12',chevron_left:'M15 18l-6-6 6-6',chevron_right:'M9 18l6-6-6-6',voice:'M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Zm5 9a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z','image-studio':'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z',more:'M5 12h.01M12 12h.01M19 12h.01',pin:'M12 17v5M9 3h6l-1 7 3 3v2H7v-2l3-3-1-7Z'};
 const icon=name=>`<svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="${paths[name]||paths.creations}"/></svg>`;
-const tabLabel=id=>(TABS.find(t=>t[0]===id)?.[1])||({'image-studio':'Image studio','voice':'Voice studio','local-models':'Local models','companion-edit':'Edit companion'}[id])||id;
+const tabLabel=id=>({chat:'Chat',photos:'Photos',journals:'Journal',now:'Home'}[id])||(TABS.find(t=>t[0]===id)?.[1])||({'image-studio':'Image studio','voice':'Voice studio','local-models':'Local models','companion-edit':'Edit companion'}[id])||id;
 /* ---------------------------------------------------------------- navigation
    One destination map drives three surfaces: the desktop rail, the mobile
    bottom bar (whichever destinations the person pinned), and the More
    directory. Anything added here appears in all three. */
+const primaryDestinations=['now','chat','photos','journals'];
 const navGroups=[
-  ['Every day',    ['now','chat','photos','journals','timeline']],
-  ['Their life',   ['relationship','knows','loops','identity','creations','vault']],
-  ['Studios',      ['image-studio','voice','local-models']],
-  ['Setup & system',['settings','environment','health','roster']]
+  ['Life & memories', ['timeline','relationship','knows','loops','identity','creations','vault']],
+  ['Studios',         ['image-studio','voice','local-models']],
+  ['Setup & system',  ['settings','environment','health','roster']]
 ];
 /* One line each, so the More page explains itself without being read twice. */
 const navBlurb={
@@ -30,11 +30,12 @@ const navShort={now:'Home',chat:'Chat',timeline:'Timeline',photos:'Photos',journ
   identity:'Identity',settings:'Settings',environment:'Hermes',health:'Jobs',roster:'Companions',
   'image-studio':'Images',voice:'Voice','local-models':'Models',more:'More'};
 const shortLabel=id=>navShort[id]||tabLabel(id);
-const navDestinations=navGroups.flatMap(([,ids])=>ids);
+const navDestinations=[...primaryDestinations,...navGroups.flatMap(([,ids])=>ids)];
 const navigationButtons=ids=>ids.map(id=>`<button data-tab="${id}">${icon(id)}<span>${esc(tabLabel(id))}</span></button>`).join('');
 
-/* Desktop rail. */
-$('tabs').innerHTML=navGroups.map(([label,ids],i)=>`<details class="nav-group-collapsible" ${i<2?'open':''}><summary>${esc(label)}</summary><div class="nav-group-items">${navigationButtons(ids)}</div></details>`).join('');
+/* Desktop rail: Core primary section is always visible and prominent; secondary groups are collapsible. */
+$('tabs').innerHTML=`<div class="nav-primary-section">${navigationButtons(primaryDestinations)}</div>`+
+  navGroups.map(([label,ids],i)=>`<details class="nav-group-collapsible" ${i<1?'open':''}><summary>${esc(label)}</summary><div class="nav-group-items">${navigationButtons(ids)}</div></details>`).join('');
 for(const button of $('tabs').querySelectorAll('button'))button.onclick=()=>showTab(button.dataset.tab);
 
 /* Mobile bottom bar: the pinned destinations, then More, always last. */
@@ -91,11 +92,15 @@ workspaceHandlers.more=async()=>{
       <label>Your companion<select id="more-companion">${$('companion-select').innerHTML}</select></label>
       <label>Environment<select id="more-installation">${$('installation-select').innerHTML}</select></label>
     </div>`;
+  const allNavGroups=[
+    ['Core pages', primaryDestinations],
+    ...navGroups
+  ];
   $('more').innerHTML=heading('More','Every part of the workspace. Star up to four to keep them on the bottom bar.')+switcher+
     `<div class="pin-preview"><span class="eyebrow">Your bottom bar</span><div class="pin-preview-bar">${
       [...pins,'more'].map(id=>`<span${id==='more'?' class="is-more"':''}>${icon(id)}<small>${esc(shortLabel(id))}</small></span>`).join('')
     }</div><p class="dim small">More always keeps the last slot, so nothing is ever more than two taps away.</p></div>`+
-    navGroups.map(([label,ids])=>`<section class="more-group"><h2>${esc(label)}</h2><div class="more-list">${ids.map(row).join('')}</div></section>`).join('');
+    allNavGroups.map(([label,ids])=>`<section class="more-group"><h2>${esc(label)}</h2><div class="more-list">${ids.map(row).join('')}</div></section>`).join('');
   for(const b of $('more').querySelectorAll('[data-tab]'))b.onclick=()=>showTab(b.dataset.tab);
   // Mirror the rail's selects rather than moving them, so both layouts keep working.
   const mirror=(here,there)=>{const a=$(here),b=$(there);if(!a||!b)return;a.value=b.value;
@@ -131,40 +136,63 @@ function richText(raw){
   return source.split(/\n{2,}/).map(block=>{if(block.startsWith('```'))return `<pre><code>${esc(block.replace(/^```[^\n]*\n/,'').replace(/\n```\s*$/,''))}</code></pre>`;if(/^#{1,6}\s/.test(block)){const lines=block.split('\n'),h=lines.shift().replace(/^#+\s/,'');return `<h3>${inline(h)}</h3>${lines.length?`<p>${inline(lines.join('\n'))}</p>`:''}`;}if(/^> /.test(block))return `<blockquote>${inline(block.replace(/^> /gm,''))}</blockquote>`;if(/^(?:[-*] |\d+\. )/.test(block))return '<ul>'+block.split('\n').map(l=>'<li>'+inline(l.replace(/^(?:[-*] |\d+\. )/,''))+'</li>').join('')+'</ul>';return '<p>'+inline(block).replace(/\n/g,'<br>')+'</p>';}).join('');
 }
 
+function isBlacklistedUndergarment(item){
+  if(!item)return false;
+  const str=typeof item==='string'?item:((item.description||'')+' '+(item.id||''));
+  return /\b(panties|panty|thong|thongs|lingerie|underpants|undies|boxers|boxer|briefs|brief)\b/i.test(str);
+}
+
 function isIntimateGarment(item){
   if(!item)return false;
   const str=typeof item==='string'?item:((item.description||'')+' '+(item.id||''));
+  if(/\bsports[\s_-]?bra\b/i.test(str))return false;
   return /\b(panties|panty|bra|bras|bralette|underwear|undergarment|undergarments|boxers|boxer|briefs|brief|thong|thongs|lingerie|underpants|undies)\b/i.test(str);
 }
 
-function renderWardrobeCard(closet,s,isBonded=false){
-  const filterG=list=>(list||[]).filter(item=>isBonded||!isIntimateGarment(item));
-  if(!closet||!closet.items||!closet.items.length){
-    const cleanOutfit=filterG(s?.outfit);
-    if(!cleanOutfit.length)return '';
-    return `<div class="card"><span class="eyebrow">Clothing & appearance</span><p class="dim">${esc(cleanOutfit.map(o=>o.description||o.id).join(', '))}</p></div>`;
-  }
-  const wearing=filterG(closet.wearing);
-  const laidOut=closet.laid_out;
+function filterWardrobeItems(items,stage=0){
+  if(stage>=4)return items||[];
+  if(stage>=2)return (items||[]).filter(it=>!isBlacklistedUndergarment(it));
+  return (items||[]).filter(it=>!isIntimateGarment(it));
+}
+
+function renderWardrobeCard(closet,s,stage=0){
+  const filterG=list=>filterWardrobeItems(list,stage);
+  const wearing=filterG(closet?.wearing||s?.outfit||[]);
+  const laidOut=closet?.laid_out;
   const laidOutItems=filterG(laidOut?.items);
-  const hamper=filterG(closet.hamper);
-  const washing=filterG(closet.washing);
-  const clean=filterG(closet.clean);
-  const laundry=closet.laundry_in_progress;
-  let html=`<div class="card wardrobe-card"><div class="section-subheading" style="display:flex;align-items:center;justify-content:space-between"><span class="eyebrow">Wardrobe & Care</span>${laundry?'<span class="pill is-washing" style="font-size:11px">🧺 Laundry running</span>':''}</div>`;
-  html+=`<div class="wardrobe-block"><div class="wardrobe-block-title"><span>Currently Wearing</span><span class="dim small">${wearing.length} piece${wearing.length===1?'':'s'}</span></div><div class="wardrobe-chip-list">${wearing.map(w=>`<span class="wardrobe-chip is-wearing" title="${esc(w.description||w.id)}">👕 ${esc(w.description||w.id)}</span>`).join('')||'<span class="dim small">No current outfit recorded</span>'}</div></div>`;
+  const hamper=filterG(closet?.hamper);
+  const washing=filterG(closet?.washing);
+  const clean=filterG(closet?.clean);
+  const laundry=closet?.laundry_in_progress;
+  let html=`<div class="card wardrobe-card"><div class="section-subheading" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><span class="eyebrow">Wardrobe & Care</span>${laundry?'<span class="pill is-washing" style="font-size:11px">🧺 Laundry running</span>':''}</div>`;
+  html+=`<div class="wardrobe-block"><div class="wardrobe-block-title"><span>Currently Wearing</span><span class="dim small">${wearing.length} piece${wearing.length===1?'':'s'}</span></div><div class="wardrobe-chip-list">${wearing.map(w=>`<span class="wardrobe-chip is-wearing" title="${esc(typeof w==='string'?w:(w.description||w.id))}">👕 ${esc(typeof w==='string'?w:(w.description||w.id))}</span>`).join('')||'<span class="dim small">Casual wear</span>'}</div></div>`;
   if(laidOut&&(laidOutItems.length||laidOut.plan?.intent)){
     const plan=laidOut.plan||{};
-    html+=`<div class="wardrobe-block" style="border-left:3px solid var(--warn)"><div class="wardrobe-block-title"><span style="color:var(--warn)">✨ Laid Out For Tomorrow</span><span class="dim small">${laidOutItems.length} pieces</span></div>${laidOutItems.length?`<div class="wardrobe-chip-list">${laidOutItems.map(w=>`<span class="wardrobe-chip is-laid-out" title="${esc(w.description||w.id)}">🛏️ ${esc(w.description||w.id)}</span>`).join('')}</div>`:''}${plan.intent?`<div class="laid-out-intent-quote">“${esc(plan.intent)}”</div>`:''}</div>`;
+    html+=`<div class="wardrobe-block" style="border-left:3px solid var(--warn);margin-top:12px"><div class="wardrobe-block-title"><span style="color:var(--warn)">✨ Laid Out For Tomorrow</span><span class="dim small">${laidOutItems.length} pieces</span></div>${laidOutItems.length?`<div class="wardrobe-chip-list">${laidOutItems.map(w=>`<span class="wardrobe-chip is-laid-out" title="${esc(typeof w==='string'?w:(w.description||w.id))}">🛏️ ${esc(typeof w==='string'?w:(w.description||w.id))}</span>`).join('')}</div>`:''}${plan.intent?`<div class="laid-out-intent-quote">“${esc(plan.intent)}”</div>`:''}</div>`;
   }
   if(hamper.length||washing.length){
-    html+=`<div class="wardrobe-block"><div class="wardrobe-block-title"><span>Hamper & Wash</span><span class="dim small">${hamper.length} dirty${washing.length?` · ${washing.length} in wash`:''}</span></div><div class="wardrobe-chip-list">${washing.map(w=>`<span class="wardrobe-chip is-washing" title="In the wash: ${esc(w.description||w.id)}">🫧 ${esc(w.description||w.id)}</span>`).join('')}${hamper.map(w=>`<span class="wardrobe-chip is-hamper" title="In the hamper: ${esc(w.description||w.id)}">🧺 ${esc(w.description||w.id)}</span>`).join('')}</div></div>`;
+    html+=`<div class="wardrobe-block" style="margin-top:12px"><div class="wardrobe-block-title"><span>Hamper & Wash</span><span class="dim small">${hamper.length} dirty${washing.length?` · ${washing.length} in wash`:''}</span></div><div class="wardrobe-chip-list">${washing.map(w=>`<span class="wardrobe-chip is-washing" title="In the wash: ${esc(w.description||w.id)}">🫧 ${esc(w.description||w.id)}</span>`).join('')}${hamper.map(w=>`<span class="wardrobe-chip is-hamper" title="In the hamper: ${esc(w.description||w.id)}">🧺 ${esc(w.description||w.id)}</span>`).join('')}</div></div>`;
   }
   if(clean.length){
-    html+=`<details class="wardrobe-block" style="cursor:pointer"><summary class="wardrobe-block-title"><span>Clean in Closet</span><span class="dim small">${clean.length} piece${clean.length===1?'':'s'}</span></summary><div class="wardrobe-chip-list" style="margin-top:8px">${clean.map(w=>`<span class="wardrobe-chip is-clean" title="${esc(w.description||w.id)}">✨ ${esc(w.description||w.id)}</span>`).join('')}</div></details>`;
+    html+=`<details class="wardrobe-block" style="cursor:pointer;margin-top:12px"><summary class="wardrobe-block-title"><span>Clean in Closet</span><span class="dim small">${clean.length} piece${clean.length===1?'':'s'}</span></summary><div class="wardrobe-chip-list" style="margin-top:8px">${clean.map(w=>`<span class="wardrobe-chip is-clean" title="${esc(w.description||w.id)}">✨ ${esc(w.description||w.id)}</span>`).join('')}</div></details>`;
   }
   html+=`</div>`;
   return html;
+}
+
+function renderHeroMetersContent(emotions,bars){
+  const meters=emotions?.state?.meters||bars?.feelings?.meters||{};
+  const config=[
+    {key:'warmth',label:'Warmth',icon:'🔥',color:'linear-gradient(90deg,#f43f5e,#fb923c)',defaultVal:0.8},
+    {key:'trust',label:'Trust',icon:'🛡️',color:'linear-gradient(90deg,#0ea5e9,#2dd4bf)',defaultVal:0.75},
+    {key:'irritation',label:'Irritation',icon:'⚡',color:'linear-gradient(90deg,#eab308,#facc15)',defaultVal:0.05},
+    {key:'longing',label:'Missing you',icon:'⏳',color:'linear-gradient(90deg,#8b5cf6,#c084fc)',defaultVal:0.3}
+  ];
+  return config.map(m=>{
+    const raw=meters[m.key]!=null?meters[m.key]:m.defaultVal;
+    const pct=Math.round(Math.max(0,Math.min(1,raw))*100);
+    return `<div class="hero-meter-item"><div class="hero-meter-label-row"><span class="hero-meter-label">${m.icon} ${m.label}</span><span class="hero-meter-pct">${pct}%</span></div><div class="hero-meter-bar-track"><div class="hero-meter-bar-fill" style="width:${pct}%;background:${m.color}"></div></div></div>`;
+  }).join('');
 }
 
 workspaceHandlers.now=async()=>{
@@ -178,7 +206,7 @@ workspaceHandlers.now=async()=>{
     api('/feelings').catch(()=>null)
   ]);
   if(current!=='now')return;
-  profileTimezone=d.timezone;$('who').textContent=d.agent;$('crumb-agent').textContent=d.agent;
+  profileTimezone=d.timezone;$('who').textContent=d.agent;if($('crumb-agent'))$('crumb-agent').textContent=d.agent;
   let bannerHTML=d.problems.length?`<button class="link-button small" id="header-health">${d.problems.length} item${d.problems.length===1?'':'s'} to review</button>`:'';
   if(!bannerHTML&&updateInfo?.has_update){bannerHTML=`<button class="link-button small" id="header-update" style="color:var(--warn)">✨ Update v${esc(updateInfo.latest_version)} available</button>`;}
   $('banner').innerHTML=bannerHTML;
@@ -188,11 +216,11 @@ workspaceHandlers.now=async()=>{
   const s=d.state?.state;
   const photo=content.items.find(x=>x.kind==='image');
   const entry=journal.entries[0];
-  const isBonded=Boolean((emotions?.intimacy?.stage>=4)||(d.intimacy?.stage>=4)||(emotions?.intimacy?.can_intimate));
-  const wearingPieces=(closet?.wearing||[]).filter(x=>isBonded||!isIntimateGarment(x));
-  const rawOutfit=Array.isArray(s?.outfit)?s.outfit.filter(x=>isBonded||!isIntimateGarment(x)):[];
-  const currentOutfit=wearingPieces.map(x=>x.description||x.id).join(', ')||rawOutfit.map(x=>x.description||x.id).join(', ')||(typeof s?.outfit==='string'&&(isBonded||!isIntimateGarment(s.outfit))?s.outfit:'');
-  const feelingBadge=emotions?.intimacy?`${emotions.intimacy.stage_badge} (${emotions.intimacy.score}%)`:'';
+  const stage=Number(emotions?.intimacy?.stage??d.intimacy?.stage??0);
+  const wearingPieces=filterWardrobeItems(closet?.wearing||[],stage);
+  const rawOutfit=Array.isArray(s?.outfit)?filterWardrobeItems(s.outfit,stage):[];
+  const currentOutfit=wearingPieces.map(x=>x.description||x.id).join(', ')||rawOutfit.map(x=>x.description||x.id).join(', ')||(typeof s?.outfit==='string'&&filterWardrobeItems([s.outfit],stage).length?s.outfit:'');
+  const feelingBadge=emotions?.intimacy?`${emotions.intimacy.stage_badge} (${emotions.intimacy.score}%)`:(d.intimacy?`${d.intimacy.stage_badge} (${d.intimacy.score}%)`:'');
 
   let latestThought='';
   let thoughtSource='';
@@ -212,54 +240,66 @@ workspaceHandlers.now=async()=>{
 
   <div class="presence-sanctuary">
     <div class="presence-hero-card">
-      <div class="presence-main-row">
-        <div class="presence-avatar-frame">
-          ${photo?`<img class="presence-avatar-img" ${mediaPrivacy(photo)} src="${mediaUrl(photo.url)}" alt="${esc(d.agent)}">`:`<div class="presence-avatar-placeholder">${esc(d.agent.slice(0,1))}</div>`}
-          <span class="presence-pulse-dot" title="Active presence"></span>
-        </div>
-        <div class="presence-identity-block">
-          <div class="presence-tag-line">
-            <span class="eyebrow" style="color:var(--accent-ink);letter-spacing:.1em">TAMANITOMO · SOUL OF A FRIEND</span>
-            ${feelingBadge?`<span class="pill status-good" style="font-size:11.5px;font-weight:600">${esc(feelingBadge)}</span>`:''}
-            <span class="dim small" style="margin-left:auto">${stamp(new Date().toISOString(),{weekday:'short',month:'short',day:'numeric'})} · ${esc(d.timezone)}</span>
-          </div>
-          <h1 class="presence-name">${esc(d.agent)}</h1>
-          <div class="presence-vibe-chips">
-            ${s?.activity?`<span class="presence-chip activity-chip">✨ ${esc(s.activity)}</span>`:''}
-            ${s?.location?`<span class="presence-chip location-chip">📍 ${esc(s.location)}</span>`:''}
-            ${s?.mood?`<span class="presence-chip mood-chip">💭 ${esc(s.mood)}</span>`:''}
-            ${currentOutfit?`<span class="presence-chip outfit-chip">👗 ${esc(currentOutfit)}</span>`:''}
+      <div class="presence-grid-container">
+        <div class="presence-avatar-column">
+          <div class="presence-avatar-frame-tall">
+            ${photo?`<img class="presence-avatar-img-tall" ${mediaPrivacy(photo)} src="${mediaUrl(photo.url)}" alt="${esc(d.agent)}">`:`<div class="presence-avatar-placeholder-tall">${esc(d.agent.slice(0,1))}</div>`}
+            <span class="presence-pulse-dot" title="Active presence"></span>
           </div>
         </div>
-      </div>
 
-      ${latestThought?`
-      <div class="presence-thought-quote">
-        <div class="quote-mark">“</div>
-        <p class="thought-text">${esc(latestThought)}</p>
-        <div class="thought-footer">
-          <span class="dim small">${thoughtSource}</span>
-          ${entry?`<button class="link-button small" id="read-latest-thought">Read entry in Journal →</button>`:''}
+        <div class="presence-identity-column">
+          <div class="presence-name-header">
+            <h1 class="presence-name">${esc(d.agent)}</h1>
+            ${feelingBadge?`<div class="presence-stage-badge"><span class="pill status-good" style="font-size:11.5px;font-weight:600">${esc(feelingBadge)}</span></div>`:''}
+          </div>
+
+          <div class="presence-status-stack">
+            <div class="presence-chip-row"><span class="chip-label">✨ Status:</span> <span class="chip-val">${esc(s?.activity||'Resting quietly')}</span></div>
+            <div class="presence-chip-row"><span class="chip-label">📍 Location:</span> <span class="chip-val">${esc(s?.location||'Home')}</span></div>
+            <div class="presence-chip-row"><span class="chip-label">💭 Mood:</span> <span class="chip-val">${esc(s?.mood||'Peaceful')}</span></div>
+            <div class="presence-chip-row"><span class="chip-label">👗 Attire:</span> <span class="chip-val">${esc(currentOutfit||'Casual wear')}</span></div>
+          </div>
+
+          ${latestThought?`
+          <div class="presence-thought-quote">
+            <div class="quote-mark">“</div>
+            <p class="thought-text">${esc(latestThought)}</p>
+            <div class="thought-footer">
+              <span class="dim small">${thoughtSource}</span>
+            </div>
+          </div>`:''}
+
+          <div class="presence-actions-bar">
+            <button class="act small" data-route="chat">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              Talk with ${esc(d.agent)}
+            </button>
+            <button class="act small" id="home-open-journal">
+              📖 Read ${esc(d.agent)}'s Journal
+            </button>
+            <button class="quiet small" data-route="photos">
+              <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              Photos
+            </button>
+            <button class="quiet small" data-route="loops">
+              <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              Plans
+            </button>
+          </div>
         </div>
-      </div>`:''}
 
-      <div class="presence-actions-bar">
-        <button class="act" data-route="chat">
-          <svg class="icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          Talk with ${esc(d.agent)}
-        </button>
-        <button class="quiet" data-route="journals">
-          <svg class="icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15z"/></svg>
-          Open Journal
-        </button>
-        <button class="quiet" data-route="photos">
-          <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-          Photos & Moments
-        </button>
-        <button class="quiet" data-route="loops">
-          <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          Plans & Calendar
-        </button>
+        <div class="presence-atmosphere-column">
+          <div class="hero-meters-card">
+            <div class="hero-meters-header">
+              <span class="eyebrow" style="margin:0;font-size:11px;letter-spacing:0.08em">Atmosphere</span>
+              ${emotions?.state?.temperament||emotions?.state?.personality?`<span class="pill small" style="font-size:10px;padding:2px 7px">${esc(emotions.state.temperament||emotions.state.personality)}</span>`:''}
+            </div>
+            <div class="hero-meters-stack">
+              ${renderHeroMetersContent(emotions,d.bars)}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -270,8 +310,6 @@ workspaceHandlers.now=async()=>{
     <button data-route="loops"><span>Plans & calendar</span><strong>${d.loops.length+d.missions.length}</strong><span>Shared calendar items</span></button>
     <button data-route="relationship"><span>Closeness & stage</span><strong>${emotions?.intimacy?emotions.intimacy.stage_badge.split('·')[0].trim():'Bond'}</strong><span>${emotions?.intimacy?emotions.intimacy.score+'% attunement':'Tamagotchi progression'}</span></button>
   </div>
-
-  ${connectionSignals(d.bars)}
 
   <div class="home-columns">
     <div>
@@ -296,7 +334,7 @@ workspaceHandlers.now=async()=>{
 
     <div>
       <div class="section-heading"><h2>Current presence & closet</h2></div>
-      ${renderWardrobeCard(closet,s,isBonded)}
+      ${renderWardrobeCard(closet,s,stage)}
 
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -325,8 +363,8 @@ workspaceHandlers.now=async()=>{
   </div>`;
 
   wireRoutes($('now'));
-  if($('read-latest'))$('read-latest').onclick=()=>{selectedJournal=entry.id;showTab('journals');};
-  if($('read-latest-thought'))$('read-latest-thought').onclick=()=>{selectedJournal=entry.id;showTab('journals');};
+  if($('home-open-journal'))$('home-open-journal').onclick=()=>{if(entry?.id)selectedJournal=entry.id;showTab('journals');};
+  if($('read-latest'))$('read-latest').onclick=()=>{if(entry?.id)selectedJournal=entry.id;showTab('journals');};
   for(const b of $('now').querySelectorAll('[data-home-file]'))b.onclick=()=>openContent(content.items[Number(b.dataset.homeFile)]);
 };
 let selectedJournal=null;
@@ -677,9 +715,10 @@ workspaceHandlers.photos=async()=>{
   $('photo-older').onclick=()=>load(true);draw();
 };
 workspaceHandlers.creations=async()=>{
-  const content=await api('/content');if(current!=='creations')return;profileTimezone=content.timezone;const items=content.items.filter(x=>x.source==='creation');
-  $('creations').innerHTML=heading('Creations','Writing, artwork, audio, and documents stored in the companion vault.')+`<div class="filters"><label>Find a creation<input type="search" id="creation-search" placeholder="Search titles and folders…"></label><label>Type<select id="creation-type"><option value="all">Everything</option><option value="writing">Writing & notes</option><option value="image">Images</option><option value="audio">Audio</option><option value="video">Video</option><option value="document">Documents</option></select></label></div><div class="photo-grid" id="creation-grid"></div><p class="dim small">${content.limited?'Showing a bounded catalog. Browse the Vault for additional files.':'Files remain in their original folders. Changes appear when refreshed.'}</p>`;
-  const filter=()=>{const q=$('creation-search').value.toLowerCase(),type=$('creation-type').value;const shown=items.filter(x=>(type==='all'||x.kind===type)&&(!q||(x.title+' '+x.path).toLowerCase().includes(q)));$('creation-grid').innerHTML=shown.map((x,i)=>`<button class="photo-card" data-file="${i}">${x.kind==='image'?`<div class="photo-wrap"><img ${mediaPrivacy(x)} src="${mediaUrl(x.url)}" loading="lazy" alt="${esc(x.title)}"></div>`:`<div class="file-art">${icon(x.kind==='writing'?'journals':'creations')}</div>`}<div class="photo-meta"><small>${esc(x.kind)} · ${when(x.at)}</small><p>${esc(x.title)}</p><small>${esc(x.path.split('/').slice(0,-1).join(' / '))}</small></div></button>`).join('')||`<div style="grid-column:1/-1">${empty('creations','No creations found','Files saved in the companion vault appear here automatically. Try another filter or explore the Vault.',jump('vault','Open vault'))}</div>`;for(const b of $('creation-grid').querySelectorAll('[data-file]'))b.onclick=()=>openContent(shown[+b.dataset.file]);wireRoutes($('creations'));};$('creation-search').oninput=filter;$('creation-type').onchange=filter;filter();
+  const content=await api('/content');if(current!=='creations')return;profileTimezone=content.timezone;
+  const items=content.items.filter(x=>x.source==='creation'&&x.kind!=='image');
+  $('creations').innerHTML=heading('Creations','Writing, notes, audio, video, and documents stored in the companion vault.')+`<div class="filters"><label>Find a creation<input type="search" id="creation-search" placeholder="Search titles and folders…"></label><label>Type<select id="creation-type"><option value="all">Everything</option><option value="writing">Writing & notes</option><option value="audio">Audio</option><option value="video">Video</option><option value="document">Documents</option></select></label></div><div class="photo-grid" id="creation-grid"></div><p class="dim small">${content.limited?'Showing a bounded catalog. Browse the Vault for additional files.':'Files remain in their original folders. Changes appear when refreshed.'}</p>`;
+  const filter=()=>{const q=$('creation-search').value.toLowerCase(),type=$('creation-type').value;const shown=items.filter(x=>(type==='all'||x.kind===type)&&(!q||(x.title+' '+x.path).toLowerCase().includes(q)));$('creation-grid').innerHTML=shown.map((x,i)=>`<button class="photo-card" data-file="${i}"><div class="file-art">${icon(x.kind==='writing'?'journals':'creations')}</div><div class="photo-meta"><small>${esc(x.kind)} · ${when(x.at)}</small><p>${esc(x.title)}</p><small>${esc(x.path.split('/').slice(0,-1).join(' / '))}</small></div></button>`).join('')||`<div style="grid-column:1/-1">${empty('creations','No creations found','Files saved in the companion vault appear here automatically. Try another filter or explore the Vault.',jump('vault','Open vault'))}</div>`;for(const b of $('creation-grid').querySelectorAll('[data-file]'))b.onclick=()=>openContent(shown[+b.dataset.file]);wireRoutes($('creations'));};$('creation-search').oninput=filter;$('creation-type').onchange=filter;filter();
 };
 workspaceHandlers.timeline=async()=>{
   const [life,content,tl,journal]=await Promise.all([api('/life'),api('/content'),api('/timeline'),api('/journals')]);if(current!=='timeline')return;

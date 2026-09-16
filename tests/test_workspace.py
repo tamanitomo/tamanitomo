@@ -395,11 +395,12 @@ class WorkspaceTests(unittest.TestCase):
         (self.c.life / 'wardrobe.json').write_text(json.dumps({'items': [
             {'id': 'top-1', 'description': 'cream knit sweater'},
             {'id': 'pants-1', 'description': 'dark blue denim jeans'},
+            {'id': 'bra-sports', 'description': 'sage green low-cut ribbed active sports bra'},
             {'id': 'closet-underwear-1', 'description': 'sage green soft stretch-cotton bikini panties with subtle lace trim'}
         ]}))
         presence.update(self.c, {
             'previous_id': None,
-            'outfit': ['top-1', 'pants-1', 'closet-underwear-1'],
+            'outfit': ['top-1', 'pants-1', 'bra-sports', 'closet-underwear-1'],
             'location': 'the living room',
             'activity': 'reading',
             'mood': 'content',
@@ -409,6 +410,7 @@ class WorkspaceTests(unittest.TestCase):
         descriptions = [it.get('description', '') for it in res['state']['state']['outfit']]
         self.assertIn('cream knit sweater', descriptions)
         self.assertIn('dark blue denim jeans', descriptions)
+        self.assertIn('sage green low-cut ribbed active sports bra', descriptions)
         self.assertNotIn('sage green soft stretch-cotton bikini panties with subtle lace trim', descriptions)
         self.assertIsNone(res.get('integrity_warning'))
         self.assertFalse(res.get('integrity_lockout'))
