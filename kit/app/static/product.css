@@ -2398,3 +2398,11 @@ body[data-page="chat"] main{padding:0}
 .routing-card[open]>summary{margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--edge)}
 .routing-card .chip-row{margin:0 0 10px}
 .routing-card .panel-footer{margin-top:18px}
+
+/* Choosing a model: a list where one is known, a text box always. */
+.model-picker{display:flex;flex-direction:column;gap:6px}
+.model-picker-row{display:flex;gap:8px;align-items:center}
+.model-picker-row select{flex:1;min-width:0}
+.model-picker-row button{flex:none;padding:8px 12px;font-size:13px}
+.model-picker input[data-model-custom]{font-size:13.5px}
+.model-picker small{line-height:1.4}

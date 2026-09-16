@@ -79,6 +79,31 @@ INFERENCE_PRESETS=[
  },
 ]
 
+def _live_models(home, base_url, model_cfg):
+    """Ask an OpenAI-shaped endpoint what it serves, using the profile's credential.
+
+    The key is stored as a ${VAR} reference, so it is expanded from the same
+    .env Hermes reads rather than being held anywhere else.
+    """
+    import urllib.request
+    from companion_gateway import _env_values
+    raw = str(model_cfg.get('api_key') or '')
+    key = ''
+    match = re.fullmatch(r'\$\{([A-Za-z_][A-Za-z0-9_]*)\}', raw.strip())
+    if match:
+        values = _env_values(home)
+        key = str(values.get(match.group(1)) or os.environ.get(match.group(1)) or '')
+    elif raw and not raw.startswith('$'):
+        key = raw
+    request = urllib.request.Request(base_url.rstrip('/') + '/models')
+    if key:
+        request.add_header('Authorization', 'Bearer ' + key)
+    with urllib.request.urlopen(request, timeout=20) as response:
+        payload = json.load(response)
+    rows = payload.get('data') if isinstance(payload, dict) else payload
+    return sorted(str(r.get('id')) for r in (rows or []) if isinstance(r, dict) and r.get('id'))
+
+
 def text(value, name, maxlen=300, empty=False):
     if not isinstance(value,str) or len(value)>maxlen or any(ord(c)<32 for c in value) or (not empty and not value.strip()):
         raise ValueError(f'{name} must be plain text (maximum {maxlen} characters)')
@@ -523,6 +548,46 @@ def register(app, select, load, operations):
         values=_env_values(h)
         return {'providers':[{**row,'credential_configured':any(bool(values.get(k) or os.environ.get(k)) for k in row.get('api_key_env_vars',[]))} for row in (rows or FALLBACK_CATALOG)],
                 'source':'installed Hermes catalog' if rows else 'basic compatibility catalog'}
+
+    @app.get('/api/models/catalog')
+    def models_catalog(provider:str='',base_url:str='',refresh:int=0):
+        """The models a provider actually offers, so picking one is a choice from a list.
+
+        Hermes writes a per-provider cache of live /v1/models results whenever
+        its own picker runs, and that file is the fast path here — reading it
+        beats importing hermes_cli, which lives in a different virtualenv.
+        Named providers are keyed by name; a `custom` provider is keyed by its
+        address, because "custom" alone says nothing about what is served
+        there. An address also means we can go and ask, which is what Refresh
+        does."""
+        rt,_,h=context()
+        provider=(provider or '').strip().lower()
+        base_url=(base_url or '').strip()
+        cfg=config(h).get('model') or {}
+        if not provider:
+            provider=str(cfg.get('provider') or '').strip().lower()
+        # An empty endpoint on a custom provider means "whatever the profile uses".
+        if not base_url and provider in ('','custom'):
+            base_url=str(cfg.get('base_url') or '').strip()
+
+        key=f'custom:{base_url.rstrip("/")}' if base_url else provider
+        models,source,note=[],'none',''
+        if not refresh:
+            try:
+                cache=json.loads((h/'provider_models_cache.json').read_text(encoding='utf-8'))
+                models=[str(m) for m in ((cache.get(key) or {}).get('models') or [])]
+                if models:source='cache'
+            except Exception:pass
+        if not models and base_url:
+            try:
+                models=_live_models(h,base_url,cfg);source='live'
+            except Exception as exc:
+                note=f'Could not reach {base_url}: '+hr.redact(str(exc))[:160]
+        if not models and not note:
+            note=('No cached list for this provider yet. Open it once in the Hermes dashboard, '
+                  'or type the model name — a name you type is always accepted.')
+        return {'models':models,'provider':provider,'base_url':base_url,'source':source,
+                'cache_key':key,'note':note}
 
     @app.post('/api/environment')
     def save_environment(payload:dict):

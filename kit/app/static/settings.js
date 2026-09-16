@@ -524,6 +524,73 @@ const JOB_PROVIDER_PRESETS=[
    hint:'Clears all three, so jobs use whatever the profile default is.'},
 ];
 
+/* Model lists, asked for once per provider+endpoint pair and remembered for the
+   page. A name typed by hand is always accepted — the list is there to save
+   typing and to show what is actually on offer, never to be the only answer. */
+const modelListCache=new Map();
+function modelList(provider,baseUrl,refresh){
+  const key=`${provider||''}|${baseUrl||''}`;
+  if(refresh)modelListCache.delete(key);
+  if(!modelListCache.has(key)){
+    const q=new URLSearchParams();
+    if(provider)q.set('provider',provider);
+    if(baseUrl)q.set('base_url',baseUrl);
+    if(refresh)q.set('refresh','1');
+    modelListCache.set(key,api('/models/catalog?'+q).catch(error=>({models:[],note:error.message})));
+  }
+  return modelListCache.get(key);
+}
+
+/* A model field that is a list when we know the list, and a text box always. */
+function modelPickerHTML(id,value){
+  return `<div class="model-picker" data-model-picker="${esc(id)}">
+    <div class="model-picker-row">
+      <select data-model-select aria-label="Model"><option value="">Loading…</option></select>
+      <button type="button" class="quiet" data-model-refresh title="Ask the provider what it serves">Refresh</button>
+    </div>
+    <input data-model-custom placeholder="Model name" value="${esc(value||'')}" aria-label="Model name">
+    <small class="dim" data-model-note></small>
+  </div>`;
+}
+
+/* Fills one picker and keeps the free-text box in step with it. */
+function wireModelPicker(root,{provider,baseUrl,value,onChange}){
+  const select=root.querySelector('[data-model-select]');
+  const custom=root.querySelector('[data-model-custom]');
+  const note=root.querySelector('[data-model-note]');
+  const CUSTOM='__custom__';
+  const read=()=>select.value===CUSTOM?custom.value.trim():select.value;
+  const paint=d=>{
+    const models=d.models||[];
+    const known=models.includes(custom.value.trim());
+    select.innerHTML=
+      `<option value="">Follow the profile default</option>`+
+      models.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('')+
+      `<option value="${CUSTOM}">Write your own…</option>`;
+    select.value=custom.value.trim()?(known?custom.value.trim():CUSTOM):'';
+    custom.hidden=select.value!==CUSTOM;
+    note.textContent=d.note||(models.length
+      ?`${models.length} model${models.length===1?'':'s'} offered${d.source==='cache'?' · cached':''}`:'');
+  };
+  custom.value=value||'';
+  const load=refresh=>{
+    select.innerHTML='<option>Loading…</option>';
+    return modelList(provider(),baseUrl(),refresh).then(paint);
+  };
+  select.onchange=()=>{
+    custom.hidden=select.value!==CUSTOM;
+    if(select.value!==CUSTOM)custom.value=select.value;
+    if(onChange)onChange(read());
+  };
+  custom.oninput=()=>{if(onChange)onChange(read());};
+  root.querySelector('[data-model-refresh]').onclick=async e=>{
+    e.preventDefault();const b=e.currentTarget;b.disabled=true;
+    try{await load(true);}finally{b.disabled=false;}
+  };
+  load(false);
+  return {read,reload:()=>load(false)};
+}
+
 /* ------------------------------------------------------------- jobs panel
    The jobs list used to be read-only apart from a schedule prompt(), and the
    model behind each job could only be changed by running Hermes's own CLI.
@@ -564,8 +631,9 @@ async function renderJobsPanel(host){
       </div>
       <p class="dim small" id="routing-hint">Pick a starting point, then adjust anything below before applying.</p>
       <div class="form-grid">
-        <label>Provider<input id="routing-provider" list="provider-model-ids" placeholder="custom, openai, anthropic…"></label>
-        <label>Model<input id="routing-model" placeholder="Leave empty to follow the profile default"></label>
+        <label>Provider<input id="routing-provider" list="provider-ids" placeholder="custom, openai, anthropic…"></label>
+        <label>Model${modelPickerHTML('routing','')}
+          <input type="hidden" id="routing-model"></label>
         <label class="wide">Endpoint<input id="routing-base-url" placeholder="Leave empty unless the provider needs a specific address">
           <small class="dim">An address here outranks the provider. This is the field that strands jobs on a dead server when it is changed by hand.</small></label>
       </div>
@@ -617,8 +685,9 @@ async function renderJobsPanel(host){
           <div class="form-grid">
             <label>Schedule<input data-field="schedule" data-job="${esc(j.id)}" value="${esc(schedule(j))}" placeholder="*/15 * * * * or every 15m"></label>
             ${j.no_agent?'':`
-            <label>Model<input data-field="model" data-job="${esc(j.id)}" list="provider-model-ids" value="${esc(j.model||'')}" placeholder="Follow the profile default"></label>
-            <label>Provider<input data-field="provider" data-job="${esc(j.id)}" value="${esc(j.provider||'')}" placeholder="Follow the profile default"></label>
+            <label>Provider<input data-field="provider" data-job="${esc(j.id)}" list="provider-ids" value="${esc(j.provider||'')}" placeholder="Follow the profile default"></label>
+            <label>Model${modelPickerHTML('job-'+j.id,j.model)}
+              <input type="hidden" data-field="model" data-job="${esc(j.id)}" value="${esc(j.model||'')}"></label>
             <label>Reasoning effort<select data-field="reasoning_effort" data-job="${esc(j.id)}">${options([['','Hermes default'],['none','None'],['low','Low'],['medium','Medium'],['high','High']],j.reasoning_effort||'')}</select></label>
             <label class="wide">Endpoint<input data-field="base_url" data-job="${esc(j.id)}" value="${esc(j.base_url||'')}" placeholder="Leave empty to use the provider's own address">
               <small class="dim">Only set this to override where the provider sends requests — a local server, or a gateway. An address left here outranks the provider above.</small></label>`}
@@ -632,6 +701,31 @@ async function renderJobsPanel(host){
           </div>
         </div>
       </details>`).join(''):empty('health','No matching jobs','Nothing here matches that search or filter.');
+
+    /* A row builds its picker the first time it is opened, not for all 29 at
+       once, and rebuilds it when the provider or endpoint underneath changes. */
+    for(const row of host.querySelectorAll('.job-row')){
+      const picker=row.querySelector('[data-model-picker]');
+      if(!picker)continue;
+      const field=n=>row.querySelector(`[data-field="${n}"]`);
+      const attach=()=>{
+        if(picker.dataset.wired)return;
+        picker.dataset.wired='1';
+        wireModelPicker(picker,{
+          provider:()=>field('provider').value.trim(),
+          baseUrl:()=>field('base_url')?field('base_url').value.trim():'',
+          value:field('model').value,
+          onChange:v=>{field('model').value=v;}});
+      };
+      row.addEventListener('toggle',()=>{if(row.open)attach();});
+      if(row.open)attach();
+      for(const name of ['provider','base_url']){
+        const input=field(name);
+        if(input)input.addEventListener('change',()=>{
+          picker.dataset.wired='';attach();
+        });
+      }
+    }
 
     for(const b of host.querySelectorAll('[data-save-job]'))b.onclick=async()=>{
       const id=b.dataset.saveJob;
@@ -665,12 +759,27 @@ async function renderJobsPanel(host){
       catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;b.disabled=false;}
     };
   };
+  /* The switcher's own picker, rebuilt whenever the provider or endpoint moves
+     under it — those two decide which catalogue the model list comes from. */
+  const routingPicker=host.querySelector('#job-routing [data-model-picker]');
+  const routingModel=host.querySelector('#routing-model');
+  const buildRoutingPicker=()=>wireModelPicker(routingPicker,{
+    provider:()=>host.querySelector('#routing-provider').value.trim(),
+    baseUrl:()=>host.querySelector('#routing-base-url').value.trim(),
+    value:routingModel.value,
+    onChange:v=>{routingModel.value=v;}});
+  buildRoutingPicker();
+  for(const id of ['#routing-provider','#routing-base-url'])
+    host.querySelector(id).addEventListener('change',buildRoutingPicker);
+
   /* Presets fill the three fields; nothing is sent until Apply. */
   for(const b of host.querySelectorAll('[data-preset]'))b.onclick=()=>{
     const preset=JOB_PROVIDER_PRESETS.find(x=>x.id===b.dataset.preset);
     host.querySelector('#routing-provider').value=preset.provider;
-    host.querySelector('#routing-model').value=preset.model;
+    routingModel.value=preset.model;
+    routingPicker.querySelector('[data-model-custom]').value=preset.model;
     host.querySelector('#routing-base-url').value=preset.base_url;
+    buildRoutingPicker();
     host.querySelector('#routing-hint').textContent=preset.hint;
     for(const other of host.querySelectorAll('[data-preset]'))
       other.setAttribute('aria-pressed',String(other===b));
@@ -683,7 +792,7 @@ async function renderJobsPanel(host){
     try{
       await action('/jobs/routing',{
         provider:host.querySelector('#routing-provider').value.trim(),
-        model:host.querySelector('#routing-model').value.trim(),
+        model:routingModel.value.trim(),
         base_url:host.querySelector('#routing-base-url').value.trim()});
       openSettings(null,'jobs');
     }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
@@ -701,7 +810,7 @@ async function renderJobsPanel(host){
   api('/providers').then(p=>{
     if(!host.isConnected)return;
     const list=document.createElement('datalist');
-    list.id='provider-model-ids';
+    list.id='provider-ids';
     list.innerHTML=p.providers.map(x=>`<option value="${esc(x.slug)}">${esc(x.label)}</option>`).join('');
     host.append(list);
   }).catch(()=>{});
