@@ -83,8 +83,10 @@ header{position:fixed;inset:0 auto 0 0;width:var(--rail);background:var(--bg);bo
 @media(min-width:1600px){main{padding-left:54px;padding-right:54px}.home-hero{grid-template-columns:1.5fr 1fr}.hero-image{min-height:390px}}
 @media(max-width:1100px){:root{--rail:215px}main{padding:28px 24px 100px}.home-columns{grid-template-columns:1fr}.home-hero{grid-template-columns:1fr 260px}.hero-copy{padding:25px}.hero-copy h2{font-size:24px}.reader-layout{grid-template-columns:230px minmax(0,1fr)}.paper{padding:28px}.stat-strip button{padding:15px}.form-grid{grid-template-columns:1fr}}
 @media(max-width:900px){:root{--rail:0px}header{width:260px;transform:translateX(-100%);transition:transform .2s;box-shadow:20px 0 70px rgb(0 0 0 / 0.47)}.menu-open header{transform:translateX(0)}.top-actions-bar{top:10px;right:12px;padding:3px 6px}#mobile-menu{display:inline-flex}.top-actions-bar .search-label,.top-actions-bar kbd{display:none}main{padding:24px 18px 100px}.home-title{align-items:flex-start}.home-title .act{font-size:13px;white-space:nowrap}.page-title{font-size:28px}.home-hero{grid-template-columns:1fr}.hero-image{min-height:280px;order:-1}.hero-copy{padding:24px}.hero-copy h2{font-size:24px}.stat-strip{grid-template-columns:repeat(2,1fr)}.stat-strip button{border-bottom:1px solid var(--edge)}.home-columns,.split,.reader-layout,.lightbox-layout{grid-template-columns:1fr}.reader-list{display:flex;gap:10px;max-height:none;overflow-x:auto}.reader-list button{min-width:220px;max-width:220px}.paper{padding:28px 23px}.paper h2{font-size:28px}.photo-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.photo-meta p{font-size:13px}.filters label{min-width:140px}.feed-item{grid-template-columns:1fr;gap:8px}.feed-item>time{padding:0}.feed-item img{width:105px;height:135px}.card{padding:20px}.files{max-height:220px}#operation{left:14px;right:14px;bottom:14px;max-width:none}.notice-strip{align-items:flex-start}table{display:block;overflow:auto}.dialog-body{padding:18px}.form-grid{grid-template-columns:1fr}}
+/* The go-to-page button is keyboard-only: Ctrl-K still clicks it. It is never
+   drawn, on any width. */
+#open-search{display:none!important}
 @media(min-width:901px){
-  #open-search{display:none!important}
   .top-actions-bar:not(:has(#editor-status:not([hidden]))){
     display:none!important;
   }
@@ -1136,6 +1138,9 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
   width:100%;
   height:100%;
   object-fit:cover;
+  /* A cover crop centres on the middle of the image, which on a standing
+     portrait is the torso. Faces are at the top, so that is where it holds. */
+  object-position:top center;
   display:block;
 }
 .presence-avatar-placeholder-tall{
@@ -1299,6 +1304,8 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
   margin-bottom:10px;
   flex:none;
 }
+.hero-chemistry-pill .chem-score::before{content:'('}
+.hero-chemistry-pill .chem-score::after{content:')'}
 .hero-chemistry-pill{
   font-size:11.5px;
   font-weight:600;
@@ -1517,4 +1524,61 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
   .presence-name{font-size:28px}
   .calendar-cell{min-height:56px;padding:4px}
   .calendar-cell-date{font-size:11px}
+}
+
+/* ------------------------------------------------------- home, on a phone */
+/* Order on a narrow screen: the companion, then how things stand between you,
+   then the day ahead, the journal, what they are wearing, and the photos last.
+   The two column wrappers step out of the way so each block can be placed. */
+@media(max-width:900px){
+  .home-columns>div{display:contents}
+  .home-block{min-width:0}
+  .home-block[data-block="calendar"]{order:1}
+  .home-block[data-block="journal"]{order:2}
+  .home-block[data-block="wardrobe"]{order:3}
+  .home-block[data-block="photos"]{order:4}
+  .home-block[data-block="journal"] .section-heading,
+  .home-block[data-block="wardrobe"] .section-heading,
+  .home-block[data-block="photos"] .section-heading{margin-top:26px}
+}
+
+/* The five meters and the chemistry badge become one row of six small squares:
+   emoji above the number, with the meter's colour kept as a bar along the foot
+   so a value is still readable as a length and not only as a figure. */
+@media(max-width:700px){
+  .hero-meters-card{
+    display:grid;grid-template-columns:repeat(6,minmax(0,1fr));
+    gap:6px;padding:0;height:auto;background:none;border:0
+  }
+  .hero-meters-stack{display:contents}
+  .hero-chemistry-row{display:block;margin:0}
+  .hero-meter-item,.hero-chemistry-pill{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:2px;width:100%;aspect-ratio:1;min-width:0;padding:4px 2px 8px;
+    position:relative;overflow:hidden;box-sizing:border-box;
+    background:color-mix(in srgb,var(--bg) 55%,transparent);
+    border:1px solid color-mix(in srgb,var(--edge) 70%,transparent);
+    border-radius:10px;letter-spacing:0
+  }
+  .hero-meter-item .meter-name,.hero-chemistry-pill .chem-stage,
+  .hero-chemistry-pill .chem-score::before,.hero-chemistry-pill .chem-score::after{display:none}
+  .hero-meter-label-row{display:contents}
+  .hero-meter-label,.hero-chemistry-pill .chem-icon{font-size:17px;line-height:1}
+  .hero-meter-pct,.hero-chemistry-pill .chem-score{font-size:11px;font-weight:700;line-height:1;color:var(--ink)}
+  /* The bar leaves the flow and rules the foot of the square. */
+  .hero-meter-bar-track{
+    position:absolute;left:0;right:0;bottom:0;height:4px;
+    background:color-mix(in srgb,var(--ink) 12%,transparent);border-radius:0
+  }
+  .hero-meter-bar-fill{height:100%;border-radius:0;box-shadow:none!important}
+  .hero-chemistry-pill::before{
+    content:'';position:absolute;left:0;right:0;bottom:0;height:4px;
+    background:color-mix(in srgb,var(--ink) 12%,transparent)
+  }
+  .hero-chemistry-pill::after{
+    content:'';position:absolute;left:0;bottom:0;height:4px;width:var(--chem-score,0%);
+    background:linear-gradient(90deg,var(--accent),var(--accent-deep))
+  }
+  /* A tooltip anchored to a 52px square would sit off the screen edge. */
+  .hero-meter-tooltip{display:none}
 }

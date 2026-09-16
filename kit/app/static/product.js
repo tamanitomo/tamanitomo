@@ -377,7 +377,7 @@ function renderHeroMetersContent(emotions,bars){
     return `
       <div class="hero-meter-item" title="${esc(m.label)}: ${pct}% · ${esc(m.desc)}" tabindex="0" aria-label="${esc(m.label)} meter: ${pct}%">
         <div class="hero-meter-label-row">
-          <span class="hero-meter-label"><span class="meter-icon">${m.icon}</span> ${m.label}</span>
+          <span class="hero-meter-label"><span class="meter-icon">${m.icon}</span> <span class="meter-name">${m.label}</span></span>
           <span class="hero-meter-pct">${pct}%</span>
         </div>
         <div class="hero-meter-bar-track">
@@ -417,7 +417,8 @@ workspaceHandlers.now=async()=>{
   const wearingPieces=filterWardrobeItems(closet?.wearing||[],stage);
   const rawOutfit=Array.isArray(s?.outfit)?filterWardrobeItems(s.outfit,stage):[];
   const currentOutfit=wearingPieces.map(x=>x.description||x.id).join(', ')||rawOutfit.map(x=>x.description||x.id).join(', ')||(typeof s?.outfit==='string'&&filterWardrobeItems([s.outfit],stage).length?s.outfit:'');
-  const feelingBadge=emotions?.intimacy?`${emotions.intimacy.stage_badge} (${emotions.intimacy.score}%)`:(d.intimacy?`${d.intimacy.stage_badge} (${d.intimacy.score}%)`:'');
+  const chemistry=emotions?.intimacy||d.intimacy||null;
+  const feelingBadge=chemistry?`<span class="chem-icon" aria-hidden="true">✨</span><span class="chem-stage">${esc(chemistry.stage_badge)}</span><span class="chem-score">${chemistry.score}%</span>`:'';
 
   let latestThought='';
   let thoughtSource='';
@@ -470,8 +471,9 @@ workspaceHandlers.now=async()=>{
           <div class="hero-meters-card">
             ${feelingBadge?`
             <div class="hero-chemistry-row">
-              <span class="pill status-good hero-chemistry-pill" title="Relationship & chemistry stage">
-                <span>✨</span> ${esc(feelingBadge)}
+              <span class="pill status-good hero-chemistry-pill" style="--chem-score:${Number(chemistry.score)||0}%"
+                title="Relationship & chemistry stage: ${esc(chemistry.stage_badge)} ${chemistry.score}%">
+                ${feelingBadge}
               </span>
             </div>`:''}
             <div class="hero-meters-stack">
@@ -485,6 +487,7 @@ workspaceHandlers.now=async()=>{
 
   <div class="home-columns" style="margin-top:28px">
     <div>
+      <section class="home-block" data-block="journal">
       <div class="section-heading" style="margin-top:0"><h2>From the journal</h2>${jump('journals','All reflections')}</div>
       ${entry?`
       <article class="card journal-preview" style="border-radius:var(--r-lg);padding:26px">
@@ -496,6 +499,9 @@ workspaceHandlers.now=async()=>{
         </div>
       </article>`:empty('journals','No journal entries yet','Daily reflections are recorded automatically by the scheduled nightly routine at 4:00 AM.',jump('health','View routine status'))}
 
+      </section>
+
+      <section class="home-block" data-block="photos">
       <div class="section-heading"><h2>Recent moments & captures</h2>${jump('photos','Open photo library')}</div>
       <div class="grid">
         ${(content.items.filter(x=>x.kind==='image').slice(0,6).length?content.items.filter(x=>x.kind==='image').slice(0,6):content.items.slice(0,6)).map(x=>{
@@ -507,14 +513,20 @@ workspaceHandlers.now=async()=>{
           </button>`;
         }).join('')||'<p class="dim">Photos and captures appear here as your companion records their day.</p>'}
       </div>
+      </section>
     </div>
 
     <div>
+      <section class="home-block" data-block="calendar">
       <div class="section-heading" style="margin-top:0"><h2>Calendar</h2>${jump('loops','Planner')}</div>
       ${buildCalendarHtml(d.agent,d.missions,'home-cal')}
 
-      <div class="section-heading"><h2>Current presence & closet</h2></div>
+      </section>
+
+      <section class="home-block" data-block="wardrobe">
+      <div class="section-heading"><h2>Current presence &amp; closet</h2></div>
       ${renderWardrobeCard(closet,s,stage)}
+      </section>
     </div>
   </div>`;
 
