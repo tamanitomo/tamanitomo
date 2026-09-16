@@ -403,7 +403,8 @@ workspaceHandlers.now=async()=>{
   ]);
   if(current!=='now')return;
   profileTimezone=d.timezone;$('who').textContent=d.agent;if($('crumb-agent'))$('crumb-agent').textContent=d.agent;
-  if($('companion-avatar-pill'))$('companion-avatar-pill').textContent=(d.agent||'C').charAt(0).toUpperCase();
+  if($('companion-avatar-pill'))$('companion-avatar-pill').outerHTML=
+    faceHtml(d.agent,'profile-avatar-pill').replace('class="avatar has-face','id="companion-avatar-pill" class="avatar has-face');
   let bannerHTML=d.problems.length?`<button class="link-button small" id="header-health" style="color:var(--bad)"><span aria-hidden="true">⚠️</span> ${d.problems.length} item${d.problems.length===1?'':'s'} to review</button>`:'';
   if(!bannerHTML&&updateInfo?.has_update){bannerHTML=`<button class="link-button small" id="header-update" style="color:var(--warn)">✨ Update v${esc(updateInfo.latest_version)} available</button>`;}
   $('banner').innerHTML=bannerHTML;
@@ -1058,7 +1059,6 @@ workspaceHandlers.photos=async()=>{
     <div class="photo-scrubber" id="photo-scrubber" aria-hidden="true"></div>
     <p class="dim small" id="photo-count" role="status"></p>`;
   if($('photo-manage-settings-btn'))$('photo-manage-settings-btn').onclick=openPhotoSettingsDialog;
-  if($('photo-manage-settings-card-btn'))$('photo-manage-settings-card-btn').onclick=openPhotoSettingsDialog;
   const draw=()=>{
     const shown=items.map(x=>photoForCollection(x,photoBrowse.collection));
     // One continuous grid. The pictures never break into per-day blocks; the

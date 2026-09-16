@@ -142,6 +142,29 @@ let PROFILE=params.get('profile');
 function scoped(path){const u=new URL(path,location.origin);u.searchParams.set('installation',INSTALLATION);if(PROFILE)u.searchParams.set('profile',PROFILE);return u.pathname+u.search;}
 function rawMediaUrl(path){const u=new URL(scoped(path),location.origin);if(token)u.searchParams.set('token',token);return u.pathname+u.search;}
 function mediaUrl(path){return esc(rawMediaUrl(path));}
+/* The companion's own face, wherever a placeholder initial used to stand.
+   Whether a portrait exists is asked once and remembered, so a companion with
+   no portrait never renders a broken image; the initial is what shows. */
+let portraitStored=false;
+async function refreshPortraitState(){
+  try{portraitStored=!!(await api('/portrait')).stored;}
+  catch(error){portraitStored=false;}
+  return portraitStored;
+}
+function faceHtml(name,cls){
+  const letter=esc(String(name||'?').trim().slice(0,1).toUpperCase()||'?');
+  const face=portraitStored
+    ? `<img src="${mediaUrl('/media/portrait?v='+portraitVersion)}" alt="" loading="lazy">`:'';
+  return `<div class="avatar has-face ${esc(cls||'')}"><span>${letter}</span>${face}</div>`;
+}
+/* Bumped when the portrait changes, so a replaced face is not served from cache. */
+let portraitVersion=Date.now();
+// Belt and braces: a portrait removed in another tab would otherwise linger as a
+// broken frame until the next reload. Error events do not bubble, so capture.
+document.addEventListener('error',event=>{
+  const img=event.target;
+  if(img&&img.tagName==='IMG'&&img.closest('.avatar.has-face')){img.remove();portraitStored=false;}
+},true);
 const workspaceHandlers={};
 async function api(path,options){
   const opts=Object.assign({headers:{'content-type':'application/json'}},options||{});
@@ -792,7 +815,7 @@ async function renderIdentity(){
     ['Their timezone',who.timezone||'—','']
   ].filter(Boolean);
   const hero=`<section class="identity-hero">
-    <div class="identity-avatar" aria-hidden="true">${esc((who.agent||'?').slice(0,1))}</div>
+    ${faceHtml(who.agent,'identity-avatar')}
     <div class="identity-hero-copy">
       <span class="eyebrow">${esc(who.human?who.human+'’s companion':'Companion')}</span>
       <h2>${esc(who.agent||'Your companion')}</h2>

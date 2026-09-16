@@ -1026,7 +1026,8 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
   .soul-passage-head{grid-template-columns:minmax(0,1fr)}
   .soul-edit{grid-column:1;grid-row:auto;justify-self:start;margin-top:8px;opacity:1}
   .soul-passage-body{font-size:14.5px}
-  .tool-menu-list{right:auto;left:0}
+  .tool-menu{position:static}
+  .tool-menu-list{right:14px;left:14px;width:auto;top:auto}
 }
 
 /* Publisher terms shown before downloading third-party model weights. */
@@ -1850,3 +1851,18 @@ body[data-page="chat"] main{padding:0}
   .chat-peek{top:8px;padding:5px 14px 5px 5px}
   .chat-peek-avatar{width:26px;height:26px;font-size:12px}
 }
+
+/* ------------------------------------------------- the companion's own face */
+/* The portrait fills the frame; the initial sits behind it and is what shows if
+   no portrait is stored, because the image removes itself when it fails. */
+.avatar.has-face{position:relative;overflow:hidden;isolation:isolate}
+.avatar.has-face>span{position:relative;z-index:0}
+.avatar.has-face>img{
+  position:absolute;inset:0;z-index:1;width:100%;height:100%;
+  object-fit:cover;object-position:top center;display:block
+}
+.identity-avatar.has-face>span{
+  font-size:34px;font-weight:700;letter-spacing:-.03em;display:grid;place-items:center;
+  width:100%;height:100%
+}
+.profile-avatar-pill.has-face{display:inline-grid;place-items:center}

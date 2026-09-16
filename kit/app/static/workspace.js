@@ -113,6 +113,8 @@ async function action(path,payload={},onDone){
 }
 function bindAction(id,path,payload={},onDone){const button=$(id);if(button)button.onclick=async()=>{button.disabled=true;try{await action(path,typeof payload==='function'?payload():payload,onDone);}finally{button.disabled=false;}};}
 async function boot(){
+  // Learn whether there is a face to show before anything draws one.
+  refreshPortraitState();
   $('installation-select').value=INSTALLATION;$('installation-select').onchange=e=>installationChanged(e.target.value);
   const data=await api('/profiles');roster=data.profiles;
   if(!PROFILE){const remembered=localStorage.getItem('last-profile-'+INSTALLATION);PROFILE=data.selected_profile&&data.selected_profile!=='default'?data.selected_profile:roster.some(p=>p.id===remembered)?remembered:roster.find(p=>p.installed)?.id||'default';}
@@ -216,7 +218,7 @@ workspaceHandlers.chat=async()=>{
   $('chat').innerHTML=`
     <div class="chat-room">
       <div class="chat-peek" id="chat-peek">
-        <div class="avatar chat-peek-avatar">${esc(chatName().slice(0,1))}</div>
+        ${faceHtml(chatName(),"chat-peek-avatar")}
         <div class="chat-peek-copy">
           <strong>${esc(chatName())}</strong>
           <span class="dim small" id="chat-presence">${moodLabel?esc(moodLabel):' '}</span>
@@ -365,7 +367,7 @@ async function loadFeed(generation){
     if(chatSession)sessionStorage.setItem(chatKey('session'),chatSession);
     log.innerHTML=chatMessagesHtml(d.messages)||`
       <div class="chat-welcome">
-        <div class="avatar">${esc(chatName().slice(0,1))}</div>
+        ${faceHtml(chatName())}
         <h2>The beginning</h2>
         <p>Whatever you say here, and on any channel ${esc(chatName())} is reachable on, collects in this one place.</p>
       </div>`;
