@@ -95,6 +95,17 @@ def register(app,select,load):
         try:return importer.read_image_workflow(raw,name)
         except ValueError as exc:raise HTTPException(400,str(exc))
 
+    @app.post('/api/images/import-url')
+    def import_workflow_url(payload:dict):
+        import companion_image_import as importer
+        try:return importer.read_image_url(payload.get('url',''))
+        except ValueError as exc:raise HTTPException(400,str(exc))
+
+    @app.get('/api/images/recommendations')
+    def model_recommendations(checkpoint:str=''):
+        import companion_image_import as importer
+        return importer.recommendations(checkpoint)
+
     @app.post('/api/images/check')
     def check(payload:dict):
         base=media.endpoint(payload.get('endpoint',''))

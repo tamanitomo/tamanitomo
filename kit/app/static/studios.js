@@ -922,8 +922,12 @@ workspaceHandlers['image-studio']=async()=>{
    <p class="dim">A picture rendered by ComfyUI carries its whole workflow. One downloaded from
     <a href="https://civitai.com" target="_blank" rel="noopener">civitai.com</a> or civitai.red usually
     carries its prompt and settings instead. Whatever is there gets read; whatever is not, you finish by hand.</p>
+   <label class="import-url-row">
+    <input id="workflow-import-url" type="url" placeholder="https://civitai.com/images/12345678" aria-label="Civitai image address">
+    <button type="button" class="act" id="workflow-import-go">Read it</button>
+   </label>
    <div class="actions">
-    <label class="act" style="cursor:pointer">Choose an image<input id="workflow-import-file" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
+    <label class="quiet" style="cursor:pointer">…or choose a file<input id="workflow-import-file" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
     <span class="dim small" id="workflow-import-status" role="status"></span>
    </div>
    <div id="workflow-import-report"></div>
@@ -1000,10 +1004,7 @@ workspaceHandlers['image-studio']=async()=>{
     const key=field.dataset.tagField,value=tagFieldValue(field);
     if(key==='__negative')p.negative=value;else p.parts[key]=value;
   }
-  if($('preset-size')){
-    const [w,h]=String($('preset-size').value).split('\u00d7').map(Number);
-    if(w&&h){p.width=w;p.height=h;}
-  }
+  for(const k of ['width','height'])if($('preset-'+k))p[k]=Number($('preset-'+k).value)||p[k];
   for(const k of ['steps','cfg','seed','denoise'])if($('preset-'+k))p[k]=Number($('preset-'+k).value);
   if(p.provider==='comfyui'){try{p.workflow=JSON.parse($('preset-workflow').value);p.mappings=JSON.parse($('preset-mappings').value);}catch(e){}}
   else if(p.provider==='openai'){p.model=$('preset-model').value;p.api_key_env=$('preset-key-env').value;}
@@ -1074,6 +1075,8 @@ workspaceHandlers['image-studio']=async()=>{
   const SIZES=[[832,1216,'Portrait 832×1216'],[1216,832,'Landscape 1216×832'],[1024,1024,'Square 1024'],
     [768,1152,'Portrait 768×1152'],[1152,768,'Landscape 1152×768'],[512,768,'Small portrait']];
   const sizeValue=`${p.width||832}×${p.height||1216}`;
+  const clipNode=comfy?nodesOfClass(p.workflow,'CLIPSetLastLayer')[0]:null;
+  const clipSkipValue=clipNode?Math.abs(Number(clipNode[1].inputs.stop_at_clip_layer??-2)):2;
   const knownSize=SIZES.some(([w,h])=>`${w}×${h}`===sizeValue);
   const PART_HINT={quality:'Rendering quality, not subject',identity:'Leave empty to follow the companion',
     scene:'Where and what is happening',wardrobe:'What they are wearing',
@@ -1105,6 +1108,7 @@ workspaceHandlers['image-studio']=async()=>{
               :`<option value="${esc(node.inputs.ckpt_name||'')}">${esc(node.inputs.ckpt_name||'—')}</option>`}
           </select>
         </label>`).join(''):'<p class="dim small">This workflow loads its model another way.</p>'}
+      <p class="model-family" data-family-badge hidden></p>
       ${!checkpoints.length?'<p class="dim small">Connect to ComfyUI to choose from the models it has.</p>':''}
     </div>
 
@@ -1132,13 +1136,16 @@ workspaceHandlers['image-studio']=async()=>{
 
     <div class="card studio-block">
       <h3>3 · Sampling &amp; output</h3>
+      <div class="shape-row" role="group" aria-label="Shape">
+        ${[['portrait','Portrait',832,1216],['square','Square',1024,1024],['landscape','Landscape',1216,832]]
+          .map(([key,label,w,h])=>`<button type="button" class="shape-btn ${p.width===w&&p.height===h?'is-on':''}"
+            data-shape="${w}x${h}">${label}</button>`).join('')}
+      </div>
+      <div class="dims-row">
+        <label>Width<input id="preset-width" type="number" min="256" max="2048" step="64" value="${p.width||832}"></label>
+        <label>Height<input id="preset-height" type="number" min="256" max="2048" step="64" value="${p.height||1216}"></label>
+      </div>
       <div class="form-grid">
-        <label>Size
-          <select id="preset-size">
-            ${options(SIZES.map(([w,h,label])=>[`${w}×${h}`,label]),sizeValue)}
-            ${knownSize?'':`<option value="${esc(sizeValue)}" selected>Custom ${esc(sizeValue)}</option>`}
-          </select>
-        </label>
         <label>Seed
           <span class="seed-row">
             <input id="preset-seed" type="number" step="1" value="${p.seed??-1}">
@@ -1147,8 +1154,14 @@ workspaceHandlers['image-studio']=async()=>{
           <small class="dim">−1 picks a new one every time.</small>
         </label>
       </div>
-      ${sliderRow('preset-steps','Steps',p.steps??18,4,60,1,'More steps, more detail and more time.')}
-      ${sliderRow('preset-cfg','Guidance',p.cfg??5,1,12,0.1,'How strictly the prompt is followed.')}
+      <div class="tight-numbers">
+        <label>Steps<input id="preset-steps" type="number" min="4" max="60" step="1" value="${p.steps??18}">
+          <small class="hint" data-hint="steps"></small></label>
+        <label>Guidance<input id="preset-cfg" type="number" min="1" max="12" step="0.1" value="${p.cfg??5}">
+          <small class="hint" data-hint="cfg"></small></label>
+        <label>CLIP skip<input id="preset-clip-skip" type="number" min="1" max="4" step="1" value="${clipSkipValue}">
+          <small class="hint" data-hint="clip_skip"></small></label>
+      </div>
       ${p.requires_reference?sliderRow('preset-denoise','Change from the reference',p.denoise??0.35,0.05,1,0.05,'Low keeps the original; high reinvents it.'):''}
     </div>
 
@@ -1164,13 +1177,12 @@ workspaceHandlers['image-studio']=async()=>{
       </div>
     </div>
 
-    <div class="studio-block-actions">
+    <div class="studio-actions">
       <button type="button" class="act" id="test-preset">Test render</button>
       <button type="button" class="quiet" id="assign-lane-here">Assign to a lane</button>
-      <button type="button" class="quiet" id="check-comfy">Check connection</button>
-      <button type="button" class="quiet" id="derive-img2img">Make an image-to-image copy</button>
-      <span class="dim small" id="test-preset-status" role="status"></span>
+      <button type="button" class="quiet" id="derive-img2img">Image-to-image copy</button>
     </div>
+    <p class="dim small" id="test-preset-status" role="status"></p>
     <div id="test-preset-result"></div>
     <div id="comfy-models"></div>
 
@@ -1194,11 +1206,16 @@ workspaceHandlers['image-studio']=async()=>{
       <span class="dim small" id="test-preset-status" role="status"></span></div>
     <div id="test-preset-result"></div>`}
 
-    <div class="actions studio-danger">
-      <button type="button" class="quiet" id="export-image-preset">Download</button>
-      <button type="button" class="quiet" id="duplicate-image-preset">Duplicate</button>
-      <button type="button" class="quiet" id="remove-image-preset">Delete this workflow</button>
-    </div>`;
+    <details class="studio-manage">
+      <summary>Manage this workflow</summary>
+      <div class="studio-actions">
+        <button type="button" class="quiet" id="export-image-preset">Download</button>
+        <button type="button" class="quiet" id="duplicate-image-preset">Duplicate</button>
+      </div>
+      <div class="studio-actions studio-danger">
+        <button type="button" class="quiet is-danger" id="remove-image-preset">Delete this workflow</button>
+      </div>
+    </details>`;
 
   wireSliders($('image-preset-editor'));
   wirePresetControls(p);
@@ -1206,12 +1223,42 @@ workspaceHandlers['image-studio']=async()=>{
 
  /* Every control writes straight into the preset, so the raw JSON underneath is
     always what the sliders say. */
+ let checkComfyConnection=()=>{};
+
+ /* What this family of model usually wants, beside the field it applies to.
+    A suggestion from a built-in table, never applied on its own, and labelled
+    as a guess because the family is guessed from the checkpoint's filename. */
+ async function showRecommendations(p){
+  const root=$('image-preset-editor');if(!root)return;
+  const node=nodesOfClass(p.workflow||{},'CheckpointLoaderSimple')[0];
+  const checkpoint=node?node[1].inputs.ckpt_name:'';
+  let advice={};
+  try{advice=await api('/images/recommendations?checkpoint='+encodeURIComponent(checkpoint||''));}
+  catch(error){return;}
+  const range=key=>{
+    const pair=advice[key];
+    if(!Array.isArray(pair))return '';
+    return pair[0]===pair[1]?String(pair[0]):pair[0]+'\u2013'+pair[1];
+  };
+  for(const hint of root.querySelectorAll('[data-hint]')){
+    const text=range(hint.dataset.hint);
+    hint.textContent=text?`${advice.family} likes ${text}`:'';
+    hint.hidden=!text;
+  }
+  const badge=root.querySelector('[data-family-badge]');
+  if(badge){
+    badge.textContent=advice.family?advice.family+' \u00b7 guessed from the filename':'Family not recognised';
+    badge.hidden=false;
+  }
+ }
  function wirePresetControls(p){
   const root=$('image-preset-editor');
+  const clipNode=nodesOfClass(p.workflow||{},'CLIPSetLastLayer')[0];
   if($('preset-name'))$('preset-name').onchange=()=>{readPreset();menus();};
   if($('preset-seed-random'))$('preset-seed-random').onclick=()=>{$('preset-seed').value=-1;readPreset();};
   for(const select of root.querySelectorAll('[data-ckpt-node]'))select.onchange=()=>{
-    p.workflow[select.dataset.ckptNode].inputs.ckpt_name=select.value;syncWorkflowText(p);};
+    p.workflow[select.dataset.ckptNode].inputs.ckpt_name=select.value;syncWorkflowText(p);
+    showRecommendations(p);};
   for(const row of root.querySelectorAll('[data-lora-node]')){
     const id=row.dataset.loraNode,node=p.workflow[id];
     row.querySelector('[data-lora-name]').onchange=e=>{node.inputs.lora_name=e.target.value;syncWorkflowText(p);};
@@ -1224,7 +1271,26 @@ workspaceHandlers['image-studio']=async()=>{
   if($('add-lora-row'))$('add-lora-row').onclick=async()=>{
     const models=await comfyModels(p.endpoint);
     addLoraNode(p,(models.lora_name||[])[0]);drawPreset();};
-  if($('preset-size'))$('preset-size').onchange=()=>readPreset();
+  // Shape sets the two numbers; the numbers stay editable afterwards.
+  for(const button of root.querySelectorAll('[data-shape]'))button.onclick=()=>{
+    const [w,h]=button.dataset.shape.split('x').map(Number);
+    $('preset-width').value=w;$('preset-height').value=h;
+    for(const other of root.querySelectorAll('[data-shape]'))other.classList.toggle('is-on',other===button);
+    readPreset();
+  };
+  const markShape=()=>{
+    const value=$('preset-width').value+'x'+$('preset-height').value;
+    for(const button of root.querySelectorAll('[data-shape]'))
+      button.classList.toggle('is-on',button.dataset.shape===value);
+  };
+  for(const id of ['preset-width','preset-height'])
+    if($(id))$(id).oninput=()=>{markShape();readPreset();};
+  // CLIP skip lives on a node, and is written back as a negative layer index.
+  if($('preset-clip-skip')&&clipNode)$('preset-clip-skip').onchange=()=>{
+    p.workflow[clipNode[0]].inputs.stop_at_clip_layer=-Math.abs(Number($('preset-clip-skip').value)||2);
+    syncWorkflowText(p);
+  };
+  showRecommendations(p);
 
   wireTagFields(root,()=>readPreset());
 
@@ -1243,7 +1309,7 @@ workspaceHandlers['image-studio']=async()=>{
     const copy=await post('/images/img2img',{preset:p.id,denoise:.35});
     copy.id='img2img-'+presetSuffix();settings.presets.push(copy);
     presetIndex=settings.presets.length-1;drawPreset();};
-  if($('check-comfy'))$('check-comfy').onclick=async()=>{
+  checkComfyConnection=async()=>{
     readPreset();delete comfyModelCache[p.endpoint];
     $('comfy-models').innerHTML='<p class="dim small">Checking…</p>';
     try{
@@ -1312,7 +1378,11 @@ workspaceHandlers['image-studio']=async()=>{
        : '<p class="dim small">Rendered. It is in Photos.</p>';
      status.innerHTML='Rendered from the draft \u00b7 <strong>nothing saved yet</strong>';
    });
-  }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
+  }catch(error){
+   status.innerHTML=`<span class="bad">${esc(error.message)}</span> `+
+     `<button type="button" class="link-button small" id="check-comfy">Check the connection</button>`;
+   if($('check-comfy'))$('check-comfy').onclick=checkComfyConnection;
+  }
   finally{$('test-preset').disabled=false;}
  }
 
@@ -1334,17 +1404,10 @@ workspaceHandlers['image-studio']=async()=>{
 
  /* Reading a workflow back out of a picture. What cannot be read is reported
     rather than guessed, and the result is saved either way. */
- $('workflow-import-file').onchange=async()=>{
-  const file=$('workflow-import-file').files[0];if(!file)return;
-  const status=$('workflow-import-status'),report=$('workflow-import-report');
-  status.textContent='Reading\u2026';report.innerHTML='';
-  try{
-   const headers={'content-type':'application/octet-stream','x-image-name':file.name.replace(/[^\w.\- ]/g,'')};
-   if(token)headers['x-companion-token']=token;
-   const response=await fetch(scoped('/api/images/import'),{method:'POST',headers,body:file});
-   if(!response.ok)throw Error((await response.json().catch(()=>({}))).detail||'That image could not be read');
-   const result=await response.json();
-   status.textContent='';
+ function showImportResult(result){
+  const report=$('workflow-import-report');
+  {
+   $('workflow-import-status').textContent='';
    const found=result.found||{},rows=[
     ['Read from',found.source],
     ['Nodes',found.nodes],
@@ -1372,8 +1435,28 @@ workspaceHandlers['image-studio']=async()=>{
       ? 'Saved as a draft. Choose a checkpoint before it can serve a lane.'
       : 'Workflow imported. Test it, then assign it to a lane.');
    };
-  }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
+  }
+ }
+
+ async function runImport(read){
+  const status=$('workflow-import-status');
+  status.textContent='Reading\u2026';$('workflow-import-report').innerHTML='';
+  try{showImportResult(await read());}
+  catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
+ }
+
+ $('workflow-import-file').onchange=()=>{
+  const file=$('workflow-import-file').files[0];if(!file)return;
+  runImport(async()=>{
+   const headers={'content-type':'application/octet-stream','x-image-name':file.name.replace(/[^\w.\- ]/g,'')};
+   if(token)headers['x-companion-token']=token;
+   const response=await fetch(scoped('/api/images/import'),{method:'POST',headers,body:file});
+   if(!response.ok)throw Error((await response.json().catch(()=>({}))).detail||'That image could not be read');
+   return response.json();
+  });
  };
+ $('workflow-import-go').onclick=()=>runImport(()=>post('/images/import-url',{url:$('workflow-import-url').value}));
+ $('workflow-import-url').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();$('workflow-import-go').click();}};
 
  const addComfyPreset=async()=>{readPreset();const p=await api('/images/modular-template');p.id='comfy-'+presetSuffix();settings.presets.push(p);presetIndex=settings.presets.length-1;drawPreset();showStudioView('presets');};
  const addCloudPreset=()=>{readPreset();settings.presets.push({id:'api-'+presetSuffix(),name:'Image API',provider:'openai',category:'portrait',endpoint:'https://api.openai.com/v1',api_key_env:'OPENAI_API_KEY',model:'',width:1024,height:1024,parts:{},negative:''});presetIndex=settings.presets.length-1;drawPreset();showStudioView('presets');};

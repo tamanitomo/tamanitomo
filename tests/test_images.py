@@ -101,3 +101,65 @@ class ImportTests(unittest.TestCase):
         import companion_image_import as importer
         with self.assertRaises(ValueError):
             importer.read_image_workflow(b'not an image at all', 'x.png')
+
+
+class UrlImportTests(unittest.TestCase):
+    """Civitai's public API returns an empty `meta` to anonymous callers, so the
+    import reads the image page instead, which still carries it."""
+
+    PAGE = ('<html><script id="__NEXT_DATA__" type="application/json">'
+            '{"props":{"pageProps":{"q":{"state":{"data":{"meta":'
+            '{"prompt":"a seaside inn","negativePrompt":"lowres","steps":25,'
+            '"cfgScale":7,"sampler":"Euler a","seed":3269595310,"Size":"896x1152"}'
+            '}}}}}}</script></html>')
+
+    def test_an_image_page_yields_its_settings(self):
+        import companion_image_import as importer
+        out = importer.read_image_url('https://civitai.com/images/12097475',
+                                      fetch=lambda url: self.PAGE)
+        self.assertEqual(out['found']['source'], 'Civitai image page')
+        self.assertEqual(out['preset']['steps'], 25)
+        self.assertEqual(out['preset']['cfg'], 7.0)
+        self.assertEqual((out['preset']['width'], out['preset']['height']), (896, 1152))
+        self.assertEqual(out['preset']['negative'], 'lowres')
+        # A prompt is not a graph: it needs a checkpoint before it can serve a lane.
+        self.assertTrue(out['preset']['incomplete'])
+
+    def test_civitai_red_is_the_same_site(self):
+        import companion_image_import as importer
+        out = importer.read_image_url('https://civitai.red/images/12097475',
+                                      fetch=lambda url: self.PAGE)
+        self.assertEqual(out['found']['image_id'], '12097475')
+
+    def test_a_link_that_is_not_an_image_page_is_refused(self):
+        import companion_image_import as importer
+        for bad in ('https://civitai.com/models/123', 'https://example.com/x', 'nonsense', ''):
+            with self.assertRaises(ValueError):
+                importer.read_image_url(bad, fetch=lambda url: self.PAGE)
+
+    def test_a_page_without_settings_says_so_rather_than_inventing_them(self):
+        import companion_image_import as importer
+        with self.assertRaises(ValueError):
+            importer.read_image_url('https://civitai.com/images/1', fetch=lambda url: '<html></html>')
+
+
+class RecommendationTests(unittest.TestCase):
+    def test_a_family_is_recognised_from_the_checkpoint_name(self):
+        import companion_image_import as importer
+        self.assertEqual(importer.family_of('illustriousXL_v01.safetensors'), 'Illustrious')
+        self.assertEqual(importer.family_of('ponyDiffusionV6XL.safetensors'), 'Pony')
+        self.assertEqual(importer.family_of('flux1-dev.safetensors'), 'Flux')
+        self.assertEqual(importer.family_of('cyberrealisticXL_v10.safetensors'), 'SDXL')
+
+    def test_an_unrecognised_name_offers_nothing_rather_than_guessing(self):
+        import companion_image_import as importer
+        self.assertEqual(importer.family_of('someRandomMerge.safetensors'), '')
+        self.assertEqual(importer.recommendations('someRandomMerge.safetensors'), {'family': ''})
+
+    def test_a_recognised_family_carries_usable_ranges(self):
+        import companion_image_import as importer
+        advice = importer.recommendations('illustriousXL_v01.safetensors')
+        self.assertEqual(advice['family'], 'Illustrious')
+        low, high = advice['steps']
+        self.assertLess(low, high)
+        self.assertTrue(all(k in advice for k in ('steps', 'cfg', 'clip_skip', 'size')))
