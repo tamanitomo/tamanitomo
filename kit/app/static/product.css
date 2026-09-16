@@ -2061,3 +2061,30 @@ body[data-page="chat"] main{padding:0}
 .studio-builder[open]>summary::before{content:'\2212 '}
 .studio-builder>div{padding:0 4px 4px}
 .studio-builder .comfy-lite-container{border:0;margin:0}
+
+/* --------------------------------------------- manage workflows: the three ways in */
+.workflow-modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:18px}
+.workflow-mode{
+  display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;
+  padding:14px 16px;border-radius:var(--r-md);cursor:pointer;
+  background:var(--surface);border:1px solid var(--edge);color:var(--ink)
+}
+.workflow-mode:hover{background:var(--surface-2);border-color:var(--edge-2)}
+.workflow-mode.is-on{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
+.workflow-mode strong{font-size:14px;font-weight:650}
+.workflow-mode span{font-size:12.5px;color:var(--dim);line-height:1.35}
+.workflow-mode.is-on span{color:var(--accent-ink)}
+.workflow-mode-panel[hidden]{display:none}
+
+/* What the picture gave up, before anything is kept. */
+.import-report{margin-top:16px;padding:14px 16px;border:1px solid var(--edge-2);border-radius:var(--r-md);background:var(--surface)}
+.import-report dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 16px;margin:0 0 12px}
+.import-report dt{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--dim)}
+.import-report dd{margin:2px 0 0;font-size:13.5px;overflow-wrap:anywhere}
+.import-report .actions{margin:12px 0 0}
+
+@media(max-width:700px){
+  .workflow-modes{grid-template-columns:1fr;gap:8px}
+  .workflow-mode{padding:12px 14px}
+  .import-report dl{grid-template-columns:1fr 1fr}
+}

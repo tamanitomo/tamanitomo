@@ -902,24 +902,35 @@ workspaceHandlers['image-studio']=async()=>{
 
  <!-- VIEW 3: ComfyUI Lite Workflow Creator -->
 
- <!-- Workflows: build them, edit them, test them, route them -->
+ <!-- Workflows: create one, edit one, or read one out of a picture -->
  <div id="view-presets" class="studio-view-pane" hidden>
-  <details class="card studio-builder" id="workflow-builder">
-   <summary id="open-workflow-builder">Build a new workflow from a template</summary>
+  <div class="workflow-modes" id="workflow-modes">
+   <button type="button" class="workflow-mode is-on" data-mode="edit" aria-pressed="true">
+     <strong>Edit a workflow</strong><span>Change one you already have</span></button>
+   <button type="button" class="workflow-mode" data-mode="create" aria-pressed="false">
+     <strong>Create a workflow</strong><span>Start from a template</span></button>
+   <button type="button" class="workflow-mode" data-mode="import" aria-pressed="false">
+     <strong>Import from an image</strong><span>Read the settings out of a picture</span></button>
+  </div>
+
+  <div class="card workflow-mode-panel" id="workflow-create-panel" hidden>
    <div id="workflow-creator-root"></div>
-  </details>
-  <details class="card" style="margin-bottom:16px"><summary>Where to get image models</summary><p>Browse <a href="https://civitai.com/models" target="_blank" rel="noopener">Civitai</a> for checkpoints, LoRAs, example images, and their recommended settings, or <a href="https://huggingface.co/models?pipeline_tag=text-to-image" target="_blank" rel="noopener">Hugging Face</a> for publisher model weights. Match the checkpoint, LoRA, and workflow family (for example SDXL); different families are not interchangeable.</p><p>Put checkpoint files in <code>companion-engines/comfyui/models/checkpoints</code>, LoRAs in <code>models/loras</code>, and VAEs in <code>models/vae</code> beneath the selected Hermes installation. Prefer safetensors when offered. Downloading a checkpoint does not install custom workflow nodes.</p></details>
-  <div class="card">
-   <div class="actions" style="justify-content:space-between">
-    <h2>Preset & Provider Library</h2>
-    <div class="actions">
-     <button class="quiet" id="add-comfy-preset">+ ComfyUI workflow</button>
-     <button class="quiet" id="add-cloud-preset">+ Image API</button>
-     <button class="quiet" id="add-hermes-preset">+ Hermes provider</button>
-    </div>
+  </div>
+
+  <div class="card workflow-mode-panel" id="workflow-import-panel" hidden>
+   <h2>Import from an image</h2>
+   <p class="dim">A picture rendered by ComfyUI carries its whole workflow. One downloaded from
+    <a href="https://civitai.com" target="_blank" rel="noopener">civitai.com</a> or civitai.red usually
+    carries its prompt and settings instead. Whatever is there gets read; whatever is not, you finish by hand.</p>
+   <div class="actions">
+    <label class="act" style="cursor:pointer">Choose an image<input id="workflow-import-file" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
+    <span class="dim small" id="workflow-import-status" role="status"></span>
    </div>
-   <p class="dim small">Connected Hermes providers appear here automatically, including OAuth providers. ${esc(d.provider_warning||'')}</p>
-   <label style="margin:14px 0 10px;display:block">Select preset to edit
+   <div id="workflow-import-report"></div>
+  </div>
+
+  <div class="card workflow-mode-panel" id="workflow-edit-panel">
+   <label style="margin:0 0 12px;display:block">Which workflow
     <select id="image-preset-select" style="margin-top:4px"></select>
    </label>
    <div id="image-preset-editor"></div>
@@ -974,7 +985,7 @@ workspaceHandlers['image-studio']=async()=>{
  };
  showStudioView(imageStudioView);
  for(const btn of $('image-subnav').querySelectorAll('.studio-subnav-btn')){btn.onclick=()=>showStudioView(btn.dataset.view);}
- $('assignments-goto-creator').onclick=()=>{showStudioView('presets');$('open-workflow-builder')?.click();};
+ $('assignments-goto-creator').onclick=()=>{showStudioView('presets');setWorkflowMode('create');};
  $('image-back-identity').onclick=()=>showTab('identity');
  wirePortrait();
  $('image-follow-soul').onchange=()=>{$('image-identity').disabled=$('image-follow-soul').checked;};
@@ -1011,9 +1022,11 @@ workspaceHandlers['image-studio']=async()=>{
  }
 
  function menus(){
-  const rows=settings.presets.map(p=>[p.id,p.name]);
+  const rows=settings.presets.filter(p=>!p.incomplete).map(p=>[p.id,p.name]);
+  const draftCount=settings.presets.filter(p=>p.incomplete).length;
   const allRows=[['', 'Choose a workflow'], ...rows];
-  $('image-preset-select').innerHTML=options(settings.presets.map((p,i)=>[String(i),p.name]),String(presetIndex));
+  $('image-preset-select').innerHTML=options(
+    settings.presets.map((p,i)=>[String(i),p.name+(p.incomplete?' \u00b7 draft':'')]),String(presetIndex));
   $('image-default-preset').innerHTML=options(allRows,defaultId);
   $('image-default-preset').onchange=e=>{defaultId=e.target.value;menus();updateActiveLaneBadge();};
 
@@ -1305,9 +1318,66 @@ workspaceHandlers['image-studio']=async()=>{
 
  await drawPreset();
  $('image-preset-select').onchange=e=>{readPreset();presetIndex=Number(e.target.value);drawPreset();};
- $('add-comfy-preset').onclick=async()=>{readPreset();const p=await api('/images/modular-template');p.id='comfy-'+presetSuffix();settings.presets.push(p);presetIndex=settings.presets.length-1;drawPreset();showStudioView('presets');};
- $('add-cloud-preset').onclick=()=>{readPreset();settings.presets.push({id:'api-'+presetSuffix(),name:'Image API',provider:'openai',category:'portrait',endpoint:'https://api.openai.com/v1',api_key_env:'OPENAI_API_KEY',model:'',width:1024,height:1024,parts:{},negative:''});presetIndex=settings.presets.length-1;drawPreset();showStudioView('presets');};
- $('add-hermes-preset').onclick=()=>{readPreset();settings.presets.push({id:'hermes-'+presetSuffix(),name:'Hermes image provider',provider:'hermes',category:'portrait',endpoint:'',parts:{},negative:''});presetIndex=settings.presets.length-1;drawPreset();showStudioView('presets');};
+ /* Create, edit or import: one of three, and only one on screen. */
+ function setWorkflowMode(mode){
+  for(const button of $('workflow-modes').querySelectorAll('.workflow-mode')){
+   const on=button.dataset.mode===mode;
+   button.classList.toggle('is-on',on);
+   button.setAttribute('aria-pressed',String(on));
+  }
+  for(const [name,id] of [['edit','workflow-edit-panel'],['create','workflow-create-panel'],['import','workflow-import-panel']]){
+   const panel=$(id);if(panel)panel.hidden=name!==mode;
+  }
+ }
+ for(const button of $('workflow-modes').querySelectorAll('.workflow-mode'))
+  button.onclick=()=>setWorkflowMode(button.dataset.mode);
+
+ /* Reading a workflow back out of a picture. What cannot be read is reported
+    rather than guessed, and the result is saved either way. */
+ $('workflow-import-file').onchange=async()=>{
+  const file=$('workflow-import-file').files[0];if(!file)return;
+  const status=$('workflow-import-status'),report=$('workflow-import-report');
+  status.textContent='Reading\u2026';report.innerHTML='';
+  try{
+   const headers={'content-type':'application/octet-stream','x-image-name':file.name.replace(/[^\w.\- ]/g,'')};
+   if(token)headers['x-companion-token']=token;
+   const response=await fetch(scoped('/api/images/import'),{method:'POST',headers,body:file});
+   if(!response.ok)throw Error((await response.json().catch(()=>({}))).detail||'That image could not be read');
+   const result=await response.json();
+   status.textContent='';
+   const found=result.found||{},rows=[
+    ['Read from',found.source],
+    ['Nodes',found.nodes],
+    ['Checkpoint',(found.checkpoints||[]).join(', ')],
+    ['LoRAs',(found.loras||[]).join(', ')],
+    ['Steps',found.steps],['Guidance',found.cfg],['Seed',found.seed],
+    ['Size',found.width&&found.height?found.width+'\u00d7'+found.height:'']
+   ].filter(([,value])=>value!==undefined&&value!==''&&value!==null);
+   report.innerHTML=`<div class="import-report">
+     <dl>${rows.map(([k,v])=>`<div><dt>${esc(k)}</dt><dd>${esc(String(v))}</dd></div>`).join('')}</dl>
+     ${(result.notes||[]).map(n=>`<p class="dim small">${esc(n)}</p>`).join('')}
+     <div class="actions">
+       <button class="act" id="keep-imported">${result.preset.incomplete?'Save as a draft':'Add this workflow'}</button>
+       <button class="quiet" id="discard-imported">Discard</button>
+     </div></div>`;
+   $('discard-imported').onclick=()=>{report.innerHTML='';$('workflow-import-file').value='';};
+   $('keep-imported').onclick=()=>{
+    readPreset();
+    const preset={...result.preset,id:'import-'+presetSuffix()};
+    settings.presets.push(preset);
+    presetIndex=settings.presets.length-1;
+    report.innerHTML='';$('workflow-import-file').value='';
+    setWorkflowMode('edit');drawPreset();
+    notice(preset.incomplete
+      ? 'Saved as a draft. Choose a checkpoint before it can serve a lane.'
+      : 'Workflow imported. Test it, then assign it to a lane.');
+   };
+  }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
+ };
+
+ const addComfyPreset=async()=>{readPreset();const p=await api('/images/modular-template');p.id='comfy-'+presetSuffix();settings.presets.push(p);presetIndex=settings.presets.length-1;drawPreset();showStudioView('presets');};
+ const addCloudPreset=()=>{readPreset();settings.presets.push({id:'api-'+presetSuffix(),name:'Image API',provider:'openai',category:'portrait',endpoint:'https://api.openai.com/v1',api_key_env:'OPENAI_API_KEY',model:'',width:1024,height:1024,parts:{},negative:''});presetIndex=settings.presets.length-1;drawPreset();showStudioView('presets');};
+ const addHermesPreset=()=>{readPreset();settings.presets.push({id:'hermes-'+presetSuffix(),name:'Hermes image provider',provider:'hermes',category:'portrait',endpoint:'',parts:{},negative:''});presetIndex=settings.presets.length-1;drawPreset();showStudioView('presets');};
  $('image-template-download').onclick=async()=>downloadJSON('comfy-structured-sdxl-template.json',await api('/images/modular-template'));
  $('image-import').onclick=()=>$('image-import-file').click();
  $('image-import-file').onchange=async e=>{const file=e.target.files[0];if(!file)return;if(file.size>4000000)throw Error('Workflow must be under 4 MB');readPreset();const imported=JSON.parse(await file.text());if(imported.nodes)throw Error('This is a visual-editor workflow. Export it as API format from ComfyUI, then import that file.');let p;if(imported.provider)p=imported;else{p=await api('/images/template');p.workflow=imported;p.mappings={};p.name=file.name.replace(/\.json$/,'');}p.id='import-'+presetSuffix();settings.presets.push(p);presetIndex=settings.presets.length-1;drawPreset();showStudioView('presets');};

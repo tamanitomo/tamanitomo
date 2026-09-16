@@ -4,7 +4,7 @@ from pathlib import Path
 import subprocess
 import sys
 import uuid
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 import companion_media as media
 import companion_portrait as portrait
@@ -85,6 +85,15 @@ def register(app,select,load):
         preset=next((p for p in data['presets'] if p['id']==payload.get('preset')),None)
         if preset is None:raise ValueError('Save and select a ComfyUI preset first')
         return image_to_image(preset,payload.get('denoise',.35))
+
+    @app.post('/api/images/import')
+    async def import_workflow(request:Request):
+        raw=await request.body()
+        if not raw:raise HTTPException(400,'Choose an image first')
+        import companion_image_import as importer
+        name=request.headers.get('x-image-name','')
+        try:return importer.read_image_workflow(raw,name)
+        except ValueError as exc:raise HTTPException(400,str(exc))
 
     @app.post('/api/images/check')
     def check(payload:dict):
