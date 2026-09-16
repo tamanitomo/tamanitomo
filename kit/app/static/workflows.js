@@ -162,6 +162,17 @@ function buildModularWorkflowGraph(draft) {
 async function renderWorkflowCreator(container, onCreate) {
   const data = await api('/workflows');
   let config = data.settings, library = [], inspected = null;
+  /* Whatever ComfyUI this points at, ask it what it has. /object_info is part
+     of every ComfyUI install, so this works for anyone who can give an endpoint
+     — nothing here depends on how one particular host was set up. */
+  let installed = { lora_name: [], ckpt_name: [] };
+  async function loadInstalled(endpoint) {
+    const target = endpoint || config.endpoint;
+    if (!target) return installed;
+    try { installed = (await post('/images/check', { endpoint: target })).models || installed; }
+    catch (error) { /* offline: the fields fall back to free text */ }
+    return installed;
+  }
   /* A model's own terms travel with the weights, not with this kit. Civitai
      publishes four permission flags per model; show them before downloading,
      and say plainly that they summarise rather than replace the model card. */
@@ -297,7 +308,12 @@ async function renderWorkflowCreator(container, onCreate) {
       <div>
         <div class="actions" style="justify-content:space-between">
           <label style="font-weight:600;margin:0">4 · LoRA Stack (${draft.loras.length} active)</label>
-          <button type="button" class="quiet" id="lite-add-lora">+ Add LoRA</button>
+          <span class="actions" style="margin:0;gap:8px">
+            <span class="dim small">${(installed.lora_name || []).length
+              ? (installed.lora_name.length + ' available') : 'Not connected'}</span>
+            <button type="button" class="quiet" id="lite-refresh-loras">Refresh list</button>
+            <button type="button" class="quiet" id="lite-add-lora">+ Add LoRA</button>
+          </span>
         </div>
         <div class="lora-stack" id="lite-lora-list">
           ${draft.loras.length ? draft.loras.map((lora, idx) => `
@@ -305,7 +321,15 @@ async function renderWorkflowCreator(container, onCreate) {
               <div class="lora-card-header">
                 <div style="display:flex;align-items:center;gap:10px">
                   <label class="inline-label" style="margin:0"><input type="checkbox" data-lora-enable ${lora.enabled !== false ? 'checked' : ''}><strong>LoRA ${idx + 1}</strong></label>
-                  <input data-lora-file value="${esc(lora.filename)}" placeholder="my_lora_name.safetensors" style="width:260px">
+                  ${(installed.lora_name || []).length
+                    ? `<select data-lora-file aria-label="LoRA file">
+                         <option value="">Choose a LoRA…</option>
+                         ${(installed.lora_name || []).map(f =>
+                           `<option value="${esc(f)}" ${f === lora.filename ? 'selected' : ''}>${esc(f.replace(/\.safetensors$/, ''))}</option>`).join('')}
+                         ${lora.filename && !(installed.lora_name || []).includes(lora.filename)
+                           ? `<option value="${esc(lora.filename)}" selected>${esc(lora.filename)} (not on this host)</option>` : ''}
+                       </select>`
+                    : `<input data-lora-file value="${esc(lora.filename)}" placeholder="my_lora_name.safetensors">`}
                 </div>
                 <button type="button" class="quiet" data-lora-remove>Remove</button>
               </div>
@@ -319,7 +343,7 @@ async function renderWorkflowCreator(container, onCreate) {
                 <input type="range" data-lora-clip-range min="-2.0" max="2.0" step="0.05" value="${lora.strength_clip ?? 1.0}">
                 <strong data-lora-clip-val>${(lora.strength_clip ?? 1.0).toFixed(2)}</strong>
               </div>
-              <label style="margin-top:4px">Trigger words & tags<input data-lora-triggers value="${esc(lora.triggers || '')}" placeholder="character_tag, outfit_style"></label>
+              ${tagFieldHTML('lora-triggers-' + idx, 'Trigger words', lora.triggers || '', 'Tags this LoRA expects')}
             </div>
           `).join('') : '<p class="dim small" style="padding:12px;background:var(--bg);border-radius:8px">No LoRAs added yet. Add model-specific LoRAs to tune appearance, expressions, or artistic style.</p>'}
         </div>
@@ -329,8 +353,8 @@ async function renderWorkflowCreator(container, onCreate) {
       <details open>
         <summary>5 · Structured Prompt & Triggers</summary>
         <p class="dim small">The quality tags are sent along with the companion's identity prompt and current scene.</p>
-        <label>Quality triggers & style tags<textarea id="lite-quality" style="height:60px">${esc(draft.quality)}</textarea></label>
-        <label>Negative prompt<textarea id="lite-negative" style="height:60px">${esc(draft.negative)}</textarea></label>
+        ${tagFieldHTML('lite-quality', 'Quality & style tags', draft.quality, 'Sent with the companion\u2019s own prompt')}
+        ${tagFieldHTML('lite-negative', 'Negative prompt', draft.negative, 'What to keep out')}
         <div class="actions">
           <button type="button" class="quiet" id="lite-test-prompt">Test prompt assembly</button>
         </div>
@@ -386,16 +410,35 @@ async function renderWorkflowCreator(container, onCreate) {
     $('lite-steps').oninput = e => { draft.steps = Number(e.target.value); };
     $('lite-cfg').oninput = e => { draft.cfg = Number(e.target.value); };
     $('lite-clip-skip').oninput = e => { draft.clip_skip = Number(e.target.value); };
-    $('lite-quality').oninput = e => { draft.quality = e.target.value; };
-    $('lite-negative').oninput = e => { draft.negative = e.target.value; };
+    wireTagFields(container, () => {
+      for (const field of container.querySelectorAll('[data-tag-field]')) {
+        const key = field.dataset.tagField;
+        if (key === 'lite-quality') draft.quality = tagFieldValue(field);
+        else if (key === 'lite-negative') draft.negative = tagFieldValue(field);
+        else if (key.startsWith('lora-triggers-')) {
+          const row = draft.loras[Number(key.slice('lora-triggers-'.length))];
+          if (row) row.triggers = tagFieldValue(field);
+        }
+      }
+    });
 
     $('res-portrait').onclick = () => { draft.width = 832; draft.height = 1216; $('lite-width').value = 832; $('lite-height').value = 1216; };
     $('res-square').onclick = () => { draft.width = 1024; draft.height = 1024; $('lite-width').value = 1024; $('lite-height').value = 1024; };
     $('res-landscape').onclick = () => { draft.width = 1216; draft.height = 832; $('lite-width').value = 1216; $('lite-height').value = 832; };
 
-    $('lite-add-lora').onclick = () => {
+    $('lite-add-lora').onclick = async () => {
+      if (!(installed.lora_name || []).length) await loadInstalled();
       draft.loras.push({ filename: '', strength_model: 1.0, strength_clip: 1.0, triggers: '', enabled: true });
       renderStudio();
+    };
+    $('lite-refresh-loras').onclick = async () => {
+      const button = $('lite-refresh-loras');
+      button.disabled = true; button.textContent = 'Asking ComfyUI\u2026';
+      await loadInstalled($('wc-endpoint')?.value);
+      renderStudio();
+      notice((installed.lora_name || []).length
+        ? `Found ${installed.lora_name.length} LoRAs and ${(installed.ckpt_name || []).length} models.`
+        : 'No answer from ComfyUI. Check the endpoint under Comfy host connection.');
     };
 
     for (const card of container.querySelectorAll('.lora-card')) {
@@ -404,8 +447,9 @@ async function renderWorkflowCreator(container, onCreate) {
       if (!lora) continue;
 
       card.querySelector('[data-lora-enable]').onchange = e => { lora.enabled = e.target.checked; };
-      card.querySelector('[data-lora-file]').oninput = e => { lora.filename = e.target.value; };
-      card.querySelector('[data-lora-triggers]').oninput = e => { lora.triggers = e.target.value; };
+      const file = card.querySelector('[data-lora-file]');
+      file.onchange = e => { lora.filename = e.target.value; };
+      file.oninput = e => { lora.filename = e.target.value; };
 
       const modelRange = card.querySelector('[data-lora-model-range]');
       const modelVal = card.querySelector('[data-lora-model-val]');
@@ -543,4 +587,5 @@ async function renderWorkflowCreator(container, onCreate) {
   }
 
   renderStudio();
+  loadInstalled().then(models => { if ((models.lora_name || []).length) renderStudio(); });
 }

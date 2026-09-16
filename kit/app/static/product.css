@@ -2038,3 +2038,16 @@ body[data-page="chat"] main{padding:0}
   .studio-slider input[type=range]{height:30px}
   .tag-field,.lora-row{padding:11px 12px}
 }
+
+/* The LoRA picker needs the width; the checkbox and Remove do not. */
+.lora-card-header{flex-wrap:wrap;gap:8px}
+.lora-card-header>div:first-child{flex:1 1 100%;display:flex;align-items:center;gap:10px;min-width:0}
+.lora-card-header [data-lora-file]{flex:1 1 auto;min-width:0;width:auto}
+.lora-card-header [data-lora-remove]{flex:none;margin-left:auto}
+.lora-card .tag-field{margin-top:10px}
+@media(max-width:700px){
+  .lora-card-header>div:first-child{flex-wrap:wrap}
+  .lora-card-header [data-lora-file]{flex-basis:100%}
+  .lora-slider-row{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center}
+  .lora-slider-row input[type=range]{min-width:0;accent-color:var(--accent)}
+}
