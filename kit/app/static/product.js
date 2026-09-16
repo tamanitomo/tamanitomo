@@ -536,91 +536,192 @@ workspaceHandlers.now=async()=>{
   for(const b of $('now').querySelectorAll('[data-home-file]'))b.onclick=()=>openContent(content.items[Number(b.dataset.homeFile)]);
 };
 let selectedJournal=null;
-const journalBrowse={query:'',month:''};
 let journalPageGeneration=0;
+// Held so that revisiting the page replaces this listener instead of stacking
+// another one on the document for every visit.
+let journalOutsideClick=null;
+/* The journal is a reader, not a list beside a reader. Every way of reaching a
+   different entry — the calendar and the search — lives in one panel behind the
+   date in the middle of the reader's top bar, so the page itself stays a page
+   of writing at every width. */
 workspaceHandlers.journals=async()=>{
   const pageGeneration=++journalPageGeneration;
-  $('journals').innerHTML=`<div class="filters" style="margin-top:0"><label>Search entries<input id="journal-search" type="search" maxlength="200" placeholder="Search entries by topic or keyword…"></label><label>Month<input type="month" id="journal-month"></label><button class="quiet" id="journal-clear">Clear</button></div><div id="journal-warnings"></div><div class="reader-layout"><div class="journal-browser" id="journal-browser"><div class="journal-count-bar"><span id="journal-count" class="eyebrow">…</span></div><div class="reader-list" id="journal-list"></div></div><article id="journal-page"></article></div>`;
-  $('journal-search').value=journalBrowse.query;$('journal-month').value=journalBrowse.month;
-  let entries=[],cursor=null,request=0,selection=0,timer,scrollLoading=false;
   const alive=()=>current==='journals'&&pageGeneration===journalPageGeneration;
-  const choose=async (id,fromPicker=false)=>{
-    const token=++selection;let entry=entries.find(x=>x.id===id);if(!entry)return;
-    selectedJournal=id;for(const b of $('journal-list').querySelectorAll('button'))b.setAttribute('aria-current',String(b.dataset.entry===id));
-    if(entry.truncated){$('journal-page').innerHTML='<p class="dim" role="status">Opening the full entry…</p>';try{entry=(await api('/journals/'+encodeURIComponent(id))).entry;}catch(error){if(alive()&&selection===token)$('journal-page').innerHTML=empty('journals','Entry unavailable',error.message);return;}}
-    if(!alive()||selection!==token)return;
-    const currIdx=entries.findIndex(x=>x.id===id);
-    const prevEntry=currIdx>0?entries[currIdx-1]:null;
-    const nextEntry=currIdx<entries.length-1?entries[currIdx+1]:null;
-    $('journal-page').innerHTML=`<div class="journal-nav-bar">
-      <button class="journal-nav-btn" id="journal-prev-btn" ${prevEntry?'':'disabled'} style="${prevEntry?'':'opacity:0.4;cursor:default'}">← Newer (${prevEntry?esc(prevEntry.day):'none'})</button>
-      <span style="font-weight:600;font-size:13px;color:var(--ink-2)">📅 ${esc(entry.day)}</span>
-      <button class="journal-nav-btn" id="journal-next-btn" ${nextEntry?'':'disabled'} style="${nextEntry?'':'opacity:0.4;cursor:default'}">Older (${nextEntry?esc(nextEntry.day):'none'}) →</button>
+  $('journals').innerHTML=`
+    <div id="journal-warnings"></div>
+    <div class="reader-shell">
+      <div class="journal-nav-bar">
+        <button class="journal-nav-btn" id="journal-prev-btn" disabled>← <span class="nav-word">Newer</span></button>
+        <button class="reader-browse-btn" id="journal-browse" aria-expanded="false" aria-controls="journal-picker">
+          <span aria-hidden="true">\u{1F4C5}</span><span id="journal-browse-label">Loading…</span><span class="reader-browse-caret" aria-hidden="true">▾</span>
+        </button>
+        <button class="journal-nav-btn" id="journal-next-btn" disabled><span class="nav-word">Older</span> →</button>
+      </div>
+      <div class="reader-picker" id="journal-picker" hidden>
+        <input id="journal-search" type="search" maxlength="200" autocomplete="off"
+          placeholder="Search every entry…" aria-label="Search journal entries">
+        <div id="journal-picker-body"></div>
+        <div class="reader-picker-foot">
+          <span id="journal-count" class="dim small"></span>
+          <button class="quiet small" id="journal-latest">Latest entry</button>
+        </div>
+      </div>
     </div>
-    <div class="paper">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid color-mix(in srgb,var(--surface-2) 20%,transparent);padding-bottom:10px">
+    <article id="journal-page"><p class="dim" role="status">Opening the journal…</p></article>`;
+
+  let entries=[],results=null,selection=0,searchTimer=null,pickerMonth='';
+  const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const dayFormat=day=>new Intl.DateTimeFormat(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'}).format(new Date(day+'T12:00:00'));
+  const shortDay=day=>new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',year:'numeric'}).format(new Date(day+'T12:00:00'));
+
+  /* ------------------------------------------------------------- reader */
+  const choose=async(id,{close=true}={})=>{
+    const token=++selection;
+    let entry=entries.find(x=>x.id===id)||(results||[]).find(x=>x.id===id);
+    if(!entry)return;
+    if(entry.truncated||entry.text===undefined){
+      $('journal-page').innerHTML='<p class="dim" role="status">Opening the full entry…</p>';
+      try{entry=(await api('/journals/'+encodeURIComponent(id))).entry;}
+      catch(error){if(alive())$('journal-page').innerHTML=`<p class="bad">${esc(error.message)}</p>`;return;}
+    }
+    if(!alive()||selection!==token)return;
+    selectedJournal=id;
+    if(close)openPicker(false);
+    // Neighbours come from the full list, so they are the true next and previous
+    // entries even when the panel is showing a filtered search.
+    const at=entries.findIndex(x=>x.id===id);
+    const newer=at>0?entries[at-1]:null,older=at>=0&&at<entries.length-1?entries[at+1]:null;
+    const prev=$('journal-prev-btn'),next=$('journal-next-btn');
+    prev.disabled=!newer;next.disabled=!older;
+    prev.title=newer?'Newer: '+shortDay(newer.day):'This is the newest entry';
+    next.title=older?'Older: '+shortDay(older.day):'This is the oldest entry';
+    prev.onclick=newer?()=>choose(newer.id):null;
+    next.onclick=older?()=>choose(older.id):null;
+    $('journal-browse-label').textContent=shortDay(entry.day);
+    pickerMonth=entry.day.slice(0,7);
+    $('journal-page').innerHTML=`<div class="paper">
+      <div class="paper-head">
         <span class="eyebrow" style="color:var(--faint)">Daily reflection · ${Math.max(1,Math.ceil(entry.words/220))} min read</span>
         <span class="pill" style="border-color:color-mix(in srgb,var(--surface-2) 30%,transparent);color:var(--faint)">Nightly Entry</span>
       </div>
-      <h2>${new Intl.DateTimeFormat(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'}).format(new Date(entry.day+'T12:00:00'))}</h2>
+      <h2>${esc(dayFormat(entry.day))}</h2>
       <div class="prose">${richText(entry.text)}</div>
-      <div style="margin-top:34px;padding-top:16px;border-top:1px solid color-mix(in srgb,var(--surface-2) 20%,transparent);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div class="paper-foot">
         <span style="font-family:Georgia,serif;font-style:italic;color:var(--faint);font-size:14px">Written during nightly introspection</span>
         <span class="dim small">${entry.words.toLocaleString()} words · ${esc(entry.source)}</span>
       </div>
     </div>`;
-    if($('journal-prev-btn')&&prevEntry)$('journal-prev-btn').onclick=()=>choose(prevEntry.id);
-    if($('journal-next-btn')&&nextEntry)$('journal-next-btn').onclick=()=>choose(nextEntry.id);
-    if(fromPicker&&matchMedia('(max-width:900px)').matches){$('journal-page').scrollIntoView({block:'start'});}
-    setTimeout(()=>{
-      const page=$('journal-page'),list=$('journal-list');
-      if(page&&list&&page.offsetHeight>0&&!matchMedia('(max-width:900px)').matches){
-        list.style.maxHeight=Math.max(320,Math.min(window.innerHeight-140,page.offsetHeight-50))+'px';
-      }
-    },50);
+    $('journal-page').scrollIntoView({block:'start',behavior:'smooth'});
   };
-  const draw=()=>{
-    $('journal-list').innerHTML=entries.map(x=>`<button data-entry="${esc(x.id)}" aria-current="${x.id===selectedJournal}"><strong>${esc(x.day)}</strong><small>${esc(excerpt(x.excerpt||x.text,110))}</small><small>${Math.max(1,Math.ceil(x.words/220))} min read</small></button>`).join('');
-    for(const b of $('journal-list').querySelectorAll('button'))b.onclick=()=>choose(b.dataset.entry,true);
-    const page=$('journal-page'),list=$('journal-list');
-    if(page&&list&&page.offsetHeight>0&&!matchMedia('(max-width:900px)').matches){
-      list.style.maxHeight=Math.max(320,Math.min(window.innerHeight-140,page.offsetHeight-50))+'px';
+
+  /* ------------------------------------------------------------- picker */
+  const openPicker=open=>{
+    $('journal-picker').hidden=!open;
+    $('journal-browse').setAttribute('aria-expanded',String(open));
+    if(open){drawPicker();$('journal-search').focus();}
+  };
+
+  const drawPicker=()=>{
+    const body=$('journal-picker-body');
+    if(results){
+      $('journal-count').textContent=`${results.length} matching ${results.length===1?'entry':'entries'}`;
+      body.innerHTML=results.length
+        ? `<div class="reader-picker-results">${results.map(x=>`
+            <button data-pick="${esc(x.id)}" ${x.id===selectedJournal?'aria-current="true"':''}>
+              <strong>${esc(shortDay(x.day))}</strong><small>${esc(excerpt(x.excerpt||x.text,110))}</small>
+            </button>`).join('')}</div>`
+        : '<p class="dim small reader-picker-empty">Nothing matches that.</p>';
+      return;
     }
-  };
-  const load=async more=>{
-    const token=++request;if(!more)selection++;
-    const query=journalBrowse.query,month=journalBrowse.month;
-    const params=new URLSearchParams({limit:'1000',q:query,month});if(more&&cursor)params.set('before',cursor);
-    try{
-      const data=await api('/journals?'+params);
-      if(!alive()||token!==request)return;
-      profileTimezone=data.timezone;
-      entries=more?[...entries,...data.entries.filter(x=>!entries.some(y=>y.id===x.id))]:data.entries;
-      cursor=data.next_cursor;
-      // Preserve an older selected entry when returning from another page.
-      if(!more&&selectedJournal&&!entries.some(x=>x.id===selectedJournal)){
-        const selected=await api('/journals/'+encodeURIComponent(selectedJournal)).catch(()=>null);
-        if(!alive()||token!==request)return;
-        if(selected&&(!month||selected.entry.day.startsWith(month))&&(!query||(selected.entry.day+' '+selected.entry.text).toLowerCase().includes(query.toLowerCase())))entries.unshift(selected.entry);
-      }
-      draw();
-      if($('journal-count'))$('journal-count').textContent=`${data.total} ${data.total===1?'ENTRY':'ENTRIES'}${query||month?' (MATCHING)':''}`;
-      $('journal-warnings').innerHTML=data.warnings.map(x=>`<p class="warn">${esc(x)}</p>`).join('');
-      if(!more){if(entries.length)await choose(entries.some(x=>x.id===selectedJournal)?selectedJournal:entries[0].id);else{if($('journal-count'))$('journal-count').textContent='0 ENTRIES';$('journal-page').innerHTML=empty('journals',query||month?'No matching entries':'No journal entries yet',query||month?'Try another search or month.':'Daily reflections appear here as the journal job runs.',query||month?'':jump('health','View journal schedule'));wireRoutes($('journal-page'));}}
-    }catch(error){if(alive()&&token===request&&$('journal-count'))$('journal-count').textContent='ERROR';}
-  };
-  const filter=()=>{request++;selection++;journalBrowse.query=$('journal-search').value;journalBrowse.month=$('journal-month').value;clearTimeout(timer);timer=setTimeout(()=>{if(alive())load(false);},180);};
-  $('journal-search').oninput=filter;$('journal-month').onchange=filter;
-  $('journal-clear').onclick=()=>{$('journal-search').value='';$('journal-month').value='';filter();};
-  $('journal-list').addEventListener('scroll',()=>{
-    if(!cursor||scrollLoading)return;
-    const el=$('journal-list');
-    if(el.scrollTop+el.clientHeight>=el.scrollHeight-60){
-      scrollLoading=true;
-      load(true).finally(()=>{scrollLoading=false;});
+    const byDay=new Map();
+    for(const e of entries){if(!byDay.has(e.day))byDay.set(e.day,[]);byDay.get(e.day).push(e);}
+    const [year,month]=pickerMonth.split('-').map(Number);
+    const first=new Date(year,month-1,1).getDay(),count=new Date(year,month,0).getDate();
+    const today=new Date().toISOString().slice(0,10);
+    let cells='';
+    for(let i=0;i<first;i++)cells+='<div class="calendar-cell is-other-month"></div>';
+    for(let day=1;day<=count;day++){
+      const key=`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+      const found=byDay.get(key)||[];
+      const classes=['calendar-cell',found.length?'has-entry':'is-empty',
+        key===today?'is-today':'',found.some(x=>x.id===selectedJournal)?'is-selected':''].filter(Boolean).join(' ');
+      cells+=found.length
+        ? `<button class="${classes}" data-pick="${esc(found[0].id)}" title="${esc(dayFormat(key))}">
+             <span class="calendar-cell-date">${day}</span>
+             ${found.length>1?`<span class="cal-badge-pill">${found.length}</span>`:''}</button>`
+        : `<div class="${classes}"><span class="calendar-cell-date">${day}</span></div>`;
     }
-  },{passive:true});
-  await load(false);
+    const inMonth=entries.filter(x=>x.day.startsWith(pickerMonth)).length;
+    $('journal-count').textContent=`${entries.length} ${entries.length===1?'entry':'entries'} in all`;
+    body.innerHTML=`
+      <div class="reader-picker-bar">
+        <button class="icon-button" id="journal-cal-prev" aria-label="Previous month">←</button>
+        <strong>${MONTHS[month-1]} ${year}</strong>
+        <button class="icon-button" id="journal-cal-next" aria-label="Next month">→</button>
+      </div>
+      <div class="calendar-grid reader-picker-grid">
+        ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="calendar-day-head">${d}</div>`).join('')}
+        ${cells}
+      </div>
+      ${inMonth?'':'<p class="dim small reader-picker-empty">No entries this month.</p>'}`;
+    const shift=step=>{
+      const d=new Date(year,month-1+step,1);
+      pickerMonth=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      drawPicker();
+    };
+    $('journal-cal-prev').onclick=()=>shift(-1);
+    $('journal-cal-next').onclick=()=>shift(1);
+  };
+
+  $('journal-browse').onclick=()=>openPicker($('journal-picker').hidden);
+  $('journal-latest').onclick=()=>{if(entries[0])choose(entries[0].id);};
+  $('journal-picker').addEventListener('click',event=>{
+    const pick=event.target.closest('[data-pick]');
+    if(pick)choose(pick.dataset.pick);
+  });
+  $('journal-search').oninput=()=>{
+    const query=$('journal-search').value.trim();
+    clearTimeout(searchTimer);
+    searchTimer=setTimeout(async()=>{
+      if(!alive())return;
+      if(!query){results=null;drawPicker();return;}
+      try{
+        const data=await api('/journals?limit=1000&q='+encodeURIComponent(query));
+        if(!alive()||$('journal-search').value.trim()!==query)return;
+        results=data.entries;drawPicker();
+      }catch(error){if(alive())$('journal-count').textContent=error.message;}
+    },220);
+  };
+  // Escape closes the panel; a click anywhere outside it does too.
+  $('journals').addEventListener('keydown',event=>{
+    if(event.key==='Escape'&&!$('journal-picker').hidden){openPicker(false);$('journal-browse').focus();}
+  });
+  if(journalOutsideClick)document.removeEventListener('click',journalOutsideClick);
+  journalOutsideClick=event=>{
+    if(!alive()||$('journal-picker')?.hidden!==false)return;
+    if(!event.target.closest('#journal-picker')&&!event.target.closest('#journal-browse'))openPicker(false);
+  };
+  document.addEventListener('click',journalOutsideClick);
+
+  /* --------------------------------------------------------------- load */
+  try{
+    const data=await api('/journals?limit=1000');
+    if(!alive())return;
+    profileTimezone=data.timezone;
+    entries=data.entries;
+    $('journal-warnings').innerHTML=data.warnings.map(x=>`<p class="warn">${esc(x)}</p>`).join('');
+    if(!entries.length){
+      $('journal-browse-label').textContent='No entries';
+      $('journal-page').innerHTML=empty('journals','No journal entries yet',
+        'Daily reflections are recorded automatically by the scheduled nightly routine at 4:00 AM.',
+        jump('health','View routine status'));
+      return;
+    }
+    pickerMonth=entries[0].day.slice(0,7);
+    await choose(entries.some(x=>x.id===selectedJournal)?selectedJournal:entries[0].id,{close:false});
+  }catch(error){
+    if(alive())$('journal-page').innerHTML=`<p class="bad">${esc(error.message)}</p>`;
+  }
 };
 let viewerItems=[],viewerIndex=0,viewerAlbums=null,viewerInitialized=false;
 function initPhotoViewer(){
