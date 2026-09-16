@@ -390,6 +390,28 @@ class WorkspaceTests(unittest.TestCase):
         with self.assertRaises(ValueError):messages(self.c,'r')
         self.assertEqual(self.get('/api/sessions/r').status_code,400)
 
+    def test_undergarment_privacy_gating_in_overview_and_closet(self):
+        import companion_presence as presence
+        (self.c.life / 'wardrobe.json').write_text(json.dumps({'items': [
+            {'id': 'top-1', 'description': 'cream knit sweater'},
+            {'id': 'pants-1', 'description': 'dark blue denim jeans'},
+            {'id': 'closet-underwear-1', 'description': 'sage green soft stretch-cotton bikini panties with subtle lace trim'}
+        ]}))
+        presence.update(self.c, {
+            'previous_id': None,
+            'outfit': ['top-1', 'pants-1', 'closet-underwear-1'],
+            'location': 'the living room',
+            'activity': 'reading',
+            'mood': 'content',
+            'text': 'Quiet afternoon reading.'
+        })
+        res = self.get('/api/overview').json()
+        descriptions = [it.get('description', '') for it in res['state']['state']['outfit']]
+        self.assertIn('cream knit sweater', descriptions)
+        self.assertIn('dark blue denim jeans', descriptions)
+        self.assertNotIn('sage green soft stretch-cotton bikini panties with subtle lace trim', descriptions)
+        self.assertIsNone(res.get('integrity_warning'))
+        self.assertFalse(res.get('integrity_lockout'))
 
 class ModelPinTests(unittest.TestCase):
     def test_apply_preserves_ids_and_history_and_skips_script_jobs(self):

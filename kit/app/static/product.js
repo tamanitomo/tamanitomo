@@ -7,7 +7,7 @@ const tabLabel=id=>(TABS.find(t=>t[0]===id)?.[1])||({'image-studio':'Image studi
    bottom bar (whichever destinations the person pinned), and the More
    directory. Anything added here appears in all three. */
 const navGroups=[
-  ['Every day',    ['chat','now','photos','journals','timeline']],
+  ['Every day',    ['now','chat','photos','journals','timeline']],
   ['Their life',   ['relationship','knows','loops','identity','creations','vault']],
   ['Studios',      ['image-studio','voice','local-models']],
   ['Setup & system',['settings','environment','health','roster']]
@@ -41,7 +41,7 @@ for(const button of $('tabs').querySelectorAll('button'))button.onclick=()=>show
 const navPins=()=>{
   const saved=(window.Appearance&&window.Appearance.state.nav_pins)||[];
   const pins=saved.filter(id=>navDestinations.includes(id)).slice(0,4);
-  return pins.length?pins:['chat','now','photos','journals'];
+  return pins.length?pins:['now','chat','photos','journals'];
 };
 function renderTabbar(){
   const bar=$('tabbar');if(!bar)return;
@@ -131,22 +131,31 @@ function richText(raw){
   return source.split(/\n{2,}/).map(block=>{if(block.startsWith('```'))return `<pre><code>${esc(block.replace(/^```[^\n]*\n/,'').replace(/\n```\s*$/,''))}</code></pre>`;if(/^#{1,6}\s/.test(block)){const lines=block.split('\n'),h=lines.shift().replace(/^#+\s/,'');return `<h3>${inline(h)}</h3>${lines.length?`<p>${inline(lines.join('\n'))}</p>`:''}`;}if(/^> /.test(block))return `<blockquote>${inline(block.replace(/^> /gm,''))}</blockquote>`;if(/^(?:[-*] |\d+\. )/.test(block))return '<ul>'+block.split('\n').map(l=>'<li>'+inline(l.replace(/^(?:[-*] |\d+\. )/,''))+'</li>').join('')+'</ul>';return '<p>'+inline(block).replace(/\n/g,'<br>')+'</p>';}).join('');
 }
 
-function renderWardrobeCard(closet,s){
+function isIntimateGarment(item){
+  if(!item)return false;
+  const str=typeof item==='string'?item:((item.description||'')+' '+(item.id||''));
+  return /\b(panties|panty|bra|bras|bralette|underwear|undergarment|undergarments|boxers|boxer|briefs|brief|thong|thongs|lingerie|underpants|undies)\b/i.test(str);
+}
+
+function renderWardrobeCard(closet,s,isBonded=false){
+  const filterG=list=>(list||[]).filter(item=>isBonded||!isIntimateGarment(item));
   if(!closet||!closet.items||!closet.items.length){
-    if(!s?.outfit?.length)return '';
-    return `<div class="card"><span class="eyebrow">Clothing & appearance</span><p class="dim">${esc(s.outfit.map(o=>o.description||o.id).join(', '))}</p></div>`;
+    const cleanOutfit=filterG(s?.outfit);
+    if(!cleanOutfit.length)return '';
+    return `<div class="card"><span class="eyebrow">Clothing & appearance</span><p class="dim">${esc(cleanOutfit.map(o=>o.description||o.id).join(', '))}</p></div>`;
   }
-  const wearing=closet.wearing||[];
+  const wearing=filterG(closet.wearing);
   const laidOut=closet.laid_out;
-  const hamper=closet.hamper||[];
-  const washing=closet.washing||[];
-  const clean=closet.clean||[];
+  const laidOutItems=filterG(laidOut?.items);
+  const hamper=filterG(closet.hamper);
+  const washing=filterG(closet.washing);
+  const clean=filterG(closet.clean);
   const laundry=closet.laundry_in_progress;
   let html=`<div class="card wardrobe-card"><div class="section-subheading" style="display:flex;align-items:center;justify-content:space-between"><span class="eyebrow">Wardrobe & Care</span>${laundry?'<span class="pill is-washing" style="font-size:11px">🧺 Laundry running</span>':''}</div>`;
   html+=`<div class="wardrobe-block"><div class="wardrobe-block-title"><span>Currently Wearing</span><span class="dim small">${wearing.length} piece${wearing.length===1?'':'s'}</span></div><div class="wardrobe-chip-list">${wearing.map(w=>`<span class="wardrobe-chip is-wearing" title="${esc(w.description||w.id)}">👕 ${esc(w.description||w.id)}</span>`).join('')||'<span class="dim small">No current outfit recorded</span>'}</div></div>`;
-  if(laidOut&&(laidOut.items?.length||laidOut.plan?.intent)){
+  if(laidOut&&(laidOutItems.length||laidOut.plan?.intent)){
     const plan=laidOut.plan||{};
-    html+=`<div class="wardrobe-block" style="border-left:3px solid var(--warn)"><div class="wardrobe-block-title"><span style="color:var(--warn)">✨ Laid Out For Tomorrow</span><span class="dim small">${laidOut.items?.length||0} pieces</span></div>${laidOut.items?.length?`<div class="wardrobe-chip-list">${laidOut.items.map(w=>`<span class="wardrobe-chip is-laid-out" title="${esc(w.description||w.id)}">🛏️ ${esc(w.description||w.id)}</span>`).join('')}</div>`:''}${plan.intent?`<div class="laid-out-intent-quote">“${esc(plan.intent)}”</div>`:''}</div>`;
+    html+=`<div class="wardrobe-block" style="border-left:3px solid var(--warn)"><div class="wardrobe-block-title"><span style="color:var(--warn)">✨ Laid Out For Tomorrow</span><span class="dim small">${laidOutItems.length} pieces</span></div>${laidOutItems.length?`<div class="wardrobe-chip-list">${laidOutItems.map(w=>`<span class="wardrobe-chip is-laid-out" title="${esc(w.description||w.id)}">🛏️ ${esc(w.description||w.id)}</span>`).join('')}</div>`:''}${plan.intent?`<div class="laid-out-intent-quote">“${esc(plan.intent)}”</div>`:''}</div>`;
   }
   if(hamper.length||washing.length){
     html+=`<div class="wardrobe-block"><div class="wardrobe-block-title"><span>Hamper & Wash</span><span class="dim small">${hamper.length} dirty${washing.length?` · ${washing.length} in wash`:''}</span></div><div class="wardrobe-chip-list">${washing.map(w=>`<span class="wardrobe-chip is-washing" title="In the wash: ${esc(w.description||w.id)}">🫧 ${esc(w.description||w.id)}</span>`).join('')}${hamper.map(w=>`<span class="wardrobe-chip is-hamper" title="In the hamper: ${esc(w.description||w.id)}">🧺 ${esc(w.description||w.id)}</span>`).join('')}</div></div>`;
@@ -179,7 +188,10 @@ workspaceHandlers.now=async()=>{
   const s=d.state?.state;
   const photo=content.items.find(x=>x.kind==='image');
   const entry=journal.entries[0];
-  const currentOutfit=closet?.wearing?.map(x=>x.description||x.id).join(', ')||(s?.outfit||'');
+  const isBonded=Boolean((emotions?.intimacy?.stage>=4)||(d.intimacy?.stage>=4)||(emotions?.intimacy?.can_intimate));
+  const wearingPieces=(closet?.wearing||[]).filter(x=>isBonded||!isIntimateGarment(x));
+  const rawOutfit=Array.isArray(s?.outfit)?s.outfit.filter(x=>isBonded||!isIntimateGarment(x)):[];
+  const currentOutfit=wearingPieces.map(x=>x.description||x.id).join(', ')||rawOutfit.map(x=>x.description||x.id).join(', ')||(typeof s?.outfit==='string'&&(isBonded||!isIntimateGarment(s.outfit))?s.outfit:'');
   const feelingBadge=emotions?.intimacy?`${emotions.intimacy.stage_badge} (${emotions.intimacy.score}%)`:'';
 
   let latestThought='';
@@ -284,7 +296,7 @@ workspaceHandlers.now=async()=>{
 
     <div>
       <div class="section-heading"><h2>Current presence & closet</h2></div>
-      ${renderWardrobeCard(closet,s)}
+      ${renderWardrobeCard(closet,s,isBonded)}
 
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">

@@ -5,6 +5,7 @@
 <title>Tamanitomo · Soul of a Friend</title>
 <link rel="stylesheet" href="/static/product.css">
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="/static/site.webmanifest">
 <script>
 /* Paint the saved palette before the first render, so the workspace never
    flashes the default theme on the way to the chosen one. */
@@ -17,7 +18,13 @@
 </script>
 
 <header>
-  <div class="brand"><span class="brand-mark">友</span> tamanitomo<span class="dim small">· 魂の友</span></div>
+  <div class="brand">
+    <img class="brand-logo" src="/static/favicon.svg" alt="Tamanitomo" width="34" height="34">
+    <div class="brand-name-group">
+      <span class="brand-name">Tamanitomo</span>
+      <span class="brand-sub">魂の友</span>
+    </div>
+  </div>
   <div class="profile-switch"><label for="companion-select" class="eyebrow">Your companion</label><select id="companion-select"><option>Loading…</option></select><h1 id="who">…</h1><span class="meta" id="sub"></span><div id="banner"></div></div>
   <nav id="tabs" aria-label="Main navigation"></nav>
   <div class="environment-switch"><label>Environment<select id="installation-select"><option value="existing">Existing Hermes</option><option value="managed">Tamanitomo Hermes</option></select></label><span class="dim small">Private workspace · stored locally</span></div>

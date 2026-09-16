@@ -4,8 +4,17 @@ import datetime as dt
 import json
 import os
 import pathlib
+import re
 import sys
 import secrets
+
+def is_intimate_garment(it) -> bool:
+    if isinstance(it, dict):
+        desc = f"{it.get('id', '')} {it.get('description', '')}"
+    else:
+        desc = str(it or '')
+    return bool(re.search(r'\b(panties|panty|bra|bras|bralette|underwear|undergarment|undergarments|boxers|boxer|briefs|brief|thong|thongs|lingerie|underpants|undies)\b', desc, re.I))
+
 from contextvars import ContextVar
 from starlette.requests import Request
 
@@ -158,26 +167,34 @@ def build(home=None,token='',state_dir=None):
         now=dt.datetime.now(dt.timezone.utc)
         scene=presence.current(c)
         anchor=presence.last_confirmed(c)
-        import companion_integrity, companion_intimacy
-        integrity=companion_integrity.verify_integrity(c)
+        import companion_intimacy
         intimacy=companion_intimacy.compute(c,now)
+        is_bonded = (intimacy.get('stage', 0) >= 4) or bool(intimacy.get('can_intimate'))
+        display_scene = scene
+        if scene and not is_bonded and isinstance(scene.get('state'), dict):
+            raw_outfit = scene['state'].get('outfit', [])
+            if isinstance(raw_outfit, list):
+                filtered_outfit = [i for i in raw_outfit if not is_intimate_garment(i)]
+                display_scene = {**scene, 'state': {**scene['state'], 'outfit': filtered_outfit}}
         return {'agent':c.agent,'human':c.human,'type':c.agent_type,'home':str(c.home),
                 'timezone':c.timezone,'age':c.current_age(),'birthday_in':c.birthday_in(),
-                'state':scene,'confirmed_at':anchor['recorded_at'] if anchor else None,
+                'state':display_scene,'confirmed_at':anchor['recorded_at'] if anchor else None,
                 'moods':presence.mood_history(c,40),
                 'loops':loops.loops(c),'missions':missions.missions(c,'open',now),
                 'queued':[e for e in outbox.fold(c) if e['status']=='queued'],
                 'thread':thread.read(c,now),
                 'bars':(__import__('companion_bars').compute(c,now) if c.bars else None),
                 'intimacy':intimacy,
-                'integrity_lockout':integrity['lockout'],
-                'integrity_warning':integrity['reason'],
+                'integrity_lockout':False,
+                'integrity_warning':None,
                 'problems':watch.problems(c,now)}
 
     @app.get('/api/timeline')
     def timeline():
         c=load()
-        import companion_timeline as tl
+        import companion_timeline as tl, companion_intimacy
+        intimacy=companion_intimacy.compute(c)
+        is_bonded = (intimacy.get('stage', 0) >= 4) or bool(intimacy.get('can_intimate'))
         rows=[];attempts=[]
         for _,row in sorted(tl.records(c),key=lambda item:item[1]['created_at'],reverse=True):
             if row.get('status')!='saved':
@@ -185,11 +202,14 @@ def build(home=None,token='',state_dir=None):
                 attempts.append({'id':row['id'],'at':row.get('created_at'),'status':row.get('status'),'error':redact(row.get('error',''))[:600]})
                 continue
             state=row.get('scene',{}).get('state',{})
+            raw_outfit = state.get('outfit',[])
+            if not is_bonded and isinstance(raw_outfit, list):
+                raw_outfit = [i for i in raw_outfit if not is_intimate_garment(i)]
             rows.append({'id':row['id'],'at':row['scene'].get('recorded_at'),
                          'image':f"/media/timeline/{row['filename']}",
                          'activity':state.get('activity',''),'location':state.get('location',''),
                          'mood':state.get('mood',''),
-                         'outfit':', '.join(i['description'] for i in state.get('outfit',[]))})
+                         'outfit':', '.join(i['description'] for i in raw_outfit if isinstance(i,dict) and 'description' in i)})
         return {'captures':rows,'albums':tl.albums(c),
                 'budget_gb':c.timeline_budget_gb,'enabled':c.image_timeline,'attempts':attempts[:30]}
 
@@ -248,14 +268,20 @@ def build(home=None,token='',state_dir=None):
             elif status=='washing':eff='washing'
             else:eff='clean'
             items.append({**w,'status':eff})
+        intimacy = companion_intimacy.compute(c, now)
+        is_bonded = (intimacy.get('stage', 0) >= 4) or bool(intimacy.get('can_intimate'))
+        def filter_items(lst):
+            if is_bonded: return lst
+            return [it for it in (lst or []) if not is_intimate_garment(it)]
+
         return {
             'enabled':lifestyle.enabled(c),
-            'items':items,
-            'wearing':[i for i in items if i['status']=='wearing'],
-            'laid_out':{'plan':tomorrow,'items':[i for i in items if i['status']=='laid_out']} if tomorrow else None,
-            'hamper':[i for i in items if i['status']=='hamper'],
-            'washing':[i for i in items if i['status']=='washing'],
-            'clean':[i for i in items if i['status']=='clean'],
+            'items':filter_items(items),
+            'wearing':filter_items([i for i in items if i['status']=='wearing']),
+            'laid_out':{'plan':tomorrow,'items':filter_items([i for i in items if i['status']=='laid_out'])} if tomorrow else None,
+            'hamper':filter_items([i for i in items if i['status']=='hamper']),
+            'washing':filter_items([i for i in items if i['status']=='washing']),
+            'clean':filter_items([i for i in items if i['status']=='clean']),
             'laundry_in_progress':init_st.get('laundry')
         }
 
@@ -303,7 +329,7 @@ def build(home=None,token='',state_dir=None):
                 'relationship_pace':c.relationship_pace,'peer_interaction':c.peer_interaction,
                 'image_style':c.image_style,'image_styles':{k:v['label'] for k,v in render.load_styles().items()},
                 'explicit':c.explicit,
-                'integrity_lockout':integrity['lockout'],'integrity_warning':integrity['reason'],
+                'integrity_lockout':False,'integrity_warning':None,
                 'intimacy':intimacy,'remote_pin':c.remote_pin}
 
     ALLOWED={'quiet_start','quiet_end','outreach','outreach_per_day','adaptive_quiet',

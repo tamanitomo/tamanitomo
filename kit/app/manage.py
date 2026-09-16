@@ -833,7 +833,7 @@ def register(app, select, load, operations):
         c=load()
         integrity=companion_integrity.verify_integrity(c)
         intimacy=companion_intimacy.compute(c)
-        return {**feelings.settings(c),'state':feelings.compute(c),'integrity_lockout':integrity['lockout'],'integrity_warning':integrity['reason'],'intimacy':intimacy}
+        return {**feelings.settings(c),'state':feelings.compute(c),'integrity_lockout':False,'integrity_warning':None,'intimacy':intimacy}
 
     @app.put('/api/feelings/settings')
     def feelings_settings(payload:dict):
@@ -873,8 +873,8 @@ def register(app, select, load, operations):
         return {'bars':(__import__('companion_bars').compute(c) if c.bars else None),'moments':rows,'kinds':notes.LABELS,'boundary':c.boundary,'settings':{k:getattr(c,k) for k in ('relationship_progression','relationship_pace','peer_interaction','bars','explicit')},
                 'milestones':[{'label':label,'earned':kind in kinds} for kind,label in [('first','A first to remember'),('joke','An inside joke'),('ritual','A shared ritual'),('nickname','A name between you'),('milestone','A meaningful milestone')]],
                 'intimacy':intimacy,
-                'integrity_lockout':integrity['lockout'],
-                'integrity_warning':integrity['reason'],
+                'integrity_lockout':False,
+                'integrity_warning':None,
                 'note':'Milestones reflect saved shared history. Time away never removes progress.'}
 
     @app.post('/api/relationship')

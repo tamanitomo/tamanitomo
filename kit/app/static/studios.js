@@ -1122,238 +1122,202 @@ workspaceHandlers['local-models']=async()=>{
 
   const memText=srv.memory_mb ? `${srv.memory_mb} MB RAM` : '';
   const serviceText=srv.found
-    ? `${esc(srv.unit || 'companion-llama.service')} · PID ${srv.main_pid || 'N/A'}${memText ? ' · ' + memText : ''} · ${srv.active_state || ''} (${srv.sub_state || ''})`
+    ? `${esc(srv.unit || 'companion-llama.service')} · PID ${srv.main_pid || 'N/A'}${memText ? ' · ' + memText : ''} · ${srv.active_state || ''}`
     : (d.endpoint ? esc(d.endpoint) : 'No system service found');
 
- let loadedCard='';
- if(loaded){
-   const ctxStr=(loaded.ctx_size||0).toLocaleString()+' tokens context';
-   const quantStr=loaded.quant ? 'Quant: '+loaded.quant : '';
-   const paramStr=loaded.params ? (loaded.params/1e9).toFixed(1)+'B params' : '';
-   const sizeStr=loaded.size ? (loaded.size/(1024**3)).toFixed(1)+' GB weights' : '';
-   const metaItems=[ctxStr, quantStr, paramStr, sizeStr].filter(Boolean).join(' · ');
+  let heroCard='';
+  if(loaded){
+    const ctxStr=(loaded.ctx_size||0).toLocaleString()+' tokens context';
+    const quantStr=loaded.quant ? 'Quant: '+loaded.quant : '';
+    const paramStr=loaded.params ? (loaded.params/1e9).toFixed(1)+'B params' : '';
+    const sizeStr=loaded.size ? (loaded.size/(1024**3)).toFixed(1)+' GB weights' : '';
+    const metaItems=[ctxStr, quantStr, paramStr, sizeStr].filter(Boolean).join(' · ');
 
-   loadedCard=`<div class="card">
-     <div class="section-heading" style="margin-top:0">
-       <div>
-         <span class="eyebrow">Active Inference Model</span>
-         <h2 style="font-size:22px;margin-top:4px">${esc(loaded.id||'Loaded Model')}</h2>
-       </div>
-       <span class="pill status-good">Loaded on GPU</span>
-     </div>
-     <p class="dim">${esc(metaItems)}</p>
-     <div class="actions">
-       <button class="act" id="assign-loaded-btn">Use ${esc(loaded.id)} for ${esc(companionName)}</button>
-       <button class="quiet" id="srv-restart-btn">🔄 Restart Engine</button>
-       <button class="quiet" id="srv-stop-btn">⏹ Stop Engine</button>
-     </div>
-   </div>`;
- } else {
-   loadedCard=`<div class="card">
-     <div class="section-heading" style="margin-top:0">
-       <div>
-         <span class="eyebrow">Active Inference Model</span>
-         <h2 style="font-size:20px;margin-top:4px">${isOnline ? 'Model Server Ready' : 'Model Server Offline'}</h2>
-       </div>
-       ${statusBadge}
-     </div>
-     <p class="dim">${isOnline ? 'Engine is listening on '+esc(d.endpoint)+', but no model is actively serving.' : (esc(d.error)||'Engine is stopped. Use Start Engine to activate.')}</p>
-     <div class="actions">
-       ${isOnline
-         ? `<button class="quiet" id="srv-restart-btn">🔄 Restart Engine</button><button class="quiet" id="srv-stop-btn">⏹ Stop Engine</button>`
-         : `<button class="act" id="srv-start-btn">▶ Start Engine</button>`}
-     </div>
-   </div>`;
- }
+    heroCard=`<div class="card">
+      <div class="section-heading" style="margin-top:0">
+        <div>
+          <span class="eyebrow">Active Local Model</span>
+          <h2 style="font-size:22px;margin:4px 0">${esc(loaded.id||'Loaded Model')}</h2>
+        </div>
+        ${statusBadge}
+      </div>
+      <p class="dim" style="margin-bottom:8px">${esc(metaItems)}</p>
+      <p class="dim small" style="margin-bottom:16px">${esc(serviceText)} · <code>${esc(d.endpoint||'')}</code></p>
+      <div class="actions">
+        <button class="act" id="assign-loaded-btn">Use ${esc(loaded.id)} for ${esc(companionName)}</button>
+        <button class="quiet" id="srv-restart-btn">🔄 Restart</button>
+        <button class="quiet" id="srv-stop-btn">⏹ Stop</button>
+        <button class="quiet" id="bar-refresh-btn">↻ Refresh</button>
+      </div>
+    </div>`;
+  } else {
+    heroCard=`<div class="card">
+      <div class="section-heading" style="margin-top:0">
+        <div>
+          <span class="eyebrow">Local Inference Engine</span>
+          <h2 style="font-size:22px;margin:4px 0">${isOnline ? 'Engine Ready · No Model Loaded' : 'Local Engine Offline'}</h2>
+        </div>
+        ${statusBadge}
+      </div>
+      <p class="dim" style="margin-bottom:8px">${isOnline ? 'Engine is active and listening on '+esc(d.endpoint)+'. Select any model below to activate GPU offload.' : (esc(d.error)||'Inference service is stopped. Start engine or select a model below to run.')}</p>
+      <p class="dim small" style="margin-bottom:16px">${esc(serviceText)}</p>
+      <div class="actions">
+        ${isOnline
+          ? `<button class="quiet" id="srv-restart-btn">🔄 Restart</button><button class="quiet" id="srv-stop-btn">⏹ Stop</button>`
+          : `<button class="act" id="srv-start-btn">▶ Start Engine</button>`}
+        <button class="quiet" id="bar-refresh-btn">↻ Refresh</button>
+      </div>
+    </div>`;
+  }
 
- const currentActiveModel=diskModels.find(m=>m.active)||diskModels[0]||{};
- const currentActivePath=currentActiveModel.path||'';
- const currentActiveAlias=currentActiveModel.alias||'';
+  const libraryHTML=`<div class="card">
+    <div class="section-heading" style="margin-top:0">
+      <div>
+        <span class="eyebrow">Storage Library</span>
+        <h2 style="font-size:18px;margin:4px 0">Discovered Model Weights</h2>
+      </div>
+      <span class="pill">${diskModels.length} models found</span>
+    </div>
+    <p class="dim small" style="margin-bottom:18px">GGUF weights discovered on storage (<code>/mnt/nvme2/models/</code> and <code>~/models/</code>). 1-click activate automatically applies Vulkan GPU offloading and pairs vision projectors.</p>
+    ${diskModels.length?`<div class="grid">
+      ${diskModels.map(m=>`
+        <div class="card" style="margin-bottom:0;display:flex;flex-direction:column;justify-content:space-between;border-color:${m.active?'var(--accent)':'var(--edge)'}">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <span class="pill">${esc(m.family)}</span>
+              <span class="small dim">${m.size_gb} GB</span>
+            </div>
+            <h3 style="font-size:14px;word-break:break-all;margin:6px 0 10px">${esc(m.name)}</h3>
+            ${m.mmproj ? '<p class="small" style="color:var(--accent);margin:0 0 8px">👁 Multimodal Vision mmproj included</p>' : ''}
+          </div>
+          <div style="margin-top:14px;display:flex;flex-direction:column;gap:6px">
+            ${m.active
+              ? '<span class="pill status-good" style="width:100%;text-align:center;display:block">● Active on GPU</span>'
+              : `<button type="button" class="act small" style="width:100%" data-quick-switch="${esc(m.path)}" data-quick-alias="${esc(m.alias)}">⚡ Activate & Offload</button>`}
+            <button type="button" class="quiet small" style="width:100%" data-quick-assign="${esc(m.alias||m.name)}">Assign to ${esc(companionName)}</button>
+          </div>
+        </div>
+      `).join('')}
+    </div>`:'<p class="dim">No GGUF models discovered in storage. Place <code>.gguf</code> files into <code>/mnt/nvme2/models/</code> or <code>~/models/</code> and refresh.</p>'}
+  </div>`;
 
- const modelOptions=diskModels.map(m=>
-   `<option value="${esc(m.path)}" data-alias="${esc(m.alias)}" ${m.active?'selected':''}>${esc(m.family)} · ${esc(m.name)} (${m.size_gb} GB)${m.mmproj?' [Vision mmproj]':''}${m.active?' [ACTIVE]':''}</option>`
- ).join('');
+  const advancedHTML=`<details class="card">
+    <summary><strong>Advanced Engine Parameters & Custom Offload</strong></summary>
+    <div style="margin-top:16px">
+      <form id="model-switch-form">
+        <div class="form-grid">
+          <div class="wide">
+            <label>Model File
+              <select id="model-switch-select">
+                ${diskModels.map(m=>`<option value="${esc(m.path)}" data-alias="${esc(m.alias)}" ${m.active?'selected':''}>${esc(m.family)} · ${esc(m.name)} (${m.size_gb} GB)${m.active?' [ACTIVE]':''}</option>`).join('')}
+              </select>
+            </label>
+          </div>
+          <div>
+            <label>Model Identifier / Alias
+              <input id="model-switch-alias" value="${esc(diskModels.find(m=>m.active)?.alias||diskModels[0]?.alias||'local-model')}" placeholder="e.g. local-model" required maxlength="32">
+            </label>
+          </div>
+          <div>
+            <label>Context Window Size
+              <select id="model-switch-ctx">
+                <option value="131072" selected>131,072 tokens (128k - Recommended)</option>
+                <option value="65536">65,536 tokens (64k)</option>
+                <option value="32768">32,768 tokens (32k)</option>
+                <option value="16384">16,384 tokens (16k)</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit" class="act" id="model-switch-submit">Apply & Restart Engine</button>
+          <button type="button" class="quiet" id="models-refresh-btn">Rescan Storage</button>
+        </div>
+      </form>
+    </div>
+  </details>`;
 
- const switcherHTML=`<div class="card">
-   <h2>Switch Running Model Weights</h2>
-   <p>Select any local GGUF weight file discovered on storage (<code>/mnt/nvme2/models/</code> or <code>~/models/</code>). Switching writes the systemd drop-in configuration with optimal Vulkan GPU layer offloading and restarts the model server.</p>
-   <form id="model-switch-form">
-     <div class="form-grid">
-       <div class="wide">
-         <label>Local GGUF Weights on Storage
-           <select id="model-switch-select">${modelOptions}</select>
-         </label>
-       </div>
-       <div>
-         <label>Model Alias / Identifier
-           <input id="model-switch-alias" value="${esc(currentActiveAlias)}" placeholder="e.g. local-model" required maxlength="32">
-         </label>
-       </div>
-       <div>
-         <label>Context Window Size
-           <select id="model-switch-ctx">
-             <option value="131072" selected>131,072 tokens (128k - Recommended)</option>
-             <option value="65536">65,536 tokens (64k)</option>
-             <option value="32768">32,768 tokens (32k)</option>
-             <option value="16384">16,384 tokens (16k)</option>
-           </select>
-         </label>
-       </div>
-     </div>
-     <div class="actions">
-       <button type="submit" class="act" id="model-switch-submit">⚡ Switch Model & Restart Engine</button>
-       <button type="button" class="quiet" id="models-refresh-btn">Scan Storage & Refresh</button>
-     </div>
-   </form>
- </div>`;
+  const ollamaHTML=`<details class="card">
+    <summary><strong>Ollama Engine & Catalog Downloads</strong> (Optional)</summary>
+    <div style="margin-top:14px">
+      <p class="dim small">${d.installed ? 'Ollama runtime is present.' : 'Ollama runtime is not installed.'} Standard catalog models can be pulled below if you prefer Ollama over Vulkan llama.cpp.</p>
+      <div class="actions">
+        <button class="act" id="local-install" ${d.installed?'disabled':''}>${d.installed?'Ollama installed':'Install Ollama on Hermes host'}</button>
+        <button class="quiet" id="local-start">Start Ollama</button>
+      </div>
+      ${recommendations.length?`<div class="grid" style="margin-top:14px">
+        ${recommendations.map(m=>`
+          <div class="card" style="margin-bottom:0">
+            <h3>${esc(m.name)}</h3>
+            <p class="dim small">${m.gb} GB download · Q4_K_M</p>
+            <p class="dim small">${esc(m.memory)}</p>
+            <div class="actions">
+              <button class="quiet small" data-pull-model="${esc(m.id)}">Download weights</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>`:''}
+    </div>
+  </details>`;
 
- const cardsHTML=`<div class="card">
-   <h2>Discovered Weights Library (${diskModels.length} models)</h2>
-   <p class="dim">Fast 1-click model switching for all GGUF models on disk. Selecting a model configures Vulkan acceleration, threads, context memory, and auto-pairs matching multimodal vision projectors when available.</p>
-   <div class="grid">
-     ${diskModels.map(m=>`
-       <div class="card" style="margin-bottom:0;display:flex;flex-direction:column;justify-content:space-between">
-         <div>
-           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-             <span class="pill">${esc(m.family)}</span>
-             <span class="small dim">${m.size_gb} GB</span>
-           </div>
-           <h3 style="font-size:14px;word-break:break-all;margin:6px 0 10px">${esc(m.name)}</h3>
-           ${m.mmproj ? '<p class="small" style="color:var(--accent);margin:0 0 6px">👁 Multimodal Vision mmproj included</p>' : ''}
-         </div>
-         <div style="margin-top:12px">
-           ${m.active
-             ? '<span class="pill status-good" style="width:100%;text-align:center;display:block">● Active Model</span>'
-             : `<button type="button" class="quiet small" style="width:100%" data-quick-switch="${esc(m.path)}" data-quick-alias="${esc(m.alias)}">Switch to this</button>`}
-         </div>
-       </div>
-     `).join('')}
-   </div>
- </div>`;
+  $('local-models').innerHTML=heading('Local Models & Hardware Engine','Configure your Vulkan-accelerated local inference engine, switch GGUF weights, and assign models to '+esc(companionName)+'.')+`
+    ${heroCard}
+    ${libraryHTML}
+    ${advancedHTML}
+    ${ollamaHTML}
+  `;
 
- const allAssignableModels=[
-   ...(loaded ? [{id: loaded.id, name: loaded.id + ' (Currently Loaded)'}] : []),
-   ...diskModels.map(m=>({id: m.alias||m.name, name: `${m.family} · ${m.alias||m.name} (${m.size_gb} GB)`})),
-   ...(d.models||[]).map(m=>({id: m.name, name: m.name + ' (Ollama)'}))
- ];
- const uniqueAssignable=Array.from(new Map(allAssignableModels.map(m=>[m.id, m])).values());
-
- const assignHTML=`<div class="card">
-   <h2>Assign Inference Model to ${esc(companionName)}</h2>
-   <p>Assigns the chosen model to <strong>${esc(companionName)}</strong> for conversation chat, daily loops/activities, and night reflection. Configured to use the local Vulkan OpenAI-compatible server at <code>${esc(d.endpoint)}/v1</code>.</p>
-   <div class="row" style="align-items:flex-end">
-     <div style="flex:2">
-       <label>Model Identifier
-         <select id="companion-model-choice">
-           ${options(uniqueAssignable.map(m=>[m.id, m.name]), loaded?.id || uniqueAssignable[0]?.id || '')}
-         </select>
-       </label>
-     </div>
-     <div style="flex:1;margin-bottom:14px">
-       <button class="act" id="companion-assign-btn" style="width:100%">Use for this companion</button>
-     </div>
-   </div>
- </div>`;
-
- const ollamaHTML=`<details class="card">
-   <summary><strong>Ollama Engine & Catalog Downloads</strong> (Optional)</summary>
-   <div style="margin-top:14px">
-     <p>${d.installed ? 'Ollama runtime is present.' : 'Ollama runtime is not installed.'} Standard catalog models can be pulled below if you prefer Ollama over llama.cpp.</p>
-     <div class="actions">
-       <button class="act" id="local-install" ${d.installed?'disabled':''}>${d.installed?'Ollama installed':'Install Ollama on Hermes host'}</button>
-       <button class="quiet" id="local-start">Start Ollama</button>
-     </div>
-     <div class="grid" style="margin-top:14px">
-       ${recommendations.map(m=>`
-         <div class="card" style="margin-bottom:0">
-           <h3>${esc(m.name)}</h3>
-           <p>${m.gb} GB download · Q4_K_M</p>
-           <p class="dim small">${esc(m.memory)}</p>
-           <div class="actions">
-             <button class="quiet small" data-pull-model="${esc(m.id)}">Download weights</button>
-           </div>
-         </div>
-       `).join('')}
-     </div>
-   </div>
- </details>`;
-
- $('local-models').innerHTML=heading('Local Models & Hardware Engine','Manage the Vulkan-accelerated local inference engine, switch running GGUF weights, and assign models to companions.')+`
-   <div class="card">
-     <div class="section-heading" style="margin-top:0">
-       <div>
-         <span class="eyebrow">Engine Status</span>
-         <h2 style="margin:4px 0 0">${esc(d.engine||'Model Server')}</h2>
-       </div>
-       ${statusBadge}
-     </div>
-     <p class="dim small">${esc(serviceText)}</p>
-     <div class="actions">
-       ${isOnline
-         ? `<button class="quiet" id="bar-restart-btn">🔄 Restart Engine</button><button class="quiet" id="bar-stop-btn">⏹ Stop Engine</button>`
-         : `<button class="act" id="bar-start-btn">▶ Start Engine</button>`}
-       <button class="quiet" id="bar-refresh-btn">Refresh</button>
-     </div>
-   </div>
-   ${loadedCard}
-   ${switcherHTML}
-   ${cardsHTML}
-   ${assignHTML}
-   ${ollamaHTML}
- `;
-
- const wireEngineActions=()=>{
-   const refresh=()=>render('local-models');
-   for(const id of ['srv-restart-btn','bar-restart-btn'])bindAction(id,'/local-models/server/control',{action:'restart'},refresh);
-   for(const id of ['srv-stop-btn','bar-stop-btn'])bindAction(id,'/local-models/server/control',{action:'stop'},refresh);
-   for(const id of ['srv-start-btn','bar-start-btn'])bindAction(id,'/local-models/server/control',{action:'start'},refresh);
-   for(const id of ['bar-refresh-btn','models-refresh-btn']) {
-     const b=$(id);
-     if(b)b.onclick=refresh;
-   }
-   const assignLoaded=$('assign-loaded-btn');
-   if(assignLoaded&&loaded) {
-     assignLoaded.onclick=()=>action('/local-models/assign',{model:loaded.id},refresh);
-   }
-   const switchSel=$('model-switch-select');
-   if(switchSel) {
-     switchSel.onchange=()=>{
-       const opt=switchSel.options[switchSel.selectedIndex];
-       if(opt&&opt.dataset.alias)$('model-switch-alias').value=opt.dataset.alias;
-     };
-   }
-   const switchForm=$('model-switch-form');
-   if(switchForm) {
-     switchForm.onsubmit=async e=>{
-       e.preventDefault();
-       const path=$('model-switch-select').value;
-       const alias=$('model-switch-alias').value;
-       const ctx_size=Number($('model-switch-ctx').value)||131072;
-       if(!path)throw Error('Please select a model file.');
-       await action('/local-models/server/switch',{path,alias,ctx_size},refresh);
-     };
-   }
-   for(const b of $('local-models').querySelectorAll('[data-quick-switch]')) {
-     b.onclick=async()=>{
-       const path=b.dataset.quickSwitch;
-       const alias=b.dataset.quickAlias;
-       await action('/local-models/server/switch',{path,alias,ctx_size:131072},refresh);
-     };
-   }
-   const companionAssign=$('companion-assign-btn');
-   if(companionAssign) {
-     companionAssign.onclick=async()=>{
-       const model=$('companion-model-choice').value;
-       if(!model)throw Error('Please select a model to assign.');
-       await action('/local-models/assign',{model},refresh);
-     };
-   }
-   bindAction('local-install','/local-models/install',{},refresh);
-   bindAction('local-start','/local-models/start',{},refresh);
-   for(const b of $('local-models').querySelectorAll('[data-pull-model]')) {
-     b.onclick=()=>action('/local-models/pull',{model:b.dataset.pullModel},refresh);
-   }
- };
- wireEngineActions();
+  const wireEngineActions=()=>{
+    const refresh=()=>render('local-models');
+    bindAction('srv-restart-btn','/local-models/server/control',{action:'restart'},refresh);
+    bindAction('srv-stop-btn','/local-models/server/control',{action:'stop'},refresh);
+    bindAction('srv-start-btn','/local-models/server/control',{action:'start'},refresh);
+    for(const id of ['bar-refresh-btn','models-refresh-btn']) {
+      const b=$(id);
+      if(b)b.onclick=refresh;
+    }
+    const assignLoaded=$('assign-loaded-btn');
+    if(assignLoaded&&loaded) {
+      assignLoaded.onclick=()=>action('/local-models/assign',{model:loaded.id},refresh);
+    }
+    const switchSel=$('model-switch-select');
+    if(switchSel) {
+      switchSel.onchange=()=>{
+        const opt=switchSel.options[switchSel.selectedIndex];
+        if(opt&&opt.dataset.alias)$('model-switch-alias').value=opt.dataset.alias;
+      };
+    }
+    const switchForm=$('model-switch-form');
+    if(switchForm) {
+      switchForm.onsubmit=async e=>{
+        e.preventDefault();
+        const path=$('model-switch-select').value;
+        const alias=$('model-switch-alias').value;
+        const ctx_size=Number($('model-switch-ctx').value)||131072;
+        if(!path)throw Error('Please select a model file.');
+        await action('/local-models/server/switch',{path,alias,ctx_size},refresh);
+      };
+    }
+    for(const b of $('local-models').querySelectorAll('[data-quick-switch]')) {
+      b.onclick=async()=>{
+        const path=b.dataset.quickSwitch;
+        const alias=b.dataset.quickAlias;
+        await action('/local-models/server/switch',{path,alias,ctx_size:131072},refresh);
+      };
+    }
+    for(const b of $('local-models').querySelectorAll('[data-quick-assign]')) {
+      b.onclick=async()=>{
+        const model=b.dataset.quickAssign;
+        if(!model)return;
+        await action('/local-models/assign',{model},refresh);
+      };
+    }
+    bindAction('local-install','/local-models/install',{},refresh);
+    bindAction('local-start','/local-models/start',{},refresh);
+    for(const b of $('local-models').querySelectorAll('[data-pull-model]')) {
+      b.onclick=()=>action('/local-models/pull',{model:b.dataset.pullModel},refresh);
+    }
+  };
+  wireEngineActions();
 };
 boot().catch(e=>{notice(e.message,true);$('who').textContent='Connection needed';});

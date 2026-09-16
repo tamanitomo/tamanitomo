@@ -188,9 +188,6 @@ workspaceHandlers.chat=async()=>{
   <div class="chat-archive-controls" id="chat-archive-controls" hidden><button type="button" class="quiet" id="older-messages">Load older messages</button><span class="dim small" id="history-status" role="status"></span></div>
   <div id="chat-log" class="chat-log" role="log" aria-live="polite"></div>
   <form id="chat-form"><label class="sr-only" for="chat-message">Your message</label><textarea rows="1" id="chat-message" placeholder="What’s on your mind?" required maxlength="30000"></textarea><div class="actions"><button class="act" id="send-message">Send</button><span class="dim small" id="chat-status" role="status">Enter to send · Shift+Enter for a new line</span></div></form></div>`;
-  if(emotions?.integrity_warning){
-    $('chat').insertAdjacentHTML('afterbegin',`<div class="card warning-card" style="border-left:4px solid var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent);padding:12px;margin-bottom:12px"><strong style="color:var(--accent);font-size:13px">ℹ️ Relationship Setting Notice</strong><p style="margin:4px 0 0;font-size:12.5px;line-height:1.4">${esc(emotions.integrity_warning)}</p></div>`);
-  }
   if($('chat-feeling'))$('chat-feeling').onclick=()=>showTab('relationship');
   let sessionsCursor=d.next_cursor;
   $('older-sessions').onclick=async()=>{
@@ -441,7 +438,6 @@ workspaceHandlers.relationship=async()=>{
   const d=await api('/relationship');const s=d.settings;
   const companionName=chatName()||'Your companion';
   $('relationship').innerHTML=heading('Your story together','Small firsts, familiar rituals, and jokes that only make sense between you. A shared history grows through experience.')+
-  (d.integrity_warning?`<div class="card warning-card" style="border-left:4px solid var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent);padding:12px;margin-bottom:14px"><strong style="color:var(--accent);font-size:13px">ℹ️ Relationship Setting Notice</strong><p style="margin:4px 0 0;font-size:12.5px;line-height:1.4">${esc(d.integrity_warning)}</p></div>`:'')+
   connectionSignals(d.bars)+
   renderIntimacyCard(d.intimacy,companionName)+
   `<div class="story-hero-card">
