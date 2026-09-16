@@ -25,12 +25,26 @@
       <span class="brand-sub">魂の友</span>
     </div>
   </div>
-  <div class="profile-switch"><label for="companion-select" class="eyebrow">Your companion</label><select id="companion-select"><option>Loading…</option></select><h1 id="who">…</h1><span class="meta" id="sub"></span><div id="banner"></div></div>
+  <div class="profile-switch">
+    <button type="button" class="profile-switch-btn" id="companion-switch-trigger" aria-label="Select companion">
+      <div class="profile-switch-header">
+        <span class="eyebrow">Your companion</span>
+        <span class="profile-switch-arrow">⇄ Switch</span>
+      </div>
+      <div class="profile-switch-row">
+        <span class="profile-avatar-pill" id="companion-avatar-pill">C</span>
+        <h1 id="who">…</h1>
+      </div>
+      <span class="meta" id="sub"></span>
+    </button>
+    <select id="companion-select" style="display:none"><option>Loading…</option></select>
+    <div id="banner"></div>
+  </div>
   <nav id="tabs" aria-label="Main navigation"></nav>
   <div class="environment-switch"><label>Environment<select id="installation-select"><option value="existing">Existing Hermes</option><option value="managed">Tamanitomo Hermes</option></select></label><span class="dim small">Private workspace · stored locally</span></div>
 </header>
 <button id="navigation-backdrop" aria-label="Close navigation" hidden></button>
-<div class="top-actions-bar"><button class="icon-button" id="mobile-menu" aria-label="Toggle navigation">☰</button><span id="editor-status" class="small warn" role="status" hidden>Unsaved changes</span><button class="quiet" id="open-search" aria-label="Go to page"><span class="search-label">Go to page</span><span aria-hidden="true">⌕</span><kbd>Ctrl K</kbd></button><button class="icon-button" id="refresh-page" aria-label="Refresh current page" title="Refresh">↻</button></div>
+<div class="top-actions-bar"><button class="icon-button" id="mobile-menu" aria-label="Toggle navigation">☰</button><span id="editor-status" class="small warn" role="status" hidden>Unsaved changes</span><button class="quiet" id="open-search" aria-label="Go to page"><span class="search-label">Go to page</span><span aria-hidden="true">⌕</span><kbd>Ctrl K</kbd></button></div>
 <dialog id="product-dialog" aria-labelledby="dialog-title"><div class="dialog-bar"><h2 id="dialog-title"></h2><button class="icon-button" id="close-dialog" aria-label="Close dialog">✕</button></div><div class="dialog-body" id="dialog-body"></div></dialog>
 <dialog id="pin-modal" class="pin-dialog" aria-labelledby="pin-modal-title">
   <div class="pin-dialog-card">
@@ -49,8 +63,8 @@
 <dialog id="photo-viewer" class="photo-viewer" aria-label="Photo viewer">
   <div class="viewer-topbar">
     <div class="viewer-top-left">
-      <button class="viewer-icon-btn" id="viewer-close" aria-label="Close viewer" title="Close (Esc)">
-        <svg class="icon" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      <button class="viewer-icon-btn" id="viewer-close" aria-label="Back" title="Back (Esc)">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
       </button>
       <span class="viewer-counter" id="viewer-counter">1 / 1</span>
       <span class="viewer-date" id="viewer-date"></span>

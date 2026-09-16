@@ -267,6 +267,7 @@ def build(home=None,token='',state_dir=None):
         import companion_presence as presence
         import companion_lifestyle as lifestyle
         import companion_life as life
+        import companion_intimacy
         now=dt.datetime.now(dt.timezone.utc)
         curr=presence.current(c)
         wardrobe=presence.wardrobe(c).get('items',[])

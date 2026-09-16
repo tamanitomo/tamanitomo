@@ -1147,7 +1147,6 @@ workspaceHandlers['local-models']=async()=>{
         <button class="act" id="assign-loaded-btn">Use ${esc(loaded.id)} for ${esc(companionName)}</button>
         <button class="quiet" id="srv-restart-btn">🔄 Restart</button>
         <button class="quiet" id="srv-stop-btn">⏹ Stop</button>
-        <button class="quiet" id="bar-refresh-btn">↻ Refresh</button>
       </div>
     </div>`;
   } else {
@@ -1165,7 +1164,6 @@ workspaceHandlers['local-models']=async()=>{
         ${isOnline
           ? `<button class="quiet" id="srv-restart-btn">🔄 Restart</button><button class="quiet" id="srv-stop-btn">⏹ Stop</button>`
           : `<button class="act" id="srv-start-btn">▶ Start Engine</button>`}
-        <button class="quiet" id="bar-refresh-btn">↻ Refresh</button>
       </div>
     </div>`;
   }
