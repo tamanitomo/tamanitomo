@@ -779,13 +779,15 @@ function tagsFromText(text){
 }
 function tagFieldHTML(key,label,text,hint){
   const tags=tagsFromText(text);
-  return `<div class="tag-field" data-tag-field="${esc(key)}">
-    <div class="tag-field-head"><strong>${esc(label)}</strong>${hint?`<small class="dim">${esc(hint)}</small>`:''}</div>
+  return `<details class="tag-field" data-tag-field="${esc(key)}" open>
+    <summary class="tag-field-head"><strong>${esc(label)}</strong>
+      <span class="tag-count">${tags.length}</span>
+      ${hint?`<small class="dim">${esc(hint)}</small>`:''}</summary>
     <div class="tag-list" data-tags>${tags.map((t,i)=>
       `<span class="tag-chip">${esc(t)}<button type="button" class="tag-remove" data-remove="${i}" aria-label="Remove ${esc(t)}">✕</button></span>`).join('')}
     </div>
     <input class="tag-input" data-tag-input placeholder="Add a tag, then Enter" aria-label="Add a tag to ${esc(label)}">
-  </div>`;
+  </details>`;
 }
 /* One delegated handler for every tag field on the page. */
 function wireTagFields(root,onChange){
@@ -825,6 +827,8 @@ function wireTagFields(root,onChange){
 const readTags=field=>[...field.querySelectorAll('.tag-chip')].map(chip=>chip.firstChild.textContent.trim());
 function writeTags(field,tags){
   const unique=[...new Set(tags.filter(Boolean))];
+  const count=field.querySelector('.tag-count');
+  if(count)count.textContent=String(unique.length);
   field.querySelector('[data-tags]').innerHTML=unique.map((t,i)=>
     `<span class="tag-chip">${esc(t)}<button type="button" class="tag-remove" data-remove="${i}" aria-label="Remove ${esc(t)}">✕</button></span>`).join('');
 }
@@ -1416,13 +1420,39 @@ workspaceHandlers['image-studio']=async()=>{
     ['Steps',found.steps],['Guidance',found.cfg],['Seed',found.seed],
     ['Size',found.width&&found.height?found.width+'\u00d7'+found.height:'']
    ].filter(([,value])=>value!==undefined&&value!==''&&value!==null);
+   const resources=found.resources||[];
+   const missing=resources.filter(r=>r.file&&!r.installed&&r.version_id);
    report.innerHTML=`<div class="import-report">
      <dl>${rows.map(([k,v])=>`<div><dt>${esc(k)}</dt><dd>${esc(String(v))}</dd></div>`).join('')}</dl>
+     ${resources.length?`<div class="resource-list">
+       <span class="eyebrow">What it used</span>
+       ${resources.map((r,i)=>`<div class="resource-row ${r.installed?'is-here':''}">
+         <span class="resource-kind">${esc(r.kind||'file')}</span>
+         <span class="resource-name">${esc(r.file||r.name||'unknown')}${r.base_model?` <small class="dim">${esc(r.base_model)}</small>`:''}</span>
+         ${r.installed?'<span class="resource-state">installed</span>'
+           :r.version_id?`<button type="button" class="quiet small" data-fetch="${i}">Download</button>`
+           :'<span class="resource-state dim">not on Civitai</span>'}
+       </div>`).join('')}
+       ${missing.length?`<button type="button" class="quiet" id="fetch-all-missing">Download all ${missing.length} missing</button>`:''}
+     </div>`:''}
      ${(result.notes||[]).map(n=>`<p class="dim small">${esc(n)}</p>`).join('')}
-     <div class="actions">
+     <div class="studio-actions">
        <button class="act" id="keep-imported">${result.preset.incomplete?'Save as a draft':'Add this workflow'}</button>
        <button class="quiet" id="discard-imported">Discard</button>
      </div></div>`;
+   const fetchOne=async row=>{
+     const status=$('workflow-import-status');
+     status.textContent=`Downloading ${row.file}\u2026`;
+     try{
+       await followOperation(await post('/images/fetch-resource',{version_id:row.version_id,kind:row.kind}));
+       row.installed=true;status.textContent='';showImportResult(result);
+     }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
+   };
+   for(const button of report.querySelectorAll('[data-fetch]'))
+     button.onclick=()=>fetchOne(resources[Number(button.dataset.fetch)]);
+   if($('fetch-all-missing'))$('fetch-all-missing').onclick=async()=>{
+     for(const row of missing)await fetchOne(row);
+   };
    $('discard-imported').onclick=()=>{report.innerHTML='';$('workflow-import-file').value='';};
    $('keep-imported').onclick=()=>{
     readPreset();

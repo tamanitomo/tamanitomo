@@ -92,13 +92,58 @@ def register(app,select,load):
         if not raw:raise HTTPException(400,'Choose an image first')
         import companion_image_import as importer
         name=request.headers.get('x-image-name','')
-        try:return importer.read_image_workflow(raw,name)
+        try:return _settle_import(importer.read_image_workflow(raw,name))
         except ValueError as exc:raise HTTPException(400,str(exc))
+
+    def _settle_import(result):
+        from .workflows import settings as workflow_settings
+        preset=result.get('preset') or {}
+        try:preset['endpoint']=workflow_settings(select()[0].root).get('endpoint') or preset.get('endpoint','')
+        except Exception:pass
+        preset['include_identity']=False
+        installed=set()
+        try:
+            import companion_media as media
+            info=media.request_json(media.endpoint(preset['endpoint'])+'/object_info')
+            for node in ('CheckpointLoaderSimple','LoraLoader','VAELoader','CLIPLoader'):
+                for spec in info.get(node,{}).get('input',{}).get('required',{}).values():
+                    if isinstance(spec[0],list):installed.update(spec[0])
+        except Exception:
+            result.setdefault('notes',[]).append(
+                'Could not reach ComfyUI to see which of these you already have.')
+        for row in (result.get('found') or {}).get('resources',[]) or []:
+            row['installed']=bool(row.get('file') and row['file'] in installed)
+        return result
+
+    SLOT_FOR_KIND={'checkpoint':'checkpoint','lora':'lora','lycoris':'lora','locon':'lora',
+                   'vae':'vae','embedding':'embedding'}
+
+    @app.post('/api/images/fetch-resource')
+    def fetch_resource(payload:dict):
+        from .workflows import inspect_model, download, settings as workflow_settings
+        rt,_=select()
+        version=payload.get('version_id')
+        slot=SLOT_FOR_KIND.get(str(payload.get('kind','')).lower())
+        if not version:raise HTTPException(400,'That resource has no Civitai version to fetch')
+        if not slot:raise HTTPException(400,'There is nowhere to put that kind of file')
+        import companion_image_import as importer
+        try:
+            info=importer._json_get(f'https://civitai.com/api/v1/model-versions/{int(version)}')
+            model_id=(info.get('model') or {}).get('id') or info.get('modelId')
+            if not model_id:raise ValueError('Civitai did not say which model that version belongs to')
+            data=inspect_model(rt.root,f'https://civitai.com/models/{model_id}?modelVersionId={int(version)}',int(version))
+        except (ValueError,TypeError) as exc:raise HTTPException(400,str(exc))
+        except Exception:raise HTTPException(400,'Could not reach Civitai for that resource')
+        files=data.get('files') or []
+        primary=next((f for f in files if f.get('primary')),files[0] if files else None)
+        if not primary:raise HTTPException(400,'Civitai lists no downloadable file for that version')
+        return app.state.operations.submit(str(rt.root),'Download '+str(data.get('name') or 'weights'),
+            lambda report:download(rt.root,{'version_id':version,'file_id':primary['id'],'slot':slot},report))
 
     @app.post('/api/images/import-url')
     def import_workflow_url(payload:dict):
         import companion_image_import as importer
-        try:return importer.read_image_url(payload.get('url',''))
+        try:return _settle_import(importer.read_image_url(payload.get('url','')))
         except ValueError as exc:raise HTTPException(400,str(exc))
 
     @app.get('/api/images/recommendations')

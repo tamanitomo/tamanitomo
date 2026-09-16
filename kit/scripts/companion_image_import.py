@@ -207,7 +207,50 @@ def _civitai_meta_from_page(html:str):
     return best
 
 
-def read_image_url(url:str,fetch=None):
+RESOURCE_KINDS={'checkpoint':'checkpoint','lora':'lora','lycoris':'lycoris','locon':'locon',
+               'embed':'embedding','embedding':'embedding','vae':'vae','textualinversion':'embedding'}
+
+
+def _json_get(url):
+    import urllib.request
+    request=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'})
+    with urllib.request.urlopen(request,timeout=20) as response:
+        return json.loads(response.read(2_000_000).decode('utf-8','replace'))
+
+
+def resolve_resources(resources,fetch_json=None):
+    """Turn Civitai's version ids into files, base models and download links.
+
+    This endpoint answers without an API key. A key is still worth having for
+    gated models and for a higher rate limit, so a failure here is reported per
+    resource rather than sinking the whole import.
+    """
+    fetch_json=fetch_json or _json_get
+    out=[]
+    for entry in resources or []:
+        if not isinstance(entry,dict):continue
+        kind=RESOURCE_KINDS.get(str(entry.get('type','')).lower(),str(entry.get('type','')).lower())
+        version=entry.get('modelVersionId') or entry.get('modelVersionID')
+        row={'kind':kind,'weight':entry.get('weight'),'version_id':version,
+             'name':'','file':'','base_model':'','download':'','size_kb':None,'error':''}
+        if version:
+            try:
+                data=fetch_json(f'https://civitai.com/api/v1/model-versions/{int(version)}')
+                model=data.get('model') or {}
+                row['name']=' \u00b7 '.join(x for x in (model.get('name'),data.get('name')) if x)
+                row['base_model']=data.get('baseModel') or ''
+                files=data.get('files') or []
+                primary=next((f for f in files if f.get('primary')),files[0] if files else {})
+                row['file']=primary.get('name') or ''
+                row['download']=primary.get('downloadUrl') or ''
+                row['size_kb']=primary.get('sizeKB')
+            except Exception:
+                row['error']='Could not look this one up on Civitai.'
+        out.append(row)
+    return out
+
+
+def read_image_url(url:str,fetch=None,fetch_json=None):
     """Import from a Civitai image page. civitai.red serves the same images."""
     url=(url or '').strip()
     match=CIVITAI_IMAGE_URL.match(url)
@@ -248,12 +291,19 @@ def read_image_url(url:str,fetch=None):
     if meta.get('sampler'):found['sampler']=meta['sampler']
     model=meta.get('Model') or meta.get('model')
     if model:found['checkpoints']=[str(model)]
-    resources=meta.get('civitaiResources') or meta.get('resources') or []
-    loras=[str(r.get('modelVersionName') or r.get('name') or '') for r in resources
-           if isinstance(r,dict) and str(r.get('type','')).lower()=='lora']
-    if loras:found['loras']=[x for x in loras if x]
+    clip_skip=_number(meta.get('clipSkip'),int)
+    if clip_skip:found['clip_skip']=clip_skip
+    # Civitai names its resources by version id, not by filename. Resolving them
+    # gives the real file, the base model, and somewhere to download it from.
+    found['resources']=resolve_resources(meta.get('civitaiResources') or meta.get('resources') or [],fetch_json)
+    families={r['base_model'] for r in found['resources'] if r.get('base_model')}
+    if families:found['base_model']=sorted(families)[0]
+    checkpoint=next((r for r in found['resources'] if r['kind']=='checkpoint'),None)
+    if checkpoint and checkpoint.get('file'):found['checkpoints']=[checkpoint['file']]
+    loras=[r['file'] or r['name'] for r in found['resources'] if r['kind'] in ('lora','lycoris','locon')]
+    if loras:found['loras']=loras
     notes.append('Read from the page, not from a file: this is a prompt and its settings, not a '
-                 'ComfyUI graph. Choose a checkpoint here before it can serve a lane.')
+                 'ComfyUI graph. Pick the checkpoint from what this ComfyUI has before it can serve a lane.')
     draft['name']='Civitai image '+match.group(1)
     draft['category']=''
     draft['incomplete']=True

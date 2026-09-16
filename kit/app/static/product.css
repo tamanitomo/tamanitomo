@@ -2125,3 +2125,29 @@ body[data-page="chat"] main{padding:0}
   .import-url-row button{padding:11px 18px}
   .studio-actions{grid-template-columns:1fr}
 }
+
+/* Prompt categories fold, and every one starts open: a hidden section is one
+   you forget you set. */
+.tag-field>summary{list-style:none;cursor:pointer;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.tag-field>summary::-webkit-details-marker{display:none}
+.tag-field>summary::before{content:'\25be';color:var(--dim);font-size:10px;transition:transform .15s}
+.tag-field:not([open])>summary::before{transform:rotate(-90deg)}
+.tag-count{font-size:10.5px;font-weight:700;color:var(--accent-ink);background:var(--accent-soft);
+  border-radius:999px;padding:1px 7px;min-width:20px;text-align:center}
+.tag-field:not([open])>summary{margin:0}
+
+/* What an imported picture used, and whether it is on this machine. */
+.resource-list{margin:12px 0;display:flex;flex-direction:column;gap:6px}
+.resource-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;
+  background:var(--bg);border:1px solid var(--edge)}
+.resource-row.is-here{border-color:color-mix(in srgb,var(--good) 40%,transparent)}
+.resource-kind{flex:none;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);
+  min-width:64px}
+.resource-name{flex:1;min-width:0;font-size:12.5px;overflow-wrap:anywhere}
+.resource-state{flex:none;font-size:11px;color:var(--good);font-weight:600}
+.resource-row button{flex:none}
+@media(max-width:700px){
+  .resource-row{flex-wrap:wrap;row-gap:6px}
+  .resource-kind{min-width:0}
+  .resource-name{flex-basis:100%}
+}
