@@ -742,6 +742,37 @@ function wirePortrait(){
 
 let comfyModelCache={};
 let missingVersions={};
+let modelFamilies={};
+
+/* What each installed file says it was trained for, read from its own header.
+   Cached on the server, so this is one small request. */
+async function loadModelFamilies(refresh){
+  try{
+    const data=await api('/images/model-families'+(refresh?'?refresh=1':''));
+    modelFamilies=data.models||{};
+    return data;
+  }catch(error){return null;}
+}
+
+/* Compatible first, then everything we could not place, with a line between.
+   Nothing is hidden: a LoRA whose header is silent still works, and 61% of a
+   real library has no base model recorded. */
+function groupedModelOptions(files,current,wanted){
+  const family=name=>(modelFamilies[name]||{}).family||'';
+  const fits=name=>!wanted||!family(name)||family(name)===wanted;
+  const label=name=>name.replace(/\.safetensors$/,'');
+  const known=files.filter(f=>family(f)&&fits(f));
+  const unknown=files.filter(f=>!family(f));
+  const mismatched=files.filter(f=>family(f)&&!fits(f));
+  const group=(rows,title)=>rows.length
+    ? `<optgroup label="${esc(title)}">${rows.map(f=>
+        `<option value="${esc(f)}" ${f===current?'selected':''}>${esc(label(f))}</option>`).join('')}</optgroup>`:'';
+  return group(known,wanted?wanted+' \u00b7 fits this model':'Identified')
+    +group(unknown,'Not recorded \u2014 probably fine')
+    +group(mismatched,'Built for something else')
+    +((current&&!files.includes(current))
+      ? `<option value="${esc(current)}" selected>${esc(label(current))} (not installed)</option>`:'');
+}
 async function comfyModels(endpoint){
   if(!endpoint)return {};
   if(comfyModelCache[endpoint])return comfyModelCache[endpoint];
@@ -836,7 +867,7 @@ function writeTags(field,tags){
 const tagFieldValue=field=>readTags(field).join(', ');
 
 workspaceHandlers['image-studio']=async()=>{
- const [d,portrait]=await Promise.all([api('/images'),api('/portrait')]);
+ const [d,portrait]=await Promise.all([api('/images'),api('/portrait'),loadModelFamilies(false)]);
  let settings=d.settings,revision=d.revision,presetIndex=0;const defaults=d.effective;
  const routeValues={...settings.routes};let defaultId=settings.default_preset||'';
  let activeCategory='portrait';
@@ -1049,6 +1080,8 @@ workspaceHandlers['image-studio']=async()=>{
     [768,1152,'Portrait 768×1152'],[1152,768,'Landscape 1152×768'],[512,768,'Small portrait']];
   const sizeValue=`${p.width||832}×${p.height||1216}`;
   const clipNode=comfy?nodesOfClass(p.workflow,'CLIPSetLastLayer')[0]:null;
+  const checkpointName=ckptNodes.length?ckptNodes[0][1].inputs.ckpt_name:'';
+  const checkpointFamily=(modelFamilies[checkpointName]||{}).family||'';
   const clipSkipValue=clipNode?Math.abs(Number(clipNode[1].inputs.stop_at_clip_layer??-2)):2;
   const knownSize=SIZES.some(([w,h])=>`${w}×${h}`===sizeValue);
   const PART_HINT={quality:'Rendering quality, not subject',identity:'Leave empty to follow the companion',
@@ -1077,7 +1110,7 @@ workspaceHandlers['image-studio']=async()=>{
       ${ckptNodes.length?ckptNodes.map(([id,node])=>`
         <label>Checkpoint
           <select data-ckpt-node="${esc(id)}">
-            ${checkpoints.length?options(checkpoints.map(v=>[v,v]),node.inputs.ckpt_name)
+            ${checkpoints.length?groupedModelOptions(checkpoints,node.inputs.ckpt_name,'')
               :`<option value="${esc(node.inputs.ckpt_name||'')}">${esc(node.inputs.ckpt_name||'—')}</option>`}
           </select>
         </label>`).join(''):'<p class="dim small">This workflow loads its model another way.</p>'}
@@ -1096,8 +1129,8 @@ workspaceHandlers['image-studio']=async()=>{
         <div class="lora-line ${absent?'is-absent':''}" data-lora-node="${esc(id)}">
           <div class="lora-line-main">
             <select data-lora-name aria-label="LoRA file">
-              ${loras.length?options(loras.map(v=>[v,v.replace(/\.safetensors$/,'')]),file):''}
-              ${(absent||!loras.length)&&file?`<option value="${esc(file)}" selected>${esc(file.replace(/\.safetensors$/,''))}</option>`:''}
+              ${loras.length?groupedModelOptions(loras,file,checkpointFamily)
+                :(file?`<option value="${esc(file)}" selected>${esc(file.replace(/\.safetensors$/,''))}</option>`:'')}
             </select>
             <input type="number" data-lora-model step="0.05" min="-2" max="2" value="${Number(node.inputs.strength_model??1)}" title="Model strength" aria-label="Model strength">
             <input type="number" data-lora-clip step="0.05" min="-2" max="2" value="${Number(node.inputs.strength_clip??1)}" title="Text strength" aria-label="Text strength">
@@ -1108,8 +1141,9 @@ workspaceHandlers['image-studio']=async()=>{
           ${absent?`<small class="lora-absent-note">${esc(file.replace(/\.safetensors$/,''))} — ${version?'needs to be downloaded':'not on this ComfyUI'}</small>`:''}
         </div>`;}).join('')}</div>`
         :'<p class="dim small">No LoRAs in this workflow yet.</p>'}
-      ${loras.length?`<p class="dim small">${loras.length} available on this ComfyUI.</p>`
-        :'<p class="dim small">Test the connection below to load the LoRAs this ComfyUI has.</p>'}
+      ${loras.length?`<p class="dim small">${loras.length} available${checkpointFamily?' \u00b7 sorted for '+esc(checkpointFamily):''}.
+        <button type="button" class="link-button small" id="rescan-models">Re-read what they are</button></p>`
+        :'<p class="dim small">Connect to ComfyUI to load its LoRAs.</p>'}
     </div>
 
     <div class="card studio-block">
@@ -1235,8 +1269,8 @@ workspaceHandlers['image-studio']=async()=>{
   if($('preset-name'))$('preset-name').onchange=()=>{readPreset();menus();};
   if($('preset-seed-random'))$('preset-seed-random').onclick=()=>{$('preset-seed').value=-1;readPreset();};
   for(const select of root.querySelectorAll('[data-ckpt-node]'))select.onchange=()=>{
-    p.workflow[select.dataset.ckptNode].inputs.ckpt_name=select.value;syncWorkflowText(p);
-    showRecommendations(p);};
+    p.workflow[select.dataset.ckptNode].inputs.ckpt_name=select.value;
+    syncWorkflowText(p);drawPreset();};
   for(const row of root.querySelectorAll('[data-lora-node]')){
     const id=row.dataset.loraNode,node=p.workflow[id];
     row.querySelector('[data-lora-name]').onchange=e=>{node.inputs.lora_name=e.target.value;drawPreset();};
@@ -1259,6 +1293,14 @@ workspaceHandlers['image-studio']=async()=>{
       await comfyModels(p.endpoint);
       drawPreset();notice(file+' downloaded.');
     }catch(error){get.disabled=false;get.textContent='\u2193';notice('Download failed: '+error.message);}
+  };
+  if($('rescan-models'))$('rescan-models').onclick=async()=>{
+    const button=$('rescan-models');
+    button.disabled=true;button.textContent='Reading headers\u2026';
+    const data=await loadModelFamilies(true);
+    notice(data?`Read ${data.total} files \u00b7 ${data.known} say what they were trained for.`
+      :'Could not read the model files. Check the Comfy host in Preferences.');
+    drawPreset();
   };
   if($('add-lora-row'))$('add-lora-row').onclick=async()=>{
     const models=await comfyModels(p.endpoint);

@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import subprocess
+import time
 import sys
 import uuid
 from fastapi import HTTPException, Request
@@ -145,6 +146,36 @@ def register(app,select,load):
         import companion_image_import as importer
         try:return _settle_import(importer.read_image_url(payload.get('url','')))
         except ValueError as exc:raise HTTPException(400,str(exc))
+
+    @app.get('/api/images/model-families')
+    def model_families(refresh:int=0):
+        """What each installed model says it was trained for.
+
+        Cached, because reading a hundred file headers over SSH is not something
+        to do on every page load. `refresh=1` rereads them.
+        """
+        from .workflows import settings as workflow_settings, run_scan, read_scan_cache, write_scan_cache
+        rt,_=select()
+        if not refresh:
+            cached=read_scan_cache(rt.root)
+            if cached.get('models'):return {**cached,'cached':True}
+        config=workflow_settings(rt.root)
+        import companion_media as media
+        folders=[]
+        try:
+            listing=media.request_json(media.endpoint(config['endpoint'])+'/api/experiment/models')
+            for row in listing:
+                if row.get('name') in ('loras','checkpoints','vae','text_encoders','clip'):
+                    folders.extend(row.get('folders') or [])
+        except Exception:
+            raise HTTPException(400,'Could not ask ComfyUI where its models are. Check the address in Preferences.')
+        if not folders:raise HTTPException(400,'ComfyUI reported no model folders')
+        try:result=run_scan(config,folders)
+        except ValueError as exc:raise HTTPException(400,str(exc))
+        known=sum(1 for v in result['models'].values() if v.get('family'))
+        payload={**result,'scanned_at':time.time(),'known':known,'total':len(result['models'])}
+        write_scan_cache(rt.root,payload)
+        return {**payload,'cached':False}
 
     @app.get('/api/images/recommendations')
     def model_recommendations(checkpoint:str=''):

@@ -163,3 +163,51 @@ class RecommendationTests(unittest.TestCase):
         low, high = advice['steps']
         self.assertLess(low, high)
         self.assertTrue(all(k in advice for k in ('steps', 'cfg', 'clip_skip', 'size')))
+
+
+class ModelScanTests(unittest.TestCase):
+    """Reading what a model file says it was trained for, from its own header."""
+
+    def _safetensors(self, metadata):
+        import struct
+        header = json.dumps({'__metadata__': metadata}).encode()
+        return struct.pack('<Q', len(header)) + header + b'\0' * 16
+
+    def test_a_header_names_the_architecture(self):
+        import companion_model_scan as scan
+        path = pathlib.Path(self.tmp.name) / 'a.safetensors'
+        path.write_bytes(self._safetensors({'ss_base_model_version': 'sdxl_base_v1-0'}))
+        self.assertEqual(scan.describe(str(path))['family'], 'SDXL')
+
+    def test_a_file_with_no_header_is_unknown_not_guessed(self):
+        import companion_model_scan as scan
+        path = pathlib.Path(self.tmp.name) / 'b.safetensors'
+        path.write_bytes(b'not a safetensors file at all')
+        result = scan.describe(str(path))
+        self.assertEqual(result['family'], '')
+        self.assertEqual(result['source'], 'no header')
+
+    def test_a_header_without_a_base_model_says_which_it_was(self):
+        import companion_model_scan as scan
+        path = pathlib.Path(self.tmp.name) / 'c.safetensors'
+        path.write_bytes(self._safetensors({'ss_network_dim': '32'}))
+        result = scan.describe(str(path))
+        self.assertEqual(result['family'], '')
+        self.assertEqual(result['source'], 'header had no base model')
+
+    def test_nested_models_keep_the_name_comfyui_uses(self):
+        """ComfyUI names a nested model by its path under the folder root, so the
+        scan has to key by the same thing or nothing matches up."""
+        import companion_model_scan as scan
+        root = pathlib.Path(self.tmp.name) / 'loras'
+        (root / 'style').mkdir(parents=True)
+        (root / 'style' / 'd.safetensors').write_bytes(
+            self._safetensors({'ss_base_model_version': 'flux'}))
+        found = scan.scan([str(root)])
+        self.assertIn('style/d.safetensors', found)
+        self.assertEqual(found['style/d.safetensors']['family'], 'Flux')
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)

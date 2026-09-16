@@ -101,6 +101,46 @@ def download(root,payload,report):
     return {**result,'name':data['name'],'trigger_words':data['trigger_words'],'note':'Verified weights installed. Refresh the model list before building.'}
 
 
+def run_scan(config,folders):
+    """Ask the Comfy host what its model files say about themselves.
+
+    Same shape as the downloader: the script is piped to python3 on whichever
+    machine holds the weights. It reads headers and writes nothing.
+    """
+    worker=Path(__file__).resolve().parents[1]/'scripts/companion_model_scan.py'
+    args=[sys.executable,str(worker)]
+    if config['mode']=='ssh':
+        args=['ssh','-o','BatchMode=yes','-o','ConnectTimeout=10',config['host'],
+              'python3 -c '+shlex.quote(worker.read_text())]
+    proc=subprocess.Popen(args,stdin=subprocess.PIPE,stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL,text=True)
+    result=None;error='Could not read the model files on the Comfy host'
+    try:
+        proc.stdin.write(json.dumps({'folders':folders}));proc.stdin.close()
+        for line in proc.stdout:
+            if line.startswith('RESULT='):result=json.loads(line[7:])
+            elif line.startswith('ERROR='):error=line[6:].strip()
+        code=proc.wait(timeout=300)
+    finally:
+        if proc.poll() is None:proc.kill();proc.wait()
+    if code or result is None:raise ValueError(error)
+    return result
+
+
+def scan_cache_path(root):
+    return Path(root)/'companion-model-families.json'
+
+
+def read_scan_cache(root):
+    try:return json.loads(scan_cache_path(root).read_text(encoding='utf-8'))
+    except (OSError,ValueError):return {}
+
+
+def write_scan_cache(root,data):
+    try:scan_cache_path(root).write_text(json.dumps(data),encoding='utf-8')
+    except OSError:pass
+
+
 def run_worker(config,request,report=lambda _:None):
     worker=Path(__file__).resolve().parents[1]/'scripts/companion_model_download.py'
     args=[sys.executable,str(worker)]
