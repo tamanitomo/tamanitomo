@@ -949,88 +949,18 @@ function mergePhotos(content,timeline){const captures=new Map(timeline.captures.
 function photoDays(items){const groups=new Map();items.forEach((item,index)=>{const day=dayKey(item.at)||'unknown';if(!groups.has(day))groups.set(day,{day,items:[]});groups.get(day).items.push({item,index});});return [...groups.values()];}
 const photoBrowse={query:'',day:'',collection:'all'};
 let photoPageGeneration=0;
-async function openPhotoSettingsDialog(){
-  const [config,prefs,tl,jobs]=await Promise.all([
-    api('/config'),
-    api('/media/preferences').catch(()=>({})),
-    api('/timeline'),
-    api('/jobs')
-  ]);
-  const job=jobs.jobs?.find(j=>j.name?.endsWith(' image timeline'));
-  const styles=config.image_styles||{};
-  const currentStyle=config.image_style||'';
-  const isEnabled=Boolean(config.image_timeline);
-  const budget=config.timeline_budget_gb??5;
-
-  const html=`<div style="display:flex;flex-direction:column;gap:18px">
-    <div style="padding:14px 16px;background:var(--surface-2);border:1px solid var(--edge);border-radius:10px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <strong style="font-size:14px">Capture Routine Status</strong>
-        <span class="pill ${isEnabled&&job?.enabled?'status-good':'status-warn'}">
-          ${!isEnabled?'Disabled':!job?'Job Not Installed':!job.enabled?'Paused':'Active'}
-        </span>
-      </div>
-      <p class="dim small" style="margin:0">
-        ${job?.schedule?.expr?`Schedule: ${esc(job.schedule.expr)} · Next: ${when(job.next_run_at)}`:'Runs every 15 minutes when active'}
-      </p>
-    </div>
-
-    <p class="dim small" style="margin:0">
-      Captures ${isEnabled?'on':'off'} · ${esc(styles[currentStyle]||currentStyle||'no style set')} · ${esc(String(budget))} GB budget.
-    </p>
-
-    <div style="border-top:1px solid var(--edge);padding-top:14px;display:flex;flex-direction:column;gap:10px">
-      <span class="eyebrow" style="margin:0;font-size:11px;letter-spacing:0.08em">Privacy & Review</span>
-      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin:0;font-size:13.5px">
-        <input type="checkbox" id="dlg-photo-blur" ${prefs.blur_nsfw_initially?'checked':''} style="width:auto;cursor:pointer">
-        <span>Blur NSFW / sensitive images initially</span>
-      </label>
-      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin:0;font-size:13.5px">
-        <input type="checkbox" id="dlg-photo-blur-unknown" ${prefs.blur_unknown_initially!==false?'checked':''} style="width:auto;cursor:pointer">
-        <span>Blur unreviewed images and failed scans</span>
-      </label>
-    </div>
-
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-top:8px;padding-top:16px;border-top:1px solid var(--edge)">
-      <button class="quiet small" id="dlg-photo-jump-settings" type="button">
-        Capture settings in Preferences →
-      </button>
-      <div style="display:flex;gap:10px">
-        <button class="quiet" id="dlg-photo-cancel" type="button">Cancel</button>
-        <button class="act" id="dlg-photo-save" type="button">Save changes</button>
-      </div>
-    </div>
-  </div>`;
-  dialog('Photo review', html);
-
-  $('dlg-photo-cancel').onclick=()=>$('product-dialog').close();
-  $('dlg-photo-jump-settings').onclick=()=>{
-    $('product-dialog').close();
-    preferencePanel='photos';
-    showTab('settings');
-  };
-  $('dlg-photo-save').onclick=async()=>{
-    const btn=$('dlg-photo-save');
-    btn.disabled=true;
-    try{
-      await post('/media/preferences',{
-        blur_nsfw_initially:$('dlg-photo-blur').checked,
-        blur_unknown_initially:$('dlg-photo-blur-unknown').checked
-      });
-      $('product-dialog').close();
-      notice('Photo review settings saved.');
-      await render('photos');
-    }catch(e){
-      notice('Failed to save settings: '+e.message);
-      btn.disabled=false;
-    }
-  };
+/* The photos panel in Preferences owns every photo setting, including the blur
+   toggles and the local scanner. The gear goes there rather than opening a
+   smaller, separate copy of it. */
+function openPhotoSettings(){
+  preferencePanel='photos';
+  showTab('settings');
 }
 
 workspaceHandlers.photos=async()=>{
   const generation=++photoPageGeneration;
-  let [content,tl,jobs]=await Promise.all([api('/content?'+new URLSearchParams({kind:'image',limit:'1500',q:photoBrowse.query,day:photoBrowse.day,collection:photoBrowse.collection})),api('/timeline'),api('/jobs')]);if(current!=='photos'||generation!==photoPageGeneration)return;
-  profileTimezone=content.timezone;let items=mergePhotos(content,tl);const job=jobs.jobs.find(j=>j.name?.endsWith(' image timeline'));
+  let [content,tl]=await Promise.all([api('/content?'+new URLSearchParams({kind:'image',limit:'1500',q:photoBrowse.query,day:photoBrowse.day,collection:photoBrowse.collection})),api('/timeline')]);if(current!=='photos'||generation!==photoPageGeneration)return;
+  profileTimezone=content.timezone;let items=mergePhotos(content,tl);
   // One search field and a row of collection chips, the way a photo library
   // does it; the day picker is gone, its job taken by the date rail.
   const collections=[['all','All photos'],['photo session','Timeline'],['creation','Creations'],
@@ -1051,7 +981,7 @@ workspaceHandlers.photos=async()=>{
     <div id="photo-grid" class="photo-library"></div>
     <div class="photo-scrubber" id="photo-scrubber" aria-hidden="true"></div>
     <p class="dim small" id="photo-count" role="status"></p>`;
-  if($('photo-manage-settings-btn'))$('photo-manage-settings-btn').onclick=openPhotoSettingsDialog;
+  if($('photo-manage-settings-btn'))$('photo-manage-settings-btn').onclick=openPhotoSettings;
   const draw=()=>{
     const shown=items.map(x=>photoForCollection(x,photoBrowse.collection));
     // One continuous grid. The pictures never break into per-day blocks; the
@@ -1080,7 +1010,7 @@ workspaceHandlers.photos=async()=>{
         </div>
       </div>`;}).join('')}</div>`;
     if(!shown.length)$('photo-grid').innerHTML=empty('photos',(photoBrowse.query||photoBrowse.day||photoBrowse.collection!=='all')?'No matching photos':'No photos in library',(photoBrowse.query||photoBrowse.day||photoBrowse.collection!=='all')?'Try another search, day or collection.':'Capture routines will populate images automatically.','<button class="act" id="photo-empty-manage-settings">⚙️ Manage settings</button>');
-    if($('photo-empty-manage-settings'))$('photo-empty-manage-settings').onclick=openPhotoSettingsDialog;
+    if($('photo-empty-manage-settings'))$('photo-empty-manage-settings').onclick=openPhotoSettings;
     $('photo-count').textContent=`${shown.length} of ${content.total} images${content.scan_limited?' · scan limit reached; additional files remain in the Vault':''}`;
     for(const b of $('photo-grid').querySelectorAll('.photo-card')){
       b.onclick=e=>{
