@@ -635,9 +635,6 @@ dialog.photo-viewer::backdrop{background:rgba(0,0,0,0.94)}
 /* Identity & Utilities */
 .small-btn{padding:3px 8px;font-size:11.5px;border-radius:5px}
 #identity .card{margin-bottom:16px;border-radius:12px;background:var(--panel);border:1px solid var(--surface-3)}
-#identity textarea{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;font-size:13px;line-height:1.55;background:var(--bg);color:var(--ink);border:1px solid var(--edge);border-radius:8px;padding:12px 14px;min-height:120px;resize:vertical;width:100%;box-sizing:border-box}
-#identity textarea:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 20%,transparent)}
-.identity-actions-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;background:var(--panel);border:1px solid var(--edge);padding:12px 16px;border-radius:10px}
 .environment-switch{display:none !important}
 
 /* Inline Chat Media Cards (#chat) */
@@ -960,33 +957,118 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
 .identity-facts dd{margin:0;font-size:14px;font-weight:600;line-height:1.35}
 .identity-facts dd small{display:block;font-weight:400;font-size:12px;color:var(--dim);margin-top:3px;line-height:1.4}
 
-.identity-actions-bar{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;
-  padding:16px 20px;margin-bottom:20px;border:1px solid var(--edge);border-radius:var(--r-md);background:var(--surface)}
-.identity-actions-copy{flex:1;min-width:210px}
-.identity-actions-copy strong{font-size:14px;display:block}
-.identity-actions-copy p{margin:2px 0 0}
-.identity-actions-bar .actions{margin:0;display:flex;gap:9px;flex-wrap:wrap}
-
-.identity-section{padding:0;overflow:hidden}
-.identity-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
-  padding:16px 20px;border-bottom:1px solid var(--edge);background:var(--wash)}
-.identity-section-head h3{margin:0;font-size:16px;letter-spacing:-.01em}
-.identity-section-head p{margin:3px 0 0;max-width:62ch}
 .section-key{flex:none;font-size:11px;color:var(--faint);background:var(--surface-2);
   border:1px solid var(--edge);border-radius:6px;padding:3px 7px}
-.identity-section textarea{border:0;border-radius:0;min-height:170px;width:100%;display:block;
-  background:var(--bg);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px;line-height:1.65;padding:18px 20px}
-.identity-section textarea:focus-visible{outline-offset:-2px}
-.identity-section-actions{display:flex;align-items:center;gap:12px;padding:13px 20px;border-top:1px solid var(--edge)}
 
+/* A menu for the tools that act on the whole file, so the page can open on the
+   document rather than on a row of buttons. */
+#soul-heading{align-items:flex-start}
+#identity-tools{margin:0;flex:none}
+.tool-menu{position:relative;margin:0}
+.tool-menu>summary{list-style:none;cursor:pointer}
+.tool-menu>summary::-webkit-details-marker{display:none}
+.tool-menu>summary::after{content:'\25be';margin-left:2px;color:var(--dim)}
+.tool-menu[open]>summary{background:var(--surface-3);border-color:var(--edge-2)}
+.tool-menu-list{position:absolute;right:0;top:calc(100% + 6px);z-index:20;width:min(330px,80vw);
+  display:flex;flex-direction:column;padding:6px;background:var(--panel);
+  border:1px solid var(--edge-2);border-radius:var(--r-md);box-shadow:var(--shadow-2)}
+.tool-menu-item{display:block;width:100%;text-align:left;border:0;border-radius:8px;
+  background:transparent;color:var(--ink);padding:10px 12px;font-size:14px}
+.tool-menu-item:hover,.tool-menu-item:focus-visible{background:var(--surface-2)}
+.tool-menu-item strong{display:block;font-weight:600}
+.tool-menu-item span{display:block;margin-top:2px;font-size:12.5px;line-height:1.45;color:var(--dim)}
+
+/* --------------------------------------------- the SOUL, read as a document */
+.identity-doc-layout{display:grid;grid-template-columns:232px minmax(0,1fr);gap:28px;align-items:start}
+
+.soul-outline{position:sticky;top:20px;border:1px solid var(--edge);border-radius:var(--r-md);
+  background:var(--panel);padding:14px 6px 10px;max-height:calc(100vh - 48px);overflow:auto}
+.soul-outline-head{padding:0 12px 10px;border-bottom:1px solid var(--edge);margin-bottom:6px}
+.soul-outline-head strong{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+.soul-outline ol{list-style:none;margin:0;padding:0}
+.soul-outline li{margin:0}
+.soul-outline a{display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:7px;
+  color:var(--ink-2);text-decoration:none;font-size:13.5px;line-height:1.3}
+.soul-outline a:hover{background:var(--surface-2);color:var(--ink)}
+.soul-outline-name{flex:1;min-width:0}
+.soul-outline-flag{color:var(--accent);font-size:8px;flex:none}
+.soul-outline-todo{color:var(--warn);font-size:12px;flex:none}
+.soul-outline-key{margin:10px 12px 2px;padding-top:9px;border-top:1px solid var(--edge);font-size:11.5px}
+
+.soul-doc{display:flex;flex-direction:column;gap:2px;border:1px solid var(--edge);
+  border-radius:var(--r-lg);background:var(--panel);overflow:hidden}
+.soul-passage{position:relative;padding:26px 30px 28px;border-bottom:1px solid var(--edge);scroll-margin-top:16px}
+.soul-passage:last-child{border-bottom:0}
+.soul-passage.is-targeted{background:var(--accent-soft)}
+.soul-passage.is-editing{background:var(--wash)}
+.soul-passage-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;margin-bottom:14px}
+.soul-passage-title{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px 12px;min-width:0}
+.soul-passage-title h3{margin:0;font-size:12.5px;font-weight:700;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink)}
+.soul-passage-tags{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.soul-passage-tags .pill{padding:2px 8px;font-size:11px}
+.soul-lock{color:var(--accent-ink);background:var(--accent-soft);border-color:var(--accent-line)}
+.soul-pill-todo{color:var(--warn);background:var(--warn-bg);border-color:var(--warn-bg)}
+.soul-passage-note{grid-column:1;margin:0;max-width:64ch;font-size:13px;line-height:1.5;color:var(--dim)}
+.soul-edit{grid-column:2;grid-row:1/span 2;align-self:start;padding:6px 12px;font-size:13px;
+  opacity:.55;transition:opacity .15s}
+.soul-passage:hover .soul-edit,.soul-passage:focus-within .soul-edit,
+.soul-passage.is-editing .soul-edit{opacity:1}
+
+.soul-passage-body{font-size:15px;line-height:1.75;color:var(--ink-2);max-width:74ch}
+.soul-passage-body p{margin:0 0 .85em}
+.soul-passage-body p:last-child{margin-bottom:0}
+.soul-passage-body ul,.soul-passage-body ol{margin:0 0 .85em;padding-left:22px}
+.soul-passage-body li{margin:5px 0}
+.soul-passage-body strong{color:var(--ink)}
+.soul-passage-body h1,.soul-passage-body h2,.soul-passage-body h3,
+.soul-passage-body h4{font-size:15px;color:var(--ink);margin:1.1em 0 .45em}
+.soul-empty{font-style:italic}
+.soul-todo{color:var(--warn);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+
+/* The paired COMPANION- comments inside a section say something real; shown as
+   a labelled block they read as meaning rather than as leftover markup. */
+.soul-aside{margin:16px 0;padding:12px 16px;border-left:2px solid var(--edge-2);
+  background:var(--surface);border-radius:0 8px 8px 0;font-size:13.5px;line-height:1.6}
+.soul-aside p:last-child{margin-bottom:0}
+.soul-aside-label{display:block;margin-bottom:6px;font-size:10.5px;text-transform:uppercase;
+  letter-spacing:.09em;font-weight:700;color:var(--faint)}
+.soul-aside-self{border-left-color:var(--accent);background:var(--accent-soft)}
+.soul-aside-self .soul-aside-label{color:var(--accent-ink)}
+
+.soul-passage-edit{max-width:none}
+.soul-passage-edit textarea{display:block;width:100%;box-sizing:border-box;min-height:200px;
+  background:var(--bg);color:var(--ink);border:1px solid var(--edge-2);border-radius:9px;padding:16px 18px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:13.5px;line-height:1.7;resize:vertical}
+.soul-passage-edit textarea:focus{border-color:var(--accent);outline:none;
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 20%,transparent)}
+.soul-passage-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+.soul-syntax{flex:1;min-width:180px}
+.soul-syntax code{background:var(--surface-2);border-radius:4px;padding:1px 5px}
+
+/* The reference portrait, now in the image studio beside the prompt it feeds. */
+.portrait-row{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
+.portrait-row>div{flex:1;min-width:250px}
+.portrait-thumb{width:170px;height:212px;object-fit:cover;border-radius:10px;border:1px solid var(--edge);flex:none}
+.portrait-empty{display:grid;place-items:center;background:var(--surface-2);color:var(--dim);font-size:13px}
+
+@media(max-width:1100px){
+  .identity-doc-layout{grid-template-columns:1fr;gap:16px}
+  .soul-outline{position:static;max-height:none;padding:12px 6px 8px}
+  .soul-outline ol{display:flex;flex-wrap:wrap;gap:4px}
+  .soul-outline a{border:1px solid var(--edge);padding:6px 10px;font-size:12.5px}
+  .soul-outline-key{display:none}
+}
 @media(max-width:700px){
   .identity-hero{grid-template-columns:auto minmax(0,1fr);gap:16px;padding:20px 18px}
   .identity-avatar{width:58px;height:58px;font-size:26px;border-radius:17px}
   .identity-hero-copy h2{font-size:25px}
   .identity-facts{grid-template-columns:1fr 1fr}
-  .identity-section-head{padding:14px 16px}
-  .identity-section textarea{padding:15px 16px}
-  .identity-section-actions{padding:12px 16px}
+  .soul-passage{padding:20px 18px 22px}
+  .soul-passage-head{grid-template-columns:minmax(0,1fr)}
+  .soul-edit{grid-column:1;grid-row:auto;justify-self:start;margin-top:8px;opacity:1}
+  .soul-passage-body{font-size:14.5px}
+  .tool-menu-list{right:auto;left:0}
 }
 
 /* Publisher terms shown before downloading third-party model weights. */
@@ -1210,7 +1292,27 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
   gap:12px;
   height:100%;
 }
+.hero-chemistry-row{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  margin-bottom:10px;
+  flex:none;
+}
+.hero-chemistry-pill{
+  font-size:11.5px;
+  font-weight:600;
+  padding:5px 12px;
+  border-radius:8px;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  width:100%;
+  justify-content:center;
+  letter-spacing:0.02em;
+}
 .hero-meter-item{
+  position:relative;
   display:flex;
   flex-direction:column;
   justify-content:center;
@@ -1221,10 +1323,65 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
   border-radius:10px;
   padding:10px 14px;
   transition:background .2s,border-color .2s;
+  cursor:help;
 }
 .hero-meter-item:hover{
   background:color-mix(in srgb,var(--bg) 70%,transparent);
   border-color:var(--edge-2);
+  z-index:20;
+}
+.hero-meter-tooltip{
+  position:absolute;
+  bottom:calc(100% + 8px);
+  left:50%;
+  transform:translateX(-50%) translateY(4px);
+  background:color-mix(in srgb,var(--panel) 98%,transparent);
+  border:1px solid var(--edge-2);
+  border-radius:9px;
+  padding:8px 12px;
+  box-shadow:0 8px 24px rgb(0 0 0 / 0.45);
+  backdrop-filter:blur(16px);
+  pointer-events:none;
+  opacity:0;
+  visibility:hidden;
+  transition:opacity .18s ease,transform .18s ease,visibility .18s;
+  width:max-content;
+  max-width:260px;
+  z-index:50;
+  text-align:left;
+}
+.hero-meter-tooltip::after{
+  content:'';
+  position:absolute;
+  top:100%;
+  left:50%;
+  transform:translateX(-50%);
+  border:5px solid transparent;
+  border-top-color:var(--edge-2);
+}
+.hero-meter-tooltip-title{
+  font-size:12px;
+  font-weight:700;
+  color:var(--ink);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  margin-bottom:3px;
+}
+.hero-meter-tooltip-val{
+  color:var(--accent);
+  font-weight:700;
+}
+.hero-meter-tooltip-desc{
+  font-size:11px;
+  line-height:1.4;
+  color:var(--dim);
+}
+.hero-meter-item:hover .hero-meter-tooltip{
+  opacity:1;
+  visibility:visible;
+  transform:translateX(-50%) translateY(0);
 }
 .hero-meter-label-row{
   display:flex;

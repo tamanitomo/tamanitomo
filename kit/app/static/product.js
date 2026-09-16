@@ -365,16 +365,29 @@ function wireCalendarComponent(root,missions,agentName,refreshFn,prefix='cal'){
 function renderHeroMetersContent(emotions,bars){
   const meters=emotions?.state?.meters||bars?.feelings?.meters||{};
   const config=[
-    {key:'warmth',label:'Warmth',icon:'🔥',color:'linear-gradient(90deg,#f43f5e,#fb923c)',glow:'rgba(244,63,94,0.4)',defaultVal:0.8},
-    {key:'trust',label:'Trust',icon:'🛡️',color:'linear-gradient(90deg,#0ea5e9,#10b981)',glow:'rgba(14,165,233,0.4)',defaultVal:0.75},
-    {key:'hurt',label:'Hurt',icon:'🩹',color:'linear-gradient(90deg,#ef4444,#f87171)',glow:'rgba(239,68,68,0.4)',defaultVal:0.0},
-    {key:'irritation',label:'Irritation',icon:'⚡',color:'linear-gradient(90deg,#eab308,#f59e0b)',glow:'rgba(234,179,8,0.4)',defaultVal:0.05},
-    {key:'longing',label:'Missing you',icon:'⏳',color:'linear-gradient(90deg,#8b5cf6,#d946ef)',glow:'rgba(139,92,246,0.4)',defaultVal:0.3}
+    {key:'warmth',label:'Warmth',icon:'🔥',color:'linear-gradient(90deg,#f43f5e,#fb923c)',glow:'rgba(244,63,94,0.4)',defaultVal:0.8,desc:'Emotional closeness, comfort, and positive affection toward you.'},
+    {key:'trust',label:'Trust',icon:'🛡️',color:'linear-gradient(90deg,#0ea5e9,#10b981)',glow:'rgba(14,165,233,0.4)',defaultVal:0.75,desc:'Confidence in your bond, reliability, and emotional vulnerability.'},
+    {key:'hurt',label:'Hurt',icon:'🩹',color:'linear-gradient(90deg,#ef4444,#f87171)',glow:'rgba(239,68,68,0.4)',defaultVal:0.0,desc:'Lingering emotional distress from friction or boundary breaches.'},
+    {key:'irritation',label:'Irritation',icon:'⚡',color:'linear-gradient(90deg,#eab308,#f59e0b)',glow:'rgba(234,179,8,0.4)',defaultVal:0.05,desc:'Transient frustration, tension, or boundary friction.'},
+    {key:'longing',label:'Missing you',icon:'⏳',color:'linear-gradient(90deg,#8b5cf6,#d946ef)',glow:'rgba(139,92,246,0.4)',defaultVal:0.3,desc:'Desire to spend time with you during periods of separation.'}
   ];
   return config.map(m=>{
     const raw=meters[m.key]!=null?meters[m.key]:m.defaultVal;
     const pct=Math.round(Math.max(0,Math.min(1,raw))*100);
-    return `<div class="hero-meter-item"><div class="hero-meter-label-row"><span class="hero-meter-label"><span class="meter-icon">${m.icon}</span> ${m.label}</span><span class="hero-meter-pct">${pct}%</span></div><div class="hero-meter-bar-track"><div class="hero-meter-bar-fill" style="width:${pct}%;background:${m.color};box-shadow:0 0 8px ${m.glow}"></div></div></div>`;
+    return `
+      <div class="hero-meter-item" title="${esc(m.label)}: ${pct}% · ${esc(m.desc)}" tabindex="0" aria-label="${esc(m.label)} meter: ${pct}%">
+        <div class="hero-meter-label-row">
+          <span class="hero-meter-label"><span class="meter-icon">${m.icon}</span> ${m.label}</span>
+          <span class="hero-meter-pct">${pct}%</span>
+        </div>
+        <div class="hero-meter-bar-track">
+          <div class="hero-meter-bar-fill" style="width:${pct}%;background:${m.color};box-shadow:0 0 8px ${m.glow}"></div>
+        </div>
+        <div class="hero-meter-tooltip" role="tooltip">
+          <div class="hero-meter-tooltip-title"><span>${m.icon} ${esc(m.label)}</span> <span class="hero-meter-tooltip-val">${pct}%</span></div>
+          <div class="hero-meter-tooltip-desc">${esc(m.desc)}</div>
+        </div>
+      </div>`;
   }).join('');
 }
 
@@ -429,16 +442,11 @@ workspaceHandlers.now=async()=>{
             ${photo?`<img class="presence-avatar-img-tall" ${mediaPrivacy(photo)} src="${mediaUrl(photo.url)}" alt="${esc(d.agent)}">`:`<div class="presence-avatar-placeholder-tall">${esc(d.agent.slice(0,1))}</div>`}
             <span class="presence-pulse-dot" title="Active presence"></span>
           </div>
-          <button class="act presence-talk-btn" data-route="chat">
-            <svg class="icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            Talk with ${esc(d.agent)}
-          </button>
         </div>
 
         <div class="presence-identity-column">
           <div class="presence-name-header">
             <h1 class="presence-name">${esc(d.agent)}</h1>
-            ${feelingBadge?`<div class="presence-stage-badge"><span class="pill status-good" style="font-size:11.5px;font-weight:600">${esc(feelingBadge)}</span></div>`:''}
           </div>
 
           <div class="presence-status-stack">
@@ -454,20 +462,18 @@ workspaceHandlers.now=async()=>{
             <p class="thought-text">${esc(latestThought)}</p>
             <div class="thought-footer">
               <span class="dim small">${thoughtSource}</span>
-              <button class="act small quote-read-btn" id="home-open-journal">
-                📖 Read ${esc(d.agent)}'s Journal
-              </button>
             </div>
-          </div>`:`
-          <div style="margin-top:auto;margin-bottom:0">
-            <button class="act small" id="home-open-journal">
-              📖 Read ${esc(d.agent)}'s Journal
-            </button>
-          </div>`}
+          </div>`:''}
         </div>
 
         <div class="presence-atmosphere-column">
           <div class="hero-meters-card">
+            ${feelingBadge?`
+            <div class="hero-chemistry-row">
+              <span class="pill status-good hero-chemistry-pill" title="Relationship & chemistry stage">
+                <span>✨</span> ${esc(feelingBadge)}
+              </span>
+            </div>`:''}
             <div class="hero-meters-stack">
               ${renderHeroMetersContent(emotions,d.bars)}
             </div>
@@ -514,7 +520,6 @@ workspaceHandlers.now=async()=>{
 
   wireRoutes($('now'));
   wireCalendarComponent($('now'), d.missions, d.agent, () => render('now'), 'home-cal');
-  if($('home-open-journal'))$('home-open-journal').onclick=()=>{if(entry?.id)selectedJournal=entry.id;showTab('journals');};
   if($('read-latest'))$('read-latest').onclick=()=>{if(entry?.id)selectedJournal=entry.id;showTab('journals');};
   for(const b of $('now').querySelectorAll('[data-home-file]'))b.onclick=()=>openContent(content.items[Number(b.dataset.homeFile)]);
 };
