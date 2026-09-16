@@ -208,9 +208,9 @@ function renderWardrobeCard(closet,s,stage=0){
     html+=`<div class="wardrobe-block" style="border-left:3px solid var(--warn);margin-top:12px"><div class="wardrobe-block-title"><span style="color:var(--warn)">✨ Laid Out For Tomorrow</span><span class="dim small">${laidOutItems.length} pieces</span></div>${laidOutItems.length?`<div class="wardrobe-chip-list">${laidOutItems.map(w=>`<span class="wardrobe-chip is-laid-out" title="${esc(typeof w==='string'?w:(w.description||w.id))}">🛏️ ${esc(typeof w==='string'?w:(w.description||w.id))}</span>`).join('')}</div>`:''}${plan.intent?`<div class="laid-out-intent-quote">“${esc(plan.intent)}”</div>`:''}</div>`;
   }
   if(hamper.length||washing.length){
-    html+=`<div class="wardrobe-block" style="margin-top:12px"><div class="wardrobe-block-title"><span>Hamper & Wash (Dirty Clothes)</span><span class="dim small">${hamper.length} dirty${washing.length?` · ${washing.length} in wash`:''}</span></div><div class="wardrobe-chip-list">${washing.map(w=>`<span class="wardrobe-chip is-washing" title="In the wash: ${esc(w.description||w.id)}">🫧 ${esc(w.description||w.id)}</span>`).join('')}${hamper.map(w=>`<span class="wardrobe-chip is-hamper" title="In the hamper: ${esc(w.description||w.id)}">🧺 ${esc(w.description||w.id)}</span>`).join('')}</div></div>`;
+    html+=`<details class="wardrobe-block" style="cursor:pointer;margin-top:12px"><summary class="wardrobe-block-title"><span>Hamper & Wash (Dirty Clothes)</span><span class="dim small">${hamper.length} dirty${washing.length?` · ${washing.length} in wash`:''}</span></summary><div class="wardrobe-chip-list" style="margin-top:8px">${washing.map(w=>`<span class="wardrobe-chip is-washing" title="In the wash: ${esc(w.description||w.id)}">🫧 ${esc(w.description||w.id)}</span>`).join('')}${hamper.map(w=>`<span class="wardrobe-chip is-hamper" title="In the hamper: ${esc(w.description||w.id)}">🧺 ${esc(w.description||w.id)}</span>`).join('')}</div></details>`;
   } else {
-    html+=`<div class="wardrobe-block" style="margin-top:12px"><div class="wardrobe-block-title"><span>Hamper & Wash (Dirty Clothes)</span><span class="dim small">0 dirty</span></div><div class="dim small" style="margin-top:4px">🧺 Hamper is empty · All clothes are clean.</div></div>`;
+    html+=`<details class="wardrobe-block" style="cursor:pointer;margin-top:12px"><summary class="wardrobe-block-title"><span>Hamper & Wash (Dirty Clothes)</span><span class="dim small">0 dirty</span></summary><div class="dim small" style="margin-top:8px">🧺 Hamper is empty · All clothes are clean.</div></details>`;
   }
   if(clean.length){
     html+=`<details class="wardrobe-block" style="cursor:pointer;margin-top:12px"><summary class="wardrobe-block-title"><span>Clean in Closet</span><span class="dim small">${clean.length} piece${clean.length===1?'':'s'}</span></summary><div class="wardrobe-chip-list" style="margin-top:8px">${clean.map(w=>`<span class="wardrobe-chip is-clean" title="${esc(w.description||w.id)}">✨ ${esc(w.description||w.id)}</span>`).join('')}</div></details>`;
@@ -367,6 +367,7 @@ function renderHeroMetersContent(emotions,bars){
   const config=[
     {key:'warmth',label:'Warmth',icon:'🔥',color:'linear-gradient(90deg,#f43f5e,#fb923c)',glow:'rgba(244,63,94,0.4)',defaultVal:0.8},
     {key:'trust',label:'Trust',icon:'🛡️',color:'linear-gradient(90deg,#0ea5e9,#10b981)',glow:'rgba(14,165,233,0.4)',defaultVal:0.75},
+    {key:'hurt',label:'Hurt',icon:'🩹',color:'linear-gradient(90deg,#ef4444,#f87171)',glow:'rgba(239,68,68,0.4)',defaultVal:0.0},
     {key:'irritation',label:'Irritation',icon:'⚡',color:'linear-gradient(90deg,#eab308,#f59e0b)',glow:'rgba(234,179,8,0.4)',defaultVal:0.05},
     {key:'longing',label:'Missing you',icon:'⏳',color:'linear-gradient(90deg,#8b5cf6,#d946ef)',glow:'rgba(139,92,246,0.4)',defaultVal:0.3}
   ];
@@ -390,7 +391,7 @@ workspaceHandlers.now=async()=>{
   if(current!=='now')return;
   profileTimezone=d.timezone;$('who').textContent=d.agent;if($('crumb-agent'))$('crumb-agent').textContent=d.agent;
   if($('companion-avatar-pill'))$('companion-avatar-pill').textContent=(d.agent||'C').charAt(0).toUpperCase();
-  let bannerHTML=d.problems.length?`<button class="link-button small" id="header-health">${d.problems.length} item${d.problems.length===1?'':'s'} to review</button>`:'';
+  let bannerHTML=d.problems.length?`<button class="link-button small" id="header-health" style="color:var(--bad)"><span aria-hidden="true">⚠️</span> ${d.problems.length} item${d.problems.length===1?'':'s'} to review</button>`:'';
   if(!bannerHTML&&updateInfo?.has_update){bannerHTML=`<button class="link-button small" id="header-update" style="color:var(--warn)">✨ Update v${esc(updateInfo.latest_version)} available</button>`;}
   $('banner').innerHTML=bannerHTML;
   if($('header-health'))$('header-health').onclick=()=>showTab('health');
@@ -449,7 +450,7 @@ workspaceHandlers.now=async()=>{
           </div>
 
           ${latestThought?`
-          <div class="presence-thought-quote">
+          <div class="presence-thought-quote" style="margin-top:auto;margin-bottom:0">
             <div class="quote-mark">“</div>
             <p class="thought-text">${esc(latestThought)}</p>
             <div class="thought-footer">
@@ -459,7 +460,7 @@ workspaceHandlers.now=async()=>{
               </button>
             </div>
           </div>`:`
-          <div style="margin-top:10px">
+          <div style="margin-top:auto;margin-bottom:0">
             <button class="act small" id="home-open-journal">
               📖 Read ${esc(d.agent)}'s Journal
             </button>
@@ -477,11 +478,11 @@ workspaceHandlers.now=async()=>{
     </div>
   </div>
 
-  <div class="section-heading" style="margin-top:28px"><h2>Shared Calendar & Commitments</h2>${jump('loops','Open full planner')}</div>
-  ${buildCalendarHtml(d.agent,d.missions,'home-cal')}
-
-  <div class="home-columns">
+  <div class="home-columns" style="margin-top:28px">
     <div>
+      <div class="section-heading" style="margin-top:0"><h2>Shared Calendar & Commitments</h2>${jump('loops','Open full planner')}</div>
+      ${buildCalendarHtml(d.agent,d.missions,'home-cal')}
+
       <div class="section-heading"><h2>From the journal</h2>${jump('journals','All reflections')}</div>
       ${entry?`
       <article class="card journal-preview" style="border-radius:var(--r-lg);padding:26px">
@@ -560,11 +561,21 @@ workspaceHandlers.journals=async()=>{
     if($('journal-prev-btn')&&prevEntry)$('journal-prev-btn').onclick=()=>choose(prevEntry.id);
     if($('journal-next-btn')&&nextEntry)$('journal-next-btn').onclick=()=>choose(nextEntry.id);
     if(fromPicker&&matchMedia('(max-width:900px)').matches){$('journal-browser').open=false;$('journal-page').scrollIntoView({block:'start'});}
+    setTimeout(()=>{
+      const page=$('journal-page'),list=$('journal-list');
+      if(page&&list&&page.offsetHeight>0&&!matchMedia('(max-width:900px)').matches){
+        list.style.maxHeight=Math.max(320,Math.min(window.innerHeight-140,page.offsetHeight-50))+'px';
+      }
+    },50);
   };
   const draw=()=>{
     $('journal-list').innerHTML=entries.map(x=>`<button data-entry="${esc(x.id)}" aria-current="${x.id===selectedJournal}"><strong>${esc(x.day)}</strong><small>${esc(excerpt(x.excerpt||x.text,110))}</small><small>${Math.max(1,Math.ceil(x.words/220))} min read</small></button>`).join('');
     for(const b of $('journal-list').querySelectorAll('button'))b.onclick=()=>choose(b.dataset.entry,true);
     $('journal-older').hidden=!cursor;
+    const page=$('journal-page'),list=$('journal-list');
+    if(page&&list&&page.offsetHeight>0&&!matchMedia('(max-width:900px)').matches){
+      list.style.maxHeight=Math.max(320,Math.min(window.innerHeight-140,page.offsetHeight-50))+'px';
+    }
   };
   const load=async more=>{
     const token=++request;if(!more)selection++;
@@ -593,14 +604,6 @@ workspaceHandlers.journals=async()=>{
   $('journal-search').oninput=filter;$('journal-month').onchange=filter;
   $('journal-clear').onclick=()=>{$('journal-search').value='';$('journal-month').value='';filter();};
   $('journal-older').onclick=()=>load(true);
-  $('journal-list').onscroll=async()=>{
-    if(scrollLoading||!cursor)return;
-    const {scrollTop,clientHeight,scrollHeight}=$('journal-list');
-    if(scrollTop+clientHeight>=scrollHeight-80){
-      scrollLoading=true;
-      try{await load(true);}finally{scrollLoading=false;}
-    }
-  };
   await load(false);
 };
 let viewerItems=[],viewerIndex=0,viewerAlbums=null,viewerInitialized=false;
@@ -630,6 +633,7 @@ function initPhotoViewer(){
     }catch(err){notice('Failed to save album: '+err.message);}
   };
   $('photo-viewer').addEventListener('cancel',e=>{e.preventDefault();closePhotoViewer();});
+  $('photo-viewer').addEventListener('close',()=>{document.body.style.overflow='';});
   const canvas=$('viewer-canvas'),img=$('viewer-img');
   let startX=0,startY=0,currentX=0,isSwiping=false,startTime=0;
   canvas.addEventListener('pointerdown',e=>{
@@ -681,11 +685,13 @@ function openPhotoViewer(item,items,index){
   if(viewerIndex<0)viewerIndex=0;
   $('viewer-album-popover').hidden=true;
   $('viewer-info-pane').hidden=true;
+  document.body.style.overflow='hidden';
   if(!$('photo-viewer').open)$('photo-viewer').showModal();
   renderViewerPhoto();
 }
 function closePhotoViewer(){
   if($('photo-viewer').open)$('photo-viewer').close();
+  document.body.style.overflow='';
   $('viewer-album-popover').hidden=true;
   $('viewer-info-pane').hidden=true;
   $('viewer-img').src='';
@@ -713,14 +719,28 @@ async function populateAlbumChips(item){
   try{
     if(!viewerAlbums){const tl=await api('/timeline');viewerAlbums=tl.albums||[];}
     const standard=['Favorites'],names=[...new Set([...standard,...viewerAlbums.map(a=>a.name)])];
-    chips.innerHTML=names.map(name=>`<button class="album-chip" data-album="${esc(name)}">${esc(name)}</button>`).join('');
+    const isInAlbum=(name)=>{
+      const copies=[item,...(item.copies||[])];
+      return copies.some(c=>c.path&&(c.path.startsWith('albums/'+name+'/')||c.path.startsWith('albums/'+name)));
+    };
+    chips.innerHTML=names.map(name=>{
+      const active=isInAlbum(name);
+      return `<button class="album-chip ${active?'is-active':''}" data-album="${esc(name)}">${active?'✓ ':'+ '}${esc(name)}</button>`;
+    }).join('');
     for(const chip of chips.querySelectorAll('[data-album]')){
       chip.onclick=async()=>{
         const name=chip.dataset.album;
+        if(isInAlbum(name)){
+          notice('Photo is already in album: '+name);
+          return;
+        }
         try{
           await post('/content/album',{path:item.path,album:name});
-          $('viewer-album-popover').hidden=true;
-          notice('Added copy to album: '+name);
+          notice('Saved copy to album: '+name);
+          if(!item.copies)item.copies=[];
+          item.copies.push({path:'albums/'+name+'/'+(item.path.split('/').pop()||'photo.jpg'),source:'album'});
+          if(viewerAlbums&&!viewerAlbums.some(a=>a.name===name))viewerAlbums.push({name,count:1});
+          await populateAlbumChips(item);
           if(current==='photos')render('photos');
         }catch(err){notice('Failed to add to album: '+err.message);}
       };
@@ -739,6 +759,7 @@ function renderViewerPhoto(){
   if(item.blur){conceal.hidden=false;img.classList.add('concealed-media');}
   else{conceal.hidden=true;img.classList.remove('concealed-media');}
   const isNsfw=item.blur||item.rating==='nsfw';
+  const downloadUrl=mediaUrl(item.url+'&download=true');
   $('viewer-actions').innerHTML=`
     <button class="viewer-icon-btn ${isNsfw?'is-safe':'is-warn'}" id="viewer-btn-rate" title="${isNsfw?'Mark safe':'Mark NSFW'}" aria-label="${isNsfw?'Mark safe':'Mark NSFW'}">${icon(isNsfw?'shield_check':'shield_alert')}</button>
     <button class="viewer-icon-btn" id="viewer-btn-album" title="Add copy to album" aria-label="Add copy to album">${icon('album')}</button>
