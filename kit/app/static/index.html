@@ -605,7 +605,7 @@ async function renderSettings(){
     </div>
   </div>
 
-  <div class="settings-save"><button class="act" id="save">Save preferences</button> <span id="saved" class="dim" role="status"></span></div>`;
+  <div class="settings-save" id="settings-save" hidden><span class="settings-save-note">Unsaved changes</span><button class="act" id="save">Save preferences</button> <span id="saved" class="dim" role="status"></span></div>`;
   api('/network').then(net=>{
     if($('net-localhost-url'))$('net-localhost-url').textContent=net.localhost_url;
     if($('copy-localhost-btn'))$('copy-localhost-btn').onclick=()=>{navigator.clipboard.writeText(net.localhost_url);if(typeof notice==='function')notice('Copied localhost URL');};
@@ -672,6 +672,13 @@ async function renderSettings(){
   }
   $('cap-unlimited').onchange=()=>{$('cap').disabled=$('cap-unlimited').checked;};
   if($('spontaneous-nsfw')){$('spontaneous-nsfw').onchange=()=>{if($('spontaneous-nsfw').checked){if(!confirm('This setting will require a compatible image provider')){  $('spontaneous-nsfw').checked=false;}}};}
+  // The bar follows the page's dirty state, so it is present exactly when it
+  // has something to do.
+  const showSaveBar=()=>{const bar=$('settings-save');if(bar)bar.hidden=!hasEditorChanges('settings');};
+  const showSaveBarSoon=()=>setTimeout(showSaveBar,0);
+  showSaveBar();
+  $('settings').addEventListener('input',showSaveBarSoon);
+  $('settings').addEventListener('change',showSaveBarSoon);
   $('save').onclick=async()=>{
     if(!$('cap-unlimited').checked&&!$('cap').reportValidity())return;
     const sensors=[...$('settings').querySelectorAll('[data-sensor]')].filter(x=>x.checked).map(x=>x.dataset.sensor);
@@ -687,7 +694,15 @@ async function renderSettings(){
         explicit:$('adult-themes')?$('adult-themes').value==='true':false,
         peer_interaction:$('peer-interaction').value==='true',
         content_permissions:{image:$('pimage').value,voice:$('pvoice').value}})});
-      clearEditorDirty('settings-main');$('saved').textContent='Preferences saved';if(result.operation)await followOperation(result.operation);
+      if($('media-blur'))await post('/media/preferences',{
+        blur_nsfw_initially:$('media-blur').checked,
+        blur_unknown_initially:$('media-blur-unknown').checked,
+        review_before_delivery:$('media-review').checked,
+        review_provider:$('media-review-provider').value,
+        review_model:$('media-review-model').value});
+      clearEditorDirty('settings-main');clearEditorDirty('settings-media');
+      $('saved').textContent='Preferences saved';$('settings-save').hidden=true;
+      if(result.operation)await followOperation(result.operation);
     }catch(e){$('saved').innerHTML=`<span class="bad">${esc(e.message)}</span>`;}
   };
 }

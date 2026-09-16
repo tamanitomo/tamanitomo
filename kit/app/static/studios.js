@@ -741,25 +741,28 @@ workspaceHandlers['image-studio']=async()=>{
  <div class="home-title" style="margin-bottom:12px">
   <div>
    <h2 class="page-title">Image Studio</h2>
-   <p class="intro">One identity, specialized workflows. Craft character photos, configure image type lanes, or design modular ComfyUI recipes.</p>
+   <p class="intro">One companion, many ways to picture them.</p>
   </div>
-  <div class="actions">
-   <button class="quiet" id="image-back-identity">← Identity</button>
-   <button class="quiet" id="image-template-download">Download template</button>
-   <button class="quiet" id="image-import">Import preset</button>
-   <input id="image-import-file" type="file" accept=".json,application/json" hidden>
-   <button class="quiet" id="image-install-comfy">Install ComfyUI</button>
-   <button class="quiet" id="image-start-comfy">Start ComfyUI</button>
-   <label class="inline-label switch-container"><input type="checkbox" id="comfy-cpu"><span class="switch-slider"></span><span class="switch-label">CPU mode</span></label>
-  </div>
+  <details class="studio-setup">
+   <summary class="quiet">Setup &amp; tools</summary>
+   <div class="studio-setup-body">
+    <button class="quiet" id="image-back-identity">← Identity</button>
+    <button class="quiet" id="image-template-download">Download template</button>
+    <button class="quiet" id="image-import">Import preset</button>
+    <input id="image-import-file" type="file" accept=".json,application/json" hidden>
+    <button class="quiet" id="image-install-comfy">Install ComfyUI</button>
+    <button class="quiet" id="image-start-comfy">Start ComfyUI</button>
+    <label class="inline-label switch-container"><input type="checkbox" id="comfy-cpu"><span class="switch-slider"></span><span class="switch-label">CPU mode</span></label>
+   </div>
+  </details>
  </div>
 
  <nav class="studio-subnav" id="image-subnav" aria-label="Image studio navigation">
-  <button type="button" class="studio-subnav-btn is-active" data-view="compose">📸 Photo Composer</button>
-  <button type="button" class="studio-subnav-btn" data-view="assignments">🔀 Assigned Workflows & Lanes</button>
-  <button type="button" class="studio-subnav-btn" data-view="creator">⚡ ComfyUI Lite Workflow Creator</button>
-  <button type="button" class="studio-subnav-btn" data-view="presets">⚙️ Presets & Library</button>
-  <button type="button" class="studio-subnav-btn" data-view="identity">👤 Identity Prompt</button>
+  <button type="button" class="studio-subnav-btn is-active" data-view="compose">📸 Compose</button>
+  <button type="button" class="studio-subnav-btn" data-view="assignments">🔀 Routing</button>
+  <button type="button" class="studio-subnav-btn" data-view="creator">⚡ Workflows</button>
+  <button type="button" class="studio-subnav-btn" data-view="presets">⚙️ Presets</button>
+  <button type="button" class="studio-subnav-btn" data-view="identity">👤 Appearance</button>
  </nav>
 
  <!-- VIEW 1: Photo Composer -->
