@@ -27,16 +27,38 @@ assert.ok(formatted.includes('<strong>Hello</strong>'));
 assert.ok(!formatted.includes('<script>'));
 assert.ok(!formatted.includes('href="javascript:'));
 console.log('Date groups and formatted-message safety passed');
+/* The feed is one infinite stream, so a slow reply to an abandoned page must
+   never repaint a page the reader has since moved on from. */
 (async()=>{
   const workspace=fs.readFileSync(require('node:path').join(__dirname,'../kit/app/static/workspace.js'),'utf8');
-  const pending={},box={innerHTML:'',scrollTop:0,scrollHeight:120};
-  const chat={current:'chat',chatSession:'first',api:path=>new Promise(resolve=>pending[path]=resolve),$:()=>box,esc:sandbox.esc,richText:sandbox.richText,chatName:()=> 'Nova',inlineMedia:()=>''};
+  const pending={},box={innerHTML:'',scrollTop:0,scrollHeight:120,
+    scrollTo(){},querySelector:()=>null,insertAdjacentHTML(){},classList:{toggle(){}}};
+  const chat={current:'chat',chatPageGeneration:1,chatSession:'',chatFeedCursor:null,
+    chatFeedLoading:false,chatFeedReady:false,chatLastDay:'',chatTopWatcher:null,
+    api:path=>new Promise(resolve=>(pending[path]=pending[path]||[]).push(resolve)),
+    $:name=>name==='chat-log'?box:null,esc:sandbox.esc,richText:sandbox.richText,
+    chatName:()=>'Nova',inlineMedia:()=>'',faceHtml:()=>'',
+    chatKey:k=>k,sessionStorage:{setItem(){},getItem:()=>null},
+    chatMessagesHtml:messages=>messages.map(m=>`<div>${m.content}</div>`).join(''),
+    watchTopOfLog(){},jumpToNewest(){}};
   vm.createContext(chat);
-  vm.runInContext(workspace.slice(workspace.indexOf('let chatLoadGeneration='),workspace.indexOf('\nfunction inlineMedia')),chat);
-  const first=chat.loadChat();chat.chatSession='second';const second=chat.loadChat();
-  pending['/sessions/second']({messages:[{role:'assistant',timestamp:1,content:'Second conversation'}]});await second;
-  pending['/sessions/first']({messages:[{role:'assistant',timestamp:1,content:'Old conversation'}]});await first;
-  assert.ok(box.innerHTML.includes('Second conversation'));
-  assert.ok(!box.innerHTML.includes('Old conversation'));
-  console.log('Out-of-order chat history stays in its selected conversation');
+  vm.runInContext(workspace.slice(workspace.indexOf('async function loadFeed('),
+                                  workspace.indexOf('\nasync function loadOlder('))+
+                  '\n;globalThis.__loadFeed=loadFeed;',chat);
+  const loadFeed=chat.__loadFeed;
+
+  // The reader opens the feed, then something re-renders the page under them.
+  const abandoned=loadFeed(1);
+  chat.chatPageGeneration=2;
+  const current=loadFeed(2);
+  // The newer request answers first, then the stale one arrives late.
+  const [stale,fresh]=pending['/feed?limit=60'];
+  fresh({messages:[{content:'Current page'}],next_cursor:null});
+  await current;
+  stale({messages:[{content:'Abandoned page'}],next_cursor:null});
+  await abandoned;
+  assert.ok(box.innerHTML.includes('Current page'));
+  assert.ok(!box.innerHTML.includes('Abandoned page'),
+    'a reply to an abandoned page must not repaint the feed');
+  console.log('Out-of-order feed loads stay on the reader\u2019s current page');
 })().catch(error=>{console.error(error);process.exitCode=1;});

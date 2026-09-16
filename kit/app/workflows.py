@@ -43,6 +43,7 @@ def save_settings(root,payload):
     key=payload.get('api_key')
     if key is not None and (not isinstance(key,str) or len(key)>2000 or any(ord(c)<32 for c in key)):raise ValueError('Invalid API key')
     current.update(mode=mode,host=host,directory=directory,endpoint=media.endpoint(payload.get('endpoint',current['endpoint'])))
+    if 'hash_lookup' in payload:current['hash_lookup']=bool(payload['hash_lookup'])
     if key:current['api_key']=key
     if payload.get('clear_key'):current['api_key']=''
     path=root/'companion-comfy-private.json';cp.atomic_write(path,json.dumps(current,indent=2));path.chmod(0o600)
@@ -101,11 +102,15 @@ def download(root,payload,report):
     return {**result,'name':data['name'],'trigger_words':data['trigger_words'],'note':'Verified weights installed. Refresh the model list before building.'}
 
 
-def run_scan(config,folders):
+def run_scan(config,folders,hash_unknown=False,known=None):
     """Ask the Comfy host what its model files say about themselves.
 
     Same shape as the downloader: the script is piped to python3 on whichever
     machine holds the weights. It reads headers and writes nothing.
+
+    `hash_unknown` additionally digests the files no header could identify, so
+    they can be looked up by hash. That reads every byte of those files, which
+    is why it is asked for explicitly and why digests already known are reused.
     """
     worker=Path(__file__).resolve().parents[1]/'scripts/companion_model_scan.py'
     args=[sys.executable,str(worker)]
@@ -116,11 +121,12 @@ def run_scan(config,folders):
                           stderr=subprocess.DEVNULL,text=True)
     result=None;error='Could not read the model files on the Comfy host'
     try:
-        proc.stdin.write(json.dumps({'folders':folders}));proc.stdin.close()
+        proc.stdin.write(json.dumps({'folders':folders,'hash_unknown':bool(hash_unknown),
+                                     'known':known or {}}));proc.stdin.close()
         for line in proc.stdout:
             if line.startswith('RESULT='):result=json.loads(line[7:])
             elif line.startswith('ERROR='):error=line[6:].strip()
-        code=proc.wait(timeout=300)
+        code=proc.wait(timeout=3600 if hash_unknown else 300)
     finally:
         if proc.poll() is None:proc.kill();proc.wait()
     if code or result is None:raise ValueError(error)

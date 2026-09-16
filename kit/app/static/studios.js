@@ -4,6 +4,9 @@ addPage('local-models','Local models');addPage('companion-edit','Edit companion'
 // getRandomValues also works on plain HTTP LAN origins; randomUUID requires HTTPS.
 const presetSuffix=()=>Array.from(crypto.getRandomValues(new Uint8Array(8)),v=>v.toString(16).padStart(2,'0')).join('');
 const formLabel=key=>key.replaceAll('_',' ').replace(/^./,s=>s.toUpperCase());
+/* A lane reads faster with a face on it. Unknown lanes fall back to a star. */
+const LANE_ICON={portrait:'\u{1F5BC}\uFE0F',anime:'\u{1F338}',realistic:'\u{1F4F7}',landscape:'\u{1F3D4}\uFE0F',other:'\u2728'};
+const laneIcon=key=>LANE_ICON[key]||'\u2728';
 const profileChoices={agent_type:['companion','colleague','worker'],pronoun_set:['she','he'],human_pronoun_set:['she','he'],outreach:['updates_only','free','never'],relationship_progression:['off','subtle','milestones'],relationship_pace:['slow','natural','quick'],context_mode:['auto','fixed']};
 function fieldHTML(key,value,choices=[],readonly=false){
  if(key==='outreach_per_day')return `<label>Maximum proactive messages per day<input data-config="outreach_per_day" type="number" required min="1" max="100" value="${value||3}" ${value===0?'disabled':''}></label><label class="inline-label"><input id="editor-unlimited" type="checkbox" ${value===0?'checked':''}>No daily limit (unlimited proactive messages)</label>`;
@@ -674,6 +677,54 @@ workspaceHandlers.voice=async()=>{
  $('hero-quick-test').onclick=()=>$('studio-preview-voice').click();
 };
 
+/* A model's own terms travel with the weights, not with this kit. Civitai
+   publishes four permission flags per model; show them before downloading,
+   and say plainly that they summarise rather than replace the model card. */
+const licenceNotice = (licence, page) => {
+    if (!licence) return '';
+    const rows = [['allowCommercialUse', 'Commercial use'], ['allowDerivatives', 'Derivatives'],
+                  ['allowNoCredit', 'Use without credit'], ['allowDifferentLicense', 'Relicensing']];
+    const read = v => Array.isArray(v) ? (v.length ? v.join(', ') : 'None') :
+                      v === true ? 'Allowed' : v === false ? 'Not allowed' : 'Not stated';
+    const restricted = v => v === false || (Array.isArray(v) && !v.length);
+    const strict = rows.some(([k]) => restricted(licence[k]));
+    return `<div class="card licence-note${strict ? ' is-restricted' : ''}">
+      <strong>The publisher's terms for these weights</strong>
+      <dl>${rows.map(([k, label]) => `<div><dt>${esc(label)}</dt><dd${restricted(licence[k]) ? ' class="bad"' : ''}>${esc(read(licence[k]))}</dd></div>`).join('')}</dl>
+      <p class="dim small">A summary published by Civitai, not the licence itself.${page ? ' Read the <a href="' + esc(page) + '" target="_blank" rel="noopener noreferrer">model card</a> before relying on it.' : ''} These terms bind your use of the weights regardless of Companion Kit's own licence.</p>
+    </div>`;
+  };
+
+/* Weights are never fetched until their terms have been put in front of
+   someone. Resolves true when the download should go ahead. */
+async function confirmWeightTerms(versionId){
+ let terms;
+ try{terms=await api('/images/resource-terms?version_id='+encodeURIComponent(versionId));}
+ catch(error){return confirm('Could not read this model\u2019s terms from Civitai ('+error.message+
+   ').\n\nDownload the weights anyway?');}
+ const size=terms.size_bytes?(terms.size_bytes/1024**3).toFixed(2)+' GB':'unknown size';
+ const dialog=document.createElement('dialog');
+ dialog.className='terms-dialog';
+ dialog.innerHTML=`<h3>${esc(terms.name)}</h3>
+   <p class="dim small">${esc([terms.type,terms.base_model,size].filter(Boolean).join(' \u00b7 '))}</p>
+   ${licenceNotice(terms.license,terms.page)||
+     '<p class="dim small">Civitai published no permissions for this model. Read the model card before relying on it.</p>'}
+   ${terms.trigger_words.length?`<p class="small">Triggers: ${esc(terms.trigger_words.join(', '))}</p>`:''}
+   <div class="studio-actions">
+     <button class="act" value="go">Accept and download</button>
+     <button class="quiet" value="stop">Cancel</button>
+   </div>`;
+ document.body.append(dialog);
+ const answer=await new Promise(resolve=>{
+  for(const button of dialog.querySelectorAll('button'))
+   button.onclick=()=>{resolve(button.value);dialog.close();};
+  dialog.addEventListener('cancel',()=>resolve('stop'));
+  dialog.showModal();
+ });
+ dialog.remove();
+ return answer==='go';
+}
+const fileSlug=name=>String(name||'workflow').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60)||'workflow';
 function downloadJSON(name,data){const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 
 /* Which studio view is open, kept across a re-render so a portrait change comes
@@ -931,7 +982,7 @@ workspaceHandlers['image-studio']=async()=>{
     <!-- Rendered dynamically -->
    </div>
    <label class="fallback-row">
-    <span>✨ Fallback</span>
+    <span><span class="lane-ico">✨</span>Fallback</span>
     <select id="image-default-preset"></select>
    </label>
    <p class="dim small" style="margin:6px 2px 16px">Used when a lane has nothing of its own.</p>
@@ -952,7 +1003,6 @@ workspaceHandlers['image-studio']=async()=>{
   <div class="workflow-new-head">
    <button type="button" class="quiet" id="workflow-show-import">🖼️ Import from an image</button>
   </div>
-  <div id="workflow-creator-root" hidden></div>
 
   <div class="card workflow-mode-panel" id="workflow-import-panel" hidden>
    <h3>Import from an image</h3>
@@ -971,9 +1021,16 @@ workspaceHandlers['image-studio']=async()=>{
   </div>
 
   <div class="card workflow-mode-panel" id="workflow-edit-panel">
-   <label style="margin:0 0 12px;display:block">Workflow
-    <select id="image-preset-select" style="margin-top:4px"></select>
-   </label>
+   <div class="workflow-pick">
+    <label for="image-preset-select">Workflow</label>
+    <div class="workflow-pick-row">
+     <select id="image-preset-select"></select>
+     <button type="button" class="icon-button" id="download-interactive"
+       title="Download interactive workflow \u2014 opens in ComfyUI"
+       aria-label="Download interactive workflow">\u2b07</button>
+    </div>
+    <span class="dim small" id="download-interactive-status" role="status"></span>
+   </div>
    <div id="image-preset-editor"></div>
   </div>
   <div class="actions" style="margin-top:14px">
@@ -1083,7 +1140,7 @@ workspaceHandlers['image-studio']=async()=>{
    const assigned=routeValues[k]||'';
    return `
    <label class="lane-row">
-    <span class="lane-row-name">${formLabel(k)}</span>
+    <span class="lane-row-name"><span class="lane-ico">${laneIcon(k)}</span>${formLabel(k)}</span>
     <select class="lane-select" data-image-route="${k}">
      ${options([['','Fallback · '+fallbackLabel],...rows],assigned)}
     </select>
@@ -1347,6 +1404,7 @@ workspaceHandlers['image-studio']=async()=>{
   for(const get of root.querySelectorAll('[data-get-lora]'))get.onclick=async()=>{
     const file=get.dataset.getLora,version=missingVersions[file];
     if(!version)return;
+    if(!await confirmWeightTerms(version))return;
     get.disabled=true;get.textContent='\u2026';
     try{
       await followOperation(await post('/images/fetch-resource',{version_id:version,kind:'lora'}));
@@ -1411,7 +1469,7 @@ workspaceHandlers['image-studio']=async()=>{
 
   wireTagFields(root,()=>readPreset());
 
-  $('export-image-preset').onclick=()=>{readPreset();downloadJSON(p.id+'.json',p);};
+  $('export-image-preset').onclick=()=>{readPreset();downloadJSON(fileSlug(p.name)+'-api.json',p);};
   $('duplicate-image-preset').onclick=()=>{readPreset();const copy=structuredClone(p);
     copy.id='preset-'+presetSuffix();copy.name+=' copy';settings.presets.push(copy);
     presetIndex=settings.presets.length-1;drawPreset();};
@@ -1504,6 +1562,23 @@ workspaceHandlers['image-studio']=async()=>{
  }
 
  await drawPreset();
+ /* The plain Download hands back the API graph the server runs. This one asks
+    ComfyUI for its node definitions and rebuilds the editor graph, so the file
+    can be dropped straight onto the ComfyUI canvas. */
+ $('download-interactive').onclick=async()=>{
+  const button=$('download-interactive'),status=$('download-interactive-status');
+  readPreset();
+  const preset=settings.presets[presetIndex];
+  if(!preset)return;
+  button.disabled=true;status.textContent='Asking ComfyUI for its node list\u2026';
+  try{
+   const graph=await post('/images/interactive-workflow',{preset});
+   downloadJSON(fileSlug(preset.name)+'-interactive.json',graph);
+   status.textContent='';
+   notice('Interactive workflow downloaded. Drop it onto the ComfyUI canvas to edit it.');
+  }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
+  finally{button.disabled=false;}
+ };
  $('image-preset-select').onchange=async e=>{
   readPreset();
   if(e.target.value==='__new__'){
@@ -1570,6 +1645,7 @@ workspaceHandlers['image-studio']=async()=>{
    }
    const fetchOne=async row=>{
      const status=$('workflow-import-status');
+     if(!await confirmWeightTerms(row.version_id))return;
      status.textContent=`Downloading ${row.file}\u2026`;
      try{
        await followOperation(await post('/images/fetch-resource',{version_id:row.version_id,kind:row.kind}));
@@ -1666,18 +1742,6 @@ workspaceHandlers['image-studio']=async()=>{
  };
 
 
- await renderWorkflowCreator($('workflow-creator-root'),(p,lane)=>{
-  readPreset();
-  settings.presets.push(p);
-  if(lane){
-   if(lane==='default')defaultId=p.id;
-   else routeValues[lane]=p.id;
-  }
-  presetIndex=settings.presets.length-1;
-  drawPreset();
-  showStudioView('assignments');
-  notice(`Workflow “${p.name}” saved and assigned to ${lane||'default'}!`);
- });
 };
 workspaceHandlers['local-models']=async()=>{
  const d=await api('/local-models');

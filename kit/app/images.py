@@ -138,22 +138,43 @@ def register(app,select,load):
     SLOT_FOR_KIND={'checkpoint':'checkpoint','lora':'lora','lycoris':'lora','locon':'lora',
                    'vae':'vae','embedding':'embedding'}
 
-    @app.post('/api/images/fetch-resource')
-    def fetch_resource(payload:dict):
-        from .workflows import inspect_model, download, settings as workflow_settings
-        rt,_=select()
-        version=payload.get('version_id')
-        slot=SLOT_FOR_KIND.get(str(payload.get('kind','')).lower())
-        if not version:raise HTTPException(400,'That resource has no Civitai version to fetch')
-        if not slot:raise HTTPException(400,'There is nowhere to put that kind of file')
+    def _inspect_version(version):
+        """What Civitai says about one model version, including its own terms."""
+        from .workflows import inspect_model
         import companion_image_import as importer
+        rt,_=select()
         try:
             info=importer._json_get(f'https://civitai.com/api/v1/model-versions/{int(version)}')
             model_id=(info.get('model') or {}).get('id') or info.get('modelId')
             if not model_id:raise ValueError('Civitai did not say which model that version belongs to')
-            data=inspect_model(rt.root,f'https://civitai.com/models/{model_id}?modelVersionId={int(version)}',int(version))
+            return rt,inspect_model(rt.root,f'https://civitai.com/models/{model_id}?modelVersionId={int(version)}',int(version))
         except (ValueError,TypeError) as exc:raise HTTPException(400,str(exc))
         except Exception:raise HTTPException(400,'Could not reach Civitai for that resource')
+
+    @app.get('/api/images/resource-terms')
+    def resource_terms(version_id:int=0):
+        """The publisher's terms for a set of weights, to be read before fetching them.
+
+        A model's licence travels with its weights, not with this kit, so the
+        person downloading them is shown what they are agreeing to first.
+        """
+        if not version_id:raise HTTPException(400,'That resource has no Civitai version')
+        _,data=_inspect_version(version_id)
+        files=data.get('files') or []
+        primary=next((f for f in files if f.get('primary')),files[0] if files else None)
+        return {'name':data.get('name') or 'these weights','base_model':data.get('base_model') or '',
+                'type':data.get('type') or '','page':data.get('page') or '',
+                'license':data.get('license'),'trigger_words':data.get('trigger_words') or [],
+                'size_bytes':(primary or {}).get('size_bytes') or 0}
+
+    @app.post('/api/images/fetch-resource')
+    def fetch_resource(payload:dict):
+        from .workflows import download
+        version=payload.get('version_id')
+        slot=SLOT_FOR_KIND.get(str(payload.get('kind','')).lower())
+        if not version:raise HTTPException(400,'That resource has no Civitai version to fetch')
+        if not slot:raise HTTPException(400,'There is nowhere to put that kind of file')
+        rt,data=_inspect_version(version)
         files=data.get('files') or []
         primary=next((f for f in files if f.get('primary')),files[0] if files else None)
         if not primary:raise HTTPException(400,'Civitai lists no downloadable file for that version')
@@ -189,12 +210,80 @@ def register(app,select,load):
         except Exception:
             raise HTTPException(400,'Could not ask ComfyUI where its models are. Check the address in Preferences.')
         if not folders:raise HTTPException(400,'ComfyUI reported no model folders')
-        try:result=run_scan(config,folders)
+        hashing=bool(config.get('hash_lookup'))
+        previous=read_scan_cache(rt.root).get('models') or {}
+        digests={k:v['sha256'] for k,v in previous.items() if isinstance(v,dict) and v.get('sha256')}
+        try:result=run_scan(config,folders,hashing,digests)
         except ValueError as exc:raise HTTPException(400,str(exc))
+        notes=[]
+        if hashing:notes.extend(_name_by_hash(result['models'],previous,config.get('api_key','')))
         known=sum(1 for v in result['models'].values() if v.get('family'))
-        payload={**result,'scanned_at':time.time(),'known':known,'total':len(result['models'])}
+        payload={**result,'scanned_at':time.time(),'known':known,'total':len(result['models']),
+                 'hash_lookup':hashing,'notes':notes}
         write_scan_cache(rt.root,payload)
         return {**payload,'cached':False}
+
+    def _name_by_hash(models,previous,api_key):
+        """Ask Civitai what the files no header could place actually are.
+
+        Civitai indexes weights by their whole-file SHA256, so a digest is
+        enough to recover the flavour a safetensors header never records —
+        Illustrious and Pony both report themselves as plain SDXL. Answers are
+        kept in the scan cache so a hash is only ever asked about once.
+        """
+        from .workflows import api_json, family as family_of
+        seen={}
+        for name,row in previous.items():
+            looked=row.get('hash_lookup') if isinstance(row,dict) else None
+            if isinstance(looked,dict) and row.get('sha256'):seen[row['sha256']]=looked
+        asked=failed=0
+        for name,row in models.items():
+            digest=row.get('sha256')
+            if row.get('family') or not digest:continue
+            if digest not in seen:
+                if failed>=5:continue
+                asked+=1
+                try:
+                    found=api_json('model-versions/by-hash/'+digest,api_key)
+                    seen[digest]={'base_model':found.get('baseModel') or '',
+                                  'model':(found.get('model') or {}).get('name') or '',
+                                  'version':found.get('name') or '',
+                                  'version_id':found.get('id') or 0}
+                except ValueError:
+                    seen[digest]={};failed+=1
+            match=seen[digest]
+            row['hash_lookup']=match
+            if match.get('base_model'):
+                row['family']=match['base_model']
+                row['source']='Civitai hash'
+                row['model']=match.get('model') or ''
+        notes=[]
+        if asked:notes.append(f'Looked up {asked} unidentified file(s) on Civitai by hash.')
+        if failed>=5:notes.append('Civitai stopped answering, so some files were left unidentified.')
+        return notes
+
+    @app.post('/api/images/interactive-workflow')
+    def interactive_workflow(payload:dict):
+        """Rebuild the ComfyUI editor graph so a workflow can be opened and edited.
+
+        Presets store the API format, which is what the server executes; the
+        editor additionally needs each node's declared slot order, and only that
+        ComfyUI knows it. So this asks the configured host rather than guessing,
+        and says so plainly when the host is unreachable.
+        """
+        import companion_workflow as wf
+        preset=payload.get('preset') or {}
+        graph=preset.get('workflow')
+        if preset.get('provider','comfyui')!='comfyui':
+            raise HTTPException(400,'Only ComfyUI workflows have an editor graph')
+        if not isinstance(graph,dict) or not graph:raise HTTPException(400,'That workflow has no nodes')
+        base=media.endpoint(preset.get('endpoint') or '')
+        try:schema=media.request_json(base+'/object_info')
+        except Exception:
+            raise HTTPException(400,'Could not reach ComfyUI at '+base+
+                ' to read its node definitions. The editor format needs them; the plain Download still works.')
+        try:return wf.interactive_graph(graph,schema,str(preset.get('name') or 'Companion workflow'))
+        except ValueError as exc:raise HTTPException(400,str(exc))
 
     @app.get('/api/images/recommendations')
     def model_recommendations(checkpoint:str=''):

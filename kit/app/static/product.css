@@ -8,6 +8,10 @@
    ============================================================ */
 :root{
   color-scheme:dark;
+  /* Shared label columns. Anything laid out as "name, then value" borrows one
+     of these so the values line up in a column instead of staggering. */
+  --lane-label:clamp(98px,26vw,118px);
+  --presence-label:clamp(76px,22vw,96px);
   /* surfaces, darkest to lightest */
   --bg:#101217;
   --panel:#191c23;
@@ -1154,7 +1158,8 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
   width:100%;
 }
 .presence-chip-row{
-  display:flex;
+  display:grid;
+  grid-template-columns:var(--presence-label) minmax(0,1fr);
   align-items:baseline;
   gap:8px;
   font-size:13px;
@@ -1172,7 +1177,8 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
   color:var(--dim);
   font-size:12px;
   white-space:nowrap;
-  flex-shrink:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 .presence-chip-row .chip-val{
   color:var(--ink);
@@ -2173,19 +2179,57 @@ body[data-page="chat"] main{padding:0}
 .lanes-header{gap:12px}
 .lanes-header h3{font-size:15px}
 
-/* A lane is a name and the workflow that serves it. */
-.fallback-row{display:flex;align-items:center;gap:12px;margin:0}
-.fallback-row>span{flex:none;font-size:13.5px;font-weight:600;min-width:72px}
-.fallback-row select{flex:1;min-width:0}
+/* Getting set up: each step says where it stands without being asked. */
+.setup-checklist{list-style:none;counter-reset:setup;margin:0 0 22px;padding:0;
+  display:flex;flex-direction:column;gap:10px}
+.setup-step{counter-increment:setup;position:relative;margin:0;padding:14px 16px 14px 46px;
+  border:1px solid var(--edge);border-radius:10px;background:var(--surface)}
+.setup-step::before{content:counter(setup);position:absolute;left:14px;top:14px;
+  width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+  background:var(--surface-3);color:var(--dim);font-size:12px;font-weight:700}
+.setup-step-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.setup-step-name{font-size:14px;font-weight:600;color:var(--ink)}
+.setup-state{flex:none;font-size:11.5px;font-weight:650;letter-spacing:.04em;
+  padding:3px 9px;border-radius:20px;border:1px solid var(--edge);color:var(--dim)}
+.setup-state.is-done{color:var(--ink-2);background:var(--good-bg);border-color:var(--good-bg)}
+.setup-state.is-missing{color:var(--bad);background:var(--bad-bg);border-color:var(--bad-line)}
+.setup-state.is-waiting{color:var(--warn);background:var(--warn-bg);border-color:var(--warn-bg)}
+.setup-step small{display:block;margin-top:6px;line-height:1.5}
+.setup-step .studio-actions{margin-top:10px}
+.setup-step>input{margin:0}
+
+/* Terms shown before any weights are fetched. */
+.terms-dialog{border:1px solid var(--edge);border-radius:12px;background:var(--panel);
+  color:var(--ink);padding:22px;max-width:520px;width:calc(100vw - 32px)}
+.terms-dialog::backdrop{background:rgb(0 0 0 / 0.55)}
+.terms-dialog h3{margin:0 0 4px;font-size:16px}
+.terms-dialog .licence-note{margin-top:14px}
+
+/* Choosing a workflow, with its export sitting right beside the name. */
+.workflow-pick{margin:0 0 14px}
+.workflow-pick>label{margin:0 0 4px}
+.workflow-pick-row{display:flex;align-items:center;gap:8px}
+.workflow-pick-row select{flex:1;min-width:0}
+.workflow-pick-row .icon-button{flex:none;padding:10px 12px;font-size:15px;line-height:1;
+  border:1px solid var(--edge);background:var(--surface-2);color:var(--ink-2)}
+.workflow-pick-row .icon-button:hover:not(:disabled){color:var(--ink);border-color:var(--accent-line);
+  background:var(--accent-soft)}
+.workflow-pick-row .icon-button:disabled{opacity:.5}
+#download-interactive-status{display:block;margin-top:5px}
+#download-interactive-status:empty{display:none}
+
+/* A lane is a name and the workflow that serves it. One shared label column
+   keeps every dropdown on the same left edge, at every width; the name never
+   drops beneath its own select. */
 .lane-cards-grid{display:flex;flex-direction:column;gap:6px}
-.lane-row{display:flex;align-items:center;gap:12px;margin:0;padding:7px 10px;
+.fallback-row,.lane-row{display:grid;grid-template-columns:var(--lane-label) minmax(0,1fr);
+  align-items:center;gap:12px;margin:0;padding:7px 10px;
   border:1px solid var(--edge);border-radius:8px;background:var(--surface)}
-.lane-row-name{flex:none;min-width:72px;font-size:13px;font-weight:600;color:var(--ink)}
-.lane-row select{flex:1;min-width:0;padding:7px 9px;font-size:12.5px}
-@media(max-width:700px){
-  .fallback-row,.lane-row{flex-wrap:wrap;row-gap:6px}
-  .fallback-row>span,.lane-row-name{min-width:0;flex-basis:100%}
-}
+.fallback-row{background:var(--surface-2);border-style:dashed}
+.fallback-row>span,.lane-row-name{min-width:0;font-size:13px;font-weight:600;color:var(--ink);
+  display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lane-ico{font-size:14px;line-height:1;flex:none}
+.fallback-row select,.lane-row select{width:100%;min-width:0;padding:7px 9px;font-size:12.5px}
 
 /* A vocabulary for the boxes most people have no words for. */
 .tag-vocab{margin-top:8px;font-size:12.5px;padding:7px 9px;background:var(--bg);

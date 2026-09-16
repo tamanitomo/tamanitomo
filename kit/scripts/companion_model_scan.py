@@ -9,7 +9,7 @@ It runs where the models are: locally, or piped to `python3 -c` over SSH, which
 is how the weight downloader already reaches a remote Comfy host. It reads
 headers only and writes nothing.
 """
-import json, os, struct, sys
+import hashlib, json, os, struct, sys
 
 MAX_HEADER = 8 * 1024 * 1024
 FAMILY_HINTS = [
@@ -57,7 +57,24 @@ def describe(path):
     return {'family': '', 'source': 'no header'}
 
 
-def scan(folders):
+def sha256(path):
+    """The whole-file digest Civitai indexes its weights under.
+
+    Reading several gigabytes per file is the reason this is opt-in, and the
+    reason it is only ever asked for on files the header could not identify.
+    """
+    digest = hashlib.sha256()
+    try:
+        with open(path, 'rb') as handle:
+            for block in iter(lambda: handle.read(8 * 1024 * 1024), b''):
+                digest.update(block)
+    except OSError:
+        return ''
+    return digest.hexdigest()
+
+
+def scan(folders, hash_unknown=False, known=None):
+    known = known or {}
     out = {}
     for folder in folders:
         if not os.path.isdir(folder):
@@ -71,15 +88,24 @@ def scan(folders):
                 if not os.path.isfile(full):
                     continue
                 key = os.path.relpath(full, folder).replace(os.sep, '/')
-                out.setdefault(key, describe(full))
+                if key in out:
+                    continue
+                record = describe(full)
+                # Only files the header could not place are worth hashing, and
+                # only once: a digest already on file is reused as it stands.
+                if hash_unknown and not record['family']:
+                    record['sha256'] = known.get(key) or sha256(full)
+                out[key] = record
     return out
 
 
 def main():
     request = json.loads(sys.stdin.read() or '{}')
     folders = [f for f in (request.get('folders') or []) if isinstance(f, str)]
+    known = request.get('known') if isinstance(request.get('known'), dict) else {}
     try:
-        print('RESULT=' + json.dumps({'models': scan(folders)}))
+        models = scan(folders, bool(request.get('hash_unknown')), known)
+        print('RESULT=' + json.dumps({'models': models}))
     except Exception as exc:                      # noqa: BLE001 - reported, not raised
         print('ERROR=' + str(exc)[:300])
 

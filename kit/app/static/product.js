@@ -1534,28 +1534,51 @@ async function imagesPanelHTML(){
   return `
   <h2>Image generation</h2>
 
-  <h3 class="section-subheading">Where images are made</h3>
-  <div class="form-grid">
-    <label>ComfyUI address
+  <h3 class="section-subheading">Set up</h3>
+  <ol class="setup-checklist">
+    <li class="setup-step" id="setup-step-comfy">
+      <div class="setup-step-head">
+        <span class="setup-step-name">Link ComfyUI</span>
+        <span class="setup-state is-waiting" id="setup-comfy-state">Checking\u2026</span>
+      </div>
       <input id="set-comfy-endpoint" type="url" value="${esc(config.endpoint||'')}" placeholder="http://127.0.0.1:8188">
       <small class="dim">The machine running ComfyUI. Workflows use this unless one overrides it.</small>
-    </label>
-    <label>Civitai API key
+      <div class="studio-actions">
+        <button class="quiet" id="set-comfy-check">Check again</button>
+        <button class="quiet" id="set-comfy-install">Install ComfyUI here</button>
+        <button class="quiet" id="set-comfy-start">Start ComfyUI</button>
+      </div>
+      <label class="inline-label switch-container" style="margin:6px 0 0">
+        <input type="checkbox" id="set-comfy-cpu"><span class="switch-slider"></span>
+        <span class="switch-label">Run on the processor instead of the graphics card</span>
+      </label>
+      <p class="dim small" id="set-comfy-status" role="status"></p>
+    </li>
+    <li class="setup-step">
+      <div class="setup-step-head">
+        <span class="setup-step-name">Civitai account <span class="dim">\u00b7 optional</span></span>
+        <span class="setup-state ${config.api_key_configured?'is-done':'is-skipped'}" id="setup-key-state">${config.api_key_configured?'Saved':'Not set'}</span>
+      </div>
       <input id="set-civitai-key" type="password" autocomplete="off"
-        value="" placeholder="${config.api_key_configured?'•••• saved':'Paste a key to download gated models'}">
+        value="" placeholder="${config.api_key_configured?'\u2022\u2022\u2022\u2022 saved; blank keeps it':'Paste a key to download gated models'}">
       <small class="dim">Only needed for models Civitai gates behind an account.</small>
-    </label>
-  </div>
-  <div class="studio-actions">
-    <button class="quiet" id="set-comfy-check">Check the connection</button>
-    <button class="quiet" id="set-comfy-install">Install ComfyUI here</button>
-    <button class="quiet" id="set-comfy-start">Start ComfyUI</button>
-  </div>
-  <label class="inline-label switch-container" style="margin:6px 0 0">
-    <input type="checkbox" id="set-comfy-cpu"><span class="switch-slider"></span>
-    <span class="switch-label">Run on the processor instead of the graphics card</span>
-  </label>
-  <p class="dim small" id="set-comfy-status" role="status"></p>
+    </li>
+    <li class="setup-step">
+      <div class="setup-step-head">
+        <span class="setup-step-name">Identify your models</span>
+        <span class="setup-state ${config.hash_lookup?'is-done':'is-skipped'}" id="setup-hash-state">${config.hash_lookup?'On':'Off'}</span>
+      </div>
+      <label class="inline-label switch-container" style="margin:4px 0 0">
+        <input type="checkbox" id="set-hash-lookup" ${config.hash_lookup?'checked':''}>
+        <span class="switch-slider"></span>
+        <span class="switch-label">Look up unrecognised models on Civitai by file hash</span>
+      </label>
+      <small class="dim">A model file says which architecture it is, but not which flavour \u2014 Illustrious and
+        Pony both call themselves SDXL. Matching the file against Civitai fills that in, so the LoRA lists
+        can be filtered to what actually fits. It reads every byte of the files it could not already place,
+        so it is slow the first time and then remembered.</small>
+    </li>
+  </ol>
 
   <h3 class="section-subheading">Reference photograph</h3>
   <div class="portrait-row">
@@ -1592,14 +1615,33 @@ function wireImagesPanel(panel){
   const identity=panel.querySelector('#set-image-identity');
   if(follow)follow.onchange=()=>{identity.disabled=follow.checked;};
 
-  panel.querySelector('#set-comfy-check').onclick=async()=>{
-    status.textContent='Checking…';
+  /* Setting up should report itself rather than wait to be asked, so the first
+     step says "Detected" on its own once ComfyUI answers. */
+  const state=panel.querySelector('#setup-comfy-state');
+  const setState=(node,text,kind)=>{
+    if(!node)return;
+    node.textContent=text;
+    node.className='setup-state '+kind;
+  };
+  const checkComfy=async announce=>{
+    setState(state,'Checking\u2026','is-waiting');
+    if(announce)status.textContent='Checking\u2026';
     try{
       const result=await post('/images/check',{endpoint:panel.querySelector('#set-comfy-endpoint').value});
       const models=result.models||{};
-      status.innerHTML=`<span class="good">Connected · ${(models.ckpt_name||[]).length} models · ${(models.lora_name||[]).length} LoRAs</span>`;
-    }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
+      setState(state,'Detected','is-done');
+      status.innerHTML=`<span class="good">${(models.ckpt_name||[]).length} models \u00b7 ${(models.lora_name||[]).length} LoRAs</span>`;
+    }catch(error){
+      setState(state,'Not found','is-missing');
+      status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;
+    }
   };
+  checkComfy(false);
+  panel.querySelector('#set-comfy-check').onclick=()=>checkComfy(true);
+
+  const hash=panel.querySelector('#set-hash-lookup');
+  if(hash)hash.onchange=()=>setState(panel.querySelector('#setup-hash-state'),
+    hash.checked?'On':'Off',hash.checked?'is-done':'is-skipped');
   panel.querySelector('#set-comfy-install').onclick=async()=>
     action('/images/install',{cpu:panel.querySelector('#set-comfy-cpu').checked},()=>notice('ComfyUI installed.'));
   panel.querySelector('#set-comfy-start').onclick=async()=>
@@ -1632,7 +1674,9 @@ function wireImagesPanel(panel){
       const key=panel.querySelector('#set-civitai-key').value;
       const current=(await api('/workflows')).settings||{};
       await post('/workflows/settings',{...current,endpoint,
+        hash_lookup:Boolean(hash&&hash.checked),
         ...(key?{api_key:key}:{})});
+      if(key)setState(panel.querySelector('#setup-key-state'),'Saved','is-done');
       const images=await api('/images');
       await post('/images',{revision:images.revision,settings:{...images.settings,
         identity_override:follow.checked?null:identity.value}});

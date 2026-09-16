@@ -13,6 +13,91 @@ import companion_model_download as downloader
 from kit.app import workflows
 from tests.test_workspace import WorkspaceTests
 
+class InteractiveExportTests(unittest.TestCase):
+    """The editor format has to be rebuilt from the API graph plus /object_info.
+
+    Widget order is the whole game: a workflow whose widgets_values are off by
+    one opens in ComfyUI with the steps in the cfg box. These cases are drawn
+    from a real ComfyUI schema and a real saved workflow.
+    """
+    SCHEMA={
+      'CheckpointLoaderSimple':{'input':{'required':{'ckpt_name':[['a.safetensors','b.safetensors']]}},
+        'output':['MODEL','CLIP','VAE'],'output_name':['MODEL','CLIP','VAE']},
+      'CLIPTextEncode':{'input':{'required':{'text':['STRING',{'multiline':True,'default':''}],'clip':['CLIP']}},
+        'output':['CONDITIONING'],'output_name':['CONDITIONING']},
+      'StringConcatenate':{'input':{'required':{'string_a':['STRING',{'default':''}],
+        'string_b':['STRING',{'default':''}],'delimiter':['STRING',{'default':''}]}},
+        'output':['STRING'],'output_name':['STRING']},
+      'EmptyLatentImage':{'input':{'required':{'width':['INT',{'default':512}],'height':['INT',{'default':512}],
+        'batch_size':['INT',{'default':1}]}},'output':['LATENT'],'output_name':['LATENT']},
+      'KSampler':{'input':{'required':{'model':['MODEL'],'seed':['INT',{'default':0}],
+        'steps':['INT',{'default':20}],'cfg':['FLOAT',{'default':8.}],'sampler_name':[['euler','dpmpp_2m']],
+        'scheduler':[['normal','karras']],'positive':['CONDITIONING'],'negative':['CONDITIONING'],
+        'latent_image':['LATENT'],'denoise':['FLOAT',{'default':1.}]}},'output':['LATENT'],'output_name':['LATENT']},
+      'VAEDecode':{'input':{'required':{'samples':['LATENT'],'vae':['VAE']}},'output':['IMAGE'],'output_name':['IMAGE']},
+      'SaveImage':{'input':{'required':{'images':['IMAGE'],'filename_prefix':['STRING',{'default':'ComfyUI'}]}},
+        'output':[],'output_name':[]}}
+
+    def graph(self):
+        return {'1':{'class_type':'CheckpointLoaderSimple','inputs':{'ckpt_name':'b.safetensors'}},
+          '2':{'class_type':'CLIPTextEncode','inputs':{'clip':['1',1],'text':'a cat'}},
+          '3':{'class_type':'CLIPTextEncode','inputs':{'clip':['1',1],'text':'blurry'}},
+          '4':{'class_type':'EmptyLatentImage','inputs':{'width':832,'height':1216,'batch_size':1}},
+          '5':{'class_type':'KSampler','inputs':{'model':['1',0],'positive':['2',0],'negative':['3',0],
+            'latent_image':['4',0],'seed':7,'steps':22,'cfg':5.,'sampler_name':'euler','scheduler':'normal','denoise':1.}},
+          '6':{'class_type':'VAEDecode','inputs':{'samples':['5',0],'vae':['1',2]}},
+          '7':{'class_type':'SaveImage','inputs':{'images':['6',0],'filename_prefix':'Companion'}}}
+
+    def nodes(self,ui):
+        return {str(n['id']):n for n in ui['nodes']}
+
+    def test_widgets_keep_their_declared_order_and_seed_control(self):
+        ui=wf.interactive_graph(self.graph(),self.SCHEMA,'Test')
+        sampler=self.nodes(ui)['5']
+        # Sockets never enter widgets_values; the seed's control widget does.
+        self.assertEqual(sampler['widgets_values'],[7,'randomize',22,5.,'euler','normal',1.])
+        self.assertEqual([i['name'] for i in sampler['inputs']],
+                         ['model','positive','negative','latent_image'])
+        self.assertEqual([o['type'] for o in self.nodes(ui)['1']['outputs']],['MODEL','CLIP','VAE'])
+
+    def test_converted_widgets_keep_their_slot_in_widgets_values(self):
+        """A linked widget still occupies its place, or later widgets shift."""
+        graph=self.graph()
+        graph['8']={'class_type':'StringConcatenate','inputs':{'string_a':['2',0],'string_b':['3',0],'delimiter':', '}}
+        ui=wf.interactive_graph(graph,self.SCHEMA,'Test')
+        joiner=self.nodes(ui)['8']
+        self.assertEqual(joiner['widgets_values'],['','',', '])
+        self.assertEqual([i['name'] for i in joiner['inputs']],['string_a','string_b'])
+        self.assertTrue(all('widget' in i for i in joiner['inputs']))
+
+    def test_links_are_numbered_and_agree_from_both_ends(self):
+        ui=wf.interactive_graph(self.graph(),self.SCHEMA,'Test')
+        nodes=self.nodes(ui)
+        ids=[l[0] for l in ui['links']]
+        self.assertEqual(sorted(ids),list(range(1,len(ids)+1)))
+        self.assertEqual(ui['last_link_id'],len(ids))
+        for link,origin,slot,target,target_slot,wire in ui['links']:
+            self.assertEqual(nodes[str(target)]['inputs'][target_slot]['link'],link)
+            self.assertIn(link,nodes[str(origin)]['outputs'][slot]['links'])
+            self.assertEqual(nodes[str(origin)]['outputs'][slot]['type'],wire)
+
+    def test_execution_order_follows_the_links(self):
+        ui=wf.interactive_graph(self.graph(),self.SCHEMA,'Test')
+        order={str(n['id']):n['order'] for n in ui['nodes']}
+        self.assertLess(order['1'],order['2'])
+        self.assertLess(order['2'],order['5'])
+        self.assertLess(order['5'],order['6'])
+        self.assertLess(order['6'],order['7'])
+
+    def test_it_refuses_rather_than_guessing(self):
+        with self.assertRaises(ValueError):wf.interactive_graph({},self.SCHEMA)
+        with self.assertRaises(ValueError):wf.interactive_graph(self.graph(),{})
+        unknown=self.graph();unknown['9']={'class_type':'SomeCustomNode','inputs':{}}
+        with self.assertRaisesRegex(ValueError,'SomeCustomNode'):wf.interactive_graph(unknown,self.SCHEMA)
+        loop=self.graph();loop['4']['inputs']['width']=['5',0]
+        with self.assertRaisesRegex(ValueError,'loop'):wf.interactive_graph(loop,self.SCHEMA)
+
+
 class WorkflowTests(unittest.TestCase):
     def test_modular_branches_and_img2img_keep_models(self):
         p=wf.modular_template();media.validate({'version':1,'presets':[p]})

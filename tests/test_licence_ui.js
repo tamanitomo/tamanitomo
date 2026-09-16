@@ -1,8 +1,8 @@
 // The weight downloader must show a model's own terms before fetching it.
 const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const assert=require('node:assert/strict');
-const source=fs.readFileSync(path.join(__dirname,'../kit/app/static/workflows.js'),'utf8');
-const slice=source.slice(source.indexOf('  const licenceNotice ='),source.indexOf('\n  };',source.indexOf('  const licenceNotice ='))+5);
+const source=fs.readFileSync(path.join(__dirname,'../kit/app/static/studios.js'),'utf8');
+const slice=source.slice(source.indexOf('const licenceNotice ='),source.indexOf('\n  };',source.indexOf('const licenceNotice ='))+5);
 const sandbox={esc:s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))};
 vm.createContext(sandbox);
 vm.runInContext(slice+'\n;globalThis.__notice=licenceNotice;',sandbox);

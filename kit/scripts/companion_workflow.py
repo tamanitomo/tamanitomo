@@ -102,3 +102,124 @@ def create_recipe(spec):
     g['301']['inputs'].update(width=p['width'],height=p['height'])
     p['builder']=copy.deepcopy(spec)
     return p
+
+
+SOCKET_TYPES={'INT','FLOAT','STRING','BOOLEAN'}
+WIDE_NODES={'CLIPTextEncode','CLIPTextEncodeSDXL','String','PrimitiveStringMultiline'}
+
+
+def _slot_kind(spec):
+    """Whether a declared input is a widget the user types into, or a socket."""
+    if not isinstance(spec,(list,tuple)) or not spec:return 'socket'
+    head=spec[0]
+    if isinstance(head,list):return 'widget'
+    if isinstance(head,str) and head in SOCKET_TYPES:return 'widget'
+    return 'socket'
+
+
+def _default(spec):
+    """What the editor shows in a widget that currently has no value of its own."""
+    if isinstance(spec,(list,tuple)) and len(spec)>1 and isinstance(spec[1],dict) and 'default' in spec[1]:
+        return spec[1]['default']
+    head=spec[0] if isinstance(spec,(list,tuple)) and spec else ''
+    if isinstance(head,list):return head[0] if head else ''
+    return {'INT':0,'FLOAT':0.,'BOOLEAN':False}.get(head,'')
+
+
+def _multiline(spec):
+    return bool(isinstance(spec,(list,tuple)) and len(spec)>1 and isinstance(spec[1],dict) and spec[1].get('multiline'))
+
+
+def interactive_graph(graph,schema,name='Companion workflow'):
+    """Rebuild ComfyUI's editor format from an API prompt.
+
+    The API format keeps only what the server needs: a class name, widget values
+    and link tuples. The editor additionally needs each node's declared slot
+    order, numbered links and positions. Only `/object_info` knows the declared
+    order, so the schema is a required argument rather than something guessed
+    from the graph — a workflow rebuilt from guesswork opens with its widgets
+    shifted by one, which is worse than refusing.
+    """
+    if not isinstance(graph,dict) or not graph:raise ValueError('That workflow has no nodes')
+    if not isinstance(schema,dict) or not schema:raise ValueError('ComfyUI did not describe its nodes')
+    ids=sorted(graph,key=lambda k:(0,int(k)) if str(k).isdigit() else (1,str(k)))
+    missing=sorted({graph[i].get('class_type') for i in ids}-set(schema))
+    if missing:raise ValueError('This ComfyUI has no '+', '.join(str(m) for m in missing if m))
+
+    plan={}
+    for nid in ids:
+        node=graph[nid];cls=node.get('class_type');entry=schema.get(cls,{}) or {}
+        declared=[]
+        for section in ('required','optional'):
+            for key,spec in (entry.get('input',{}) or {}).get(section,{}).items():declared.append((key,spec))
+        given=node.get('inputs',{}) or {}
+        sockets,widgets,values=[],[],[]
+        for key,spec in declared:
+            supplied=given.get(key)
+            linked=isinstance(supplied,list) and len(supplied)==2 and not isinstance(supplied[0],list)
+            kind=_slot_kind(spec)
+            if kind=='socket' or linked:
+                slot={'name':key,'type':spec[0] if isinstance(spec,(list,tuple)) and isinstance(spec[0],str) else '*','link':None}
+                if kind=='widget':slot['widget']={'name':key}
+                sockets.append(slot)
+                if kind=='socket':continue
+            if kind!='widget':continue
+            # A widget converted to an input keeps its place in widgets_values;
+            # dropping it shifts every later widget by one.
+            widgets.append((key,spec));values.append(_default(spec) if linked else supplied)
+            # ComfyUI pairs every seed with a control widget, whose value sits
+            # immediately after the seed.
+            if key in ('seed','noise_seed'):values.append('randomize')
+        outputs=[]
+        types=list(entry.get('output',()) or ())
+        names=list(entry.get('output_name',()) or ())
+        for index,otype in enumerate(types):
+            outputs.append({'name':names[index] if index<len(names) else str(otype),
+                            'type':otype,'links':[],'slot_index':index})
+        plan[nid]={'class':cls,'sockets':sockets,'widgets':widgets,'values':values,'outputs':outputs}
+
+    links=[];link_id=0
+    for nid in ids:
+        for index,slot in enumerate(plan[nid]['sockets']):
+            supplied=(graph[nid].get('inputs',{}) or {}).get(slot['name'])
+            if not (isinstance(supplied,list) and len(supplied)==2):continue
+            source,source_slot=str(supplied[0]),int(supplied[1])
+            if source not in plan:raise ValueError('A node points at missing node '+source)
+            link_id+=1
+            slot['link']=link_id
+            outs=plan[source]['outputs']
+            if source_slot<len(outs):
+                outs[source_slot]['links'].append(link_id)
+                wire=outs[source_slot]['type']
+            else:wire=slot['type']
+            links.append([link_id,int(source) if source.isdigit() else source,source_slot,
+                          int(nid) if nid.isdigit() else nid,index,wire])
+
+    depth={};visiting=set()
+    def rank(nid):
+        if nid in depth:return depth[nid]
+        if nid in visiting:raise ValueError('That workflow contains a loop')
+        visiting.add(nid)
+        upstream=[str(v[0]) for v in (graph[nid].get('inputs',{}) or {}).values()
+                  if isinstance(v,list) and len(v)==2 and str(v[0]) in plan]
+        depth[nid]=1+max((rank(u) for u in upstream),default=-1)
+        visiting.discard(nid)
+        return depth[nid]
+    for nid in ids:rank(nid)
+    order=sorted(ids,key=lambda n:(depth[n],ids.index(n)))
+    column={}
+    nodes=[]
+    for position,nid in enumerate(order):
+        info=plan[nid];level=depth[nid];row=column.get(level,0);column[level]=row+1
+        tall=sum(4 if _multiline(spec) else 1 for _,spec in info['widgets'])
+        width=400 if info['class'] in WIDE_NODES or any(_multiline(s) for _,s in info['widgets']) else 280
+        height=46+26*tall+22*max(len(info['sockets']),len(info['outputs']))
+        nodes.append({'id':int(nid) if str(nid).isdigit() else nid,'type':info['class'],
+          'pos':[level*460,row*(height+60)],'size':[width,height],'flags':{},'order':position,'mode':0,
+          'inputs':info['sockets'],'outputs':info['outputs'],
+          'properties':{'Node name for S&R':info['class']},'widgets_values':info['values']})
+
+    numeric=[n['id'] for n in nodes if isinstance(n['id'],int)]
+    return {'id':None,'revision':0,'last_node_id':max(numeric,default=0),'last_link_id':link_id,
+            'nodes':nodes,'links':links,'groups':[],'config':{},
+            'extra':{'ds':{'scale':.8,'offset':[0,0]},'companion_kit':{'name':name}},'version':.4}
