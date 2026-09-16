@@ -2003,15 +2003,9 @@ body[data-page="chat"] main{padding:0}
 .studio-slider input[type=range]{width:100%;accent-color:var(--accent);height:26px;margin:0}
 .studio-slider small{display:block;margin-top:2px}
 
-.lora-stack{display:flex;flex-direction:column;gap:12px}
-.lora-row{padding:12px 14px;border:1px solid var(--edge);border-radius:10px;background:var(--surface)}
-.lora-row-head{display:flex;gap:8px;align-items:center;margin-bottom:10px}
-.lora-row-head select{flex:1;min-width:0}
 .lora-drop{flex:none;padding:6px 10px;color:var(--dim)}
 .lora-drop:hover{color:var(--bad);border-color:var(--bad)}
 /* Two strengths side by side on a wide screen, stacked where there is no room. */
-.lora-strengths{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
-.lora-strengths .studio-slider{margin-bottom:4px}
 
 .seed-row{display:flex;gap:8px;align-items:center}
 .seed-row input{flex:1;min-width:0}
@@ -2150,4 +2144,37 @@ body[data-page="chat"] main{padding:0}
   .resource-row{flex-wrap:wrap;row-gap:6px}
   .resource-kind{min-width:0}
   .resource-name{flex-basis:100%}
+}
+
+/* ------------------------------------------------------------ LoRA lines */
+/* One line each: name, model strength, text strength, out. Six of these fit
+   where two sliders used to, which is the difference between usable and not. */
+.lora-stack{display:flex;flex-direction:column;gap:5px}
+.lora-line{border:1px solid var(--edge);border-radius:8px;background:var(--surface);padding:5px 6px}
+.lora-line-main{display:flex;align-items:center;gap:5px}
+.lora-line select{flex:1;min-width:0;padding:6px 8px;font-size:12.5px;border-radius:6px}
+.lora-line input[type=number]{
+  flex:none;width:58px;padding:6px 4px;font-size:12.5px;text-align:center;border-radius:6px;
+  font-variant-numeric:tabular-nums
+}
+.lora-x,.lora-get{
+  flex:none;width:28px;height:28px;border-radius:6px;border:1px solid var(--edge);
+  background:var(--surface-2);color:var(--dim);cursor:pointer;display:grid;place-items:center;
+  font-size:12px;padding:0
+}
+.lora-x:hover{color:var(--bad);border-color:var(--bad)}
+.lora-get{color:#c98a12;border-color:color-mix(in srgb,#e0a521 55%,transparent);
+  background:color-mix(in srgb,#e0a521 16%,transparent);font-weight:700}
+.lora-get:hover{background:color-mix(in srgb,#e0a521 28%,transparent);color:#8a5d00}
+.lora-line.is-absent{border-color:color-mix(in srgb,#e0a521 45%,transparent)}
+.lora-absent-note{display:block;margin:4px 2px 1px;font-size:10.5px;color:#c98a12;overflow-wrap:anywhere}
+
+/* Prompt categories sit closer together now that each one folds. */
+.tag-fields{gap:7px}
+.tag-field{padding:9px 11px}
+.tag-field-head{margin-bottom:0}
+.tag-field[open] .tag-field-head{margin-bottom:8px}
+@media(max-width:700px){
+  .lora-line input[type=number]{width:50px}
+  .lora-line select{font-size:12px}
 }

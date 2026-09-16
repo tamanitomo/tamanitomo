@@ -354,7 +354,7 @@ async function renderWorkflowCreator(container, onCreate) {
         <summary>5 · Structured Prompt & Triggers</summary>
         <p class="dim small">The quality tags are sent along with the companion's identity prompt and current scene.</p>
         ${tagFieldHTML('lite-quality', 'Quality & style tags', draft.quality, 'Sent with the companion\u2019s own prompt')}
-        ${tagFieldHTML('lite-negative', 'Negative prompt', draft.negative, 'What to keep out')}
+        ${tagFieldHTML('lite-negative', 'Negative prompt', draft.negative, 'What to keep out', true)}
         <div class="actions">
           <button type="button" class="quiet" id="lite-test-prompt">Test prompt assembly</button>
         </div>

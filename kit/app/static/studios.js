@@ -741,6 +741,7 @@ function wirePortrait(){
    controls; the JSON stays underneath, authoritative, and is written back.   */
 
 let comfyModelCache={};
+let missingVersions={};
 async function comfyModels(endpoint){
   if(!endpoint)return {};
   if(comfyModelCache[endpoint])return comfyModelCache[endpoint];
@@ -777,9 +778,9 @@ function wireSliders(root){
 function tagsFromText(text){
   return String(text||'').split(',').map(x=>x.trim()).filter(Boolean);
 }
-function tagFieldHTML(key,label,text,hint){
+function tagFieldHTML(key,label,text,hint,collapsed){
   const tags=tagsFromText(text);
-  return `<details class="tag-field" data-tag-field="${esc(key)}" open>
+  return `<details class="tag-field" data-tag-field="${esc(key)}" ${collapsed?'':'open'}>
     <summary class="tag-field-head"><strong>${esc(label)}</strong>
       <span class="tag-count">${tags.length}</span>
       ${hint?`<small class="dim">${esc(hint)}</small>`:''}</summary>
@@ -1119,20 +1120,25 @@ workspaceHandlers['image-studio']=async()=>{
     <div class="card studio-block">
       <div class="studio-block-head"><h3>2 · LoRAs</h3>
         <button type="button" class="quiet small" id="add-lora-row" ${loras.length?'':'disabled'}>Add LoRA</button></div>
-      ${loraNodes.length?`<div class="lora-stack">${loraNodes.map(([id,node])=>`
-        <div class="lora-row" data-lora-node="${esc(id)}">
-          <div class="lora-row-head">
+      ${loraNodes.length?`<div class="lora-stack">${loraNodes.map(([id,node])=>{
+        const file=node.inputs.lora_name||'';
+        const absent=loras.length&&file&&!loras.includes(file);
+        const version=missingVersions[file];
+        return `
+        <div class="lora-line ${absent?'is-absent':''}" data-lora-node="${esc(id)}">
+          <div class="lora-line-main">
             <select data-lora-name aria-label="LoRA file">
-              ${loras.length?options(loras.map(v=>[v,v.replace(/\\.safetensors$/,'')]),node.inputs.lora_name)
-                :`<option value="${esc(node.inputs.lora_name||'')}">${esc((node.inputs.lora_name||'').replace(/\\.safetensors$/,''))}</option>`}
+              ${loras.length?options(loras.map(v=>[v,v.replace(/\.safetensors$/,'')]),file):''}
+              ${(absent||!loras.length)&&file?`<option value="${esc(file)}" selected>${esc(file.replace(/\.safetensors$/,''))}</option>`:''}
             </select>
-            <button type="button" class="quiet small lora-drop" data-drop-lora="${esc(id)}" aria-label="Remove this LoRA">✕</button>
+            <input type="number" data-lora-model step="0.05" min="-2" max="2" value="${Number(node.inputs.strength_model??1)}" title="Model strength" aria-label="Model strength">
+            <input type="number" data-lora-clip step="0.05" min="-2" max="2" value="${Number(node.inputs.strength_clip??1)}" title="Text strength" aria-label="Text strength">
+            ${absent&&version
+              ? `<button type="button" class="lora-get" data-get-lora="${esc(file)}" title="Download this LoRA" aria-label="Download ${esc(file)}">↓</button>`
+              : `<button type="button" class="lora-x" data-drop-lora="${esc(id)}" title="Remove" aria-label="Remove this LoRA">✕</button>`}
           </div>
-          <div class="lora-strengths">
-            ${sliderRow('lora-'+id+'-model','Model',Number(node.inputs.strength_model??1),-1,2,0.05)}
-            ${sliderRow('lora-'+id+'-clip','Text',Number(node.inputs.strength_clip??1),-1,2,0.05)}
-          </div>
-        </div>`).join('')}</div>`
+          ${absent?`<small class="lora-absent-note">${esc(file.replace(/\.safetensors$/,''))} — ${version?'needs to be downloaded':'not on this ComfyUI'}</small>`:''}
+        </div>`;}).join('')}</div>`
         :'<p class="dim small">No LoRAs in this workflow yet.</p>'}
       ${loras.length?`<p class="dim small">${loras.length} available on this ComfyUI.</p>`
         :'<p class="dim small">Test the connection below to load the LoRAs this ComfyUI has.</p>'}
@@ -1177,7 +1183,7 @@ workspaceHandlers['image-studio']=async()=>{
         </label></div>
       <div class="tag-fields">
         ${d.parts.map(k=>tagFieldHTML(k,formLabel(k),p.parts?.[k]||'',PART_HINT[k]||'')).join('')}
-        ${tagFieldHTML('__negative','Negative',p.negative||'','What to keep out')}
+        ${tagFieldHTML('__negative','Negative',p.negative||'','What to keep out',true)}
       </div>
     </div>
 
@@ -1265,13 +1271,27 @@ workspaceHandlers['image-studio']=async()=>{
     showRecommendations(p);};
   for(const row of root.querySelectorAll('[data-lora-node]')){
     const id=row.dataset.loraNode,node=p.workflow[id];
-    row.querySelector('[data-lora-name]').onchange=e=>{node.inputs.lora_name=e.target.value;syncWorkflowText(p);};
-    const model=$('lora-'+id+'-model'),clip=$('lora-'+id+'-clip');
-    if(model)model.addEventListener('change',()=>{node.inputs.strength_model=Number(model.value);syncWorkflowText(p);});
-    if(clip)clip.addEventListener('change',()=>{node.inputs.strength_clip=Number(clip.value);syncWorkflowText(p);});
+    row.querySelector('[data-lora-name]').onchange=e=>{node.inputs.lora_name=e.target.value;drawPreset();};
+    const model=row.querySelector('[data-lora-model]'),clip=row.querySelector('[data-lora-clip]');
+    if(model)model.onchange=()=>{node.inputs.strength_model=Number(model.value);syncWorkflowText(p);};
+    if(clip)clip.onchange=()=>{node.inputs.strength_clip=Number(clip.value);syncWorkflowText(p);};
   }
   for(const drop of root.querySelectorAll('[data-drop-lora]'))drop.onclick=()=>{
+    const node=p.workflow[drop.dataset.dropLora];
+    const name=(node?.inputs?.lora_name||'this LoRA').replace(/\.safetensors$/,'');
+    if(!confirm('Remove '+name+' from this workflow?'))return;
     removeLoraNode(p,drop.dataset.dropLora);drawPreset();};
+  for(const get of root.querySelectorAll('[data-get-lora]'))get.onclick=async()=>{
+    const file=get.dataset.getLora,version=missingVersions[file];
+    if(!version)return;
+    get.disabled=true;get.textContent='\u2026';
+    try{
+      await followOperation(await post('/images/fetch-resource',{version_id:version,kind:'lora'}));
+      delete comfyModelCache[p.endpoint];
+      await comfyModels(p.endpoint);
+      drawPreset();notice(file+' downloaded.');
+    }catch(error){get.disabled=false;get.textContent='\u2193';notice('Download failed: '+error.message);}
+  };
   if($('add-lora-row'))$('add-lora-row').onclick=async()=>{
     const models=await comfyModels(p.endpoint);
     addLoraNode(p,(models.lora_name||[])[0]);drawPreset();};
@@ -1440,6 +1460,10 @@ workspaceHandlers['image-studio']=async()=>{
        <button class="act" id="keep-imported">${result.preset.incomplete?'Save as a draft':'Add this workflow'}</button>
        <button class="quiet" id="discard-imported">Discard</button>
      </div></div>`;
+   for(const row of resources){
+     if(row.file&&row.version_id&&!row.installed)missingVersions[row.file]=row.version_id;
+     else if(row.file&&row.installed)delete missingVersions[row.file];
+   }
    const fetchOne=async row=>{
      const status=$('workflow-import-status');
      status.textContent=`Downloading ${row.file}\u2026`;
