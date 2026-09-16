@@ -678,7 +678,7 @@ function downloadJSON(name,data){const url=URL.createObjectURL(new Blob([JSON.st
 
 /* Which studio view is open, kept across a re-render so a portrait change comes
    back to the identity view instead of dropping you on the composer. */
-let imageStudioView='presets';
+let imageStudioView='assignments';
 
 /* The reference portrait used to sit on Identity, where it broke the SOUL into
    pieces and was the one thing on that page that could call a model. It belongs
@@ -859,21 +859,20 @@ workspaceHandlers['image-studio']=async()=>{
  <div id="view-assignments" class="studio-view-pane">
   <div class="card lanes-dashboard">
    <div class="lanes-header">
-    <h3 style="margin:0">Lanes</h3>
-    <div class="actions">
-     <button class="act" id="save-assignments-btn">Save lane assignments</button>
-     <button class="quiet" id="assignments-goto-creator">+ Build new workflow</button>
-    </div>
+    <h3 style="margin:0">🎯 Lanes</h3>
    </div>
-
-   <label class="fallback-row">
-    <span>Fallback</span>
-    <select id="image-default-preset"></select>
-   </label>
-   <p class="dim small" style="margin:6px 2px 16px">Used when a lane has nothing assigned.</p>
 
    <div class="lane-cards-grid" id="image-routes">
     <!-- Rendered dynamically -->
+   </div>
+   <label class="fallback-row">
+    <span>✨ Fallback</span>
+    <select id="image-default-preset"></select>
+   </label>
+   <p class="dim small" style="margin:6px 2px 16px">Used when a lane has nothing of its own.</p>
+   <div class="studio-actions">
+    <button class="act" id="save-assignments-btn">Save lanes</button>
+    <button class="quiet" id="assignments-goto-creator">⚙️ Manage workflows</button>
    </div>
   </div>
  </div>
@@ -881,14 +880,14 @@ workspaceHandlers['image-studio']=async()=>{
  <!-- VIEW 3: ComfyUI Lite Workflow Creator -->
 
  <!-- Workflows: create one, edit one, or read one out of a picture -->
- <div id="view-presets" class="studio-view-pane">
-  <div class="card workflow-mode-panel" id="workflow-create-panel" hidden>
-   <div class="workflow-new-head">
-    <h3>New workflow</h3>
-    <button type="button" class="quiet" id="workflow-show-import">Import from an image</button>
-   </div>
-   <div id="workflow-creator-root"></div>
+ <div id="view-presets" class="studio-view-pane" hidden>
+  <div class="studio-actions" style="margin-bottom:14px">
+   <button type="button" class="quiet" id="workflows-back-lanes">← Back to lanes</button>
   </div>
+  <div class="workflow-new-head">
+   <button type="button" class="quiet" id="workflow-show-import">🖼️ Import from an image</button>
+  </div>
+  <div id="workflow-creator-root" hidden></div>
 
   <div class="card workflow-mode-panel" id="workflow-import-panel" hidden>
    <h3>Import from an image</h3>
@@ -957,12 +956,19 @@ workspaceHandlers['image-studio']=async()=>{
  // Subnav Switching
  const showStudioView=(viewName)=>{
   imageStudioView=viewName;
-  const target=$('view-'+viewName);
-  if(target&&target.scrollIntoView)target.scrollIntoView({block:'start',behavior:'smooth'});
+  if(viewName==='assignments')showStudioSection('lanes');
+  else if(viewName==='presets'||viewName==='identity')showStudioSection('workflows');
  };
  showStudioView(imageStudioView);
 
- $('assignments-goto-creator').onclick=()=>{showStudioView('presets');setWorkflowMode('create');};
+ /* One half of the page at a time: the assignments, or the workflows. */
+ function showStudioSection(which){
+  $('view-assignments').hidden=which!=='lanes';
+  $('view-presets').hidden=which!=='workflows';
+  window.scrollTo({top:0});
+ }
+ $('assignments-goto-creator').onclick=()=>{showStudioSection('workflows');setWorkflowMode('edit');};
+ $('workflows-back-lanes').onclick=()=>showStudioSection('lanes');
  $('image-back-identity').onclick=()=>showTab('identity');
  wirePortrait();
  $('image-follow-soul').onchange=()=>{$('image-identity').disabled=$('image-follow-soul').checked;};
@@ -1373,15 +1379,27 @@ workspaceHandlers['image-studio']=async()=>{
  }
 
  await drawPreset();
- $('image-preset-select').onchange=e=>{
+ $('image-preset-select').onchange=async e=>{
   readPreset();
-  if(e.target.value==='__new__'){setWorkflowMode('create');menus();return;}
+  if(e.target.value==='__new__'){
+   const blank=await api('/images/modular-template');
+   blank.id='comfy-'+presetSuffix();
+   blank.name='New workflow';
+   blank.category='';
+   blank.incomplete=true;
+   try{blank.endpoint=(await api('/workflows')).settings?.endpoint||blank.endpoint;}catch(error){}
+   settings.presets.push(blank);
+   presetIndex=settings.presets.length-1;
+   setWorkflowMode('edit');await drawPreset();
+   notice('New workflow started. Choose a model, then test it before saving.');
+   return;
+  }
   presetIndex=Number(e.target.value);setWorkflowMode('edit');drawPreset();
  };
  /* Create, edit or import: one of three, and only one on screen. */
  /* Edit what exists, or make a new one; importing is a way of making one. */
  function setWorkflowMode(mode){
-  for(const [name,id] of [['edit','workflow-edit-panel'],['create','workflow-create-panel'],['import','workflow-import-panel']]){
+  for(const [name,id] of [['edit','workflow-edit-panel'],['import','workflow-import-panel']]){
    const panel=$(id);if(panel)panel.hidden=name!==mode;
   }
  }

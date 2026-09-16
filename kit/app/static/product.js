@@ -1517,6 +1517,130 @@ function wireAppearancePanel(panel){
   }
 }
 
+
+/* ------------------------------------------------- image generation settings
+
+   Everything that configures picture-making rather than being part of doing it:
+   where ComfyUI is, how to get one, the reference photograph, and the
+   appearance sent to a provider. The studio had these bolted to its header;
+   they belong with the rest of the configuration. */
+async function imagesPanelHTML(){
+  let config={},identity={},portrait={stored:false};
+  try{config=(await api('/workflows')).settings||{};}catch(error){}
+  try{identity=await api('/images');}catch(error){}
+  try{portrait=await api('/portrait');}catch(error){}
+  const settings=identity.settings||{};
+  const following=settings.identity_override===null||settings.identity_override===undefined;
+  return `
+  <h2>Image generation</h2>
+
+  <h3 class="section-subheading">Where images are made</h3>
+  <div class="form-grid">
+    <label>ComfyUI address
+      <input id="set-comfy-endpoint" type="url" value="${esc(config.endpoint||'')}" placeholder="http://127.0.0.1:8188">
+      <small class="dim">The machine running ComfyUI. Workflows use this unless one overrides it.</small>
+    </label>
+    <label>Civitai API key
+      <input id="set-civitai-key" type="password" autocomplete="off"
+        value="" placeholder="${config.api_key_configured?'•••• saved':'Paste a key to download gated models'}">
+      <small class="dim">Only needed for models Civitai gates behind an account.</small>
+    </label>
+  </div>
+  <div class="studio-actions">
+    <button class="quiet" id="set-comfy-check">Check the connection</button>
+    <button class="quiet" id="set-comfy-install">Install ComfyUI here</button>
+    <button class="quiet" id="set-comfy-start">Start ComfyUI</button>
+  </div>
+  <label class="inline-label switch-container" style="margin:6px 0 0">
+    <input type="checkbox" id="set-comfy-cpu"><span class="switch-slider"></span>
+    <span class="switch-label">Run on the processor instead of the graphics card</span>
+  </label>
+  <p class="dim small" id="set-comfy-status" role="status"></p>
+
+  <h3 class="section-subheading">Reference photograph</h3>
+  <div class="portrait-row">
+    ${portrait.stored?`<img class="portrait-thumb" src="${mediaUrl('/media/portrait?t='+Date.now())}" alt="Reference portrait">`
+      :'<div class="portrait-thumb portrait-empty">No photo</div>'}
+    <div>
+      <p class="dim">One photograph, kept in the vault, passed to providers that accept a reference.</p>
+      <div class="actions">
+        <label class="quiet" style="cursor:pointer">${portrait.stored?'Replace it':'Choose a photo'}<input id="set-pfile" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
+        ${portrait.stored?'<button class="quiet" id="set-pdrop">Forget it</button>':''}
+        <span class="dim small" id="set-pmsg"></span>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="section-subheading">How they are described to a provider</h3>
+  <label class="inline-label switch-container" style="margin-bottom:10px">
+    <input id="set-follow-soul" type="checkbox" ${following?'checked':''}>
+    <span class="switch-slider"></span>
+    <span class="switch-label">Use the appearance from their SOUL</span>
+  </label>
+  <textarea id="set-image-identity" aria-label="Appearance sent to the image provider"
+    ${following?'disabled':''}>${esc(settings.identity_override||identity.identity||'')}</textarea>
+  <small class="dim">Overrides what Identity says, for pictures only.</small>
+  <div class="studio-actions">
+    <button class="act" id="set-images-save">Save image settings</button>
+    <span class="dim small" id="set-images-saved" role="status"></span>
+  </div>`;
+}
+
+function wireImagesPanel(panel){
+  const status=panel.querySelector('#set-comfy-status');
+  const follow=panel.querySelector('#set-follow-soul');
+  const identity=panel.querySelector('#set-image-identity');
+  if(follow)follow.onchange=()=>{identity.disabled=follow.checked;};
+
+  panel.querySelector('#set-comfy-check').onclick=async()=>{
+    status.textContent='Checking…';
+    try{
+      const result=await post('/images/check',{endpoint:panel.querySelector('#set-comfy-endpoint').value});
+      const models=result.models||{};
+      status.innerHTML=`<span class="good">Connected · ${(models.ckpt_name||[]).length} models · ${(models.lora_name||[]).length} LoRAs</span>`;
+    }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
+  };
+  panel.querySelector('#set-comfy-install').onclick=async()=>
+    action('/images/install',{cpu:panel.querySelector('#set-comfy-cpu').checked},()=>notice('ComfyUI installed.'));
+  panel.querySelector('#set-comfy-start').onclick=async()=>
+    action('/images/start',{cpu:panel.querySelector('#set-comfy-cpu').checked},()=>notice('ComfyUI starting.'));
+
+  const pfile=panel.querySelector('#set-pfile');
+  if(pfile)pfile.onchange=async()=>{
+    const file=pfile.files[0];if(!file)return;
+    const message=panel.querySelector('#set-pmsg');
+    message.textContent='storing…';
+    try{
+      await uploadPortrait(file);
+      portraitVersion=Date.now();await refreshPortraitState();
+      await render('settings');
+    }catch(error){message.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
+  };
+  const pdrop=panel.querySelector('#set-pdrop');
+  if(pdrop)pdrop.onclick=async()=>{
+    if(!confirm('Remove the reference photograph?'))return;
+    await api('/portrait',{method:'DELETE'});
+    portraitVersion=Date.now();await refreshPortraitState();
+    await render('settings');
+  };
+
+  panel.querySelector('#set-images-save').onclick=async()=>{
+    const saved=panel.querySelector('#set-images-saved');
+    saved.textContent='Saving…';
+    try{
+      const endpoint=panel.querySelector('#set-comfy-endpoint').value;
+      const key=panel.querySelector('#set-civitai-key').value;
+      const current=(await api('/workflows')).settings||{};
+      await post('/workflows/settings',{...current,endpoint,
+        ...(key?{api_key:key}:{})});
+      const images=await api('/images');
+      await post('/images',{revision:images.revision,settings:{...images.settings,
+        identity_override:follow.checked?null:identity.value}});
+      saved.textContent='Saved';
+    }catch(error){saved.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
+  };
+}
+
 const settingsPage=workspaceHandlers.settings||(typeof renderSettings==='function'?renderSettings:null);
 workspaceHandlers.settings=async()=>{
   if(settingsPage)await settingsPage();if(current!=='settings')return;
@@ -1532,6 +1656,16 @@ workspaceHandlers.settings=async()=>{
   workspacePanel.innerHTML=appearancePanelHTML();
   wireAppearancePanel(workspacePanel);
 
+  let imagesPanel=page.querySelector('[data-preference-panel="images"]');
+  if(!imagesPanel){
+    imagesPanel=document.createElement('div');
+    imagesPanel.className='card';
+    imagesPanel.dataset.preferencePanel='images';
+    page.append(imagesPanel);
+  }
+  imagesPanel.innerHTML=await imagesPanelHTML();
+  wireImagesPanel(imagesPanel);
+
   const allCards=[...page.querySelectorAll('[data-preference-panel]')];
   const oldTabs=page.querySelector('.segmented[aria-label="Preference categories"]');
   if(oldTabs)oldTabs.remove();
@@ -1539,7 +1673,7 @@ workspaceHandlers.settings=async()=>{
   tabs.className='segmented preference-tabs';
   tabs.setAttribute('role','tablist');
   tabs.setAttribute('aria-label','Preference categories');
-  tabs.innerHTML=[['contact','Contact'],['photos','Photo sessions'],['routine','Daily rhythm'],['relationship','Relationship'],['senses','Awareness'],['network','Network & PIN'],['workspace','Appearance']].map(([id,label])=>`<button role="tab" data-preference="${id}">${label}</button>`).join('');
+  tabs.innerHTML=[['contact','Contact'],['photos','Photo sessions'],['images','Image generation'],['routine','Daily rhythm'],['relationship','Relationship'],['senses','Awareness'],['network','Network & PIN'],['workspace','Appearance']].map(([id,label])=>`<button role="tab" data-preference="${id}">${label}</button>`).join('');
   page.insertBefore(tabs,allCards[0]);
   const pick=name=>{
     preferencePanel=name;
