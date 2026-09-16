@@ -398,6 +398,9 @@ def feed_page(c, limit=60, before=None):
             values.extend(FEED_EXCLUDED_SOURCES)
         if '_compressed_summary' in cols:conditions.append('coalesce(m._compressed_summary,0)=0')
         if {'active','compacted'}<=cols:conditions.append('(m.active=1 OR m.compacted=1)')
+        conditions.append("trim(coalesce(m.content,''))<>''")
+        if 'display_kind' in cols:
+            conditions.append("coalesce(m.display_kind,'')<>'internal_notification'")
         if cursor:
             if type(cursor[1])!=int:raise ValueError('Invalid message cursor')
             conditions.append('(coalesce(m.timestamp,0),m.rowid)<(?,?)');values.extend(cursor)

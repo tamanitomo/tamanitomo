@@ -113,8 +113,9 @@ async function action(path,payload={},onDone){
 }
 function bindAction(id,path,payload={},onDone){const button=$(id);if(button)button.onclick=async()=>{button.disabled=true;try{await action(path,typeof payload==='function'?payload():payload,onDone);}finally{button.disabled=false;}};}
 async function boot(){
-  // Learn whether there is a face to show before anything draws one.
-  refreshPortraitState();
+  // Learn whether there is a face to show before anything draws one: a page
+  // that renders first would otherwise show the initial and keep it.
+  await refreshPortraitState();
   $('installation-select').value=INSTALLATION;$('installation-select').onchange=e=>installationChanged(e.target.value);
   const data=await api('/profiles');roster=data.profiles;
   if(!PROFILE){const remembered=localStorage.getItem('last-profile-'+INSTALLATION);PROFILE=data.selected_profile&&data.selected_profile!=='default'?data.selected_profile:roster.some(p=>p.id===remembered)?remembered:roster.find(p=>p.installed)?.id||'default';}
@@ -432,20 +433,33 @@ function extractMediaFromContent(content){
   return {text:text.trim(),extractedMedia:mediaMatches};
 }
 function chatMessagesHtml(messages){
-  return messages.map(m=>{
+  const GROUP_WINDOW=5*60;
+  return messages.map((m,i)=>{
     const at=new Date((m.timestamp||0)*1000),day=at.toLocaleDateString();
     const divider=day!==chatLastDay?`<div class="chat-day">${esc(day)}</div>`:'';
+    const newDay=day!==chatLastDay;
     chatLastDay=day;
     const channel=channelOf(m.source);
+    const prev=messages[i-1],next=messages[i+1];
+    const sameRun=(a,b)=>a&&b&&a.role===b.role&&String(a.source||'')===String(b.source||'')
+      &&Math.abs((b.timestamp||0)-(a.timestamp||0))<=GROUP_WINDOW;
+    const startsRun=newDay||!sameRun(prev,m);
+    const endsRun=!sameRun(m,next)||
+      (next&&new Date((next.timestamp||0)*1000).toLocaleDateString()!==day);
     const {text,extractedMedia}=extractMediaFromContent(m.content);
     const attachments=[...(m.attachments||[]),...extractedMedia];
     // "Here" needs no badge; any other channel is worth knowing about.
     const badge=channel.key==='desktop'||channel.key==='web'?''
       :`<span class="bubble-channel">${channel.mark?channel.mark+' ':''}${esc(channel.label)}</span>`;
-    return divider+`<div class="bubble ${m.role==='user'?'user':''}" data-channel="${esc(channel.key)}">
+    const meta=endsRun
+      ?`<small>${badge}<span>${esc(at.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}))}</span></small>`:'';
+    const shape=[startsRun?'starts-run':'',endsRun?'ends-run':''].filter(Boolean).join(' ');
+    const face=m.role!=='user'&&endsRun?faceHtml(chatName(),'bubble-face'):'';
+    return divider+`<div class="bubble ${m.role==='user'?'user':''} ${shape}" data-channel="${esc(channel.key)}">
+      ${face}
       <div class="message-body">${richText(text)}</div>
       ${attachments.map(inlineMedia).join('')}
-      <small>${badge}<span>${esc(at.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}))}</span></small>
+      ${meta}
     </div>`;}).join('');
 }
 

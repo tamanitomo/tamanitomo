@@ -35,6 +35,10 @@ class FeedTests(unittest.TestCase):
             db.executemany('INSERT INTO messages VALUES (?,?,?,?,0,1,0)',said)
             db.execute("INSERT INTO messages VALUES ('web','assistant','hidden summary',33,1,1,0)")
             db.execute("INSERT INTO messages VALUES ('web','assistant','inactive',34,0,0,0)")
+            # Half of a real history looks like this: an assistant row with no
+            # text, carrying only the tool call the model decided to make.
+            db.execute("INSERT INTO messages VALUES ('web','assistant','',35,0,1,0)")
+            db.execute("INSERT INTO messages VALUES ('web','assistant','   ',36,0,1,0)")
 
     def get(self,path,**params):
         return self.f.client.get('/api'+path,params={'profile':'nova',**params},headers=self.f.headers)
@@ -52,6 +56,14 @@ class FeedTests(unittest.TestCase):
         self.assertNotIn('subagent',{r['source'] for r in rows})
         for hidden in ('nightly summary','tool output','hidden summary','inactive'):
             self.assertNotIn(hidden,[r['content'] for r in rows])
+
+    def test_a_message_with_no_text_is_not_a_message(self):
+        """Empty assistant rows carry a tool call and nothing to read. On a real
+        history they are about half of everything, and every one of them was
+        drawn as an empty bubble."""
+        rows=self.get('/feed').json()['messages']
+        self.assertTrue(all(row['content'].strip() for row in rows))
+        self.assertEqual(len(rows),6)
 
     def test_another_companions_conversation_is_never_shown(self):
         rows=self.get('/feed').json()['messages']

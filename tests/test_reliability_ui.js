@@ -75,7 +75,7 @@ vm.runInContext(workspace.slice(workspace.indexOf('async function followOperatio
   // a rejected HTTP request. It must still release all composer controls.
   const voice=read('voice-chat.js');
   vm.runInContext(voice.match(/^function voiceControlsBusy.*$/m)[0],sandbox);
-  for(const id of ['session-select','new-chat','send-message','chat-message','voice-record','voice-cancel'])elements[id]={disabled:true,readOnly:true};
+  for(const id of ['send-message','chat-message','voice-record','voice-cancel','voice-stop'])elements[id]={disabled:true,readOnly:true,hidden:false,classList:{add(){},remove(){},toggle(){}}};
   sandbox.clearTimeout=()=>{};sandbox.Blob=Blob;
   sandbox.stream={getTracks:()=>[{stop(){}}]};
   sandbox.state={chunks:[new Uint8Array(32)],recorder:{mimeType:'audio/webm'},cancelled:false};
