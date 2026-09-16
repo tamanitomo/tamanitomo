@@ -142,11 +142,16 @@ def template():
         '11':{'class_type':'SaveImage','inputs':{'images':['10',0],'filename_prefix':'Companion'}}},
       'mappings':{'prompt':['4','text'],'negative':['5','text'],'width':['7','width'],'height':['7','height'],'seed':['9','seed'],'steps':['9','steps'],'cfg':['9','cfg']}}
 
-def compile(c,preset_id='',category='portrait',overrides=None):
+def compile(c,preset_id='',category='portrait',overrides=None,draft=None):
     import companion_portrait as portrait
     data=effective(c)
-    ident=preset_id or data.get('routes',{}).get(category) or data.get('default_preset')
-    preset=next((p for p in data['presets'] if p['id']==ident),None)
+    if draft is not None:
+        if not isinstance(draft,dict) or not draft.get('provider'):
+            raise ValueError('That draft workflow is not complete enough to render')
+        preset={**draft,'id':draft.get('id') or 'draft'}
+    else:
+        ident=preset_id or data.get('routes',{}).get(category) or data.get('default_preset')
+        preset=next((p for p in data['presets'] if p['id']==ident),None)
     if not preset:raise ValueError('Choose and save an image preset first')
     p=copy.deepcopy(preset);parts=dict(p.get('parts',{}))
     parts['identity']=(parts.get('identity') or portrait.identity_block(c)) if p.get('include_identity',True) else ''
@@ -189,8 +194,8 @@ class ImageHeld(ValueError):
         super().__init__(message);self.path=path;self.rating=rating
 
 
-def generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:None,allow_nsfw=False):
-    try:return _generate(c,preset_id,category,overrides,report,allow_nsfw)
+def generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:None,allow_nsfw=False,draft=None):
+    try:return _generate(c,preset_id,category,overrides,report,allow_nsfw,draft)
     except ImageHeld as held:
         # 'unknown' is the detector's uncertain band, and it earns the same one clothed retry as
         # a definite flag: without it an ambiguous image had no route to delivery at all.
@@ -205,7 +210,7 @@ def generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:N
             'No exposed breasts, genitals, buttocks, or sexual activity. Preserve the requested subject count, setting and activity.')
         review.write_metadata(held.path,{'replacement_status':'retrying'})
         try:
-            replacement=_generate(c,preset_id,category,retry,report,False)
+            replacement=_generate(c,preset_id,category,retry,report,False,draft)
             target=Path(replacement['path']);meta=review.metadata(target)
             if meta.get('rating')!='safe' or meta.get('review',{}).get('status')!='passed':
                 raise ValueError('Replacement did not pass scanning')
@@ -220,8 +225,8 @@ def generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:N
         return replacement
 
 
-def _generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:None,allow_nsfw=False):
-    result=compile(c,preset_id,category,overrides);p=result['preset'];base=endpoint(p['endpoint']) if p['provider']!='hermes' else ''
+def _generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:None,allow_nsfw=False,draft=None):
+    result=compile(c,preset_id,category,overrides,draft);p=result['preset'];base=endpoint(p['endpoint']) if p['provider']!='hermes' else ''
     report('Generating with '+p['name'])
     if p['provider']=='hermes':
         reply=hermes_bridge(c,'generate',{'prompt':result['prompt'],'hermes_provider':p.get('hermes_provider',''),

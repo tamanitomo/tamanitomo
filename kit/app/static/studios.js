@@ -678,7 +678,7 @@ function downloadJSON(name,data){const url=URL.createObjectURL(new Blob([JSON.st
 
 /* Which studio view is open, kept across a re-render so a portrait change comes
    back to the identity view instead of dropping you on the composer. */
-let imageStudioView='compose';
+let imageStudioView='presets';
 
 /* The reference portrait used to sit on Identity, where it broke the SOUL into
    pieces and was the one thing on that page that could call a model. It belongs
@@ -857,88 +857,11 @@ workspaceHandlers['image-studio']=async()=>{
  </div>
 
  <nav class="studio-subnav" id="image-subnav" aria-label="Image studio navigation">
-  <button type="button" class="studio-subnav-btn is-active" data-view="compose">📸 Compose</button>
-  <button type="button" class="studio-subnav-btn" data-view="assignments">🔀 Routing</button>
-  <button type="button" class="studio-subnav-btn" data-view="creator">⚡ Workflows</button>
-  <button type="button" class="studio-subnav-btn" data-view="presets">⚙️ Presets</button>
+  <button type="button" class="studio-subnav-btn is-active" data-view="presets">⚡ Workflows</button>
+  <button type="button" class="studio-subnav-btn" data-view="assignments">🔀 Lanes</button>
   <button type="button" class="studio-subnav-btn" data-view="identity">👤 Appearance</button>
  </nav>
 
- <!-- VIEW 1: Photo Composer -->
- <div id="view-compose" class="studio-view-pane">
-  <div class="composer-lane-bar">
-   <span class="dim small" style="text-transform:uppercase;letter-spacing:.05em;font-weight:600">Lane:</span>
-   <div class="lane-pills" id="composer-lane-pills">
-    ${d.categories.map(cat=>`<button type="button" class="lane-pill ${cat===activeCategory?'is-selected':''}" data-lane="${cat}">${formLabel(cat)}</button>`).join('')}
-   </div>
-  </div>
-
-  <div class="composer-route-info">
-   <div class="composer-active-route">
-    <span class="sparkle-icon">⚡</span>
-    <span>Active lane: <strong id="composer-lane-label">${formLabel(activeCategory)}</strong> · <span id="composer-assigned-name" class="pill-badge">Loading…</span></span>
-    <button type="button" class="link-btn" id="composer-goto-assignments">Change assignment ↗</button>
-   </div>
-   <div class="composer-override-box">
-    <label class="dim small">Workflow override:
-     <select id="image-test-preset" class="mini-select"></select>
-    </label>
-   </div>
-  </div>
-  <select id="image-test-category" hidden>${options(d.categories.map(v=>[v,formLabel(v)]),activeCategory)}</select>
-
-  <div class="studio-composer-grid">
-   <!-- Left: Prompt Director -->
-   <div class="composer-deck">
-    <div class="composer-prompt-box">
-     <div class="composer-box-header">
-      <label for="prompt-part-scene" class="composer-box-label">
-       <span class="sparkle-icon">✨</span>
-       <span>Standard Category Test Prompt</span>
-       <span class="dim small">— Verified workflow benchmark scene</span>
-      </label>
-      <button type="button" class="link-btn" id="reset-scene-btn">Reset to lane default</button>
-     </div>
-     <textarea id="prompt-part-scene" data-shot-part="scene" class="composer-textarea" rows="3" readonly style="background:color-mix(in srgb,var(--ink) 3%,transparent);cursor:default"></textarea>
-     <div class="inspiration-tags-strip" style="margin-top:10px">
-      <span class="dim small">Benchmark scenes:</span>
-      <div id="lane-test-chips" style="display:inline-flex;gap:6px;flex-wrap:wrap"></div>
-     </div>
-    </div>
-
-    <p class="dim small studio-scope-note">Test renders use standard benchmark scenes to check the workflow, not the companion.</p>
-
-    <!-- Controls & Action Footer -->
-    <div class="composer-footer" style="margin-top:16px">
-     <div class="composer-actions" style="width:100%;display:flex;justify-content:flex-end;gap:10px">
-      <button type="button" class="quiet-action-btn" id="image-compile">
-       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-       <span>Preview Prompt</span>
-      </button>
-      <button type="button" class="generate-action-btn" id="image-generate">
-       <span>✨ Test Render Lane</span>
-      </button>
-     </div>
-    </div>
-   </div>
-
-   <!-- Right: Canvas & Results -->
-   <div class="canvas-deck">
-    <div class="canvas-frame" id="image-canvas-frame">
-     <div id="image-output" style="width:100%">
-      <div class="canvas-idle-state">
-       <div class="idle-icon-ring">
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-       </div>
-       <h4 style="margin:0 0 4px;color:var(--ink-2)">Studio Canvas Ready</h4>
-       <p class="dim small" style="margin:0">Choose a lane, shape your prompt, and click Generate Photo.</p>
-      </div>
-     </div>
-    </div>
-    <div id="image-prompt-result" class="prompt-inspector-box" hidden></div>
-   </div>
-  </div>
- </div>
 
  <!-- VIEW 2: Assigned Workflows & Lanes (Dedicated Routing Deck) -->
  <div id="view-assignments" class="studio-view-pane" hidden>
@@ -978,12 +901,13 @@ workspaceHandlers['image-studio']=async()=>{
  </div>
 
  <!-- VIEW 3: ComfyUI Lite Workflow Creator -->
- <div id="view-creator" class="studio-view-pane" hidden>
-  <div id="workflow-creator-root"></div>
- </div>
 
- <!-- VIEW 4: Presets & Library -->
+ <!-- Workflows: build them, edit them, test them, route them -->
  <div id="view-presets" class="studio-view-pane" hidden>
+  <details class="card studio-builder" id="workflow-builder">
+   <summary id="open-workflow-builder">Build a new workflow from a template</summary>
+   <div id="workflow-creator-root"></div>
+  </details>
   <details class="card" style="margin-bottom:16px"><summary>Where to get image models</summary><p>Browse <a href="https://civitai.com/models" target="_blank" rel="noopener">Civitai</a> for checkpoints, LoRAs, example images, and their recommended settings, or <a href="https://huggingface.co/models?pipeline_tag=text-to-image" target="_blank" rel="noopener">Hugging Face</a> for publisher model weights. Match the checkpoint, LoRA, and workflow family (for example SDXL); different families are not interchangeable.</p><p>Put checkpoint files in <code>companion-engines/comfyui/models/checkpoints</code>, LoRAs in <code>models/loras</code>, and VAEs in <code>models/vae</code> beneath the selected Hermes installation. Prefer safetensors when offered. Downloading a checkpoint does not install custom workflow nodes.</p></details>
   <div class="card">
    <div class="actions" style="justify-content:space-between">
@@ -1046,12 +970,11 @@ workspaceHandlers['image-studio']=async()=>{
  const showStudioView=(viewName)=>{
   imageStudioView=viewName;
   for(const btn of $('image-subnav').querySelectorAll('.studio-subnav-btn')){btn.classList.toggle('is-active',btn.dataset.view===viewName);}
-  for(const id of ['view-compose','view-assignments','view-creator','view-presets','view-identity']){const el=$(id);if(el)el.hidden=id!==('view-'+viewName);}
+  for(const id of ['view-assignments','view-presets','view-identity']){const el=$(id);if(el)el.hidden=id!==('view-'+viewName);}
  };
  showStudioView(imageStudioView);
  for(const btn of $('image-subnav').querySelectorAll('.studio-subnav-btn')){btn.onclick=()=>showStudioView(btn.dataset.view);}
- $('composer-goto-assignments').onclick=()=>showStudioView('assignments');
- $('assignments-goto-creator').onclick=()=>showStudioView('creator');
+ $('assignments-goto-creator').onclick=()=>{showStudioView('presets');$('open-workflow-builder')?.click();};
  $('image-back-identity').onclick=()=>showTab('identity');
  wirePortrait();
  $('image-follow-soul').onchange=()=>{$('image-identity').disabled=$('image-follow-soul').checked;};
@@ -1091,7 +1014,6 @@ workspaceHandlers['image-studio']=async()=>{
   const rows=settings.presets.map(p=>[p.id,p.name]);
   const allRows=[['', 'Choose a workflow'], ...rows];
   $('image-preset-select').innerHTML=options(settings.presets.map((p,i)=>[String(i),p.name]),String(presetIndex));
-  $('image-test-preset').innerHTML=options([['','Use lane assigned workflow'],...(settings.inherit?d.installation_presets.map(p=>[p.id,p.name]):rows)],'');
   $('image-default-preset').innerHTML=options(allRows,defaultId);
   $('image-default-preset').onchange=e=>{defaultId=e.target.value;menus();updateActiveLaneBadge();};
 
@@ -1162,7 +1084,7 @@ workspaceHandlers['image-studio']=async()=>{
 
     ${comfy?`
     <div class="card studio-block">
-      <h3>Model</h3>
+      <h3>1 · Model</h3>
       ${ckptNodes.length?ckptNodes.map(([id,node])=>`
         <label>Checkpoint
           <select data-ckpt-node="${esc(id)}">
@@ -1174,7 +1096,7 @@ workspaceHandlers['image-studio']=async()=>{
     </div>
 
     <div class="card studio-block">
-      <div class="studio-block-head"><h3>LoRAs</h3>
+      <div class="studio-block-head"><h3>2 · LoRAs</h3>
         <button type="button" class="quiet small" id="add-lora-row" ${loras.length?'':'disabled'}>Add LoRA</button></div>
       ${loraNodes.length?`<div class="lora-stack">${loraNodes.map(([id,node])=>`
         <div class="lora-row" data-lora-node="${esc(id)}">
@@ -1196,7 +1118,7 @@ workspaceHandlers['image-studio']=async()=>{
     </div>
 
     <div class="card studio-block">
-      <h3>Render</h3>
+      <h3>3 · Sampling &amp; output</h3>
       <div class="form-grid">
         <label>Size
           <select id="preset-size">
@@ -1218,7 +1140,7 @@ workspaceHandlers['image-studio']=async()=>{
     </div>
 
     <div class="card studio-block">
-      <div class="studio-block-head"><h3>Prompt</h3>
+      <div class="studio-block-head"><h3>4 · Prompt</h3>
         <label class="inline-label switch-container" style="margin:0">
           <input id="preset-include-identity" type="checkbox" ${p.include_identity!==false?'checked':''}>
           <span class="switch-slider"></span><span class="switch-label">Include the companion</span>
@@ -1231,6 +1153,7 @@ workspaceHandlers['image-studio']=async()=>{
 
     <div class="studio-block-actions">
       <button type="button" class="act" id="test-preset">Test render</button>
+      <button type="button" class="quiet" id="assign-lane-here">Assign to a lane</button>
       <button type="button" class="quiet" id="check-comfy">Check connection</button>
       <button type="button" class="quiet" id="derive-img2img">Make an image-to-image copy</button>
       <span class="dim small" id="test-preset-status" role="status"></span>
@@ -1318,6 +1241,7 @@ workspaceHandlers['image-studio']=async()=>{
     }catch(error){$('comfy-models').innerHTML=`<p class="bad">${esc(error.message)}</p>`;}
   };
   if($('test-preset'))$('test-preset').onclick=async()=>testPreset(p);
+  if($('assign-lane-here'))$('assign-lane-here').onclick=()=>{readPreset();showStudioView('assignments');};
  }
 
  /* A LoRA loader sits in a chain: model and clip come from the node before it,
@@ -1361,21 +1285,19 @@ workspaceHandlers['image-studio']=async()=>{
   if($('preset-workflow'))$('preset-workflow').value=JSON.stringify(p.workflow,null,2);
  }
 
- /* Renders this workflow as it stands, with no lane assigned. The server reads
-    the preset by id, so the edits have to be saved before it can see them. */
+ /* Renders this workflow as it stands: unsaved, unassigned, and sent as a draft
+    so the library is untouched until the result is worth keeping. */
  async function testPreset(p){
   readPreset();
   const status=$('test-preset-status'),out=$('test-preset-result');
-  status.textContent='Saving\u2026';out.innerHTML='';
+  status.textContent='Rendering\u2026';out.innerHTML='';
   $('test-preset').disabled=true;
   try{
-   await saveSettings('');
-   status.textContent='Rendering\u2026';
-   await action('/images/generate',{preset:p.id,category:p.category||'portrait',parts:p.parts||{}},r=>{
+   await action('/images/generate',{draft:p,category:p.category||'portrait',parts:p.parts||{}},r=>{
      out.innerHTML=r.image
        ? `<img class="studio-test-shot ${r.blur?'concealed-media':''}" src="${mediaUrl(r.image)}" alt="Test render">`
        : '<p class="dim small">Rendered. It is in Photos.</p>';
-     status.textContent='Done \u00b7 saved to Photos';
+     status.innerHTML='Rendered from the draft \u00b7 <strong>nothing saved yet</strong>';
    });
   }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
   finally{$('test-preset').disabled=false;}
@@ -1432,76 +1354,6 @@ workspaceHandlers['image-studio']=async()=>{
   ]
  };
 
- const renderLaneBenchmark = () => {
-  const scenes = categoryTestPrompts[activeCategory] || categoryTestPrompts.portrait;
-  const chipsHost = $('lane-test-chips');
-  if(chipsHost){
-   chipsHost.innerHTML = scenes.map(([label, text])=>`<button type="button" class="tag-chip" data-test-scene="${esc(text)}">${esc(label)}</button>`).join('');
-   for(const chip of chipsHost.querySelectorAll('[data-test-scene]')){
-    chip.onclick = () => {
-     $('prompt-part-scene').value = chip.dataset.testScene;
-    };
-   }
-  }
-  $('prompt-part-scene').value = scenes[0][1];
- };
-
- renderLaneBenchmark();
-
- // Lane Pill Switching in Composer
- for(const pill of $('composer-lane-pills').querySelectorAll('.lane-pill')){
-  pill.onclick=()=>{
-   for(const p of $('composer-lane-pills').querySelectorAll('.lane-pill'))p.classList.remove('is-selected');
-   pill.classList.add('is-selected');
-   activeCategory=pill.dataset.lane;
-   $('image-test-category').value=activeCategory;
-   renderLaneBenchmark();
-   updateActiveLaneBadge();
-  };
- }
-
- $('reset-scene-btn').onclick=()=>renderLaneBenchmark();
-
- const shot=()=>({
-  preset:$('image-test-preset').value,
-  category:activeCategory,
-  parts:{scene:$('prompt-part-scene').value.trim()}
- });
-
- $('image-compile').onclick=async()=>{
-  const r=await post('/images/prompt',shot());
-  const box=$('image-prompt-result');
-  box.hidden=false;
-  box.innerHTML=`
-   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-    <h4 style="margin:0">Compiled Prompt · ${esc(r.preset.name)}</h4>
-    <button type="button" class="link-btn" id="copy-compiled-prompt">Copy</button>
-   </div>
-   <pre>${esc(r.prompt)}</pre>
-   <p style="margin:6px 0 0"><strong>Negative:</strong> ${esc(r.negative||'None')}</p>
-   <p class="dim small" style="margin:4px 0 0">Seed: ${r.seed} · Reference: ${r.reference_image?(r.preset.provider==='hermes'?'Sent to Hermes provider':r.preset.mappings?.reference_image?'Mapped to workflow':'Not mapped; text-only generation'):'None'}</p>`;
-  $('copy-compiled-prompt').onclick=()=>{navigator.clipboard.writeText(r.prompt);notice('Prompt copied to clipboard!');};
- };
-
- $('image-generate').onclick=()=>{
-  const frame=$('image-output');
-  frame.innerHTML=`<div class="canvas-idle-state"><div class="idle-icon-ring" style="animation:spin 2s linear infinite">✨</div><h4 style="color:#fff">Synthesizing photo…</h4><p class="dim small">Sending composition to ${esc(routeValues[activeCategory]||defaultId||'provider')}...</p></div>`;
-  return action('/images/generate',shot(),r=>{
-   frame.innerHTML=`
-    <div class="canvas-result-card">
-     <img class="canvas-result-img ${r.blur?'concealed-media':''}" ${r.blur?'data-concealed title="Click to reveal"':''} alt="Generated companion image" src="${mediaUrl(r.image)}">
-     <div class="canvas-action-dock">
-      <div style="display:flex;align-items:center;gap:6px">
-       <span class="pill-badge" style="font-size:11px">${esc(r.provider)}</span>
-       <span class="dim small">Seed: ${r.seed}</span>
-      </div>
-      <div class="actions" style="margin:0">
-       <a class="act" href="${mediaUrl(r.image)}" download style="padding:5px 12px;font-size:12px">Download photo</a>
-      </div>
-     </div>
-    </div>`;
-  });
- };
 
  await renderWorkflowCreator($('workflow-creator-root'),(p,lane)=>{
   readPreset();

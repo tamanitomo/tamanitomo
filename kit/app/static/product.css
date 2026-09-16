@@ -2051,3 +2051,13 @@ body[data-page="chat"] main{padding:0}
   .lora-slider-row{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center}
   .lora-slider-row input[type=range]{min-width:0;accent-color:var(--accent)}
 }
+
+/* Building from a template lives inside Workflows, closed until wanted. */
+.studio-builder{margin-bottom:16px;padding:0}
+.studio-builder>summary{padding:16px 20px;cursor:pointer;font-weight:600;font-size:14.5px;list-style:none}
+.studio-builder>summary::-webkit-details-marker{display:none}
+.studio-builder>summary::before{content:'+ ';color:var(--accent);font-weight:700}
+.studio-builder[open]>summary{border-bottom:1px solid var(--edge)}
+.studio-builder[open]>summary::before{content:'\2212 '}
+.studio-builder>div{padding:0 4px 4px}
+.studio-builder .comfy-lite-container{border:0;margin:0}

@@ -61,7 +61,8 @@ def register(app,select,load):
         if any(term in combined for term in FORBIDDEN_NSFW_TERMS):
             raise HTTPException(400, 'Manual generation of intimate/NSFW media of your companion without their agency and consent is strictly disallowed.')
         def run(rt,c,report):
-            result=media.generate(c,payload.get('preset',''),payload.get('category','portrait'),payload.get('parts'),report,allow_nsfw=False)
+            result=media.generate(c,payload.get('preset',''),payload.get('category','portrait'),
+                payload.get('parts'),report,allow_nsfw=False,draft=payload.get('draft'))
             return {**result,'image':'/api/images/file?name='+result['file'],'note':'Image saved to Creations / image-studio.'}
         return operation('Generate image',run)
 
