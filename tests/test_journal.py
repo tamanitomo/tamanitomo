@@ -20,6 +20,20 @@ class JournalTests(unittest.TestCase):
         original='## 2026-09-11\nWritten before this helper existed.\n';path.write_text(original)
         self.assertFalse(journal.append(self.c,'daily',{'date':'2026-09-11','text':'New draft'})['written'])
         self.assertEqual(path.read_text(),original)
+    def test_empty_stub_is_filled_but_a_real_entry_is_never_overwritten(self):
+        # A run can leave an empty marker pair behind by raising after the journal step
+        # was committed: without this, every later run for that date is refused forever.
+        path=journal.path_for(self.c,'daily');path.parent.mkdir(parents=True)
+        path.write_text('## 2026-09-11\n<!-- companion-journal:daily-2026-09-11 -->\n<!-- /companion-journal:daily-2026-09-11 -->\n')
+        first=journal.append(self.c,'daily',{'date':'2026-09-11','text':'The real entry.'})
+        self.assertTrue(first['written']);self.assertEqual(first.get('replaced'),'empty stub')
+        self.assertIn('The real entry.',path.read_text())
+        # A second, different draft must not overwrite text that has actually landed.
+        with self.assertRaises(ValueError):journal.append(self.c,'daily',{'date':'2026-09-11','text':'A rewrite.'})
+        self.assertIn('The real entry.',path.read_text())
+        # An empty body that is not a clean stub is refused rather than silently repaired.
+        path.write_text('## 2026-09-12\n<!-- companion-journal:daily-2026-09-12 -->\n   \n<!-- /companion-journal:daily-2026-09-12 -->\n')
+        with self.assertRaises(ValueError):journal.append(self.c,'daily',{'date':'2026-09-12','text':'Body.'})
     def test_tail_discloses_omissions_and_invalid_targets_are_refused(self):
         journal.append(self.c,'autonomy',{'date':'2026-09-11','id':'run-1','text':'x'*1000})
         got=journal.tail(self.c,'autonomy',500)

@@ -40,7 +40,17 @@ def append(c,target,data):
         old=path.read_text(encoding='utf-8') if path.exists() else ''
         if marker in old:
             saved=old.split(marker,1)[1].split(end,1)[0].strip()
-            if saved!=text:raise ValueError('entry id already exists with different text; original retained')
+            if not saved:
+                # An empty marker pair is a stub left behind by a run that raised before it
+                # could append: the text never landed, so let a later good commit fill it in
+                # instead of being refused forever. Never touch an entry that has real text.
+                if marker+'\n'+end not in old:
+                    raise ValueError('this date has an empty journal entry that is not a clean stub; '
+                                     'repair it by hand before appending')
+                atomic_write(path,old.replace(marker+'\n'+end,marker+'\n'+text+'\n'+end,1))
+                return {'written':True,'id':ident,'path':str(path),'date':day,'replaced':'empty stub'}
+            if saved!=text:
+                raise ValueError('entry id already exists with different text; original retained')
             return {'written':False,'id':ident,'path':str(path),'reason':'entry already recorded'}
         if target!='autonomy' and re.search(r'^## '+re.escape(day)+r'(?:\s|$)',old,re.M):
             return {'written':False,'id':ident,'path':str(path),'reason':'this date already has an entry; existing journal retained'}
