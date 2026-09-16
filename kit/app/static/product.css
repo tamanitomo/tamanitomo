@@ -340,7 +340,6 @@ dialog.photo-viewer::backdrop{background:rgba(0,0,0,0.94)}
 .card-action-btn.is-warn{color:var(--warn)}
 .card-action-btn.is-safe{color:var(--good)}
 .card-action-btn svg{width:15px;height:15px}
-.pill-blur{position:absolute;top:8px;left:8px;background:color-mix(in srgb,var(--bg) 85%,transparent);color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 30%,transparent);z-index:2;font-size:11px}
 
 @media(max-width:768px){
  .viewer-topbar{padding:0 12px;height:54px}
@@ -610,8 +609,14 @@ dialog.photo-viewer::backdrop{background:rgba(0,0,0,0.94)}
 
 /* Compact Journal (#journals) */
 .journal-nav-bar{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg);border:1px solid var(--surface-3);border-radius:8px;margin-bottom:14px}
-.journal-nav-btn{background:transparent;border:1px solid var(--edge);color:var(--ink-2);padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer}
-.journal-nav-btn:hover{background:var(--surface-3);color:#fff}
+.journal-nav-btn{
+  display:inline-flex;align-items:center;gap:6px;flex:none;
+  background:var(--surface-2);border:1px solid var(--edge-2);color:var(--ink);
+  padding:9px 15px;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;
+  transition:background .15s,border-color .15s,transform .1s
+}
+.journal-nav-btn:hover:not(:disabled){background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
+.journal-nav-btn:active:not(:disabled){transform:scale(.96)}
 
 /* Theme Picker Cards */
 .theme-cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin:12px 0}
@@ -1572,7 +1577,7 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
 /* One control carries every way of reaching another entry: the month grid and
    the search share a panel that drops from the date in the middle of the top
    bar, so the page under it stays a page of writing. */
-.reader-shell{position:relative;max-width:850px;margin:0 auto 14px}
+.reader-shell{position:relative;max-width:850px;margin:-12px auto 14px}
 .reader-shell .journal-nav-bar{margin-bottom:0}
 .journal-nav-btn:disabled{opacity:.4;cursor:default}
 .journal-nav-btn:disabled:hover{background:transparent;color:var(--ink-2)}
@@ -1634,7 +1639,10 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
   display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
 
 @media(max-width:700px){
-  .journal-nav-bar{padding:8px 10px;gap:8px}
+  body[data-page="journals"] main{padding-top:10px}
+  .reader-shell{margin-top:0}
+  .journal-nav-bar{padding:7px 8px;gap:8px}
+  .journal-nav-btn{padding:9px 16px;font-size:17px;line-height:1}
   .journal-nav-btn .nav-word{display:none}
   .reader-browse-btn{flex:1;justify-content:center}
   .reader-picker{width:calc(100vw - 36px)}
@@ -1646,13 +1654,17 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
    as cards in a form. The tiles run tight and edge to edge, one search field
    carries the text, the collections are chips, and the months live on a rail
    down the right edge that you can throw yourself along. */
-.photo-toolbar{position:sticky;top:0;z-index:12;padding:8px 0 12px;background:var(--bg);margin-bottom:4px}
+/* The bar rides over the pictures rather than sitting in a panel: no box of its
+   own, and controls translucent enough to show what is passing behind them. */
+.photo-toolbar{position:sticky;top:0;z-index:12;padding:4px 0 10px;background:none;margin-bottom:2px}
 .photo-search-pill{
   display:flex;align-items:center;gap:10px;padding:0 14px;
-  background:var(--surface-2);border:1px solid var(--edge);border-radius:999px;
+  background:color-mix(in srgb,var(--surface-2) 72%,transparent);
+  border:1px solid color-mix(in srgb,var(--edge) 60%,transparent);
+  border-radius:999px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
   transition:background .15s,border-color .15s
 }
-.photo-search-pill:focus-within{background:var(--panel);border-color:var(--accent);
+.photo-search-pill:focus-within{background:color-mix(in srgb,var(--panel) 94%,transparent);border-color:var(--accent);
   box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
 .photo-search-pill svg{width:18px;height:18px;color:var(--dim);flex:none}
 .photo-search-pill input{
@@ -1674,18 +1686,21 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
 .photo-chips::-webkit-scrollbar{display:none}
 .photo-chip{
   flex:none;padding:7px 15px;border-radius:999px;font-size:13.5px;font-weight:500;
-  background:var(--surface-2);border:1px solid var(--edge);color:var(--ink-2);cursor:pointer;
-  white-space:nowrap
+  background:color-mix(in srgb,var(--surface-2) 72%,transparent);
+  border:1px solid color-mix(in srgb,var(--edge) 60%,transparent);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  color:var(--ink-2);cursor:pointer;white-space:nowrap
 }
 .photo-chip:hover{background:var(--surface-3);color:var(--ink)}
-.photo-chip[aria-selected=true]{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent-ink);font-weight:600}
+.photo-chip[aria-selected=true]{background:color-mix(in srgb,var(--accent) 22%,transparent);border-color:var(--accent-line);color:var(--ink);font-weight:600}
 .photo-chip-icon{margin-left:auto;padding:7px 11px;font-size:15px}
 
-.photo-day-group{margin:0 0 20px}
-.photo-day-group>h3{
-  margin:0 0 4px;padding:14px 2px 8px;
-  font-size:14px;font-weight:600;letter-spacing:-.1px;
-  display:flex;gap:10px;align-items:baseline
+.photo-date-marker{
+  position:absolute;top:6px;left:6px;z-index:2;pointer-events:none;
+  padding:3px 8px;border-radius:7px;font-size:11px;font-weight:700;letter-spacing:.01em;
+  color:#fff;background:color-mix(in srgb,#000 55%,transparent);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  text-shadow:0 1px 2px rgb(0 0 0 / .5)
 }
 .photo-library .photo-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:3px}
 .photo-library .photo-card{border:0;border-radius:2px;padding:0;overflow:hidden;background:var(--surface-2)}
@@ -1695,7 +1710,6 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
 .photo-library .photo-card:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 /* The tile is the picture; its caption belonged to a card that no longer exists. */
 .photo-library .photo-meta{display:none}
-.photo-library .pill-blur{top:5px;left:5px;font-size:10px;padding:2px 6px}
 
 .photo-scrubber{
   position:fixed;top:132px;bottom:24px;right:2px;width:74px;z-index:14;
@@ -1717,6 +1731,7 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
 .photo-scrubber-mark:hover{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
 
 @media(max-width:700px){
+  body[data-page="photos"] main{padding-top:10px}
   .photo-library .photo-grid{grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:2px}
   /* The tiles run to the edge of the screen, past main's gutter. */
   #photo-grid{margin:0 -18px}

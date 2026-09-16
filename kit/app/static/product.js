@@ -1061,11 +1061,18 @@ workspaceHandlers.photos=async()=>{
   if($('photo-manage-settings-card-btn'))$('photo-manage-settings-card-btn').onclick=openPhotoSettingsDialog;
   const draw=()=>{
     const shown=items.map(x=>photoForCollection(x,photoBrowse.collection));
-    $('photo-grid').innerHTML=photoDays(shown).map(group=>`<section class="photo-day-group" data-day="${esc(group.day)}"><h3>${esc(group.day==='unknown'?'Date not recorded':stamp(group.items[0].item.at,{weekday:'long',year:'numeric'}))}<span>${group.items.length}</span></h3><div class="photo-grid">${group.items.map(({item:x,index:i})=>`
-      <div class="photo-card" data-photo="${i}" tabindex="0" role="button" aria-label="Open ${esc(x.title)}">
+    // One continuous grid. The pictures never break into per-day blocks; the
+    // date rides the first tile of each day as a marker instead.
+    let runningDay='';
+    $('photo-grid').innerHTML=`<div class="photo-grid photo-flow">${shown.map((x,i)=>{
+      const day=dayKey(x.at)||'unknown';
+      const starts=day!==runningDay;
+      if(starts)runningDay=day;
+      return `
+      <div class="photo-card" data-photo="${i}" ${starts?`data-day="${esc(day)}"`:''} tabindex="0" role="button" aria-label="Open ${esc(x.title)}">
         <div class="photo-wrap">
           <img ${mediaPrivacy(x)} src="${mediaUrl(x.url)}" loading="lazy" alt="${esc(x.title)}">
-          ${x.blur?'<span class="pill pill-blur">Sensitive</span>':''}
+          ${starts?`<span class="photo-date-marker">${esc(day==='unknown'?'No date':stamp(x.at,{month:'short',day:'numeric'}))}</span>`:''}
         </div>
         <div class="photo-card-actions">
           <button class="card-action-btn ${x.blur||x.rating==='nsfw'?'is-safe':'is-warn'}" data-card-rate="${i}" title="${x.blur||x.rating==='nsfw'?'Mark safe':'Mark NSFW'}">
@@ -1078,7 +1085,8 @@ workspaceHandlers.photos=async()=>{
             ${icon('download')}
           </a>
         </div>
-      </div>`).join('')}</div></section>`).join('')||empty('photos',(photoBrowse.query||photoBrowse.day||photoBrowse.collection!=='all')?'No matching photos':'No photos in library',(photoBrowse.query||photoBrowse.day||photoBrowse.collection!=='all')?'Try another search, day or collection.':'Capture routines will populate images automatically.','<button class="act" id="photo-empty-manage-settings">⚙️ Manage settings</button>');
+      </div>`;}).join('')}</div>`;
+    if(!shown.length)$('photo-grid').innerHTML=empty('photos',(photoBrowse.query||photoBrowse.day||photoBrowse.collection!=='all')?'No matching photos':'No photos in library',(photoBrowse.query||photoBrowse.day||photoBrowse.collection!=='all')?'Try another search, day or collection.':'Capture routines will populate images automatically.','<button class="act" id="photo-empty-manage-settings">⚙️ Manage settings</button>');
     if($('photo-empty-manage-settings'))$('photo-empty-manage-settings').onclick=openPhotoSettingsDialog;
     $('photo-count').textContent=`${shown.length} of ${content.total} images${content.scan_limited?' · scan limit reached; additional files remain in the Vault':''}`;
     for(const b of $('photo-grid').querySelectorAll('.photo-card')){
@@ -1124,7 +1132,7 @@ workspaceHandlers.photos=async()=>{
      of the page, so dragging the thumb lands where the label says. */
   let scrubTimer=null;
   const buildScrubber=()=>{
-    const rail=$('photo-scrubber'),groups=[...$('photo-grid').querySelectorAll('.photo-day-group')];
+    const rail=$('photo-scrubber'),groups=[...$('photo-grid').querySelectorAll('[data-day]')];
     if(!rail)return;
     const height=document.documentElement.scrollHeight-window.innerHeight;
     if(groups.length<2||height<400){rail.hidden=true;rail.innerHTML='';return;}
