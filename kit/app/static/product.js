@@ -639,13 +639,115 @@ function mergePhotos(content,timeline){const captures=new Map(timeline.captures.
 function photoDays(items){const groups=new Map();items.forEach((item,index)=>{const day=dayKey(item.at)||'unknown';if(!groups.has(day))groups.set(day,{day,items:[]});groups.get(day).items.push({item,index});});return [...groups.values()];}
 const photoBrowse={query:'',day:'',collection:'all'};
 let photoPageGeneration=0;
+async function openPhotoSettingsDialog(){
+  const [config,prefs,tl,jobs]=await Promise.all([
+    api('/config'),
+    api('/media/preferences').catch(()=>({})),
+    api('/timeline'),
+    api('/jobs')
+  ]);
+  const job=jobs.jobs?.find(j=>j.name?.endsWith(' image timeline'));
+  const styles=config.image_styles||{};
+  const currentStyle=config.image_style||'';
+  const isEnabled=Boolean(config.image_timeline);
+  const budget=config.timeline_budget_gb??5;
+
+  const html=`<div style="display:flex;flex-direction:column;gap:18px">
+    <div style="padding:14px 16px;background:var(--surface-2);border:1px solid var(--edge);border-radius:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <strong style="font-size:14px">Capture Routine Status</strong>
+        <span class="pill ${isEnabled&&job?.enabled?'status-good':'status-warn'}">
+          ${!isEnabled?'Disabled':!job?'Job Not Installed':!job.enabled?'Paused':'Active'}
+        </span>
+      </div>
+      <p class="dim small" style="margin:0">
+        ${job?.schedule?.expr?`Schedule: ${esc(job.schedule.expr)} · Next: ${when(job.next_run_at)}`:'Runs every 15 minutes when active'}
+      </p>
+    </div>
+
+    <label style="display:flex;align-items:center;gap:10px;font-weight:650;cursor:pointer;margin:0">
+      <input type="checkbox" id="dlg-photo-timeline" ${isEnabled?'checked':''} style="width:auto;cursor:pointer">
+      <span>Enable 15-minute visual timeline captures</span>
+    </label>
+
+    <div class="form-grid">
+      <label style="margin:0">
+        Image style
+        <select id="dlg-photo-style" style="margin-top:6px">
+          ${Object.entries(styles).map(([k,v])=>`<option value="${esc(k)}" ${k===currentStyle?'selected':''}>${esc(v)}</option>`).join('')}
+        </select>
+      </label>
+      <label style="margin:0">
+        Storage budget (GB)
+        <input type="number" id="dlg-photo-budget" step="0.5" min="0.5" value="${budget}" style="margin-top:6px">
+      </label>
+    </div>
+
+    <div style="border-top:1px solid var(--edge);padding-top:14px;display:flex;flex-direction:column;gap:10px">
+      <span class="eyebrow" style="margin:0;font-size:11px;letter-spacing:0.08em">Privacy & Review</span>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin:0;font-size:13.5px">
+        <input type="checkbox" id="dlg-photo-blur" ${prefs.blur_nsfw_initially?'checked':''} style="width:auto;cursor:pointer">
+        <span>Blur NSFW / sensitive images initially</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin:0;font-size:13.5px">
+        <input type="checkbox" id="dlg-photo-blur-unknown" ${prefs.blur_unknown_initially!==false?'checked':''} style="width:auto;cursor:pointer">
+        <span>Blur unreviewed images and failed scans</span>
+      </label>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-top:8px;padding-top:16px;border-top:1px solid var(--edge)">
+      <button class="quiet small" id="dlg-photo-jump-settings" type="button">
+        Open all Settings →
+      </button>
+      <div style="display:flex;gap:10px">
+        <button class="quiet" id="dlg-photo-cancel" type="button">Cancel</button>
+        <button class="act" id="dlg-photo-save" type="button">Save changes</button>
+      </div>
+    </div>
+  </div>`;
+  dialog('Manage Photo Settings', html);
+
+  $('dlg-photo-cancel').onclick=()=>$('product-dialog').close();
+  $('dlg-photo-jump-settings').onclick=()=>{
+    $('product-dialog').close();
+    preferencePanel='photos';
+    showTab('settings');
+  };
+  $('dlg-photo-save').onclick=async()=>{
+    const btn=$('dlg-photo-save');
+    btn.disabled=true;
+    try{
+      await Promise.all([
+        post('/settings',{
+          image_timeline:$('dlg-photo-timeline').checked,
+          timeline_budget_gb:parseFloat($('dlg-photo-budget').value)||5,
+          image_style:$('dlg-photo-style').value
+        }),
+        post('/media/preferences',{
+          blur_nsfw_initially:$('dlg-photo-blur').checked,
+          blur_unknown_initially:$('dlg-photo-blur-unknown').checked
+        })
+      ]);
+      $('product-dialog').close();
+      notice('Photo settings saved.');
+      await render('photos');
+    }catch(e){
+      notice('Failed to save settings: '+e.message);
+      btn.disabled=false;
+    }
+  };
+}
+
 workspaceHandlers.photos=async()=>{
   const generation=++photoPageGeneration;
   let [content,tl,jobs]=await Promise.all([api('/content?'+new URLSearchParams({kind:'image',limit:'120',q:photoBrowse.query,day:photoBrowse.day,collection:photoBrowse.collection})),api('/timeline'),api('/jobs')]);if(current!=='photos'||generation!==photoPageGeneration)return;
   profileTimezone=content.timezone;let items=mergePhotos(content,tl);const job=jobs.jobs.find(j=>j.name?.endsWith(' image timeline'));
   const status=!tl.enabled?'Scheduled captures: disabled':!job?'Capture job: not installed':!job.enabled?'Scheduled captures: paused':job.last_status==='error'?'Scheduled captures: error on last run':'Scheduled captures: active';
-  $('photos').innerHTML=`<div class="section-heading" style="margin:0 0 16px;align-items:center"><h2 class="page-title" style="margin:0">Photos</h2><div style="display:flex;gap:10px;align-items:center"><button class="quiet small" data-route="settings" data-preference="photos">⚙️ Manage settings</button></div></div>`+`<details class="photo-settings"><summary>${status} · settings & recent attempts</summary><div class="card"><div class="reader-tools"><div><span class="pill ${tl.enabled&&job?.enabled?'status-good':'status-warn'}">${status}</span><p class="dim small">${!tl.enabled?'Enable photo sessions in Preferences. Existing images remain available.':!job?'Enablement and job installation are separate. Use Install / repair jobs in Hermes settings.':`Schedule: ${esc(job.schedule?.expr||'Not set')} · Next: ${when(job.next_run_at)}`}</p></div>${tl.enabled?jump('health','Manage schedule'):'<button class="link-button" data-route="settings" data-preference="photos">Photo settings →</button>'}</div><span class="dim small">${tl.budget_gb} GB rolling timeline budget · Favorites are kept separately</span>${tl.attempts.length?`<details><summary>Recent capture attempts (${tl.attempts.length})</summary>${tl.attempts.slice(0,5).map(a=>`<p class="small"><span class="pill">${esc(a.status)}</span> ${when(a.at)} ${esc(a.error)}</p>`).join('')}</details>`:''}</div></details>
-  <div class="filters"><label>Search photos<input type="search" id="photo-search" maxlength="200" placeholder="Search photos by title, prompt, or tag…"></label><label>Day<input type="date" id="photo-day"></label><label>Collection<select id="photo-collection"><option value="all">All photos</option><option value="photo session">Timeline captures</option><option value="creation">Creations</option>${tl.albums.map(a=>`<option value="album:${esc(a.name)}">${esc(a.name)}</option>`).join('')}</select></label><button class="quiet" id="photo-clear">Clear</button></div><div id="photo-grid" class="photo-library"></div><p class="dim small" id="photo-count" role="status"></p><button class="quiet" id="photo-older" hidden>Load older photos</button>`;
+  $('photos').innerHTML=`<div class="home-title" style="margin-bottom:18px"><div><h2 class="page-title" style="margin:0">Photos</h2></div><div style="display:flex;gap:10px;align-items:center"><button class="quiet" id="photo-manage-settings-btn" style="font-weight:600;font-size:13.5px;padding:8px 16px;border-radius:10px;display:inline-flex;align-items:center;gap:8px">⚙️ Manage settings</button></div></div>`+
+    `<div class="card" style="margin-bottom:20px;padding:16px 20px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="pill ${tl.enabled&&job?.enabled?'status-good':'status-warn'}">${status}</span><span class="dim small">${!tl.enabled?'Enable photo sessions in Manage settings.':!job?'Capture job not installed':!job.enabled?'Capture job paused':`Schedule: ${esc(job.schedule?.expr||'Not set')} · Next: ${when(job.next_run_at)}`}</span><span class="dim small">· ${tl.budget_gb} GB budget</span></div><div style="display:flex;gap:8px;align-items:center"><button class="quiet small" id="photo-manage-settings-card-btn">⚙️ Manage settings</button>${tl.enabled?jump('health','Capture schedule'):''}</div></div>${tl.attempts.length?`<details style="margin-top:10px;font-size:12px"><summary class="dim">Recent capture attempts (${tl.attempts.length})</summary><div style="margin-top:6px">${tl.attempts.slice(0,5).map(a=>`<p class="small" style="margin:3px 0"><span class="pill">${esc(a.status)}</span> ${when(a.at)} ${esc(a.error)}</p>`).join('')}</div></details>`:''}</div>`+
+    `<div class="filters"><label>Search photos<input type="search" id="photo-search" maxlength="200" placeholder="Search photos by title, prompt, or tag…"></label><label>Day<input type="date" id="photo-day"></label><label>Collection<select id="photo-collection"><option value="all">All photos</option><option value="photo session">Timeline captures</option><option value="creation">Creations</option>${tl.albums.map(a=>`<option value="album:${esc(a.name)}">${esc(a.name)}</option>`).join('')}</select></label><button class="quiet" id="photo-clear">Clear</button></div><div id="photo-grid" class="photo-library"></div><p class="dim small" id="photo-count" role="status"></p><button class="quiet" id="photo-older" hidden>Load older photos</button>`;
+  $('photo-manage-settings-btn').onclick=openPhotoSettingsDialog;
+  $('photo-manage-settings-card-btn').onclick=openPhotoSettingsDialog;
   const draw=()=>{
     const shown=items.map(x=>photoForCollection(x,photoBrowse.collection));
     $('photo-grid').innerHTML=photoDays(shown).map(group=>`<section class="photo-day-group"><h3>${esc(group.day==='unknown'?'Date not recorded':stamp(group.items[0].item.at,{weekday:'long',year:'numeric'}))}<span>${group.items.length}</span></h3><div class="photo-grid">${group.items.map(({item:x,index:i})=>`
@@ -665,7 +767,8 @@ workspaceHandlers.photos=async()=>{
             ${icon('download')}
           </a>
         </div>
-      </div>`).join('')}</div></section>`).join('')||empty('photos',(photoBrowse.query||photoBrowse.day||photoBrowse.collection!=='all')?'No matching photos':'No photos in library',(photoBrowse.query||photoBrowse.day||photoBrowse.collection!=='all')?'Try another search, day or collection.':'Capture routines will populate images automatically.',jump('settings','Manage settings'));
+      </div>`).join('')}</div></section>`).join('')||empty('photos',(photoBrowse.query||photoBrowse.day||photoBrowse.collection!=='all')?'No matching photos':'No photos in library',(photoBrowse.query||photoBrowse.day||photoBrowse.collection!=='all')?'Try another search, day or collection.':'Capture routines will populate images automatically.','<button class="act" id="photo-empty-manage-settings">⚙️ Manage settings</button>');
+    if($('photo-empty-manage-settings'))$('photo-empty-manage-settings').onclick=openPhotoSettingsDialog;
     $('photo-count').textContent=`${shown.length} of ${content.total} images${content.scan_limited?' · scan limit reached; additional files remain in the Vault':''}`;
     for(const b of $('photo-grid').querySelectorAll('.photo-card')){
       b.onclick=e=>{
