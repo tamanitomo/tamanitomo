@@ -7,7 +7,7 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)stopBrowser
 function mountBrowserVoice(){
  const host=$('chat-form');if(!host)return;
  const box=document.createElement('div');box.className='voice-chat-panel';box.innerHTML='<button type="button" class="chat-icon-btn" id="voice-record" title="Record a voice message" aria-label="Record a voice message"></button><button type="button" class="chat-icon-btn is-cancel" id="voice-cancel" hidden title="Discard recording" aria-label="Discard recording"></button><button type="button" class="chat-icon-btn is-stop" id="voice-stop" hidden title="Stop playback" aria-label="Stop playback"></button><span id="voice-status" role="status"></span><audio id="voice-reply" controls hidden></audio>';
- host.insertBefore(box,$('send-message'));const status=$('voice-status');
+ host.insertBefore(box,$('chat-message'));const status=$('voice-status');
  $('voice-cancel').onclick=()=>{stopBrowserVoice();$('voice-record').classList.remove('is-recording');$('voice-cancel').hidden=true;status.textContent='Recording discarded. Microphone off.';};
  $('voice-stop').onclick=()=>{stopBrowserVoice();$('voice-record').classList.remove('is-recording');$('voice-cancel').hidden=true;status.textContent='Stopped. A submitted chat turn may still finish.';};
  $('voice-record').onclick=async()=>{

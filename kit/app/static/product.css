@@ -730,7 +730,7 @@ dialog.pin-dialog::backdrop {
 @media(max-width:900px){
   :root{--bar:58px}
   .tabbar{
-    display:grid;grid-template-columns:repeat(5,1fr);
+    display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);
     position:fixed;inset:auto 0 0 0;z-index:40;
     background:color-mix(in srgb,var(--panel) 94%,transparent);
     backdrop-filter:blur(14px);
@@ -753,6 +753,12 @@ dialog.pin-dialog::backdrop {
     width:26px;height:2.5px;border-radius:0 0 3px 3px;background:var(--accent);
   }
   .tabbar button.is-fixed .icon{stroke-width:2.6}
+  /* Five across, then six: each step trades a little size for the extra slot. */
+  .tabbar:has(button:nth-child(5)) button{font-size:10px;padding-left:1px;padding-right:1px}
+  .tabbar:has(button:nth-child(5)) button .icon{width:20px;height:20px}
+  .tabbar:has(button:nth-child(6)) button{font-size:9px;gap:2px;letter-spacing:-.01em}
+  .tabbar:has(button:nth-child(6)) button .icon{width:18px;height:18px}
+  .tabbar:has(button:nth-child(6)) button[aria-current=true]::before{width:20px}
   /* The rail and its hamburger are desktop-only once the bar exists. */
   #mobile-menu{display:none}
   header{display:none}
@@ -1818,25 +1824,34 @@ body[data-page="chat"] main{padding:0}
 
 /* --------------------------------------------------------------- composer */
 .chat-composer{
-  position:relative;flex:none;display:flex;align-items:flex-end;gap:7px;margin:0;
-  padding:8px 12px calc(8px + env(safe-area-inset-bottom));background:none
+  position:relative;flex:none;display:flex;align-items:flex-end;gap:6px;
+  margin:0 12px calc(14px + env(safe-area-inset-bottom));padding:4px 6px 4px 5px;
+  border-radius:24px;
+  background:color-mix(in srgb,var(--surface-2) 72%,transparent);
+  border:1px solid color-mix(in srgb,var(--edge) 60%,transparent);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  transition:border-color .15s,background .15s
+}
+.chat-composer:focus-within{
+  background:color-mix(in srgb,var(--panel) 92%,transparent);
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 14%,transparent)
 }
 #chat-message{
-  flex:1;min-height:40px;max-height:200px;resize:none;border-radius:20px;
-  padding:11px 18px;font-size:15px;line-height:1.45;
-  background:var(--surface-2);border:1px solid var(--edge)
+  flex:1;min-width:0;min-height:36px;max-height:190px;resize:none;
+  padding:8px 4px;font-size:15px;line-height:1.45;
+  background:none;border:0;border-radius:0
 }
-#chat-message:focus{outline:none;border-color:var(--accent);
-  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
+#chat-message:focus{outline:none;box-shadow:none}
 #chat-message{scrollbar-width:none}
 #chat-message::-webkit-scrollbar{width:0;height:0}
 .chat-send{
-  flex:none;width:40px;height:40px;border-radius:50%;padding:0;align-self:flex-end;margin-bottom:2px;
+  flex:none;width:34px;height:34px;border-radius:50%;padding:0;align-self:flex-end;margin-bottom:1px;
   display:grid;place-items:center;border:0;cursor:pointer;
   background:var(--accent);color:var(--on-accent)
 }
 .chat-send:disabled{opacity:.45;cursor:default}
-.chat-send svg.icon{width:20px;height:20px;stroke-width:2.2}
+.chat-send svg.icon{width:17px;height:17px;stroke-width:2.4}
 .chat-hint{flex:none;padding:0 20px 10px;text-align:center;font-size:11px}
 
 /* Voice sits on the composer's line rather than in a block above it: a chat
@@ -1844,13 +1859,13 @@ body[data-page="chat"] main{padding:0}
 /* The voice controls are part of the composer, not a panel above it. */
 .voice-chat-panel{display:contents}
 .chat-icon-btn{
-  flex:none;width:40px;height:40px;border-radius:50%;padding:0;border:0;cursor:pointer;
-  display:grid;place-items:center;background:var(--surface-3);color:var(--ink-2);
-  align-self:flex-end;margin-bottom:2px
+  flex:none;width:34px;height:34px;border-radius:50%;padding:0;border:0;cursor:pointer;
+  display:grid;place-items:center;background:none;color:var(--dim);
+  align-self:flex-end;margin-bottom:1px
 }
-.chat-icon-btn:hover{background:var(--edge);color:var(--ink)}
+.chat-icon-btn:hover{background:var(--surface-3);color:var(--ink)}
 .chat-icon-btn[hidden]{display:none}
-.chat-icon-btn::before{content:'';width:15px;height:15px;background:currentColor;
+.chat-icon-btn::before{content:'';width:18px;height:18px;background:currentColor;
   -webkit-mask:var(--glyph) center/contain no-repeat;mask:var(--glyph) center/contain no-repeat}
 #voice-record{--glyph:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Zm7 9a7 7 0 0 1-6 6.92V21h-2v-3.08A7 7 0 0 1 5 11h2a5 5 0 0 0 10 0Z'/%3E%3C/svg%3E")}
 #voice-record.is-recording{background:var(--bad);color:#fff;animation:mic-pulse 1.4s infinite}
@@ -1860,7 +1875,7 @@ body[data-page="chat"] main{padding:0}
 #voice-stop{--glyph:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='6' y='6' width='12' height='12' rx='2'/%3E%3C/svg%3E")}
 /* Only heard from while something is happening. */
 #voice-status{
-  position:absolute;left:16px;right:16px;bottom:calc(100% + 4px);
+  position:absolute;left:16px;right:16px;bottom:calc(100% + 6px);
   font-size:11.5px;color:var(--dim);text-align:center;pointer-events:none
 }
 #voice-status:empty{display:none}
@@ -1869,7 +1884,7 @@ body[data-page="chat"] main{padding:0}
 @media(max-width:700px){
   .chat-log{padding:56px 12px 8px;gap:5px}
   .bubble{max-width:86%;font-size:15px}
-  .chat-composer{padding:6px 10px 2px}
+  .chat-composer{margin:0 10px calc(12px + env(safe-area-inset-bottom))}
   .chat-hint{display:none}
   .chat-peek{top:8px;padding:5px 14px 5px 5px}
   .chat-peek-avatar{width:26px;height:26px;font-size:12px}

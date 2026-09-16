@@ -8,7 +8,7 @@ const tabLabel=id=>({chat:'Chat',photos:'Photos',journals:'Journal',now:'Home'}[
    directory. Anything added here appears in all three. */
 const primaryDestinations=['now','chat','photos','journals'];
 const navGroups=[
-  ['Life & memories', ['timeline','relationship','knows','loops','identity','creations','vault']],
+  ['Life & memories', ['identity','timeline','relationship','knows','loops','creations','vault']],
   ['Studios',         ['image-studio','voice','local-models']],
   ['Setup & system',  ['settings','environment','health','roster']]
 ];
