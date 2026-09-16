@@ -4,6 +4,11 @@ import copy
 
 PROMPT_NODES={'quality':'101','identity':'102','wardrobe':'103','scene':'104','lighting':'105','camera':'106'}
 
+# What a new workflow keeps clothed by default. This is the only bucket a
+# companion may set aside, and only at full closeness readiness; the always-on
+# floor lives in companion_media.SAFETY_FLOOR and is never part of this.
+MODESTY_DEFAULT='nude, topless, nsfw, explicit, nipples, genitalia'
+
 
 def modular_template():
     """A standard-node SDXL scaffold with stable semantic slots."""
@@ -20,7 +25,9 @@ def modular_template():
         graph[str(111+index)]={'class_type':'ConditioningConcat','inputs':{'conditioning_to':['101' if index==0 else str(110+index),0],'conditioning_from':[node,0]}}
     return {'id':'modular-sdxl','name':'Structured SDXL workflow','category':'portrait','provider':'comfyui',
       'endpoint':'http://127.0.0.1:8188','family':'sdxl','parts':{'quality':'high quality, detailed'},
-      'negative':'low quality, blurry, malformed hands','width':832,'height':1216,'steps':22,'cfg':5,'seed':-1,
+      'negative':'low quality, blurry, malformed hands',
+      'safety_negative':'','modesty_negative':MODESTY_DEFAULT,
+      'width':832,'height':1216,'steps':22,'cfg':5,'seed':-1,
       'workflow':graph,'mappings':{**{k:[v,'text'] for k,v in PROMPT_NODES.items()},'negative':['201','text'],
         'width':['301','width'],'height':['301','height'],'seed':['302','seed'],'steps':['302','steps'],'cfg':['302','cfg']}}
 

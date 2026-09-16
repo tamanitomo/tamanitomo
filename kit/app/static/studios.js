@@ -1103,7 +1103,10 @@ workspaceHandlers['image-studio']=async()=>{
   p.parts={...p.parts};
   for(const field of $('image-preset-editor').querySelectorAll('[data-tag-field]')){
     const key=field.dataset.tagField,value=tagFieldValue(field);
-    if(key==='__negative')p.negative=value;else p.parts[key]=value;
+    if(key==='__negative')p.negative=value;
+    else if(key==='__safety')p.safety_negative=value;
+    else if(key==='__modesty')p.modesty_negative=value;
+    else p.parts[key]=value;
   }
   for(const k of ['width','height'])if($('preset-'+k))p[k]=Number($('preset-'+k).value)||p[k];
   for(const k of ['steps','cfg','seed','denoise'])if($('preset-'+k))p[k]=Number($('preset-'+k).value);
@@ -1300,8 +1303,14 @@ workspaceHandlers['image-studio']=async()=>{
       <div class="tag-fields">
         ${d.parts.map(k=>tagFieldHTML(k,formLabel(k),p.parts?.[k]||'',PART_HINT[k]||'',false,
           k==='camera'?CAMERA_LOOKS:k==='lighting'?LIGHTING_LOOKS:null)).join('')}
-        ${tagFieldHTML('__negative','Negative',p.negative||'','What to keep out',true)}
+        ${tagFieldHTML('__negative','Negative',p.negative||'','Quality terms \u2014 always applied',true)}
+        ${tagFieldHTML('__safety','Always on',p.safety_negative||'','Never set aside, by anything',true)}
+        ${tagFieldHTML('__modesty','Modesty',p.modesty_negative||'',
+          esc(chatName())+' may set these aside',true)}
       </div>
+      <p class="dim small modesty-note">A built-in floor of always-on negatives applies to every render
+        on top of these, and cannot be edited or switched off. \u201cModesty\u201d is the only bucket that is
+        ever set aside, only by ${esc(chatName())}, and only once closeness has reached Bonded.</p>
     </div>
 
     <div class="studio-actions">

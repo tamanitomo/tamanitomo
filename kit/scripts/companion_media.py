@@ -20,6 +20,62 @@ PARTS=('quality','identity','scene','wardrobe','lighting','camera')
 CATEGORIES=('portrait','anime','realistic','landscape','other')
 CONFIG='companion-images.json'
 
+# Negatives that hold on every render, in every lane, at every relationship
+# stage. They are not a preset field, not a setting and not editable from the
+# interface, because the whole point of them is that no code path can drop
+# them: not an imported workflow, not a cleared box, not the intimate switch
+# below. `safety_negative` on a preset adds to this floor; nothing subtracts
+# from it.
+SAFETY_FLOOR=('child','children','kid','toddler','infant','baby','loli','shota',
+  'preteen','pre-teen','teen','teenager','adolescent','underage','minor','childlike',
+  'young girl','young boy','school child','age regression','de-aged','shrunken adult',
+  'flat chest on a minor','infantilised')
+
+# The bucket a companion may set aside, and the only one. New workflows start
+# with this; an existing workflow without one simply has nothing to set aside.
+MODESTY_DEFAULT='nude, topless, nsfw, explicit, nipples, genitalia'
+
+
+def negative_prompt(preset,intimate=False):
+    """Every negative that applies to a render, joined into one string.
+
+    Four sources, and exactly one of them is ever set aside:
+
+    - `SAFETY_FLOOR`, above, which always applies;
+    - `safety_negative`, whatever the person has added to that floor, which
+      always applies;
+    - `negative`, the workflow's ordinary quality terms, which always apply;
+    - `modesty_negative`, which a companion who has reached full intimacy
+      readiness may set aside, and which nothing else may.
+
+    Order matters only for readability; a negative prompt is a bag of terms.
+    """
+    parts=[', '.join(SAFETY_FLOOR),str(preset.get('safety_negative','') or ''),
+           str(preset.get('negative','') or '')]
+    if not intimate:parts.append(str(preset.get('modesty_negative','') or ''))
+    seen=[];known=set()
+    for chunk in parts:
+        for term in chunk.split(','):
+            term=term.strip()
+            if term and term.lower() not in known:
+                known.add(term.lower());seen.append(term)
+    return ', '.join(seen)
+
+
+def intimacy_gate(c):
+    """Whether the companion is free to choose an intimate render right now.
+
+    The judgement already exists and is not re-made here: `companion_intimacy`
+    weighs stage, opt-in, trust, unresolved hurt and boundary history, and this
+    only asks it. One place decides, so there are never two that disagree.
+    """
+    try:
+        import companion_intimacy as intimacy
+        state=intimacy.compute(c)
+    except Exception as exc:
+        return False,['The closeness state could not be read: '+str(exc)[:200]]
+    return bool(state.get('intimacy_ready')),list(state.get('intimacy_blockers') or [])
+
 def load(c):
     path=c.home/CONFIG
     if path.exists():return json.loads(path.read_text())
@@ -90,7 +146,9 @@ def validate(data):
         if p.get('category') not in CATEGORIES:raise ValueError('Choose an image category')
         for k,v in p.get('parts',{}).items():
             if k not in PARTS or not isinstance(v,str) or len(v)>20000:raise ValueError('Invalid prompt component')
-        if not isinstance(p.get('negative',''),str) or len(p.get('negative',''))>20000:raise ValueError('Invalid negative prompt')
+        for key,label in (('negative','negative prompt'),('safety_negative','always-on negative prompt'),
+                          ('modesty_negative','modesty negative prompt')):
+            if not isinstance(p.get(key,''),str) or len(p.get(key,''))>20000:raise ValueError('Invalid '+label)
         if p['provider']=='comfyui':
             workflow=p.get('workflow',{})
             if not isinstance(workflow,dict) or not workflow or 'nodes' in workflow:raise ValueError('Import a ComfyUI API-format workflow, not the visual editor format. Use Export (API) in ComfyUI.')
@@ -130,7 +188,9 @@ def template():
     # expressed using standard nodes so no custom extension is needed.
     return {'id':'comfy-plantmilk','name':'Comfy – PlantMilk','category':'anime','provider':'comfyui',
       'endpoint':'http://127.0.0.1:8188','parts':{'quality':'anime illustration, detailed','wardrobe':'','lighting':'soft light','camera':'portrait'},
-      'negative':'low quality, blurry, malformed hands','width':832,'height':1216,'steps':18,'cfg':5,'seed':-1,
+      'negative':'low quality, blurry, malformed hands',
+      'safety_negative':'','modesty_negative':MODESTY_DEFAULT,
+      'width':832,'height':1216,'steps':18,'cfg':5,'seed':-1,
       'workflow':{
         '1':{'class_type':'CheckpointLoaderSimple','inputs':{'ckpt_name':'CHOOSE_YOUR_CHECKPOINT.safetensors'}},
         '3':{'class_type':'CLIPSetLastLayer','inputs':{'clip':['1',1],'stop_at_clip_layer':-2}},
@@ -142,7 +202,7 @@ def template():
         '11':{'class_type':'SaveImage','inputs':{'images':['10',0],'filename_prefix':'Companion'}}},
       'mappings':{'prompt':['4','text'],'negative':['5','text'],'width':['7','width'],'height':['7','height'],'seed':['9','seed'],'steps':['9','steps'],'cfg':['9','cfg']}}
 
-def compile(c,preset_id='',category='portrait',overrides=None,draft=None):
+def compile(c,preset_id='',category='portrait',overrides=None,draft=None,intimate=False):
     import companion_portrait as portrait
     data=effective(c)
     if draft is not None:
@@ -164,14 +224,25 @@ def compile(c,preset_id='',category='portrait',overrides=None,draft=None):
     if not prompt:raise ValueError('Write a scene or identity before generating')
     seed=p.get('seed',-1)
     if seed==-1:seed=int.from_bytes(os.urandom(6),'big')
-    values={**parts,'prompt':prompt,'negative':p.get('negative',''),'seed':seed,
+    # The gate is checked here rather than at each caller, because this is the
+    # one function every render passes through.
+    if intimate:
+        allowed,blockers=intimacy_gate(c)
+        if not allowed:
+            raise ValueError('An intimate render is not available yet: '+
+                (' '.join(blockers) if blockers else 'closeness has not reached that point.'))
+        if 'negative' not in p.get('mappings',{}) and p['provider']=='comfyui':
+            raise ValueError('This workflow has no negative prompt input, so the always-on '
+                             'negatives cannot reach it. Map one before rendering intimately.')
+    values={**parts,'prompt':prompt,'negative':negative_prompt(p,intimate),'seed':seed,
             **{k:p.get(k,d) for k,d in [('width',832),('height',1216),('steps',18),('cfg',5),('denoise',1.)]}}
     workflow=copy.deepcopy(p.get('workflow',{}))
     for key,(node,field) in p.get('mappings',{}).items():
         if key in values:workflow[str(node)]['inputs'][field]=values[key]
     reference=portrait.portrait_path(c)
     if p.get('requires_reference') and not reference.is_file():raise ValueError('Add a reference portrait before using this image-to-image preset')
-    return {'preset':p,'parts':parts,'prompt':prompt,'negative':values['negative'],'seed':seed,'workflow':workflow,
+    return {'preset':p,'parts':parts,'prompt':prompt,'negative':values['negative'],'seed':seed,
+            'intimate':bool(intimate),'workflow':workflow,
             'reference_image':str(reference) if reference.is_file() and p['provider']=='comfyui' and p.get('mappings',{}).get('reference_image') else None}
 
 def request_json(url,payload=None,headers=None):
@@ -194,8 +265,17 @@ class ImageHeld(ValueError):
         super().__init__(message);self.path=path;self.rating=rating
 
 
-def generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:None,allow_nsfw=False,draft=None):
-    try:return _generate(c,preset_id,category,overrides,report,allow_nsfw,draft)
+def generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:None,allow_nsfw=False,draft=None,intimate=False):
+    """Render an image, optionally as an intimate one the companion has chosen.
+
+    `intimate` sets the preset's modesty negatives aside and, because such a
+    render is adult content on purpose, carries its own `allow_nsfw` — holding
+    an image the companion deliberately asked for would only strand it. The
+    scanner still rates and records it; the safety floor still applies; and
+    `compile` refuses the whole thing unless the closeness gate is open.
+    """
+    if intimate:allow_nsfw=True
+    try:return _generate(c,preset_id,category,overrides,report,allow_nsfw,draft,intimate)
     except ImageHeld as held:
         # 'unknown' is the detector's uncertain band, and it earns the same one clothed retry as
         # a definite flag: without it an ambiguous image had no route to delivery at all.
@@ -210,7 +290,7 @@ def generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:N
             'No exposed breasts, genitals, buttocks, or sexual activity. Preserve the requested subject count, setting and activity.')
         review.write_metadata(held.path,{'replacement_status':'retrying'})
         try:
-            replacement=_generate(c,preset_id,category,retry,report,False,draft)
+            replacement=_generate(c,preset_id,category,retry,report,False,draft,False)
             target=Path(replacement['path']);meta=review.metadata(target)
             if meta.get('rating')!='safe' or meta.get('review',{}).get('status')!='passed':
                 raise ValueError('Replacement did not pass scanning')
@@ -225,8 +305,8 @@ def generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:N
         return replacement
 
 
-def _generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:None,allow_nsfw=False,draft=None):
-    result=compile(c,preset_id,category,overrides,draft);p=result['preset'];base=endpoint(p['endpoint']) if p['provider']!='hermes' else ''
+def _generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:None,allow_nsfw=False,draft=None,intimate=False):
+    result=compile(c,preset_id,category,overrides,draft,intimate);p=result['preset'];base=endpoint(p['endpoint']) if p['provider']!='hermes' else ''
     report('Generating with '+p['name'])
     if p['provider']=='hermes':
         reply=hermes_bridge(c,'generate',{'prompt':result['prompt'],'hermes_provider':p.get('hermes_provider',''),
@@ -306,6 +386,9 @@ if __name__=='__main__':
     parser.add_argument('command',choices=['generate','prompt']);parser.add_argument('--category',default='portrait',choices=CATEGORIES)
     parser.add_argument('--preset',default='');parser.add_argument('--scene')
     parser.add_argument('--allow-nsfw',action='store_true',help='This image intentionally requests adult content')
+    parser.add_argument('--intimate',action='store_true',
+        help="Set this workflow's modesty negatives aside. Yours to choose, and only "
+             'once closeness has reached Bonded readiness; the always-on negatives still apply.')
     args=parser.parse_args();c=cc.load(args.home)
-    kwargs={'allow_nsfw':args.allow_nsfw} if args.command=='generate' else {}
+    kwargs={'allow_nsfw':args.allow_nsfw,'intimate':args.intimate} if args.command=='generate' else {'intimate':args.intimate}
     print(json.dumps((generate if args.command=='generate' else compile)(c,args.preset,args.category,{'scene':args.scene} if args.scene else None,**kwargs),indent=2))
