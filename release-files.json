@@ -86,6 +86,7 @@
   "kit/scripts/companion_catalog.py",
   "kit/scripts/companion_checkin.py",
   "kit/scripts/companion_config.py",
+  "kit/scripts/companion_endpoint.py",
   "kit/scripts/companion_context.py",
   "kit/scripts/companion_day.py",
   "kit/scripts/companion_dispatch.py",

@@ -506,6 +506,24 @@ const settingsPanels=[
  render:host=>renderHermesDashboardInto(host)},
 ];
 
+/* Somewhere to move every job at once. The three axes have to travel together:
+   a stored endpoint outranks the provider, so changing the model alone leaves
+   jobs pointed at whatever served the last one. */
+const JOB_PROVIDER_PRESETS=[
+  {id:'mistral',  label:'Mistral',            provider:'custom', model:'mistral-medium-3.5', base_url:'',
+   hint:'Hosted. Uses the credential saved under Accounts & credentials.'},
+  {id:'openai',   label:'OpenAI',             provider:'openai', model:'gpt-4o',             base_url:'',
+   hint:'Hosted. Needs OPENAI_API_KEY.'},
+  {id:'anthropic',label:'Anthropic',          provider:'anthropic', model:'claude-sonnet-5', base_url:'',
+   hint:'Hosted. Needs ANTHROPIC_API_KEY.'},
+  {id:'openrouter',label:'OpenRouter',        provider:'openrouter', model:'',               base_url:'',
+   hint:'Hosted. One key, many models — name the model yourself.'},
+  {id:'local',    label:'Local server',       provider:'custom', model:'',                   base_url:'http://127.0.0.1:11434/v1',
+   hint:'llama.cpp, Ollama or anything OpenAI-shaped on this machine.'},
+  {id:'default',  label:'Follow the profile', provider:'',       model:'',                   base_url:'',
+   hint:'Clears all three, so jobs use whatever the profile default is.'},
+];
+
 /* ------------------------------------------------------------- jobs panel
    The jobs list used to be read-only apart from a schedule prompt(), and the
    model behind each job could only be changed by running Hermes's own CLI.
@@ -537,6 +555,26 @@ async function renderJobsPanel(host){
     <button data-filter="error"><span>Last run failed</span><strong>${failed}</strong><span>need a look</span></button>
   </div>
   ${noModel?`<p class="dim small">${noModel} model-backed job${noModel===1?' has':'s have'} no model of their own and follow the profile default.</p>`:''}
+  <details class="card routing-card" id="job-routing">
+    <summary><strong>Move every job to another provider</strong>
+      <small class="dim">Model, provider and endpoint together, across all ${jobs.filter(j=>!j.no_agent).length} model-backed jobs</small></summary>
+    <div class="routing-body">
+      <div class="chip-row" id="routing-presets">
+        ${JOB_PROVIDER_PRESETS.map(x=>`<button type="button" class="chip" data-preset="${esc(x.id)}">${esc(x.label)}</button>`).join('')}
+      </div>
+      <p class="dim small" id="routing-hint">Pick a starting point, then adjust anything below before applying.</p>
+      <div class="form-grid">
+        <label>Provider<input id="routing-provider" list="provider-model-ids" placeholder="custom, openai, anthropic…"></label>
+        <label>Model<input id="routing-model" placeholder="Leave empty to follow the profile default"></label>
+        <label class="wide">Endpoint<input id="routing-base-url" placeholder="Leave empty unless the provider needs a specific address">
+          <small class="dim">An address here outranks the provider. This is the field that strands jobs on a dead server when it is changed by hand.</small></label>
+      </div>
+      <div class="panel-footer">
+        <button class="act" id="routing-apply">Apply to all model-backed jobs</button>
+        <span class="dim small" id="routing-status" role="status"></span>
+      </div>
+    </div>
+  </details>
   <div class="filters">
     <label>Find a job<input id="job-search" type="search" placeholder="Photo, journal, backup…"></label>
     <label>State<select id="job-filter">
@@ -581,7 +619,9 @@ async function renderJobsPanel(host){
             ${j.no_agent?'':`
             <label>Model<input data-field="model" data-job="${esc(j.id)}" list="provider-model-ids" value="${esc(j.model||'')}" placeholder="Follow the profile default"></label>
             <label>Provider<input data-field="provider" data-job="${esc(j.id)}" value="${esc(j.provider||'')}" placeholder="Follow the profile default"></label>
-            <label>Reasoning effort<select data-field="reasoning_effort" data-job="${esc(j.id)}">${options([['','Hermes default'],['none','None'],['low','Low'],['medium','Medium'],['high','High']],j.reasoning_effort||'')}</select></label>`}
+            <label>Reasoning effort<select data-field="reasoning_effort" data-job="${esc(j.id)}">${options([['','Hermes default'],['none','None'],['low','Low'],['medium','Medium'],['high','High']],j.reasoning_effort||'')}</select></label>
+            <label class="wide">Endpoint<input data-field="base_url" data-job="${esc(j.id)}" value="${esc(j.base_url||'')}" placeholder="Leave empty to use the provider's own address">
+              <small class="dim">Only set this to override where the provider sends requests — a local server, or a gateway. An address left here outranks the provider above.</small></label>`}
           </div>
           ${j.no_agent?'':`<details class="job-prompt"><summary class="small dim">What this job is told to do</summary><textarea data-field="prompt" data-job="${esc(j.id)}" rows="5">${esc(j.prompt||'')}</textarea></details>`}
           <div class="panel-footer">
@@ -602,7 +642,7 @@ async function renderJobsPanel(host){
       const wanted=field('schedule').value.trim();
       if(wanted&&wanted!==schedule(job))payload.schedule=wanted;
       if(!job.no_agent){
-        for(const [name,was] of [['model',job.model||''],['provider',job.provider||''],['reasoning_effort',job.reasoning_effort||'']]){
+        for(const [name,was] of [['model',job.model||''],['provider',job.provider||''],['reasoning_effort',job.reasoning_effort||''],['base_url',job.base_url||'']]){
           const now=field(name).value.trim();
           if(now!==was)payload[name]=now;
         }
@@ -624,6 +664,29 @@ async function renderJobsPanel(host){
       try{await action('/jobs/'+encodeURIComponent(b.dataset.job)+'/'+b.dataset.jobAction);openSettings(null,'jobs');}
       catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;b.disabled=false;}
     };
+  };
+  /* Presets fill the three fields; nothing is sent until Apply. */
+  for(const b of host.querySelectorAll('[data-preset]'))b.onclick=()=>{
+    const preset=JOB_PROVIDER_PRESETS.find(x=>x.id===b.dataset.preset);
+    host.querySelector('#routing-provider').value=preset.provider;
+    host.querySelector('#routing-model').value=preset.model;
+    host.querySelector('#routing-base-url').value=preset.base_url;
+    host.querySelector('#routing-hint').textContent=preset.hint;
+    for(const other of host.querySelectorAll('[data-preset]'))
+      other.setAttribute('aria-pressed',String(other===b));
+  };
+  host.querySelector('#routing-apply').onclick=async()=>{
+    const status=host.querySelector('#routing-status');
+    const count=jobs.filter(j=>!j.no_agent).length;
+    if(!confirm(`Move all ${count} model-backed job(s) in this profile onto this provider?`))return;
+    status.textContent='Moving…';
+    try{
+      await action('/jobs/routing',{
+        provider:host.querySelector('#routing-provider').value.trim(),
+        model:host.querySelector('#routing-model').value.trim(),
+        base_url:host.querySelector('#routing-base-url').value.trim()});
+      openSettings(null,'jobs');
+    }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
   };
   host.querySelector('#job-search').oninput=draw;
   host.querySelector('#job-filter').onchange=draw;

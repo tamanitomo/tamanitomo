@@ -628,6 +628,44 @@ def register(app, select, load, operations):
             rows.append(out)
         return {'timezone':cc.load(h).timezone,'jobs':rows}
 
+
+    # `hermes cron edit` can set a job's model, provider and reasoning effort, but
+    # it has no flag for base_url — and scheduler.py passes a stored base_url as
+    # explicit_base_url, overriding everything else. A job pinned to a dead local
+    # server therefore cannot be rescued from the CLI at all. This writes that one
+    # field, so the workspace can move a job between providers in one action.
+    def _write_job_base_url(home, ident, value):
+        import tempfile
+        path = home / 'cron/jobs.json'
+        data = json.loads(path.read_text(encoding='utf-8'))
+        found = False
+        for row in data.get('jobs', []):
+            if row.get('id') == ident:
+                row['base_url'] = value or None
+                found = True
+        if not found:
+            raise ValueError('Job not found in this profile')
+        fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix='.jobs-', suffix='.tmp')
+        with os.fdopen(fd, 'w', encoding='utf-8') as fh:
+            json.dump(data, fh, indent=2, ensure_ascii=False)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    
+    
+    def _job_routing_args(payload):
+        """The model/provider/reasoning arguments shared by one edit and a bulk move."""
+        args = []
+        if payload.get('model') is not None:
+            args += ['--model', text(payload.get('model'), 'model', 200, empty=True)]
+        if payload.get('provider') is not None:
+            args += ['--provider', text(payload.get('provider'), 'provider', 120, empty=True)]
+        effort = payload.get('reasoning_effort')
+        if effort is not None:
+            if effort not in ('', 'none', 'low', 'medium', 'high'):
+                raise ValueError('Unknown reasoning effort')
+            args += ['--reasoning-effort', effort]
+        return args
+
     @app.post('/api/jobs/{ident}/{action}')
     def job_action(ident:str,action:str,payload:dict):
         if action not in ('pause','resume','run','edit'):raise ValueError('Unknown job action')
@@ -651,18 +689,60 @@ def register(app, select, load, operations):
                 if not isinstance(prompt,str) or len(prompt)>20000 or not prompt.strip():
                     raise ValueError('prompt must be text of at most 20000 characters')
                 args+=['--prompt',prompt.strip()]
-            if payload.get('model') is not None:
-                args+=['--model',text(payload.get('model'),'model',200,empty=True)]
-            if payload.get('provider') is not None:
-                args+=['--provider',text(payload.get('provider'),'provider',120,empty=True)]
-            effort=payload.get('reasoning_effort')
-            if effort is not None:
-                if effort not in ('','none','low','medium','high'):
-                    raise ValueError('Unknown reasoning effort')
-                args+=['--reasoning-effort',effort]
+            args+=_job_routing_args(payload)
+            # base_url has no CLI flag, so it is written straight to the store.
+            if payload.get('base_url') is not None:
+                url=text(payload.get('base_url'),'base_url',500,empty=True)
+                if url and not url.startswith(('http://','https://')):
+                    raise ValueError('base_url must start with http:// or https://')
+                _write_job_base_url(h,ident,url)
+                if len(args)==3:return op('Job edit',lambda rt,p,h,report:{'note':'Endpoint saved.'})
             if len(args)==3:raise ValueError('Nothing to change on this job')
         return op('Job '+action,lambda rt,p,h,report:{'output':hr.redact(rt.run(args,home=h).stdout),
             'note':'Run now queues a job for the next scheduler tick; the owning gateway must be running.' if action=='run' else 'Saved by Hermes.'})
+
+    @app.post('/api/jobs/routing')
+    def job_routing(payload:dict):
+        """Move every model-backed job in this profile onto one provider.
+
+        Swapping providers used to mean editing each job by hand and then
+        discovering that base_url had stayed behind, still pointing at whatever
+        served the last model. One action sets all three axes together."""
+        from kit.cli.common import _read_jobs
+        rt,p,h=context()
+        url=payload.get('base_url')
+        if url is not None:
+            url=text(url,'base_url',500,empty=True)
+            if url and not url.startswith(('http://','https://')):
+                raise ValueError('base_url must start with http:// or https://')
+        args=_job_routing_args(payload)
+        only=payload.get('jobs')
+        if only is not None and not isinstance(only,list):
+            raise ValueError('jobs must be a list of job ids')
+        rows=[j for j in _read_jobs(h/'cron/jobs.json')['jobs']
+              if not j.get('no_agent') and (only is None or j.get('id') in only)]
+        if not rows:raise ValueError('No model-backed jobs to move in this profile')
+        if not args and url is None:raise ValueError('Nothing to change')
+
+        def action(rt,p,h,report):
+            moved,failed=[],[]
+            for row in rows:
+                ident=row.get('id')
+                try:
+                    if url is not None:_write_job_base_url(h,ident,url)
+                    if args:
+                        result=rt.run(['cron','edit',ident,*args],home=h,check=False)
+                        if result.returncode:
+                            failed.append(f"{row.get('name') or ident}: "
+                                          f"{hr.redact(result.stderr or result.stdout)[-200:]}")
+                            continue
+                    moved.append(row.get('name') or ident)
+                except Exception as exc:
+                    failed.append(f"{row.get('name') or ident}: {exc}")
+            note=f"{len(moved)} job(s) moved."
+            if failed:note+=f" {len(failed)} could not be changed."
+            return {'moved':moved,'failed':failed,'note':note}
+        return op('Move jobs to a provider',action)
 
     @app.post('/api/jobs/history')
     def job_history():

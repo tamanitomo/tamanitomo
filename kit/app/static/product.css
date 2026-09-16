@@ -2390,3 +2390,11 @@ body[data-page="chat"] main{padding:0}
 }
 .panel-bare{min-width:0}
 .panel-bare>.card:last-child{margin-bottom:0}
+
+/* Moving every job to another provider at once. */
+.routing-card{background:var(--surface-2);margin:0 0 4px;padding:16px 18px}
+.routing-card>summary{list-style:none;cursor:pointer;display:flex;flex-direction:column;gap:3px}
+.routing-card>summary::-webkit-details-marker{display:none}
+.routing-card[open]>summary{margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--edge)}
+.routing-card .chip-row{margin:0 0 10px}
+.routing-card .panel-footer{margin-top:18px}
