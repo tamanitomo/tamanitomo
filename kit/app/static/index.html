@@ -663,72 +663,98 @@ async function uploadPortrait(file){
   return r.json();
 }
 
-function likenessCard(p){
-  return `<div class="card"><h2>Reference portrait ${p.stored?'<span class="pill">stored</span>':''}</h2>
-    ${p.stored?`<img src="${mediaUrl('/media/portrait?t='+Date.now())}" alt="reference portrait"
-      style="max-width:220px;border-radius:8px;display:block;margin-bottom:10px">`:''}
-    <p class="dim">One photograph, kept in the vault, passed to image providers that accept a
-    reference. Describing it asks a model to read the face and propose the appearance section —
-    that is the only thing on this page that calls a model, and it writes nothing by itself.</p>
-    <label class="quiet" style="display:inline-block;padding:6px 10px;cursor:pointer">
-      ${p.stored?'Replace it':'Choose a photo'}<input id="pfile" type="file"
-      accept="image/png,image/jpeg,image/webp" hidden></label>
-    ${p.stored?`<button class="quiet" id="pdesc">Describe this face</button>
-      <button class="quiet" id="pdrop">Forget it</button>`:''}
-    <span class="dim" id="pmsg"></span>
-    <div id="pprop"></div></div>`;
+/* ---------------------------------------------------------------- identity
+
+   The SOUL is a document, so Identity reads as one: a single flowing page with
+   a contents rail beside it and an Edit button on each marked section, which
+   swaps that passage — and only that passage — for its raw markdown. The
+   section keys, the locked flag and the unfinished ✎ EDIT placeholders are
+   surfaced as tags instead of being left as noise inside a textarea.
+
+   The reference portrait lives in the image studio now, with the rest of the
+   image plumbing; nothing on this page calls a model. */
+
+const SECTION_TITLE={
+  core:'Who they are',relationship:'The two of you',appearance:'How they look',
+  visual:'Visual presence',photorealistic:'Photorealistic mode',
+  emotion:'How they feel things',voice:'How they speak',
+  conversation:'How they hold a conversation',memory:'What they carry over',
+  continuity:'Continuity','daily-life':'Their day',environment:'Where they are',
+  boundary:'What they will not do',boundaries:'What they will not do',
+  texting:'How they write',flirtation:'How they flirt',support:'How they help',
+  conflict:'Conflict and repair',humor:'Their humour',flaws:'Where they are difficult',
+  likes:'What they like',honesty:'Accuracy and honesty',priorities:'Operating rules',
+  essence:'In one line'};
+const SECTION_NOTE={
+  core:'The person underneath everything else.',
+  relationship:'How you know each other, and how that is written.',
+  appearance:'Concrete details. Vagueness here produces a different person in every image.',
+  visual:'Whether they have a face at all, and what carries their presence if not.',
+  photorealistic:'How they are rendered when a photograph is asked for.',
+  emotion:'Their emotional range and what moves it.',
+  voice:'Sentence length, punctuation, the shape of how they talk.',
+  conversation:'Answering, disagreeing, asking — and when to say nothing.',
+  memory:'What persists between conversations, and what counts as a real memory.',
+  continuity:'What persists between conversations.',
+  'daily-life':'The routine that runs while you are not talking.',
+  environment:'Where they are when nobody is looking.',
+  boundary:'Lines they hold regardless of how the conversation goes.',
+  boundaries:'Lines they hold regardless of how the conversation goes.',
+  texting:'Message shape, pet names, and the habits they avoid.',
+  flirtation:'Whether affection is spoken, and in what register.',
+  support:'What they do when something is wrong.',
+  conflict:'How an argument starts, and how it ends.',
+  humor:'What they find funny, and how they play.',
+  flaws:'Frictions they own — never a licence to be unkind.',
+  likes:'Tastes and habits, including the part they wrote themselves.',
+  honesty:'What happens when warmth and accuracy disagree.',
+  priorities:'Guardrails for anything they do unattended.',
+  essence:'The distilled version of everything above.'};
+const sectionTitle=name=>SECTION_TITLE[name]||name.replace(/-/g,' ').replace(/^./,c=>c.toUpperCase());
+const sectionUnfinished=body=>(body||'').includes('✎ EDIT');
+
+/* The body as it should be read. The section's own `## Heading` is already the
+   passage title, the paired COMPANION- comments carry meaning worth showing as
+   a labelled block, and every other HTML comment is plumbing. */
+function soulPassages(body){
+  const out=[];let prose=[],kind='',label='';
+  const flush=()=>{const text=prose.join('\n').trim();if(text)out.push({kind:kind||'prose',label,text});prose=[];};
+  let leading=true;
+  for(const line of (body||'').split('\n')){
+    const trimmed=line.trim();
+    if(leading&&/^#{1,6} /.test(trimmed)){leading=false;continue;}
+    if(trimmed)leading=false;
+    if(/^<!--\s*COMPANION-PROMPT-EXCLUDE\s*-->$/.test(trimmed)){
+      flush();kind='aside';label='Guidance for them, not for image prompts';continue;}
+    if(/^<!--\s*COMPANION-SELF-AUTHORED:BEGIN\s*-->$/.test(trimmed)){
+      flush();kind='self';label='Theirs to write — yours to read';continue;}
+    if(/^<!--\s*(\/COMPANION-PROMPT-EXCLUDE|COMPANION-SELF-AUTHORED:END)\s*-->$/.test(trimmed)){
+      flush();kind='';label='';continue;}
+    if(/^<!--[\s\S]*-->$/.test(trimmed))continue;
+    prose.push(line);
+  }
+  flush();
+  return out;
 }
 
-function wireLikeness(){
-  const msg=$('pmsg');
-  $('pfile').onchange=async()=>{
-    const file=$('pfile').files[0];if(!file)return;
-    msg.textContent='storing…';
-    try{await uploadPortrait(file);renderIdentity();}
-    catch(e){msg.innerHTML=`<span class="bad">${esc(e.message)}</span>`;}
-  };
-  if($('pdrop'))$('pdrop').onclick=async()=>{
-    try{await api('/portrait',{method:'DELETE'});renderIdentity();}
-    catch(e){msg.innerHTML=`<span class="bad">${esc(e.message)}</span>`;}
-  };
-  if($('pdesc'))$('pdesc').onclick=async()=>{
-    msg.textContent='looking…';$('pdesc').disabled=true;
-    try{
-      const d=await api('/portrait/describe',{method:'POST',body:'{}'});
-      msg.textContent='';
-      $('pprop').innerHTML=`<p class="dim">Proposed, not saved. Read it, edit anything wrong, then
-        keep it — or close it and nothing happens.</p>
-        <textarea id="pbody">${esc(d.body)}</textarea>
-        <button class="quiet" id="pkeep">Keep this as her appearance</button>
-        <button class="quiet" id="pdiscard">Discard</button>
-        <span class="dim" id="pkmsg"></span>`;
-      $('pdiscard').onclick=()=>{$('pprop').innerHTML='';};
-      $('pkeep').onclick=async()=>{
-        try{
-          await api('/identity/appearance',{method:'POST',
-            body:JSON.stringify({body:$('pbody').value})});
-          clearEditorDirty('identity-appearance');renderIdentity();
-        }catch(e){$('pkmsg').innerHTML=`<span class="bad">${esc(e.message)}</span>`;}
-      };
-    }catch(e){msg.innerHTML=`<span class="bad">${esc(e.message)}</span>`;}
-    finally{if($('pdesc'))$('pdesc').disabled=false;}
-  };
+/* Rendered markdown, falling back to the raw text if the vault renderer has not
+   loaded. Unwritten ✎ EDIT placeholders are marked so an unfinished section is
+   visible from across the page rather than buried mid-paragraph. */
+function soulBodyHTML(body){
+  const render=typeof renderObsidianMarkdown==='function'
+    ? renderObsidianMarkdown : text=>`<pre>${esc(text)}</pre>`;
+  const blocks=soulPassages(body);
+  if(!blocks.length)return '<p class="dim soul-empty">Nothing written here yet.</p>';
+  return blocks.map(b=>{
+    const html=render(b.text).replace(/✎ EDIT:?/g,'<span class="soul-todo">✎ unwritten</span>');
+    return b.kind==='prose'?html
+      :`<aside class="soul-aside soul-aside-${b.kind}"><span class="soul-aside-label">${esc(b.label)}</span>${html}</aside>`;
+  }).join('\n');
 }
 
 async function renderIdentity(){
-  const [d,p]=await Promise.all([api('/identity'),api('/portrait')]);
-  const who=d.profile||{};
-  const SECTION_TITLE={core:'Who they are',relationship:'The two of you',appearance:'How they look',
-    visual:'Visual presence',emotion:'How they feel things',voice:'How they speak',
-    boundaries:'What they will not do',continuity:'Continuity'};
-  const SECTION_NOTE={core:'The person underneath everything else.',
-    relationship:'How you know each other, and how that is written.',
-    appearance:'Concrete details. Vagueness here produces a different person in every image.',
-    visual:'Whether they have a face at all, and what carries their presence if not.',
-    emotion:'Their emotional range and what moves it.',
-    voice:'Sentence length, punctuation, the shape of how they talk.',
-    boundaries:'Lines they hold regardless of how the conversation goes.',
-    continuity:'What persists between conversations.'};
+  const d=await api('/identity');
+  const who=d.profile||{},sections=d.sections||[];
   const pronoun=who.pronoun_set==='he'?'He / him':'She / her';
   const facts=[
     who.persona_label&&['Personality',who.persona_label,who.persona_blurb],
@@ -741,7 +767,7 @@ async function renderIdentity(){
   const hero=`<section class="identity-hero">
     <div class="identity-avatar" aria-hidden="true">${esc((who.agent||'?').slice(0,1))}</div>
     <div class="identity-hero-copy">
-      <span class="eyebrow">${esc(who.human?who.human+'\u2019s companion':'Companion')}</span>
+      <span class="eyebrow">${esc(who.human?who.human+'’s companion':'Companion')}</span>
       <h2>${esc(who.agent||'Your companion')}</h2>
       ${who.persona_blurb?`<p>${esc(who.persona_blurb)}</p>`:''}
     </div>
@@ -749,31 +775,115 @@ async function renderIdentity(){
       `<div><dt>${esc(k)}</dt><dd>${esc(v)}${note?`<small>${esc(note)}</small>`:''}</dd></div>`).join('')}</dl>
   </section>`;
   const warn=d.portrait&&!d.portrait.ready
-    ? `<div class="notice-strip"><p><strong>Images need an appearance first.</strong> ${esc(d.portrait.reason)}</p></div>`:'';
-  $('identity').innerHTML=hero+warn+likenessCard(p)+
-    `<div class="section-heading"><h2>Their documents</h2><span class="dim small">Plain text, exactly as Hermes reads it.</span></div>`+
-    d.sections.map(s=>`
-    <div class="card identity-section">
-      <div class="identity-section-head">
-        <div><h3>${esc(SECTION_TITLE[s.name]||s.name)} ${s.locked?'<span class="pill">theirs to write</span>':''}</h3>
-        ${SECTION_NOTE[s.name]?`<p class="dim small">${esc(SECTION_NOTE[s.name])}</p>`:''}</div>
-        <code class="section-key">${esc(s.name)}</code>
-      </div>
-      <textarea data-section="${esc(s.name)}">${esc(s.body)}</textarea>
-      <div class="identity-section-actions">
-        <button class="quiet" data-save="${esc(s.name)}">Save this section</button>
-        <span class="dim small" data-msg="${esc(s.name)}"></span>
-      </div></div>`).join('')
-    +`<p class="dim small">\u201cTheirs to write\u201d means they can change it themselves. You can too \u2014 it is your companion. Every save keeps a backup of the whole file.</p>`;
-  wireLikeness();
-  for(const b of $('identity').querySelectorAll('[data-save]')){
-    b.onclick=async()=>{
-      const name=b.dataset.save;
-      const body=$('identity').querySelector(`[data-section="${name}"]`).value;
-      const msg=$('identity').querySelector(`[data-msg="${name}"]`);
-      try{await api('/identity/'+name,{method:'POST',body:JSON.stringify({body})});clearEditorDirty('identity-'+name);msg.textContent='Saved';}
-      catch(e){msg.innerHTML=`<span class="bad">${esc(e.message)}</span>`;}
-    };}
+    ? `<div class="notice-strip"><p><strong>Images need an appearance first.</strong> ${esc(d.portrait.reason)}</p>
+       <button class="quiet" data-jump="appearance">Go to it</button></div>`:'';
+
+  const words=sections.reduce((n,s)=>n+(s.body||'').trim().split(/\s+/).filter(Boolean).length,0);
+  const outlineRow=s=>`<a href="#soul-sec-${esc(s.name)}" data-jump="${esc(s.name)}">
+      <span class="soul-outline-name">${esc(sectionTitle(s.name))}</span>
+      ${s.locked?'<span class="soul-outline-flag" title="Theirs to write">●</span>':''}
+      <span class="soul-outline-todo" data-todo="${esc(s.name)}" title="Has an unwritten placeholder"
+        ${sectionUnfinished(s.body)?'':'hidden'}>✎</span></a>`;
+  const outline=`<nav class="soul-outline" aria-label="Sections of this document">
+    <div class="soul-outline-head"><strong>Contents</strong>
+      <span class="dim small">${sections.length} section${sections.length===1?'':'s'} · ${words.toLocaleString()} words</span></div>
+    <ol>${sections.map(s=>`<li>${outlineRow(s)}</li>`).join('')}</ol>
+    <p class="dim small soul-outline-key"><span class="soul-outline-flag">●</span> theirs to write
+      · <span class="soul-outline-todo">✎</span> unwritten</p>
+  </nav>`;
+
+  const doc=`<article class="soul-doc">${sections.map(s=>`
+    <section class="soul-passage" id="soul-sec-${esc(s.name)}" data-passage="${esc(s.name)}">
+      <header class="soul-passage-head">
+        <div class="soul-passage-title">
+          <h3>${esc(sectionTitle(s.name))}</h3>
+          <div class="soul-passage-tags">
+            ${s.locked?'<span class="pill soul-lock" title="The companion cannot rewrite this section. You still can.">theirs to write</span>':''}
+            <span class="pill soul-pill-todo" data-todo-pill="${esc(s.name)}"
+              ${sectionUnfinished(s.body)?'':'hidden'}>needs writing</span>
+            <code class="section-key">${esc(s.name)}</code>
+          </div>
+        </div>
+        ${SECTION_NOTE[s.name]?`<p class="soul-passage-note">${esc(SECTION_NOTE[s.name])}</p>`:''}
+        <button class="quiet soul-edit" data-edit="${esc(s.name)}">Edit</button>
+      </header>
+      <div class="soul-passage-body prose" data-body="${esc(s.name)}">${soulBodyHTML(s.body)}</div>
+    </section>`).join('')}</article>`;
+
+  $('identity').innerHTML=hero+warn+
+    `<div class="section-heading" id="soul-heading">
+      <div><h2>Their documents</h2>
+      <span class="dim small">The SOUL exactly as Hermes reads it. Edit a section in place — every save keeps a backup.</span></div>
+      <div class="actions" id="identity-tools"></div>
+    </div>
+    <div class="identity-doc-layout">${outline}${doc}</div>`;
+
+  // The raw markdown is kept here so Cancel restores what the file actually
+  // holds rather than a round trip through the rendered HTML.
+  const raw=Object.fromEntries(sections.map(s=>[s.name,s.body||'']));
+  const locked=Object.fromEntries(sections.map(s=>[s.name,!!s.locked]));
+  const passage=name=>$('identity').querySelector(`[data-passage="${name}"]`);
+
+  const read=name=>{
+    const host=passage(name);host.classList.remove('is-editing');
+    host.querySelector('.soul-edit').textContent='Edit';
+    host.querySelector('[data-body]').outerHTML=
+      `<div class="soul-passage-body prose" data-body="${name}">${soulBodyHTML(raw[name])}</div>`;
+    for(const flag of $('identity').querySelectorAll(`[data-todo="${name}"],[data-todo-pill="${name}"]`))
+      flag.hidden=!sectionUnfinished(raw[name]);
+  };
+  const write=name=>{
+    const host=passage(name);host.classList.add('is-editing');
+    host.querySelector('.soul-edit').textContent='Close editor';
+    host.querySelector('[data-body]').outerHTML=`
+      <div class="soul-passage-body soul-passage-edit" data-body="${name}">
+        <textarea data-section="${name}" aria-label="${esc(sectionTitle(name))}, markdown">${esc(raw[name])}</textarea>
+        <div class="soul-passage-actions">
+          <button class="act" data-save="${name}">Save section</button>
+          <button class="quiet" data-cancel="${name}">Cancel</button>
+          <span class="dim small soul-syntax">Markdown: <code>##</code> heading, <code>**bold**</code>, <code>-</code> bullet.${
+            locked[name]?' Locked against them, not against you.':''}</span>
+          <span class="small" data-msg="${name}"></span>
+        </div>
+      </div>`;
+    const area=host.querySelector('textarea');
+    area.style.height=Math.min(700,Math.max(200,area.scrollHeight+30))+'px';
+    area.focus();
+  };
+  const leaveEditor=async name=>
+    !passage(name).classList.contains('is-editing')||!hasEditorChanges('identity-'+name)
+      ||await confirmEditorLeave('identity-'+name);
+
+  $('identity').onclick=async event=>{
+    const jump=event.target.closest('[data-jump]'),toggle=event.target.closest('[data-edit]'),
+          save=event.target.closest('[data-save]'),cancel=event.target.closest('[data-cancel]');
+    if(jump){
+      event.preventDefault();
+      const target=$('soul-sec-'+jump.dataset.jump);
+      if(!target)return;
+      target.scrollIntoView({block:'start',behavior:'smooth'});
+      target.classList.add('is-targeted');setTimeout(()=>target.classList.remove('is-targeted'),1500);
+      return;
+    }
+    if(toggle){
+      const name=toggle.dataset.edit;
+      if(!passage(name).classList.contains('is-editing'))return write(name);
+      if(await leaveEditor(name))read(name);
+      return;
+    }
+    if(cancel){if(await leaveEditor(cancel.dataset.cancel))read(cancel.dataset.cancel);return;}
+    if(!save)return;
+    const name=save.dataset.save,msg=$('identity').querySelector(`[data-msg="${name}"]`);
+    const body=$('identity').querySelector(`[data-section="${name}"]`).value;
+    save.disabled=true;msg.innerHTML='<span class="dim">Saving…</span>';
+    try{
+      await api('/identity/'+name,{method:'POST',body:JSON.stringify({body})});
+      raw[name]=body.replace(/^\n+|\n+$/g,'');
+      clearEditorDirty('identity-'+name);
+      read(name);
+      notice('Saved. The whole file was backed up first.');
+    }catch(e){msg.innerHTML=`<span class="bad">${esc(e.message)}</span>`;save.disabled=false;}
+  };
 }
 
 async function renderHealth(){

@@ -27,16 +27,6 @@ workspaceHandlers['companion-edit']=async()=>{
  config.outreach_per_day=$('editor-unlimited').checked?0:Number($('companion-edit').querySelector('[data-config=outreach_per_day]').value);
  const result=await post('/profile/editor',{revision:d.revision,config,soul:$('editor-soul').value,display_name:$('editor-display-name').value});clearEditorDirty('companion-edit');if(result.operation){const row=await followOperation(result.operation);if(row.status!=='complete')return;}await boot();notice('Companion saved with a backup.'+(result.operation?' Background jobs synchronized.':''));};
 };
-const identityStudioBase=workspaceHandlers.identity;
-workspaceHandlers.identity=async()=>{
- await identityStudioBase();
- // Sits with the other identity tools, below the companion's profile header.
- const card=`<div class="card studio-entry"><div><h2>Image studio</h2><p class="dim">Tune the exact identity prompt, pair providers, and choose a workflow for each kind of image.</p></div><button class="act" id="open-image-studio">Open image studio →</button></div>`;
- const anchor=$('identity').querySelector('.identity-actions-bar')||$('identity').querySelector('.identity-hero');
- if(anchor)anchor.insertAdjacentHTML('afterend',card);
- else $('identity').insertAdjacentHTML('afterbegin',card);
- $('open-image-studio').onclick=()=>showTab('image-studio');
-};
 
 // Obsidian-like Knowledge Vault: hierarchical tree, live markdown preview/split, TOC outline, wikilinks.
 let vaultTreeData=new Map(),vaultExpanded=new Set(['notes','journal','soul']),vaultFilter='all',vaultQuery='',vaultViewMode='preview';
@@ -687,8 +677,60 @@ workspaceHandlers.voice=async()=>{
 
 function downloadJSON(name,data){const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 
+/* Which studio view is open, kept across a re-render so a portrait change comes
+   back to the identity view instead of dropping you on the composer. */
+let imageStudioView='compose';
+
+/* The reference portrait used to sit on Identity, where it broke the SOUL into
+   pieces and was the one thing on that page that could call a model. It belongs
+   beside the appearance prompt it feeds, so it lives in this view instead. */
+function wirePortrait(){
+ const msg=$('pmsg'),reload=async()=>{imageStudioView='identity';await render('image-studio');};
+ $('pfile').onchange=async()=>{
+  const file=$('pfile').files[0];if(!file)return;
+  msg.textContent='storing\u2026';
+  try{await uploadPortrait(file);await reload();}
+  catch(e){msg.innerHTML=`<span class="bad">${esc(e.message)}</span>`;}
+ };
+ $('palbum').onclick=async()=>{
+  const content=await api('/content');const images=content.items.filter(x=>x.kind==='image');
+  dialog('Choose a reference photo',`<div class="photo-grid">${images.map((x,i)=>`<button class="card" data-reference="${i}"><img ${mediaPrivacy(x)} style="width:100%;height:150px;object-fit:cover" src="${mediaUrl(x.url)}" alt="${esc(x.title)}"><span>${esc(x.title)} \u00b7 ${esc(x.generation||x.source)}${x.blur?' \u00b7 NSFW':''}</span></button>`).join('')||'<p>No saved photos yet.</p>'}</div>`);
+  for(const b of $('dialog-body').querySelectorAll('[data-reference]'))b.onclick=async()=>{
+   const r=await fetch(rawMediaUrl(images[+b.dataset.reference].url));
+   if(!r.ok)throw Error('Photo could not be loaded');
+   await uploadPortrait(await r.blob());$('product-dialog').close();await reload();
+  };
+ };
+ if($('pdrop'))$('pdrop').onclick=async()=>{
+  try{await api('/portrait',{method:'DELETE'});await reload();}
+  catch(e){msg.innerHTML=`<span class="bad">${esc(e.message)}</span>`;}
+ };
+ if($('pdesc'))$('pdesc').onclick=async()=>{
+  msg.textContent='looking\u2026';$('pdesc').disabled=true;
+  try{
+   const d=await api('/portrait/describe',{method:'POST',body:'{}'});
+   msg.textContent='';
+   $('pprop').innerHTML=`<p class="dim">Proposed, not saved. Read it, edit anything wrong, then keep it \u2014 or discard it and nothing happens.</p>
+     <textarea id="pbody">${esc(d.body)}</textarea>
+     <div class="actions"><button class="act" id="pkeep">Save as their appearance</button>
+     <button class="quiet" id="pdiscard">Discard</button><span class="dim small" id="pkmsg"></span></div>`;
+   $('pdiscard').onclick=()=>{$('pprop').innerHTML='';};
+   $('pkeep').onclick=async()=>{
+    try{
+     await api('/identity/appearance',{method:'POST',body:JSON.stringify({body:$('pbody').value})});
+     clearEditorDirty('identity-appearance');
+     notice('Appearance saved to the SOUL. Read it on Identity.');
+     await reload();
+    }catch(e){$('pkmsg').innerHTML=`<span class="bad">${esc(e.message)}</span>`;}
+   };
+  }catch(e){msg.innerHTML=`<span class="bad">${esc(e.message)}</span>`;}
+  finally{if($('pdesc'))$('pdesc').disabled=false;}
+ };
+}
+
 workspaceHandlers['image-studio']=async()=>{
- const d=await api('/images');let settings=d.settings,revision=d.revision,presetIndex=0;const defaults=d.effective;
+ const [d,portrait]=await Promise.all([api('/images'),api('/portrait')]);
+ let settings=d.settings,revision=d.revision,presetIndex=0;const defaults=d.effective;
  const routeValues={...settings.routes};let defaultId=settings.default_preset||'';
  let activeCategory='portrait';
 
@@ -869,6 +911,24 @@ workspaceHandlers['image-studio']=async()=>{
  <!-- VIEW 5: Identity & Appearance -->
  <div id="view-identity" class="studio-view-pane" hidden>
   <div class="card">
+   <h2>Reference portrait ${portrait.stored?'<span class="pill">stored</span>':''}</h2>
+   <div class="portrait-row">
+    ${portrait.stored?`<img class="portrait-thumb" src="${mediaUrl('/media/portrait?t='+Date.now())}" alt="Reference portrait">`:'<div class="portrait-thumb portrait-empty">No photo</div>'}
+    <div>
+     <p class="dim">One photograph, kept in the vault, passed to the providers that accept a reference.
+      Describing it asks a model to read the face and propose an appearance section \u2014 that is the only
+      thing here that calls a model, and it writes nothing by itself.</p>
+     <div class="actions">
+      <label class="quiet" style="cursor:pointer">${portrait.stored?'Replace it':'Choose a photo'}<input id="pfile" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
+      <button class="quiet" id="palbum">Pick from your photos</button>
+      ${portrait.stored?'<button class="quiet" id="pdesc">Describe this face</button><button class="quiet" id="pdrop">Forget it</button>':''}
+      <span class="dim small" id="pmsg"></span>
+     </div>
+     <div id="pprop"></div>
+    </div>
+   </div>
+  </div>
+  <div class="card">
    <h2>Identity sent to the image provider</h2>
    <p class="dim">The appearance from SOUL is used unless you save a studio override. This override is also used by the companion’s portrait prompt helper.</p>
    <label class="inline-label switch-container" style="margin-bottom:12px">
@@ -887,13 +947,16 @@ workspaceHandlers['image-studio']=async()=>{
 
  // Subnav Switching
  const showStudioView=(viewName)=>{
+  imageStudioView=viewName;
   for(const btn of $('image-subnav').querySelectorAll('.studio-subnav-btn')){btn.classList.toggle('is-active',btn.dataset.view===viewName);}
   for(const id of ['view-compose','view-assignments','view-creator','view-presets','view-identity']){const el=$(id);if(el)el.hidden=id!==('view-'+viewName);}
  };
+ showStudioView(imageStudioView);
  for(const btn of $('image-subnav').querySelectorAll('.studio-subnav-btn')){btn.onclick=()=>showStudioView(btn.dataset.view);}
  $('composer-goto-assignments').onclick=()=>showStudioView('assignments');
  $('assignments-goto-creator').onclick=()=>showStudioView('creator');
  $('image-back-identity').onclick=()=>showTab('identity');
+ wirePortrait();
  $('image-follow-soul').onchange=()=>{$('image-identity').disabled=$('image-follow-soul').checked;};
  $('image-follow-soul').onchange();
 

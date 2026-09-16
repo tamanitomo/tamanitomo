@@ -1381,26 +1381,44 @@ workspaceHandlers.settings=async()=>{
 const identityBase=workspaceHandlers.identity;
 workspaceHandlers.identity=async()=>{
   await identityBase();if(current!=='identity')return;
-  // Tools belong under the profile header, not above the companion's name.
-  const bar=`
-    <div class="identity-actions-bar">
-      <div class="identity-actions-copy">
-        <strong>Edit their documents</strong>
-        <p class="dim small">Plain text, exactly as Hermes reads it. Every save keeps an automatic backup.</p>
-      </div>
-      <div class="actions">
-        <button class="act" id="edit-full-soul">Edit full documents</button>
-        <button class="quiet" id="repair-sections">Restore missing sections</button>
-        <button class="quiet" id="album-reference">Album reference</button>
-        <button class="quiet" id="visual-builder">Visual creator</button>
-      </div>
-    </div>`;
-  const hero=$('identity').querySelector('.identity-hero');
-  if(hero)hero.insertAdjacentHTML('afterend',bar);
-  else $('identity').insertAdjacentHTML('afterbegin',bar);
+  // Four buttons above the document turned the page into a control panel. The
+  // document is the page; the tools that act on the whole file live in one menu
+  // beside its heading, and the portrait moved to the image studio with the
+  // rest of the image plumbing.
+  const present=new Set([...$('identity').querySelectorAll('[data-passage]')].map(x=>x.dataset.passage));
+  const missing=['core','appearance','relationship','voice'].filter(name=>!present.has(name));
+  const tools=$('identity-tools');
+  if(!tools)return;
+  tools.innerHTML=`<details class="tool-menu" id="identity-tool-menu">
+    <summary class="quiet">Document tools</summary>
+    <div class="tool-menu-list">
+      <button class="tool-menu-item" id="edit-full-soul"><strong>Edit the whole file</strong>
+        <span>Raw markdown, including anything written outside these sections.</span></button>
+      <button class="tool-menu-item" id="visual-builder"><strong>Build an appearance</strong>
+        <span>Compose a description from the catalogue, then review it before it is saved.</span></button>
+      <button class="tool-menu-item" id="repair-sections"><strong>Restore missing sections</strong>
+        <span>${missing.length?`Missing now: ${missing.join(', ')}.`:'Re-wraps a hand-edited file. Existing writing is preserved.'}</span></button>
+      <button class="tool-menu-item" id="tools-image-studio"><strong>Image studio</strong>
+        <span>Reference portrait and the appearance sent to image providers.</span></button>
+    </div></details>`;
+  if(missing.length)$('soul-heading').insertAdjacentHTML('beforebegin',
+    `<div class="notice-strip"><p><strong>${missing.length} section${missing.length===1?' is':'s are'} missing.</strong>
+      ${esc(missing.join(', '))} — Hermes reads whatever is there, so this companion is running short of a definition.</p>
+      <button class="quiet" id="repair-inline">Restore them</button></div>`);
+  // Any tool that opens a dialog closes the menu behind it.
+  for(const b of tools.querySelectorAll('.tool-menu-item'))
+    b.addEventListener('click',()=>{$('identity-tool-menu').open=false;});
+  $('tools-image-studio').onclick=()=>showTab('image-studio');
+
+  const repair=async()=>{
+    if(!await confirmEditorLeave('identity'))return;
+    await post('/identity-repair');await render('identity');
+    notice('Missing sections restored. Existing writing was preserved.');
+  };
+  $('repair-sections').onclick=repair;
+  if($('repair-inline'))$('repair-inline').onclick=repair;
+
   $('edit-full-soul').onclick=async()=>{if(!await confirmEditorLeave('identity'))return;const list=await api('/documents');let selected='SOUL.md',revision='';dialog('Edit companion documents',`<p>Every save keeps a backup. Edit the complete document, including writing created outside the kit. Other vault documents can be edited in Vault.</p><label>Document<select id="full-document">${options(list.documents.map(x=>[x,x]),selected)}</select></label><textarea id="full-soul" style="height:55vh"></textarea><button class="act" id="save-full-soul">Save document</button>`);const read=async()=>{if(!await confirmEditorLeave('dialog')){$('full-document').value=selected;return;}selected=$('full-document').value;const d=await api('/soul-document?document='+encodeURIComponent(selected));revision=d.revision;$('full-soul').value=d.text;};await read();$('full-document').onchange=read;$('save-full-soul').onclick=async()=>{await post('/soul-document',{document:selected,text:$('full-soul').value,revision});clearEditorDirty('dialog');$('product-dialog').close();await render('identity');notice('Document saved with a backup.');};};
-  $('repair-sections').onclick=async()=>{if(!await confirmEditorLeave('identity'))return;await post('/identity-repair');await render('identity');notice('Missing sections restored. Add an appearance below, or use the visual creator. Existing writing was preserved.');};
-  $('album-reference').onclick=async()=>{if(!await confirmEditorLeave('identity'))return;const d=await api('/content');const images=d.items.filter(x=>x.kind==='image');dialog('Choose a reference photo',`<div class="photo-grid">${images.map((x,i)=>`<button class="card" data-reference="${i}"><img ${mediaPrivacy(x)} style="width:100%;height:150px;object-fit:cover" src="${mediaUrl(x.url)}" alt="${esc(x.title)}"><span>${esc(x.title)} · ${esc(x.generation||x.source)}${x.blur?" · NSFW":""}</span></button>`).join('')||'<p>No saved photos yet. Upload a photo in Identity to get started.</p>'}</div>`);for(const b of $('dialog-body').querySelectorAll('[data-reference]'))b.onclick=async()=>{const r=await fetch(rawMediaUrl(images[+b.dataset.reference].url));if(!r.ok)throw Error('Photo could not be loaded');await uploadPortrait(await r.blob());$('product-dialog').close();await render('identity');};};
   $('visual-builder').onclick=async()=>{if(!await confirmEditorLeave('identity'))return;const d=await api('/catalog');const rows=Object.entries(d.catalog.categories).filter(([k,v])=>v.section==='appearance');dialog('Visual creator',`<p>Choose a look, then review the complete appearance before saving.</p><label>Catalog<select id="visual-gender"><option value="female">Feminine</option><option value="male">Masculine</option></select></label><div id="visual-fields" class="form-grid"></div><button class="quiet" id="compose-look">Build description</button><label>Appearance description<textarea id="visual-description"></textarea></label><button class="act" id="save-look">Save appearance</button>`);const populate=()=>{$('visual-fields').innerHTML=rows.filter(([k,v])=>v[$('visual-gender').value]).map(([k,v])=>`<label>${esc(v.label)}<select aria-label="${esc(v.label)}" data-visual="${esc(k)}"><option value="">Leave unspecified</option>${options(v[$('visual-gender').value].map(r=>[r.text,r.label]),'')}<option value="__custom__">Write your own…</option></select><input aria-label="Custom ${esc(v.label)}" hidden placeholder="Your description"></label>`).join('');for(const select of $('visual-fields').querySelectorAll('select'))select.onchange=()=>{select.nextElementSibling.hidden=select.value!=='__custom__';};};populate();$('visual-gender').onchange=populate;$('compose-look').onclick=()=>{$('visual-description').value=[...$('visual-fields').querySelectorAll('select')].map(s=>s.value==='__custom__'?s.nextElementSibling.value:s.value).filter(Boolean).join(' ').replaceAll('{A}',chatName()).replaceAll('{AS_LOWER}','they').replaceAll('{AS}','They').replaceAll('{AP}','their').replaceAll('{AO}','them');};$('save-look').onclick=async()=>{const body=$('visual-description').value.trim();if(!body)throw Error('Build or write an appearance first.');await post('/identity-repair',{appearance:body});await post('/identity/appearance',{body});$('product-dialog').close();await render('identity');notice('Appearance saved.');};};
 };
 TABS.push(['voice','Voice studio']);const voiceSection=document.createElement('section');voiceSection.id='voice';voiceSection.hidden=true;document.querySelector('main').append(voiceSection);if(!$('tabs').querySelector('[data-tab="voice"]')){const voiceNav=document.createElement('button');voiceNav.dataset.tab='voice';voiceNav.innerHTML=icon('voice')+'<span>Voice studio</span>';voiceNav.onclick=()=>showTab('voice');($('tabs').querySelector('.nav-more')||$('tabs').lastElementChild||$('tabs')).append(voiceNav);}
