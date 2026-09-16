@@ -3,19 +3,31 @@ function addPage(id,label){TABS.push([id,label]);const section=document.createEl
 addPage('local-models','Local models');addPage('companion-edit','Edit companion');addPage('image-studio','Image studio');
 // getRandomValues also works on plain HTTP LAN origins; randomUUID requires HTTPS.
 const presetSuffix=()=>Array.from(crypto.getRandomValues(new Uint8Array(8)),v=>v.toString(16).padStart(2,'0')).join('');
+// Prompt boxes a workflow keeps. The rest describe one moment, are filled per
+// render, and are deliberately not written back when a workflow is saved.
+const SAVED_PARTS=['quality','identity'];
+const TRANSIENT_PARTS=['scene','wardrobe','lighting','camera'];
 const formLabel=key=>key.replaceAll('_',' ').replace(/^./,s=>s.toUpperCase());
 /* A lane reads faster with a face on it. Unknown lanes fall back to a star. */
 const LANE_ICON={portrait:'\u{1F5BC}\uFE0F',anime:'\u{1F338}',realistic:'\u{1F4F7}',landscape:'\u{1F3D4}\uFE0F',other:'\u2728'};
 const laneIcon=key=>LANE_ICON[key]||'\u2728';
+/* The kit stores a pronoun set, because that is what the text needs. People
+   think of it as gender, so that is what the box asks for; the stored value is
+   unchanged. */
+const FIELD_LABEL={pronoun_set:'Gender',human_pronoun_set:'Your gender'};
+const CHOICE_LABEL={pronoun_set:{she:'Female',he:'Male'},
+                    human_pronoun_set:{she:'Female',he:'Male'}};
+const choiceLabel=(key,value)=>(CHOICE_LABEL[key]||{})[value]||formLabel(value);
+
 const profileChoices={agent_type:['companion','colleague','worker'],pronoun_set:['she','he'],human_pronoun_set:['she','he'],outreach:['updates_only','free','never'],relationship_progression:['off','subtle','milestones'],relationship_pace:['slow','natural','quick'],context_mode:['auto','fixed']};
 function fieldHTML(key,value,choices=[],readonly=false){
  if(key==='outreach_per_day')return `<label>Maximum proactive messages per day<input data-config="outreach_per_day" type="number" required min="1" max="100" value="${value||3}" ${value===0?'disabled':''}></label><label class="inline-label"><input id="editor-unlimited" type="checkbox" ${value===0?'checked':''}>No daily limit (unlimited proactive messages)</label>`;
  const disabled=readonly?'disabled':'';
- const input=choices.length?`<select data-config="${esc(key)}" ${disabled}>${options(choices.map(v=>Array.isArray(v)?v:[v,formLabel(v)]),value)}</select>`:
+ const input=choices.length?`<select data-config="${esc(key)}" ${disabled}>${options(choices.map(v=>Array.isArray(v)?v:[v,choiceLabel(key,v)]),value)}</select>`:
  typeof value==='boolean'?`<select data-config="${esc(key)}" ${disabled}>${options([['true','Enabled'],['false','Disabled']],String(value))}</select>`:
  typeof value==='object'?`<textarea data-config="${esc(key)}" ${disabled}>${esc(JSON.stringify(value,null,2))}</textarea>`:
  `<input data-config="${esc(key)}" ${disabled} type="${typeof value==='number'?'number':key==='birthdate'?'date':['quiet_start','quiet_end'].includes(key)?'time':'text'}" ${typeof value==='number'?'step="any"':''} value="${esc(value)}">`;
- return `<label>${esc(formLabel(key))}${input}${readonly?'<span class="dim small">Storage path · managed by installation</span>':''}</label>`;
+ return `<label>${esc(FIELD_LABEL[key]||formLabel(key))}${input}${readonly?'<span class="dim small">Storage path · managed by installation</span>':''}</label>`;
 }
 workspaceHandlers['companion-edit']=async()=>{
  const [d,catalog]=await Promise.all([api('/profile/editor'),api('/catalog')]);
@@ -731,56 +743,6 @@ function downloadJSON(name,data){const url=URL.createObjectURL(new Blob([JSON.st
    back to the identity view instead of dropping you on the composer. */
 let imageStudioView='assignments';
 
-/* The reference portrait used to sit on Identity, where it broke the SOUL into
-   pieces and was the one thing on that page that could call a model. It belongs
-   beside the appearance prompt it feeds, so it lives in this view instead. */
-function wirePortrait(){
- const msg=$('pmsg'),reload=async()=>{
-  // The face the rest of the app draws just changed.
-  portraitVersion=Date.now();await refreshPortraitState();
-  imageStudioView='identity';await render('image-studio');
- };
- $('pfile').onchange=async()=>{
-  const file=$('pfile').files[0];if(!file)return;
-  msg.textContent='storing\u2026';
-  try{await uploadPortrait(file);await reload();}
-  catch(e){msg.innerHTML=`<span class="bad">${esc(e.message)}</span>`;}
- };
- $('palbum').onclick=async()=>{
-  const content=await api('/content');const images=content.items.filter(x=>x.kind==='image');
-  dialog('Choose a reference photo',`<div class="photo-grid">${images.map((x,i)=>`<button class="card" data-reference="${i}"><img ${mediaPrivacy(x)} style="width:100%;height:150px;object-fit:cover" src="${mediaUrl(x.url)}" alt="${esc(x.title)}"><span>${esc(x.title)} \u00b7 ${esc(x.generation||x.source)}${x.blur?' \u00b7 NSFW':''}</span></button>`).join('')||'<p>No saved photos yet.</p>'}</div>`);
-  for(const b of $('dialog-body').querySelectorAll('[data-reference]'))b.onclick=async()=>{
-   const r=await fetch(rawMediaUrl(images[+b.dataset.reference].url));
-   if(!r.ok)throw Error('Photo could not be loaded');
-   await uploadPortrait(await r.blob());$('product-dialog').close();await reload();
-  };
- };
- if($('pdrop'))$('pdrop').onclick=async()=>{
-  try{await api('/portrait',{method:'DELETE'});await reload();}
-  catch(e){msg.innerHTML=`<span class="bad">${esc(e.message)}</span>`;}
- };
- if($('pdesc'))$('pdesc').onclick=async()=>{
-  msg.textContent='looking\u2026';$('pdesc').disabled=true;
-  try{
-   const d=await api('/portrait/describe',{method:'POST',body:'{}'});
-   msg.textContent='';
-   $('pprop').innerHTML=`<p class="dim">Proposed, not saved. Read it, edit anything wrong, then keep it \u2014 or discard it and nothing happens.</p>
-     <textarea id="pbody">${esc(d.body)}</textarea>
-     <div class="actions"><button class="act" id="pkeep">Save as their appearance</button>
-     <button class="quiet" id="pdiscard">Discard</button><span class="dim small" id="pkmsg"></span></div>`;
-   $('pdiscard').onclick=()=>{$('pprop').innerHTML='';};
-   $('pkeep').onclick=async()=>{
-    try{
-     await api('/identity/appearance',{method:'POST',body:JSON.stringify({body:$('pbody').value})});
-     clearEditorDirty('identity-appearance');
-     notice('Appearance saved to the SOUL. Read it on Identity.');
-     await reload();
-    }catch(e){$('pkmsg').innerHTML=`<span class="bad">${esc(e.message)}</span>`;}
-   };
-  }catch(e){msg.innerHTML=`<span class="bad">${esc(e.message)}</span>`;}
-  finally{if($('pdesc'))$('pdesc').disabled=false;}
- };
-}
 
 /* ------------------------------------------------- workflow controls, humanely
 
@@ -936,7 +898,8 @@ function wireTagFields(root,onChange){
       event.preventDefault();
       const value=input.value.trim().replace(/,+$/,'');
       if(!value)return;
-      writeTags(field,[...readTags(field),...tagsFromText(value)]);
+      const added=tagsFromText(value).filter(t=>!warnIfInFloor(t,field));
+      if(added.length)writeTags(field,[...readTags(field),...added]);
       input.value='';onChange&&onChange();
     }else if(event.key==='Backspace'&&!input.value){
       const tags=readTags(field);
@@ -953,6 +916,21 @@ function wireTagFields(root,onChange){
     input.value='';onChange&&onChange();
   },true);
 }
+/* The protective floor applies to every render already, so a copy of one of
+   its terms in a preset does nothing except invite someone to edit the copy and
+   believe they changed something. Said once, when it happens, rather than as a
+   paragraph nobody reads. */
+let safetyFloor=[];
+function warnIfInFloor(term,field){
+  if(!safetyFloor.length)return false;
+  const bare=String(term||'').trim().toLowerCase().replace(/^[([]|[)\]]$/g,'');
+  if(!safetyFloor.includes(bare))return false;
+  const where=field?.dataset.tagField==='__modesty'?'modesty':'this workflow';
+  notice(`\u201c${term}\u201d is already in the protective negatives that apply to every `+
+    `render, and cannot be switched off. Adding it to ${where} would change nothing.`);
+  return true;
+}
+
 const readTags=field=>[...field.querySelectorAll('.tag-chip')].map(chip=>chip.firstChild.textContent.trim());
 function writeTags(field,tags){
   const unique=[...new Set(tags.filter(Boolean))];
@@ -965,6 +943,7 @@ const tagFieldValue=field=>readTags(field).join(', ');
 
 workspaceHandlers['image-studio']=async()=>{
  const [d,portrait]=await Promise.all([api('/images'),api('/portrait'),loadModelFamilies(false)]);
+ safetyFloor=(d.safety_floor||[]).map(t=>String(t).toLowerCase());
  let settings=d.settings,revision=d.revision,presetIndex=0;const defaults=d.effective;
  const routeValues={...settings.routes};let defaultId=settings.default_preset||'';
  let activeCategory='portrait';
@@ -1009,11 +988,10 @@ workspaceHandlers['image-studio']=async()=>{
 
  <!-- Workflows: create one, edit one, or read one out of a picture -->
  <div id="view-presets" class="studio-view-pane" hidden>
-  <div class="studio-actions" style="margin-bottom:14px">
-   <button type="button" class="quiet" id="workflows-back-lanes">← Back to lanes</button>
-  </div>
-  <div class="workflow-new-head">
-   <button type="button" class="quiet" id="workflow-show-import">🖼️ Import from an image</button>
+  <div class="workflow-bar">
+   <button type="button" class="icon-button workflow-back" id="workflows-back-lanes"
+     title="Back to lanes" aria-label="Back to lanes">\u2190</button>
+   <button type="button" class="chip-button" id="workflow-show-import">\u{1F5BC}\uFE0F Import from an image</button>
   </div>
 
   <div class="card workflow-mode-panel" id="workflow-import-panel" hidden>
@@ -1050,42 +1028,7 @@ workspaceHandlers['image-studio']=async()=>{
   </div>
  </div>
 
- <!-- VIEW 5: Identity & Appearance -->
- <div id="view-identity" class="studio-view-pane" hidden>
-  <div class="card">
-   <h2>Reference portrait ${portrait.stored?'<span class="pill">stored</span>':''}</h2>
-   <div class="portrait-row">
-    ${portrait.stored?`<img class="portrait-thumb" src="${mediaUrl('/media/portrait?t='+Date.now())}" alt="Reference portrait">`:'<div class="portrait-thumb portrait-empty">No photo</div>'}
-    <div>
-     <p class="dim">One photograph, kept in the vault, passed to the providers that accept a reference.
-      Describing it asks a model to read the face and propose an appearance section \u2014 that is the only
-      thing here that calls a model, and it writes nothing by itself.</p>
-     <div class="actions">
-      <label class="quiet" style="cursor:pointer">${portrait.stored?'Replace it':'Choose a photo'}<input id="pfile" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
-      <button class="quiet" id="palbum">Pick from your photos</button>
-      ${portrait.stored?'<button class="quiet" id="pdesc">Describe this face</button><button class="quiet" id="pdrop">Forget it</button>':''}
-      <span class="dim small" id="pmsg"></span>
-     </div>
-     <div id="pprop"></div>
-    </div>
-   </div>
-  </div>
-  <div class="card">
-   <h2>Identity sent to the image provider</h2>
-   <p class="dim">The appearance from SOUL is used unless you save a studio override. This override is also used by the companion’s portrait prompt helper.</p>
-   <label class="inline-label switch-container" style="margin-bottom:12px">
-    <input id="image-follow-soul" type="checkbox" ${settings.identity_override===null?'checked':''}>
-    <span class="switch-slider"></span>
-    <span class="switch-label">Follow the appearance in SOUL</span>
-   </label>
-   <textarea id="image-identity" aria-label="Image identity prompt" class="composer-textarea">${esc(d.identity)}</textarea>
-   <details style="margin-top:12px"><summary>Current SOUL appearance</summary><pre style="white-space:pre-wrap;background:var(--bg);padding:12px;border-radius:8px">${esc(d.appearance||'No appearance section yet. Add one in Identity.')}</pre></details>
-   ${PROFILE!=='default'?`<label class="inline-label switch-container" style="margin-top:12px"><input id="image-inherit" type="checkbox" ${settings.inherit?'checked':''}><span class="switch-slider"></span><span class="switch-label">Inherit image settings from the installation’s default profile</span></label>`:''}
-   <div class="actions" style="margin-top:14px">
-    <button class="act" id="save-identity-settings">Save identity settings</button>
-   </div>
-  </div>
- </div>`;
+`;
 
  // Subnav Switching
  const showStudioView=(viewName)=>{
@@ -1104,13 +1047,12 @@ workspaceHandlers['image-studio']=async()=>{
  $('assignments-goto-creator').onclick=()=>{showStudioSection('workflows');setWorkflowMode('edit');};
  $('workflows-back-lanes').onclick=()=>showStudioSection('lanes');
  $('image-back-identity').onclick=()=>showTab('identity');
- wirePortrait();
- $('image-follow-soul').onchange=()=>{$('image-identity').disabled=$('image-follow-soul').checked;};
- $('image-follow-soul').onchange();
 
  function readPreset(){
   const p=settings.presets[presetIndex];if(!p||!$('preset-name'))return;
-  p.name=$('preset-name').value;p.category=$('preset-category').value;p.endpoint=$('preset-endpoint')?.value||'';
+  // The endpoint is one setting for the whole kit, not a per-workflow field;
+  // it is shown here and changed in Preferences.
+  p.name=$('preset-name').value;p.category=$('preset-category').value;
   // Tags are stored the way the model wants them: comma separated, no strays.
   p.parts={...p.parts};
   for(const field of $('image-preset-editor').querySelectorAll('[data-tag-field]')){
@@ -1202,9 +1144,12 @@ workspaceHandlers['image-studio']=async()=>{
   const checkpointFamily=(modelFamilies[checkpointName]||{}).family||'';
   const clipSkipValue=clipNode?Math.abs(Number(clipNode[1].inputs.stop_at_clip_layer??-2)):2;
   const knownSize=SIZES.some(([w,h])=>`${w}×${h}`===sizeValue);
-  const PART_HINT={quality:'Rendering quality, not subject',identity:'Leave empty to follow the companion',
-    scene:'Where and what is happening',wardrobe:'What they are wearing',
-    lighting:'How the scene is lit',camera:'Lens, framing, distance'};
+  /* A workflow keeps its quality, identity and negatives; the rest describes
+     one moment and is filled per render, so saving does not keep it. The lock
+     says which is which without a paragraph explaining it. */
+  const PART_HINT={quality:'Rendering quality, not subject',identity:'Leave empty to follow '+chatName(),
+    scene:'Filled per render',wardrobe:'Filled per render',
+    lighting:'Filled per render',camera:'Filled per render'};
 
   $('image-preset-editor').innerHTML=`
     <div class="form-grid">
@@ -1216,7 +1161,7 @@ workspaceHandlers['image-studio']=async()=>{
         </select>
         <small class="dim">Assign it to a lane once you have tested it.</small>
       </label>
-      ${p.provider!=='hermes'?`<label>Endpoint<input id="preset-endpoint" type="url" value="${esc(p.endpoint)}"></label>`:''}
+      ${p.provider!=='hermes'?`<p class="dim small endpoint-note">Renders on <code>${esc(p.endpoint||'the address in Preferences')}</code></p>`:''}
       ${p.provider==='hermes'?`<p class="dim">Hermes provider: ${esc(p.hermes_provider||'Follow current Hermes default')} · ${esc(p.model||'Provider default')}${p.available===false?' · Reconnect this provider in Hermes settings':''}</p>`:''}
       ${p.provider==='openai'?`<label>Model<input id="preset-model" value="${esc(p.model||'')}" placeholder="Model supported by this API"></label>
         <label>API-key environment variable<input id="preset-key-env" value="${esc(p.api_key_env||'OPENAI_API_KEY')}"></label>`:''}
@@ -1308,15 +1253,13 @@ workspaceHandlers['image-studio']=async()=>{
           title="Fill these boxes from ${esc(chatName())}\u2019s saved image identity and what she is doing now"
           >\u21e5 Fill from ${esc(chatName())}</button></div>
       <div class="tag-fields">
-        ${d.parts.map(k=>tagFieldHTML(k,formLabel(k),p.parts?.[k]||'',PART_HINT[k]||'',false,
+        ${d.parts.map(k=>tagFieldHTML(k,SAVED_PARTS.includes(k)?'\u{1F512} '+formLabel(k):formLabel(k),
+          p.parts?.[k]||'',PART_HINT[k]||'',false,
           k==='camera'?CAMERA_LOOKS:k==='lighting'?LIGHTING_LOOKS:null)).join('')}
-        ${tagFieldHTML('__negative','Always on',p.negative||'','Quality, anatomy, wardrobe',true)}
-        ${tagFieldHTML('__modesty','Modesty',p.modesty_negative||'',
+        ${tagFieldHTML('__negative','\u{1F512} Always on',p.negative||'','Quality, anatomy, wardrobe',true)}
+        ${tagFieldHTML('__modesty','\u{1F512} Modesty',p.modesty_negative||'',
           esc(chatName())+' may set these aside',true)}
       </div>
-      <p class="dim small modesty-note">A built-in floor of protective negatives applies to every render
-        on top of these; it is not editable and nothing switches it off. \u201cModesty\u201d is the only bucket
-        ever set aside \u2014 only by ${esc(chatName())}, and only once closeness has reached Bonded.</p>
     </div>
 
     <div class="studio-actions">
@@ -1722,11 +1665,19 @@ workspaceHandlers['image-studio']=async()=>{
 
  const saveSettings=async(msg='Image settings saved for this companion.')=>{
   readPreset();
-  settings.identity_override=$('image-follow-soul').checked?null:$('image-identity').value;
+  // identity_override is the image identity block, written on the Identity
+  // page. Saving a workflow must never overwrite it.
   settings.inherit=$('image-inherit')?.checked||false;
   settings.default_preset=defaultId;
   settings.routes=routeValues;
-  const r=await post('/images',{settings,revision});
+  // A workflow describes how to render, not what was happening at one moment.
+  // The moment's boxes are filled per render and are dropped on the way out,
+  // which is what the unlocked labels in the editor promise.
+  const saved={...settings,presets:settings.presets.map(preset=>({...preset,
+    parts:Object.fromEntries(Object.entries(preset.parts||{})
+      .filter(([key])=>!TRANSIENT_PARTS.includes(key)))}))};
+  const r=await post('/images',{settings:saved,revision});
+  settings.presets=saved.presets;
   revision=r.revision;
   menus();
   notice(msg);
@@ -1734,7 +1685,6 @@ workspaceHandlers['image-studio']=async()=>{
 
  $('save-image-settings').onclick=()=>saveSettings();
  $('save-assignments-btn').onclick=()=>saveSettings('Lane assignments and fallback saved!');
- $('save-identity-settings').onclick=()=>saveSettings('Identity prompt saved!');
  $('image-install-comfy').onclick=()=>action('/images/install',{});
  $('image-start-comfy').onclick=()=>action('/images/start',{cpu:$('comfy-cpu').checked});
 

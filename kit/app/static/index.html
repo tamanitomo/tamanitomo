@@ -471,7 +471,7 @@ async function renderSettings(){
 
   <div class="card" data-preference-panel="routine">
     <h2>Daily Rhythm & Autonomy</h2>
-    <p class="dim">Independent activity windows when your companion reflects on their day, reads, or runs autonomous routines.</p>
+    <p class="dim">Independent activity windows when your companion reflects on the day, reads, or runs autonomous routines.</p>
     <label style="margin-top:12px">Autonomy Windows (HH:MM, comma separated)
       <input id="win" value="${esc(s.autonomy_windows.join(', '))}" placeholder="09:00, 14:00, 20:00">
     </label>
@@ -728,43 +728,56 @@ async function uploadPortrait(file){
    The reference portrait lives in the image studio now, with the rest of the
    image plumbing; nothing on this page calls a model. */
 
+/* The kit knows whether a companion is a she or a he, so the page says so
+   rather than talking around it. Both sets take the same verb agreement, which
+   is why one singular rewrite serves both and only the pronouns substitute. */
+const PRONOUN_WORDS={
+  she:{subj:'she',obj:'her',poss:'her',poss2:'hers'},
+  he:{subj:'he',obj:'him',poss:'his',poss2:'his'}};
+let soulPronouns=PRONOUN_WORDS.she;
+const gendered=text=>String(text||'').replace(/\{(\w+)\}/g,(whole,key)=>{
+  const word=soulPronouns[key.toLowerCase()];
+  if(!word)return whole;
+  return key[0]===key[0].toUpperCase()?word[0].toUpperCase()+word.slice(1):word;
+});
+
 const SECTION_TITLE={
-  core:'Who they are',relationship:'The two of you',appearance:'How they look',
+  core:'Who {subj} is',relationship:'The two of you',appearance:'How {subj} looks',
   visual:'Visual presence',photorealistic:'Photorealistic mode',
-  emotion:'How they feel things',voice:'How they speak',
-  conversation:'How they hold a conversation',memory:'What they carry over',
-  continuity:'Continuity','daily-life':'Their day',environment:'Where they are',
-  boundary:'What they will not do',boundaries:'What they will not do',
-  texting:'How they write',flirtation:'How they flirt',support:'How they help',
-  conflict:'Conflict and repair',humor:'Their humour',flaws:'Where they are difficult',
-  likes:'What they like',honesty:'Accuracy and honesty',priorities:'Operating rules',
+  emotion:'How {subj} feels things',voice:'How {subj} speaks',
+  conversation:'How {subj} holds a conversation',memory:'What {subj} carries over',
+  continuity:'Continuity','daily-life':'{Poss} day',environment:'Where {subj} is',
+  boundary:'What {subj} will not do',boundaries:'What {subj} will not do',
+  texting:'How {subj} writes',flirtation:'How {subj} flirts',support:'How {subj} helps',
+  conflict:'Conflict and repair',humor:'{Poss} humour',flaws:'Where {subj} is difficult',
+  likes:'What {subj} likes',honesty:'Accuracy and honesty',priorities:'Operating rules',
   essence:'In one line'};
 const SECTION_NOTE={
   core:'The person underneath everything else.',
   relationship:'How you know each other, and how that is written.',
   appearance:'Concrete details. Vagueness here produces a different person in every image.',
-  visual:'Whether they have a face at all, and what carries their presence if not.',
-  photorealistic:'How they are rendered when a photograph is asked for.',
-  emotion:'Their emotional range and what moves it.',
+  visual:'Whether {subj} has a face at all, and what carries {poss} presence if not.',
+  photorealistic:'How {subj} is rendered when a photograph is asked for.',
+  emotion:'{Poss} emotional range and what moves it.',
   voice:'Sentence length, punctuation, the shape of how they talk.',
   conversation:'Answering, disagreeing, asking — and when to say nothing.',
   memory:'What persists between conversations, and what counts as a real memory.',
   continuity:'What persists between conversations.',
   'daily-life':'The routine that runs while you are not talking.',
-  environment:'Where they are when nobody is looking.',
-  boundary:'Lines they hold regardless of how the conversation goes.',
-  boundaries:'Lines they hold regardless of how the conversation goes.',
-  texting:'Message shape, pet names, and the habits they avoid.',
+  environment:'Where {subj} is when nobody is looking.',
+  boundary:'Lines {subj} holds regardless of how the conversation goes.',
+  boundaries:'Lines {subj} holds regardless of how the conversation goes.',
+  texting:'Message shape, pet names, and the habits {subj} avoids.',
   flirtation:'Whether affection is spoken, and in what register.',
-  support:'What they do when something is wrong.',
+  support:'What {subj} does when something is wrong.',
   conflict:'How an argument starts, and how it ends.',
-  humor:'What they find funny, and how they play.',
-  flaws:'Frictions they own — never a licence to be unkind.',
-  likes:'Tastes and habits, including the part they wrote themselves.',
+  humor:'What {subj} finds funny, and how {subj} plays.',
+  flaws:'Frictions {subj} owns — never a licence to be unkind.',
+  likes:'Tastes and habits, including the part {subj} wrote {obj}self.',
   honesty:'What happens when warmth and accuracy disagree.',
-  priorities:'Guardrails for anything they do unattended.',
+  priorities:'Guardrails for anything {subj} does unattended.',
   essence:'The distilled version of everything above.'};
-const sectionTitle=name=>SECTION_TITLE[name]||name.replace(/-/g,' ').replace(/^./,c=>c.toUpperCase());
+const sectionTitle=name=>gendered(SECTION_TITLE[name]||name.replace(/-/g,' ').replace(/^./,c=>c.toUpperCase()));
 const sectionUnfinished=body=>(body||'').includes('✎ EDIT');
 
 /* The body as it should be read. The section's own `## Heading` is already the
@@ -781,7 +794,7 @@ function soulPassages(body){
     if(/^<!--\s*COMPANION-PROMPT-EXCLUDE\s*-->$/.test(trimmed)){
       flush();kind='aside';label='Guidance for them, not for image prompts';continue;}
     if(/^<!--\s*COMPANION-SELF-AUTHORED:BEGIN\s*-->$/.test(trimmed)){
-      flush();kind='self';label='Theirs to write — yours to read';continue;}
+      flush();kind='self';label=gendered('{Poss2} to write \u2014 yours to read');continue;}
     if(/^<!--\s*(\/COMPANION-PROMPT-EXCLUDE|COMPANION-SELF-AUTHORED:END)\s*-->$/.test(trimmed)){
       flush();kind='';label='';continue;}
     if(/^<!--[\s\S]*-->$/.test(trimmed))continue;
@@ -836,14 +849,15 @@ function soulBodyHTML(body){
 async function renderIdentity(){
   const d=await api('/identity');
   const who=d.profile||{},sections=d.sections||[];
-  const pronoun=who.pronoun_set==='he'?'He / him':'She / her';
+  soulPronouns=PRONOUN_WORDS[who.pronoun_set]||PRONOUN_WORDS.she;
+  const gender=who.pronoun_set==='he'?'Male':'Female';
   const facts=[
     who.persona_label&&['Personality',who.persona_label,who.persona_blurb],
     who.boundary_label&&['Between you',who.boundary_label,''],
-    ['Pronouns',pronoun,''],
+    ['Gender',gender,''],
     [who.birthdate?'Born':'Age',who.birthdate||(who.age+' years old'),who.birthdate?who.age+' years old':'No birthday set'],
     ['Kind of agent',(who.agent_type||'companion').replace(/^./,c=>c.toUpperCase()),''],
-    ['Their timezone',who.timezone||'—','']
+    [gendered('{Poss} timezone'),who.timezone||'—','']
   ].filter(Boolean);
   const hero=`<section class="identity-hero">
     ${faceHtml(who.agent,'identity-avatar')}
@@ -862,14 +876,14 @@ async function renderIdentity(){
   const words=sections.reduce((n,s)=>n+(s.body||'').trim().split(/\s+/).filter(Boolean).length,0);
   const outlineRow=s=>`<a href="#soul-sec-${esc(s.name)}" data-jump="${esc(s.name)}">
       <span class="soul-outline-name">${esc(sectionTitle(s.name))}</span>
-      ${s.locked?'<span class="soul-outline-flag" title="Theirs to write">●</span>':''}
+      ${s.locked?`<span class="soul-outline-flag" title="${esc(gendered('{Poss2} to write'))}">●</span>`:''}
       <span class="soul-outline-todo" data-todo="${esc(s.name)}" title="Has an unwritten placeholder"
         ${sectionUnfinished(s.body)?'':'hidden'}>✎</span></a>`;
   const outline=`<nav class="soul-outline" aria-label="Sections of this document">
     <div class="soul-outline-head"><strong>Contents</strong>
       <span class="dim small">${sections.length} section${sections.length===1?'':'s'} · ${words.toLocaleString()} words</span></div>
     <ol>${sections.map(s=>`<li>${outlineRow(s)}</li>`).join('')}</ol>
-    <p class="dim small soul-outline-key"><span class="soul-outline-flag">●</span> theirs to write
+    <p class="dim small soul-outline-key"><span class="soul-outline-flag">●</span> ${esc(gendered('{poss2} to write'))}
       · <span class="soul-outline-todo">✎</span> unwritten</p>
   </nav>`;
 
@@ -879,7 +893,7 @@ async function renderIdentity(){
         <div class="soul-passage-title">
           <h3>${esc(sectionTitle(s.name))}</h3>
           <div class="soul-passage-tags">
-            ${s.locked?'<span class="pill soul-lock" title="The companion cannot rewrite this section. You still can.">theirs to write</span>':''}
+            ${s.locked?`<span class="pill soul-lock" title="${esc(who.agent||'The companion')} cannot rewrite this section. You still can.">${esc(gendered('{poss2} to write'))}</span>`:''}
             <span class="pill soul-pill-todo" data-todo-pill="${esc(s.name)}"
               ${sectionUnfinished(s.body)?'':'hidden'}>needs writing</span>
             <code class="section-key">${esc(s.name)}</code>
@@ -894,7 +908,7 @@ async function renderIdentity(){
 
   $('identity').innerHTML=hero+warn+
     `<div class="section-heading" id="soul-heading">
-      <div><h2>Their documents</h2>
+      <div><h2>${esc(gendered('{Poss} documents'))}</h2>
       <span class="dim small">The SOUL exactly as Hermes reads it. Edit a section in place — every save keeps a backup.</span></div>
       <div class="actions" id="identity-tools"></div>
     </div>

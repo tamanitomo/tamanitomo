@@ -2183,8 +2183,6 @@ body[data-page="chat"] main{padding:0}
 .lanes-header h3{font-size:15px}
 
 .identity-note{margin:2px 2px 10px;line-height:1.5}
-.modesty-note{margin:8px 2px 0;line-height:1.5;padding:8px 10px;border-radius:8px;
-  background:var(--surface-2);border:1px solid var(--edge)}
 
 /* The words actually sent to an image model, shown inside the section they
    were derived from: visible while reading, not buried in a settings page. */
@@ -2204,6 +2202,32 @@ body[data-page="chat"] main{padding:0}
   display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex:none}
 .chip-button:hover{background:var(--accent-soft);color:var(--accent-ink);border-color:var(--accent-line)}
 .chip-button:disabled{opacity:.55}
+
+/* The workflow editor is a stack of small blocks. They were spaced like
+   chapters; they read better as one form. */
+.studio-block{padding:14px 16px;margin:0 0 10px}
+.studio-block h3{font-size:14px;margin:0 0 10px}
+.studio-block-head{display:flex;align-items:center;justify-content:space-between;
+  gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.studio-block-head h3{margin:0}
+.studio-block .form-grid{gap:10px}
+.studio-block label{margin-bottom:10px}
+.studio-block label:last-child{margin-bottom:0}
+#image-preset-editor>.form-grid{gap:10px;margin-bottom:12px}
+#image-preset-editor .tight-numbers{gap:10px}
+.endpoint-note{margin:0;align-self:end;padding-bottom:10px}
+.endpoint-note code{font-size:12px;color:var(--ink-2)}
+.studio-block-actions{margin-top:10px}
+.studio-advanced,.studio-manage{margin:12px 0 0}
+
+/* One bar: back on the left, import on the right, nothing between. */
+.workflow-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.workflow-back{padding:6px 11px;font-size:16px;line-height:1;border:1px solid var(--edge);
+  border-radius:8px;background:var(--surface-2);color:var(--ink-2)}
+.workflow-back:hover{background:var(--surface-3);color:var(--ink)}
+
+/* The part of an outfit a garment is, beside the state it is in. */
+.wardrobe-slot{font-size:12px;opacity:.85;margin:0 1px}
 
 /* Getting set up: each step says where it stands without being asked. */
 .setup-checklist{list-style:none;counter-reset:setup;margin:0 0 22px;padding:0;

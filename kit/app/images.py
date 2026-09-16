@@ -38,7 +38,8 @@ def register(app,select,load):
         import companion_config as cc
         root_settings=media.load(cc.load(c.hermes_root))
         return {'connected_providers':connected,'provider_warning':warning,'settings':data,'effective':media.effective(c),'installation_presets':root_settings.get('presets',[]),'revision':media.revision(c),'identity':portrait.identity_block(c),
-                'appearance':soul or portrait.identity_block(c,use_override=False),'scene':scene,'categories':media.CATEGORIES,'parts':media.PARTS}
+                'appearance':soul or portrait.identity_block(c,use_override=False),'scene':scene,'categories':media.CATEGORIES,'parts':media.PARTS,
+                'safety_floor':list(media.SAFETY_FLOOR)}
 
     @app.post('/api/images')
     def save(payload:dict):

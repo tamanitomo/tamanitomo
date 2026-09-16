@@ -91,3 +91,46 @@ console.log('Date groups and formatted-message safety passed');
   }
   console.log('Prompt tags keep their weights intact');
 }
+
+/* Wardrobe slots are a display concern: the emoji say what part of an outfit a
+   garment is, and must never reach an image prompt (prompts are built
+   server-side from item.description, which the classifier does not touch). */
+{
+  const product=fs.readFileSync(require('node:path').join(__dirname,'../kit/app/static/product.js'),'utf8');
+  const box={esc:s=>String(s)};
+  vm.createContext(box);
+  vm.runInContext(product.slice(product.indexOf('const WARDROBE_SLOTS='),
+                                product.indexOf('/* One chip:'))+
+    ';globalThis.W={wardrobeSlot,slotLabel,bySlot};',box);
+  const {wardrobeSlot,slotLabel,bySlot}=box.W;
+  const slot=t=>slotLabel(wardrobeSlot(t));
+
+  // Footwear has to win over "top": "low-top sneakers" is not a shirt.
+  assert.equal(slot('clean classic low-top white platform canvas sneakers'),'Shoes');
+  assert.equal(slot('warm cream fitted ribbed crop top revealing the midriff'),'Top');
+  assert.equal(slot('warm cream soft stretch-cotton bikini panties with lace trim'),'Undies');
+  assert.equal(slot('warm cream high-waisted seamless sculpting leggings'),'Bottom');
+  assert.equal(slot('warm cream soft cushioned cotton ankle socks'),'Sock');
+  assert.equal(slot('grey beanie'),'Hat');
+  assert.equal(slot('thin gold necklace'),'Jewelry');
+  assert.equal(slot('denim jacket'),'Additional');
+  // A sports bra is worn as an athletic top, and the stage filter treats it as
+  // one; calling it underwear here would contradict that.
+  assert.equal(slot('black sports bra'),'Top');
+  assert.equal(slot('something unrecognisable'),'Additional');
+  // "cap sleeves" is a tee, "hooded" is a jacket: neither word is a hat on its own.
+  assert.equal(slot('sage green fitted scoop-neck baby tee with cap sleeves'),'Top');
+  assert.equal(slot('hooded denim jacket'),'Additional');
+  assert.equal(slot('black baseball cap'),'Hat');
+
+  // Listed head down, whatever order they arrive in.
+  const order=bySlot(['white sneakers','grey beanie','blue jeans','cotton tee',
+                      'gold ring','ankle socks','cotton briefs','wool scarf'])
+    .map(t=>slotLabel(wardrobeSlot(t)));
+  assert.deepEqual(JSON.stringify(order),
+    JSON.stringify(['Hat','Jewelry','Top','Undies','Bottom','Sock','Shoes','Additional']));
+
+  // Objects carry a category and an id worth reading, not only a description.
+  assert.equal(slot({id:'closet-underwear-1',description:'soft cotton pair'}),'Undies');
+  console.log('Wardrobe slots classify and order correctly');
+}

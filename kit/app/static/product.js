@@ -230,6 +230,57 @@ function isIntimateGarment(item){
   return /\b(panties|panty|bra|bras|bralette|underwear|undergarment|undergarments|boxers|boxer|briefs|brief|thong|thongs|lingerie|underpants|undies)\b/i.test(str);
 }
 
+/* What part of an outfit a garment is, for display only. These emoji never
+   reach an image prompt: prompts are built server-side from item.description,
+   which this does not touch.
+
+   Matching order is not display order. "low-top canvas sneakers" contains
+   "top", so footwear has to be recognised before tops are; the list people
+   read is ordered head down. */
+const WARDROBE_SLOTS=[
+  ['hat','\u{1F9E2}','Hat'],
+  ['jewelry','\u{1F48D}','Jewelry'],
+  ['top','\u{1F455}','Top'],
+  ['undies','\u{1FA72}','Undies'],
+  ['bottom','\u{1F456}','Bottom'],
+  ['sock','\u{1F9E6}','Sock'],
+  ['shoes','\u{1F45F}','Shoes'],
+  ['additional','\u{1F9E5}','Additional']];
+const SLOT_WORDS=[
+  ['jewelry',/necklace|earring|\bring\b|bracelet|anklet|pendant|chain|brooch|\bwatch\b/i],
+  ['shoes',/sneaker|shoe|boot|sandal|heel|loafer|trainer|slipper|flip.?flop|\bflats\b/i],
+  ['sock',/\bsocks?\b|stocking|tights|hosiery|legwarmer/i],
+  // A sports bra is worn as an athletic top, and the stage filter already
+  // treats it as one; classifying it as underwear would contradict that.
+  ['top',/sports bra|athletic bra/i],
+  ['undies',/panti|knicker|thong|briefs|boxer|underwear|\bbra\b|bralette|lingerie|boyshort/i],
+  ['bottom',/legging|jeans|trouser|\bpants\b|shorts|skirt|jogger|sweatpant|chino|capri|slacks/i],
+  // "cap sleeves" is a tee and "hooded" is usually a jacket, so neither word
+  // is trusted on its own.
+  ['hat',/\bhat\b|\bcap\b(?!\s*sleeve)|beanie|headband|visor|bandana|\bberet\b/i],
+  ['top',/\btop\b|shirt|\btee\b|blouse|sweater|hoodie|tank|cami|jumper|jersey|sweatshirt|bodysuit|dress|pullover/i],
+  ['additional',/jacket|coat|cardigan|scarf|belt|\bbag\b|glasses|glove|shawl|vest|blazer/i]];
+
+function wardrobeSlot(item){
+  const text=typeof item==='string'?item:`${item?.category||''} ${item?.id||''} ${item?.description||''}`;
+  for(const [slot,pattern] of SLOT_WORDS)if(pattern.test(text))return slot;
+  return 'additional';
+}
+const slotIcon=slot=>(WARDROBE_SLOTS.find(s=>s[0]===slot)||WARDROBE_SLOTS[7])[1];
+const slotLabel=slot=>(WARDROBE_SLOTS.find(s=>s[0]===slot)||WARDROBE_SLOTS[7])[2];
+const bySlot=items=>{
+  const rank=Object.fromEntries(WARDROBE_SLOTS.map(([slot],i)=>[slot,i]));
+  return [...(items||[])].sort((a,b)=>rank[wardrobeSlot(a)]-rank[wardrobeSlot(b)]);
+};
+/* One chip: what state it is in, what part of the outfit it is, then the
+   garment itself. */
+const wardrobeChip=(item,cls,state,prefix='')=>{
+  const text=typeof item==='string'?item:(item.description||item.id||'');
+  const slot=wardrobeSlot(item);
+  return `<span class="wardrobe-chip ${cls}" title="${esc(prefix)}${esc(slotLabel(slot))} \u00b7 ${esc(text)}">`+
+    `${state} <span class="wardrobe-slot" aria-hidden="true">${slotIcon(slot)}</span> ${esc(text)}</span>`;
+};
+
 function filterWardrobeItems(items,stage=0){
   if(stage>=4)return items||[];
   if(stage>=2)return (items||[]).filter(it=>!isBlacklistedUndergarment(it));
@@ -246,18 +297,18 @@ function renderWardrobeCard(closet,s,stage=0){
   const clean=filterG(closet?.clean);
   const laundry=closet?.laundry_in_progress;
   let html=`<div class="card wardrobe-card"><div class="section-subheading" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><span class="eyebrow">Wardrobe & Care</span>${laundry?'<span class="pill is-washing" style="font-size:11px">🧺 Laundry running</span>':''}</div>`;
-  html+=`<div class="wardrobe-block"><div class="wardrobe-block-title"><span>Currently Wearing</span><span class="dim small">${wearing.length} piece${wearing.length===1?'':'s'}</span></div><div class="wardrobe-chip-list">${wearing.map(w=>`<span class="wardrobe-chip is-wearing" title="${esc(typeof w==='string'?w:(w.description||w.id))}">👕 ${esc(typeof w==='string'?w:(w.description||w.id))}</span>`).join('')||'<span class="dim small">Casual wear</span>'}</div></div>`;
+  html+=`<div class="wardrobe-block"><div class="wardrobe-block-title"><span>Currently Wearing</span><span class="dim small">${wearing.length} piece${wearing.length===1?'':'s'}</span></div><div class="wardrobe-chip-list">${bySlot(wearing).map(w=>wardrobeChip(w,'is-wearing','\u{1F464}')).join('')||'<span class="dim small">Casual wear</span>'}</div></div>`;
   if(laidOut&&(laidOutItems.length||laidOut.plan?.intent)){
     const plan=laidOut.plan||{};
-    html+=`<div class="wardrobe-block" style="border-left:3px solid var(--warn);margin-top:12px"><div class="wardrobe-block-title"><span style="color:var(--warn)">✨ Laid Out For Tomorrow</span><span class="dim small">${laidOutItems.length} pieces</span></div>${laidOutItems.length?`<div class="wardrobe-chip-list">${laidOutItems.map(w=>`<span class="wardrobe-chip is-laid-out" title="${esc(typeof w==='string'?w:(w.description||w.id))}">🛏️ ${esc(typeof w==='string'?w:(w.description||w.id))}</span>`).join('')}</div>`:''}${plan.intent?`<div class="laid-out-intent-quote">“${esc(plan.intent)}”</div>`:''}</div>`;
+    html+=`<div class="wardrobe-block" style="border-left:3px solid var(--warn);margin-top:12px"><div class="wardrobe-block-title"><span style="color:var(--warn)">✨ Laid Out For Tomorrow</span><span class="dim small">${laidOutItems.length} pieces</span></div>${laidOutItems.length?`<div class="wardrobe-chip-list">${bySlot(laidOutItems).map(w=>wardrobeChip(w,'is-laid-out','\u{1F6CF}\uFE0F','Laid out \u00b7 ')).join('')}</div>`:''}${plan.intent?`<div class="laid-out-intent-quote">“${esc(plan.intent)}”</div>`:''}</div>`;
   }
   if(hamper.length||washing.length){
-    html+=`<details class="wardrobe-block" style="cursor:pointer;margin-top:12px"><summary class="wardrobe-block-title"><span>Hamper & Wash (Dirty Clothes)</span><span class="dim small">${hamper.length} dirty${washing.length?` · ${washing.length} in wash`:''}</span></summary><div class="wardrobe-chip-list" style="margin-top:8px">${washing.map(w=>`<span class="wardrobe-chip is-washing" title="In the wash: ${esc(w.description||w.id)}">🫧 ${esc(w.description||w.id)}</span>`).join('')}${hamper.map(w=>`<span class="wardrobe-chip is-hamper" title="In the hamper: ${esc(w.description||w.id)}">🧺 ${esc(w.description||w.id)}</span>`).join('')}</div></details>`;
+    html+=`<details class="wardrobe-block" style="cursor:pointer;margin-top:12px"><summary class="wardrobe-block-title"><span>Hamper & Wash (Dirty Clothes)</span><span class="dim small">${hamper.length} dirty${washing.length?` · ${washing.length} in wash`:''}</span></summary><div class="wardrobe-chip-list" style="margin-top:8px">${bySlot(washing).map(w=>wardrobeChip(w,'is-washing','\u{1FAE7}','In the wash \u00b7 ')).join('')}${bySlot(hamper).map(w=>wardrobeChip(w,'is-hamper','\u{1F9FA}','In the hamper \u00b7 ')).join('')}</div></details>`;
   } else {
     html+=`<details class="wardrobe-block" style="cursor:pointer;margin-top:12px"><summary class="wardrobe-block-title"><span>Hamper & Wash (Dirty Clothes)</span><span class="dim small">0 dirty</span></summary><div class="dim small" style="margin-top:8px">🧺 Hamper is empty · All clothes are clean.</div></details>`;
   }
   if(clean.length){
-    html+=`<details class="wardrobe-block" style="cursor:pointer;margin-top:12px"><summary class="wardrobe-block-title"><span>Clean in Closet</span><span class="dim small">${clean.length} piece${clean.length===1?'':'s'}</span></summary><div class="wardrobe-chip-list" style="margin-top:8px">${clean.map(w=>`<span class="wardrobe-chip is-clean" title="${esc(w.description||w.id)}">✨ ${esc(w.description||w.id)}</span>`).join('')}</div></details>`;
+    html+=`<details class="wardrobe-block" style="cursor:pointer;margin-top:12px"><summary class="wardrobe-block-title"><span>Clean in Closet</span><span class="dim small">${clean.length} piece${clean.length===1?'':'s'}</span></summary><div class="wardrobe-chip-list" style="margin-top:8px">${bySlot(clean).map(w=>wardrobeChip(w,'is-clean','\u2728','Clean \u00b7 ')).join('')}</div></details>`;
   }
   html+=`</div>`;
   return html;
