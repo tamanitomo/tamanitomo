@@ -26,7 +26,7 @@ def modular_template():
     return {'id':'modular-sdxl','name':'Structured SDXL workflow','category':'portrait','provider':'comfyui',
       'endpoint':'http://127.0.0.1:8188','family':'sdxl','parts':{'quality':'high quality, detailed'},
       'negative':'low quality, blurry, malformed hands',
-      'safety_negative':'','modesty_negative':MODESTY_DEFAULT,
+      'modesty_negative':MODESTY_DEFAULT,
       'width':832,'height':1216,'steps':22,'cfg':5,'seed':-1,
       'workflow':graph,'mappings':{**{k:[v,'text'] for k,v in PROMPT_NODES.items()},'negative':['201','text'],
         'width':['301','width'],'height':['301','height'],'seed':['302','seed'],'steps':['302','steps'],'cfg':['302','cfg']}}

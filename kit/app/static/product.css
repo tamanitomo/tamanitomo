@@ -2044,7 +2044,7 @@ body[data-page="chat"] main{padding:0}
 .lora-card-header>div:first-child{flex:1 1 100%;display:flex;align-items:center;gap:10px;min-width:0}
 .lora-card-header [data-lora-file]{flex:1 1 auto;min-width:0;width:auto}
 .lora-card-header [data-lora-remove]{flex:none;margin-left:auto}
-.lora-card .tag-field{margin-top:10px}
+.lora-card .tag-field{margin:10px 0 0}
 @media(max-width:700px){
   .lora-card-header>div:first-child{flex-wrap:wrap}
   .lora-card-header [data-lora-file]{flex-basis:100%}
@@ -2162,11 +2162,14 @@ body[data-page="chat"] main{padding:0}
 .lora-line.is-absent{border-color:color-mix(in srgb,#e0a521 45%,transparent)}
 .lora-absent-note{display:block;margin:4px 2px 1px;font-size:10.5px;color:#c98a12;overflow-wrap:anywhere}
 
-/* Prompt categories sit closer together now that each one folds. */
-.tag-fields{gap:7px}
-.tag-field{padding:9px 11px}
+/* Prompt categories sit closer together now that each one folds. The base
+   sheet gives every <details> an 18px vertical margin, which in a flex column
+   does not collapse — so each gap was 36px of margin plus the gap itself. */
+.tag-fields{gap:6px}
+.tag-field{padding:8px 11px;margin:0}
 .tag-field-head{margin-bottom:0}
 .tag-field[open] .tag-field-head{margin-bottom:8px}
+.tag-field>summary{padding:1px 0}
 @media(max-width:700px){
   .lora-line input[type=number]{width:50px}
   .lora-line select{font-size:12px}
@@ -2179,6 +2182,7 @@ body[data-page="chat"] main{padding:0}
 .lanes-header{gap:12px}
 .lanes-header h3{font-size:15px}
 
+.identity-note{margin:2px 2px 10px;line-height:1.5}
 .modesty-note{margin:8px 2px 0;line-height:1.5;padding:8px 10px;border-radius:8px;
   background:var(--surface-2);border:1px solid var(--edge)}
 

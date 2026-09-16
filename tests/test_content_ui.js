@@ -62,3 +62,32 @@ console.log('Date groups and formatted-message safety passed');
     'a reply to an abandoned page must not repaint the feed');
   console.log('Out-of-order feed loads stay on the reader\u2019s current page');
 })().catch(error=>{console.error(error);process.exitCode=1;});
+
+/* The chip editor and the renderer must agree on where a tag ends. A weight
+   like `(white dress, ivory:1.3)` contains commas and is still one tag; if the
+   editor splits it into fragments, one ✕ leaves an unbalanced bracket that the
+   sampler reads as literal punctuation. Mirrors companion_media.split_terms. */
+{
+  const studios=fs.readFileSync(require('node:path').join(__dirname,'../kit/app/static/studios.js'),'utf8');
+  const start=studios.indexOf('function tagsFromText(text){');
+  const box={};vm.createContext(box);
+  vm.runInContext(studios.slice(start,studios.indexOf('\nfunction tagFieldHTML'))+
+    '\n;globalThis.__tags=tagsFromText;',box);
+  // The helper runs in its own realm, so its arrays fail a strict prototype
+  // check; compare the contents rather than the objects.
+  const tags=text=>JSON.stringify(box.__tags(text));
+  assert.equal(tags('(white dress, ivory:1.3), lowres, (two people:1.3)'),
+    JSON.stringify(['(white dress, ivory:1.3)','lowres','(two people:1.3)']),'a weight is one tag');
+  assert.equal(tags('a, b, c'),JSON.stringify(['a','b','c']));
+  assert.equal(tags(''),'[]');
+  assert.equal(tags('[soft], (a, b:1.2)'),JSON.stringify(['[soft]','(a, b:1.2)']));
+  // Removing any one tag must leave brackets balanced.
+  const all=box.__tags('(white dress, ivory:1.3), lowres, (two people:1.3)');
+  for(let i=0;i<all.length;i++){
+    const rest=all.filter((_,j)=>j!==i).join(', ');
+    let depth=0;
+    for(const ch of rest){if(ch==='('||ch==='[')depth++;else if(ch===')'||ch===']')depth--;}
+    assert.equal(depth,0,`removing tag ${i} left unbalanced brackets: ${rest}`);
+  }
+  console.log('Prompt tags keep their weights intact');
+}

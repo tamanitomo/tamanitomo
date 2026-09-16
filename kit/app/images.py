@@ -1,4 +1,5 @@
 """Image studio HTTP boundary; the generation recipe also runs outside the app."""
+import copy
 import os
 from pathlib import Path
 import subprocess
@@ -121,6 +122,16 @@ def register(app,select,load):
         try:preset['endpoint']=workflow_settings(select()[0].root).get('endpoint') or preset.get('endpoint','')
         except Exception:pass
         preset['include_identity']=False
+        # An imported workflow arrives with one monolithic negative. Sorting it
+        # here means the two buckets are real from the moment it lands, rather
+        # than something the person has to unpick by hand.
+        if preset.get('negative'):
+            always,modesty=media.sort_negative(preset['negative'])
+            preset['negative'],preset['modesty_negative']=always,modesty
+            if modesty:
+                result.setdefault('notes',[]).append(
+                    'Sorted '+str(len(media.split_terms(modesty)))+
+                    ' of its negative terms into the modesty bucket.')
         installed=set()
         try:
             import companion_media as media
@@ -277,6 +288,15 @@ def register(app,select,load):
         if preset.get('provider','comfyui')!='comfyui':
             raise HTTPException(400,'Only ComfyUI workflows have an editor graph')
         if not isinstance(graph,dict) or not graph:raise HTTPException(400,'That workflow has no nodes')
+        # The graph carries whatever negative it was built with. What the kit
+        # actually renders is the composed one, so bake that in: a workflow you
+        # open in ComfyUI should behave like the lane it came from, safety floor
+        # included. The modesty bucket stays in, since an exported file has no
+        # companion attached to set it aside.
+        mapped=(preset.get('mappings') or {}).get('negative')
+        if mapped and str(mapped[0]) in graph:
+            graph=copy.deepcopy(graph)
+            graph[str(mapped[0])]['inputs'][mapped[1]]=media.negative_prompt(preset,intimate=False)
         base=media.endpoint(preset.get('endpoint') or '')
         try:schema=media.request_json(base+'/object_info')
         except Exception:

@@ -24,8 +24,8 @@ CONFIG='companion-images.json'
 # stage. They are not a preset field, not a setting and not editable from the
 # interface, because the whole point of them is that no code path can drop
 # them: not an imported workflow, not a cleared box, not the intimate switch
-# below. `safety_negative` on a preset adds to this floor; nothing subtracts
-# from it.
+# below. A preset's own `negative` adds to this floor; nothing subtracts from
+# it.
 SAFETY_FLOOR=('child','children','kid','toddler','infant','baby','loli','shota',
   'preteen','pre-teen','teen','teenager','adolescent','underage','minor','childlike',
   'young girl','young boy','school child','age regression','de-aged','shrunken adult',
@@ -36,28 +36,79 @@ SAFETY_FLOOR=('child','children','kid','toddler','infant','baby','loli','shota',
 MODESTY_DEFAULT='nude, topless, nsfw, explicit, nipples, genitalia'
 
 
+# Terms that belong to the modesty bucket rather than the quality one, used to
+# sort a workflow's single negative prompt into the two buckets. Matching is on
+# the bare term with any weight stripped, so `(nsfw:1.2)` sorts like `nsfw`.
+MODESTY_TERMS={'nsfw','nude','nudity','naked','topless','bottomless','nipples','areola',
+  'lingerie','underwear only','see-through','see-through clothing','sheer clothing',
+  'fetish','erotic','erotica','explicit','sexual','sex','genitalia','genitals','pubic hair',
+  'suggestive','suggestive pose','provocative','seductive','seductive pose','bedroom eyes',
+  'pinup','pin-up','cleavage focus','breast focus','ass focus','crotch focus','revealing clothing'}
+
+
+def bare_term(term):
+    """A term with its weight and brackets stripped, for comparison only."""
+    t=str(term or '').strip()
+    while t.startswith(('(','[')) and t.endswith((')',']')):t=t[1:-1].strip()
+    if ':' in t:
+        head,_,tail=t.rpartition(':')
+        if head and tail.replace('.','',1).replace('-','',1).isdigit():t=head.strip()
+    return t.strip().lower()
+
+
+def sort_negative(text):
+    """Sort one negative prompt into (always-on, modesty), dropping the floor.
+
+    Terms the safety floor already carries are dropped rather than copied, since
+    the floor applies to every render anyway and a duplicate in a preset only
+    invites someone to edit the copy and believe they changed something.
+    """
+    floor={t.lower() for t in SAFETY_FLOOR}
+    always,modesty=[],[]
+    for term in split_terms(text):
+        bare=bare_term(term)
+        if bare in floor:continue
+        (modesty if bare in MODESTY_TERMS else always).append(term)
+    return ', '.join(always),', '.join(modesty)
+
+
+def split_terms(text):
+    """Split a prompt into terms on commas, without cutting inside a weight.
+
+    `(white dress, ivory dress:1.3)` is one weighted group that happens to
+    contain commas. Splitting on every comma would leave unbalanced brackets
+    that ComfyUI reads as literal punctuation, so depth is tracked.
+    """
+    terms=[];depth=0;current=''
+    for ch in str(text or ''):
+        if ch in '([':depth+=1
+        elif ch in ')]':depth=max(0,depth-1)
+        if ch==',' and depth==0:
+            terms.append(current.strip());current=''
+        else:current+=ch
+    terms.append(current.strip())
+    return [t for t in terms if t]
+
+
 def negative_prompt(preset,intimate=False):
     """Every negative that applies to a render, joined into one string.
 
-    Four sources, and exactly one of them is ever set aside:
+    Three sources, and exactly one of them is ever set aside:
 
-    - `SAFETY_FLOOR`, above, which always applies;
-    - `safety_negative`, whatever the person has added to that floor, which
-      always applies;
-    - `negative`, the workflow's ordinary quality terms, which always apply;
+    - `SAFETY_FLOOR`, above, which always applies and is not a preset field;
+    - `negative`, the workflow's own always-on terms — quality, anatomy,
+      wardrobe and whatever else the person wants held on every render;
     - `modesty_negative`, which a companion who has reached full intimacy
       readiness may set aside, and which nothing else may.
 
     Order matters only for readability; a negative prompt is a bag of terms.
     """
-    parts=[', '.join(SAFETY_FLOOR),str(preset.get('safety_negative','') or ''),
-           str(preset.get('negative','') or '')]
+    parts=[', '.join(SAFETY_FLOOR),str(preset.get('negative','') or '')]
     if not intimate:parts.append(str(preset.get('modesty_negative','') or ''))
     seen=[];known=set()
     for chunk in parts:
-        for term in chunk.split(','):
-            term=term.strip()
-            if term and term.lower() not in known:
+        for term in split_terms(chunk):
+            if term.lower() not in known:
                 known.add(term.lower());seen.append(term)
     return ', '.join(seen)
 
@@ -146,8 +197,7 @@ def validate(data):
         if p.get('category') not in CATEGORIES:raise ValueError('Choose an image category')
         for k,v in p.get('parts',{}).items():
             if k not in PARTS or not isinstance(v,str) or len(v)>20000:raise ValueError('Invalid prompt component')
-        for key,label in (('negative','negative prompt'),('safety_negative','always-on negative prompt'),
-                          ('modesty_negative','modesty negative prompt')):
+        for key,label in (('negative','negative prompt'),('modesty_negative','modesty negative prompt')):
             if not isinstance(p.get(key,''),str) or len(p.get(key,''))>20000:raise ValueError('Invalid '+label)
         if p['provider']=='comfyui':
             workflow=p.get('workflow',{})
@@ -189,7 +239,7 @@ def template():
     return {'id':'comfy-plantmilk','name':'Comfy – PlantMilk','category':'anime','provider':'comfyui',
       'endpoint':'http://127.0.0.1:8188','parts':{'quality':'anime illustration, detailed','wardrobe':'','lighting':'soft light','camera':'portrait'},
       'negative':'low quality, blurry, malformed hands',
-      'safety_negative':'','modesty_negative':MODESTY_DEFAULT,
+      'modesty_negative':MODESTY_DEFAULT,
       'width':832,'height':1216,'steps':18,'cfg':5,'seed':-1,
       'workflow':{
         '1':{'class_type':'CheckpointLoaderSimple','inputs':{'ckpt_name':'CHOOSE_YOUR_CHECKPOINT.safetensors'}},

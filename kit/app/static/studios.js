@@ -880,8 +880,20 @@ function wireSliders(root){
 
 /* Prompt parts are comma-separated tags. They are shown as tags and written
    back as `a, b, c`, so what reaches the model is never a run-on line. */
+/* Split on commas, but not on the ones inside a weight: `(white dress, ivory:1.3)`
+   is one tag. Splitting it into fragments lets a single ✕ leave an unbalanced
+   bracket behind, which the sampler then reads as literal punctuation. Mirrors
+   companion_media.split_terms. */
 function tagsFromText(text){
-  return String(text||'').split(',').map(x=>x.trim()).filter(Boolean);
+  const tags=[];let depth=0,current='';
+  for(const ch of String(text||'')){
+    if(ch==='('||ch==='[')depth++;
+    else if(ch===')'||ch===']')depth=Math.max(0,depth-1);
+    if(ch===','&&depth===0){tags.push(current.trim());current='';}
+    else current+=ch;
+  }
+  tags.push(current.trim());
+  return tags.filter(Boolean);
 }
 function tagFieldHTML(key,label,text,hint,collapsed,vocabulary){
   const tags=tagsFromText(text);
@@ -1104,7 +1116,6 @@ workspaceHandlers['image-studio']=async()=>{
   for(const field of $('image-preset-editor').querySelectorAll('[data-tag-field]')){
     const key=field.dataset.tagField,value=tagFieldValue(field);
     if(key==='__negative')p.negative=value;
-    else if(key==='__safety')p.safety_negative=value;
     else if(key==='__modesty')p.modesty_negative=value;
     else p.parts[key]=value;
   }
@@ -1295,22 +1306,26 @@ workspaceHandlers['image-studio']=async()=>{
       <div class="studio-block-head"><h3>4 · Prompt</h3>
         <label class="inline-label switch-container" style="margin:0">
           <input id="preset-include-identity" type="checkbox" ${p.include_identity!==false?'checked':''}>
-          <span class="switch-slider"></span><span class="switch-label">Include the companion</span>
+          <span class="switch-slider"></span><span class="switch-label">Include ${esc(chatName())}</span>
         </label></div>
+      <p class="dim small identity-note">Leave Identity empty and this fills it from her SOUL at
+        render time, so she stays current as she changes. Type in it \u2014 or paste below \u2014 and your
+        text wins instead.${(p.parts?.identity||'').trim()?
+          ' <strong>Identity has text, so that is what renders.</strong>':''}</p>
       <div class="studio-actions" style="margin-top:0">
-        <button type="button" class="quiet" id="insert-companion">Use ${esc(chatName())}\u2019s details</button>
+        <button type="button" class="quiet" id="insert-companion">Paste her details now</button>
+        <span class="dim small">A snapshot of how she looks today \u2014 it will not follow her.</span>
       </div>
       <div class="tag-fields">
         ${d.parts.map(k=>tagFieldHTML(k,formLabel(k),p.parts?.[k]||'',PART_HINT[k]||'',false,
           k==='camera'?CAMERA_LOOKS:k==='lighting'?LIGHTING_LOOKS:null)).join('')}
-        ${tagFieldHTML('__negative','Negative',p.negative||'','Quality terms \u2014 always applied',true)}
-        ${tagFieldHTML('__safety','Always on',p.safety_negative||'','Never set aside, by anything',true)}
+        ${tagFieldHTML('__negative','Always on',p.negative||'','Quality, anatomy, wardrobe',true)}
         ${tagFieldHTML('__modesty','Modesty',p.modesty_negative||'',
           esc(chatName())+' may set these aside',true)}
       </div>
-      <p class="dim small modesty-note">A built-in floor of always-on negatives applies to every render
-        on top of these, and cannot be edited or switched off. \u201cModesty\u201d is the only bucket that is
-        ever set aside, only by ${esc(chatName())}, and only once closeness has reached Bonded.</p>
+      <p class="dim small modesty-note">A built-in floor of protective negatives applies to every render
+        on top of these; it is not editable and nothing switches it off. \u201cModesty\u201d is the only bucket
+        ever set aside \u2014 only by ${esc(chatName())}, and only once closeness has reached Bonded.</p>
     </div>
 
     <div class="studio-actions">

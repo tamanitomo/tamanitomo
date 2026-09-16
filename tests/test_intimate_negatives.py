@@ -19,7 +19,7 @@ class NegativeCompositionTests(unittest.TestCase):
     """What actually reaches the sampler, bucket by bucket."""
 
     def preset(self, **over):
-        return {'negative': 'blurry, low quality', 'safety_negative': 'extra fingers',
+        return {'negative': 'blurry, low quality, extra fingers',
                 'modesty_negative': 'nude, topless', **over}
 
     def terms(self, preset, intimate=False):
@@ -27,8 +27,8 @@ class NegativeCompositionTests(unittest.TestCase):
 
     def test_the_floor_survives_every_bucket_being_empty(self):
         """A cleared box, or an imported workflow that never had one, changes nothing."""
-        for preset in ({}, {'negative': '', 'safety_negative': '', 'modesty_negative': ''},
-                       {'safety_negative': None, 'modesty_negative': None}):
+        for preset in ({}, {'negative': '', 'modesty_negative': ''},
+                       {'negative': None, 'modesty_negative': None}):
             for intimate in (False, True):
                 terms = self.terms(preset, intimate)
                 for floor in media.SAFETY_FLOOR:
@@ -46,12 +46,12 @@ class NegativeCompositionTests(unittest.TestCase):
 
     def test_the_floor_is_not_a_preset_field(self):
         """Nothing a preset can say removes a floor term, including saying it differently."""
-        sneaky = self.preset(safety_negative='', negative='', modesty_negative='child, loli')
+        sneaky = self.preset(negative='', modesty_negative='child, loli')
         self.assertIn('child', self.terms(sneaky, intimate=True))
         self.assertIn('loli', self.terms(sneaky, intimate=True))
 
     def test_terms_are_not_repeated(self):
-        doubled = self.preset(safety_negative='child, blurry', negative='blurry')
+        doubled = self.preset(negative='child, blurry, blurry')
         joined = media.negative_prompt(doubled)
         self.assertEqual(joined.lower().count('blurry'), 1)
         self.assertEqual(joined.lower().split(',').count(' child'), 0)
@@ -59,8 +59,52 @@ class NegativeCompositionTests(unittest.TestCase):
     def test_new_workflows_carry_a_modesty_bucket_and_no_floor_copy(self):
         template = wf.modular_template()
         self.assertTrue(template['modesty_negative'])
-        self.assertEqual(template['safety_negative'], '')
+        self.assertNotIn('safety_negative', template)
         media.validate({'version': 1, 'presets': [template]})
+
+
+class NegativeSortingTests(unittest.TestCase):
+    """Turning one monolithic negative prompt into the two buckets."""
+
+    def test_a_weight_containing_commas_is_one_term(self):
+        """`(white dress, ivory:1.3)` is a weighted group, not two terms."""
+        self.assertEqual(
+            media.split_terms('(white dress, ivory dress:1.3), lowres, (two people:1.3)'),
+            ['(white dress, ivory dress:1.3)', 'lowres', '(two people:1.3)'])
+
+    def test_weights_survive_sorting(self):
+        always, modesty = media.sort_negative('(nsfw:1.2), (white dress, ivory:1.3), lowres')
+        self.assertEqual(modesty, '(nsfw:1.2)')
+        self.assertEqual(always, '(white dress, ivory:1.3), lowres')
+
+    def test_floor_terms_are_dropped_not_copied(self):
+        """A copy in a preset invites editing the copy and believing it mattered."""
+        always, modesty = media.sort_negative('child, loli, underage, lowres, nude')
+        self.assertEqual(always, 'lowres')
+        self.assertEqual(modesty, 'nude')
+
+    def test_anatomy_and_wardrobe_stay_always_on(self):
+        """Body words are not modesty words; only the listed ones move."""
+        always, modesty = media.sort_negative(
+            'body horror, contorted body, white clothing, plastic skin, extra legs, bad anatomy')
+        self.assertEqual(modesty, '')
+        self.assertEqual(len(media.split_terms(always)), 6)
+
+    def test_bare_term_strips_brackets_and_weights_only(self):
+        self.assertEqual(media.bare_term('(nsfw:1.2)'), 'nsfw')
+        self.assertEqual(media.bare_term('[blurry]'), 'blurry')
+        self.assertEqual(media.bare_term('  Nude  '), 'nude')
+        # A colon that is not a weight is part of the term.
+        self.assertEqual(media.bare_term('style: painterly'), 'style: painterly')
+
+    def test_sorting_loses_nothing_except_the_floor(self):
+        source = ('lowres, worst quality, nsfw, nude, (two people:1.3), child, '
+                  'bad hands, lingerie, melted clothing')
+        always, modesty = media.sort_negative(source)
+        recovered = set(media.split_terms(always)) | set(media.split_terms(modesty))
+        floor = {t.lower() for t in media.SAFETY_FLOOR}
+        expected = {t for t in media.split_terms(source) if media.bare_term(t) not in floor}
+        self.assertEqual(recovered, expected)
 
 
 class IntimacyGateTests(unittest.TestCase):
