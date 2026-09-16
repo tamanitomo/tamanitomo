@@ -188,8 +188,7 @@ function renderVaultTree(){
 }
 
 workspaceHandlers.vault=async()=>{
- $('vault').innerHTML=heading('Knowledge vault','Browse, edit companion memories and notes, and organize knowledge. Markdown and JSON files stay Obsidian-ready.')+
- `<div class="obsidian-layout">
+ $('vault').innerHTML=`<div class="obsidian-layout">
    <div class="vault-sidebar">
      <div class="vault-topbar">
        <div class="vault-actions-row">

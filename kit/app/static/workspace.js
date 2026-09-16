@@ -1,5 +1,5 @@
 /* The workspace uses the same API on desktop and on a future paired mobile client. */
-const heading=(title,body)=>`<h2 class="page-title">${esc(title)}</h2><p class="intro">${esc(body)}</p>`;
+const heading=(title,body)=>'';
 const options=(rows,selected)=>rows.map(([value,label])=>`<option value="${esc(value)}" ${value===selected?'selected':''}>${esc(label)}</option>`).join('');
 const post=(path,payload={})=>api(path,{method:'POST',body:JSON.stringify(payload)});
 let roster=[],providerRows=[],activeOperation=null,chatSession=null;

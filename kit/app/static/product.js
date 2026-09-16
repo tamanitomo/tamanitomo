@@ -419,7 +419,6 @@ workspaceHandlers.now=async()=>{
   }
 
   $('now').innerHTML=`
-  ${d.problems.length?`<div class="notice-strip"><p>${esc(d.problems[0])}${d.problems.length>1?` · ${d.problems.length-1} more to review`:''}</p>${jump('health','Review')}</div>`:''}
   ${updateInfo?.has_update?`<div class="notice-strip" style="border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent)"><p><strong>Tamanitomo v${esc(updateInfo.latest_version)}</strong> is available. Run <code>./update.sh</code> in your host terminal to update.</p>${jump('environment','View')}</div>`:''}
 
   <div class="presence-sanctuary">
@@ -480,10 +479,7 @@ workspaceHandlers.now=async()=>{
 
   <div class="home-columns" style="margin-top:28px">
     <div>
-      <div class="section-heading" style="margin-top:0"><h2>Shared Calendar & Commitments</h2>${jump('loops','Open full planner')}</div>
-      ${buildCalendarHtml(d.agent,d.missions,'home-cal')}
-
-      <div class="section-heading"><h2>From the journal</h2>${jump('journals','All reflections')}</div>
+      <div class="section-heading" style="margin-top:0"><h2>From the journal</h2>${jump('journals','All reflections')}</div>
       ${entry?`
       <article class="card journal-preview" style="border-radius:var(--r-lg);padding:26px">
         <span class="eyebrow" style="color:var(--dim)">Nightly reflection · ${esc(entry.day)}</span>
@@ -505,6 +501,9 @@ workspaceHandlers.now=async()=>{
     </div>
 
     <div>
+      <div class="section-heading" style="margin-top:0"><h2>Calendar</h2>${jump('loops','Planner')}</div>
+      ${buildCalendarHtml(d.agent,d.missions,'home-cal')}
+
       <div class="section-heading"><h2>Current presence & closet</h2></div>
       ${renderWardrobeCard(closet,s,stage)}
 
@@ -528,7 +527,7 @@ const journalBrowse={query:'',month:''};
 let journalPageGeneration=0;
 workspaceHandlers.journals=async()=>{
   const pageGeneration=++journalPageGeneration;
-  $('journals').innerHTML=`<div class="filters" style="margin-top:0"><label>Search entries<input id="journal-search" type="search" maxlength="200" placeholder="Search entries by topic or keyword…"></label><label>Month<input type="month" id="journal-month"></label><button class="quiet" id="journal-clear">Clear</button></div><p id="journal-status" class="dim small" role="status"></p><div id="journal-warnings"></div><div class="reader-layout"><details class="journal-browser" id="journal-browser" ${matchMedia('(max-width:900px)').matches?'':'open'}><summary id="journal-picker-label">Browse entries</summary><div class="reader-list" id="journal-list"></div><button class="quiet" id="journal-older" hidden>Load older entries</button></details><article id="journal-page"></article></div>`;
+  $('journals').innerHTML=`<div class="filters" style="margin-top:0"><label>Search entries<input id="journal-search" type="search" maxlength="200" placeholder="Search entries by topic or keyword…"></label><label>Month<input type="month" id="journal-month"></label><button class="quiet" id="journal-clear">Clear</button></div><div id="journal-warnings"></div><div class="reader-layout"><div class="journal-browser" id="journal-browser"><div class="journal-count-bar"><span id="journal-count" class="eyebrow">…</span></div><div class="reader-list" id="journal-list"></div></div><article id="journal-page"></article></div>`;
   $('journal-search').value=journalBrowse.query;$('journal-month').value=journalBrowse.month;
   let entries=[],cursor=null,request=0,selection=0,timer,scrollLoading=false;
   const alive=()=>current==='journals'&&pageGeneration===journalPageGeneration;
@@ -537,7 +536,6 @@ workspaceHandlers.journals=async()=>{
     selectedJournal=id;for(const b of $('journal-list').querySelectorAll('button'))b.setAttribute('aria-current',String(b.dataset.entry===id));
     if(entry.truncated){$('journal-page').innerHTML='<p class="dim" role="status">Opening the full entry…</p>';try{entry=(await api('/journals/'+encodeURIComponent(id))).entry;}catch(error){if(alive()&&selection===token)$('journal-page').innerHTML=empty('journals','Entry unavailable',error.message);return;}}
     if(!alive()||selection!==token)return;
-    $('journal-picker-label').textContent='Browse entries · '+entry.day;
     const currIdx=entries.findIndex(x=>x.id===id);
     const prevEntry=currIdx>0?entries[currIdx-1]:null;
     const nextEntry=currIdx<entries.length-1?entries[currIdx+1]:null;
@@ -560,7 +558,7 @@ workspaceHandlers.journals=async()=>{
     </div>`;
     if($('journal-prev-btn')&&prevEntry)$('journal-prev-btn').onclick=()=>choose(prevEntry.id);
     if($('journal-next-btn')&&nextEntry)$('journal-next-btn').onclick=()=>choose(nextEntry.id);
-    if(fromPicker&&matchMedia('(max-width:900px)').matches){$('journal-browser').open=false;$('journal-page').scrollIntoView({block:'start'});}
+    if(fromPicker&&matchMedia('(max-width:900px)').matches){$('journal-page').scrollIntoView({block:'start'});}
     setTimeout(()=>{
       const page=$('journal-page'),list=$('journal-list');
       if(page&&list&&page.offsetHeight>0&&!matchMedia('(max-width:900px)').matches){
@@ -571,7 +569,6 @@ workspaceHandlers.journals=async()=>{
   const draw=()=>{
     $('journal-list').innerHTML=entries.map(x=>`<button data-entry="${esc(x.id)}" aria-current="${x.id===selectedJournal}"><strong>${esc(x.day)}</strong><small>${esc(excerpt(x.excerpt||x.text,110))}</small><small>${Math.max(1,Math.ceil(x.words/220))} min read</small></button>`).join('');
     for(const b of $('journal-list').querySelectorAll('button'))b.onclick=()=>choose(b.dataset.entry,true);
-    $('journal-older').hidden=!cursor;
     const page=$('journal-page'),list=$('journal-list');
     if(page&&list&&page.offsetHeight>0&&!matchMedia('(max-width:900px)').matches){
       list.style.maxHeight=Math.max(320,Math.min(window.innerHeight-140,page.offsetHeight-50))+'px';
@@ -580,8 +577,7 @@ workspaceHandlers.journals=async()=>{
   const load=async more=>{
     const token=++request;if(!more)selection++;
     const query=journalBrowse.query,month=journalBrowse.month;
-    const params=new URLSearchParams({limit:'100',q:query,month});if(more&&cursor)params.set('before',cursor);
-    $('journal-status').textContent='Loading entries…';$('journal-older').disabled=true;
+    const params=new URLSearchParams({limit:'1000',q:query,month});if(more&&cursor)params.set('before',cursor);
     try{
       const data=await api('/journals?'+params);
       if(!alive()||token!==request)return;
@@ -594,16 +590,23 @@ workspaceHandlers.journals=async()=>{
         if(!alive()||token!==request)return;
         if(selected&&(!month||selected.entry.day.startsWith(month))&&(!query||(selected.entry.day+' '+selected.entry.text).toLowerCase().includes(query.toLowerCase())))entries.unshift(selected.entry);
       }
-      draw();$('journal-status').textContent=entries.length+' of '+data.total+' '+(query||month?'matching entries':'entries');
+      draw();
+      if($('journal-count'))$('journal-count').textContent=`${data.total} ${data.total===1?'ENTRY':'ENTRIES'}${query||month?' (MATCHING)':''}`;
       $('journal-warnings').innerHTML=data.warnings.map(x=>`<p class="warn">${esc(x)}</p>`).join('');
-      if(!more){if(entries.length)await choose(entries.some(x=>x.id===selectedJournal)?selectedJournal:entries[0].id);else{$('journal-picker-label').textContent='Browse entries';$('journal-page').innerHTML=empty('journals',query||month?'No matching entries':'No journal entries yet',query||month?'Try another search or month.':'Daily reflections appear here as the journal job runs.',query||month?'':jump('health','View journal schedule'));wireRoutes($('journal-page'));}}
-    }catch(error){if(alive()&&token===request)$('journal-status').textContent=error.message;}
-    finally{if(alive()&&token===request)$('journal-older').disabled=false;}
+      if(!more){if(entries.length)await choose(entries.some(x=>x.id===selectedJournal)?selectedJournal:entries[0].id);else{if($('journal-count'))$('journal-count').textContent='0 ENTRIES';$('journal-page').innerHTML=empty('journals',query||month?'No matching entries':'No journal entries yet',query||month?'Try another search or month.':'Daily reflections appear here as the journal job runs.',query||month?'':jump('health','View journal schedule'));wireRoutes($('journal-page'));}}
+    }catch(error){if(alive()&&token===request&&$('journal-count'))$('journal-count').textContent='ERROR';}
   };
-  const filter=()=>{request++;selection++;$('journal-older').disabled=true;journalBrowse.query=$('journal-search').value;journalBrowse.month=$('journal-month').value;clearTimeout(timer);timer=setTimeout(()=>{if(alive())load(false);},180);};
+  const filter=()=>{request++;selection++;journalBrowse.query=$('journal-search').value;journalBrowse.month=$('journal-month').value;clearTimeout(timer);timer=setTimeout(()=>{if(alive())load(false);},180);};
   $('journal-search').oninput=filter;$('journal-month').onchange=filter;
   $('journal-clear').onclick=()=>{$('journal-search').value='';$('journal-month').value='';filter();};
-  $('journal-older').onclick=()=>load(true);
+  $('journal-list').addEventListener('scroll',()=>{
+    if(!cursor||scrollLoading)return;
+    const el=$('journal-list');
+    if(el.scrollTop+el.clientHeight>=el.scrollHeight-60){
+      scrollLoading=true;
+      load(true).finally(()=>{scrollLoading=false;});
+    }
+  },{passive:true});
   await load(false);
 };
 let viewerItems=[],viewerIndex=0,viewerAlbums=null,viewerInitialized=false;
@@ -918,9 +921,9 @@ async function openPhotoSettingsDialog(){
 
 workspaceHandlers.photos=async()=>{
   const generation=++photoPageGeneration;
-  let [content,tl,jobs]=await Promise.all([api('/content?'+new URLSearchParams({kind:'image',limit:'120',q:photoBrowse.query,day:photoBrowse.day,collection:photoBrowse.collection})),api('/timeline'),api('/jobs')]);if(current!=='photos'||generation!==photoPageGeneration)return;
+  let [content,tl,jobs]=await Promise.all([api('/content?'+new URLSearchParams({kind:'image',limit:'1500',q:photoBrowse.query,day:photoBrowse.day,collection:photoBrowse.collection})),api('/timeline'),api('/jobs')]);if(current!=='photos'||generation!==photoPageGeneration)return;
   profileTimezone=content.timezone;let items=mergePhotos(content,tl);const job=jobs.jobs.find(j=>j.name?.endsWith(' image timeline'));
-  $('photos').innerHTML=`<div class="filters" style="margin-top:0"><label>Search photos<input type="search" id="photo-search" maxlength="200" placeholder="Search photos by title, prompt, or tag…"></label><label>Day<input type="date" id="photo-day"></label><label>Collection<select id="photo-collection"><option value="all">All photos</option><option value="photo session">Timeline captures</option><option value="creation">Creations</option>${tl.albums.map(a=>`<option value="album:${esc(a.name)}">${esc(a.name)}</option>`).join('')}</select></label><button class="quiet" id="photo-clear">Clear</button></div><div id="photo-grid" class="photo-library"></div><p class="dim small" id="photo-count" role="status"></p><button class="quiet" id="photo-older" hidden>Load older photos</button>`;
+  $('photos').innerHTML=`<div class="filters" style="margin-top:0"><label>Search photos<input type="search" id="photo-search" maxlength="200" placeholder="Search photos by title, prompt, or tag…"></label><label>Day<input type="date" id="photo-day"></label><label>Collection<select id="photo-collection"><option value="all">All photos</option><option value="photo session">Timeline captures</option><option value="creation">Creations</option>${tl.albums.map(a=>`<option value="album:${esc(a.name)}">${esc(a.name)}</option>`).join('')}</select></label><button class="quiet" id="photo-clear">Clear</button></div><div id="photo-grid" class="photo-library"></div><p class="dim small" id="photo-count" role="status"></p>`;
   if($('photo-manage-settings-btn'))$('photo-manage-settings-btn').onclick=openPhotoSettingsDialog;
   if($('photo-manage-settings-card-btn'))$('photo-manage-settings-card-btn').onclick=openPhotoSettingsDialog;
   const draw=()=>{
@@ -979,29 +982,34 @@ workspaceHandlers.photos=async()=>{
         $('viewer-btn-album')?.click();
       };
     }
-    $('photo-older').hidden=!content.next_cursor;
     wireRoutes($('photos'));
   };
-  let request=0,timer;
+  let request=0,timer,scrollLoading=false;
   const load=async more=>{
     const token=++request;
-    const params=new URLSearchParams({kind:'image',limit:'120',q:photoBrowse.query,day:photoBrowse.day,collection:photoBrowse.collection});
+    const params=new URLSearchParams({kind:'image',limit:'1500',q:photoBrowse.query,day:photoBrowse.day,collection:photoBrowse.collection});
     if(more&&content.next_cursor)params.set('before',content.next_cursor);
-    $('photo-older').disabled=true;$('photo-count').textContent='Loading photos…';
     try{
       const page=await api('/content?'+params);
       if(current!=='photos'||generation!==photoPageGeneration||token!==request)return;
       const incoming=mergePhotos(page,tl);
       items=more?[...items,...incoming.filter(x=>!items.some(y=>(y.content_id||y.path)===(x.content_id||x.path)))]:incoming;
       content=page;draw();
-    }catch(error){if(current==='photos'&&generation===photoPageGeneration&&token===request)$('photo-count').textContent=error.message;}
-    finally{if(current==='photos'&&generation===photoPageGeneration&&token===request)$('photo-older').disabled=false;}
+    }catch(error){if(current==='photos'&&generation===photoPageGeneration&&token===request&&$('photo-count'))$('photo-count').textContent=error.message;}
   };
-  const filter=()=>{request++;$('photo-older').disabled=true;Object.assign(photoBrowse,{query:$('photo-search').value,day:$('photo-day').value,collection:$('photo-collection').value});clearTimeout(timer);timer=setTimeout(()=>{if(current==='photos'&&generation===photoPageGeneration)load(false);},180);};
+  const filter=()=>{request++;Object.assign(photoBrowse,{query:$('photo-search').value,day:$('photo-day').value,collection:$('photo-collection').value});clearTimeout(timer);timer=setTimeout(()=>{if(current==='photos'&&generation===photoPageGeneration)load(false);},180);};
   $('photo-search').value=photoBrowse.query;$('photo-day').value=photoBrowse.day;$('photo-collection').value=photoBrowse.collection;
   $('photo-search').oninput=filter;$('photo-day').onchange=filter;$('photo-collection').onchange=filter;
   $('photo-clear').onclick=()=>{$('photo-search').value='';$('photo-day').value='';$('photo-collection').value='all';filter();};
-  $('photo-older').onclick=()=>load(true);draw();
+  const onScroll=()=>{
+    if(current!=='photos'||generation!==photoPageGeneration||scrollLoading||!content?.next_cursor)return;
+    if((window.innerHeight+window.scrollY)>=document.body.offsetHeight-600){
+      scrollLoading=true;
+      load(true).finally(()=>{scrollLoading=false;});
+    }
+  };
+  window.addEventListener('scroll',onScroll,{passive:true});
+  draw();
 };
 workspaceHandlers.creations=async()=>{
   const content=await api('/content');if(current!=='creations')return;profileTimezone=content.timezone;
