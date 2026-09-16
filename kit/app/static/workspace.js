@@ -161,7 +161,7 @@ workspaceHandlers.roster=async()=>{
   </div>
   <div class="actions"><button class="act" id="create-companion">Create a companion</button>${!d.runtime.available?'<button class="quiet" id="install-hermes">Install Hermes here</button>':''}</div>
   ${!d.runtime.available?`<div class="card"><h2>Set up Hermes</h2><p>${esc(d.runtime.error)}</p><p class="dim">The installer provisions Hermes in this environment. Account setup comes next, in Hermes & providers.</p><code>${esc(d.runtime.root)}</code></div>`:''}
-  <div class="grid">${d.profiles.map(p=>`<button class="card profile-card" data-profile="${esc(p.id)}"><div class="avatar">${esc(p.name.slice(0,1))}</div><h3>${esc(p.name)}</h3><span class="pill">${p.installed?esc(p.type||'companion'):'Ready to adopt'}</span><p class="dim small">${esc(p.id)}</p></button>`).join('')||'<div class="card dim">Your first companion starts here.</div>'}</div>
+  <div class="grid">${d.profiles.map(p=>`<button class="card profile-card" data-profile="${esc(p.id)}">${faceForProfile(p.id,p.name)}<h3>${esc(p.name)}</h3><span class="pill">${p.installed?esc(p.type||'companion'):'Ready to adopt'}</span><p class="dim small">${esc(p.id)}</p></button>`).join('')||'<div class="card dim">Your first companion starts here.</div>'}</div>
   <div id="onboarding"></div>
   ${d.archives.length?`<div class="card"><h2>Archived profiles</h2>${d.archives.map(a=>`<div class="actions"><span>${esc(a.id)}</span><button class="quiet" data-restore="${esc(a.id)}">Restore</button><button class="quiet" data-purge="${esc(a.id)}">Delete permanently</button></div>`).join('')}</div>`:''}`;
   if($('guide-install-hermes'))bindAction('guide-install-hermes','/install');

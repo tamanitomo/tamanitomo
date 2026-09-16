@@ -157,13 +157,29 @@ function faceHtml(name,cls){
     ? `<img src="${mediaUrl('/media/portrait?v='+portraitVersion)}" alt="" loading="lazy">`:'';
   return `<div class="avatar has-face ${esc(cls||'')}"><span>${letter}</span>${face}</div>`;
 }
+/* A face for a companion other than the one in front of you — the roster, where
+   each card is a different profile. Whether that one has a portrait is not
+   worth a request per card, so the image asks and removes itself if there is
+   none, without disturbing what the current companion knows about its own. */
+function faceForProfile(profileId,name,cls){
+  const letter=esc(String(name||'?').trim().slice(0,1).toUpperCase()||'?');
+  const url=new URL('/media/portrait',location.origin);
+  url.searchParams.set('installation',INSTALLATION);
+  if(profileId)url.searchParams.set('profile',profileId);
+  if(token)url.searchParams.set('token',token);
+  return `<div class="avatar has-face ${esc(cls||'')}"><span>${letter}</span>`+
+    `<img data-other-profile="1" src="${esc(url.pathname+url.search)}" alt="" loading="lazy"></div>`;
+}
 /* Bumped when the portrait changes, so a replaced face is not served from cache. */
 let portraitVersion=Date.now();
 // Belt and braces: a portrait removed in another tab would otherwise linger as a
 // broken frame until the next reload. Error events do not bubble, so capture.
 document.addEventListener('error',event=>{
   const img=event.target;
-  if(img&&img.tagName==='IMG'&&img.closest('.avatar.has-face')){img.remove();portraitStored=false;}
+  if(!img||img.tagName!=='IMG'||!img.closest('.avatar.has-face'))return;
+  const other=img.dataset.otherProfile;
+  img.remove();
+  if(!other)portraitStored=false;
 },true);
 const workspaceHandlers={};
 async function api(path,options){
