@@ -737,6 +737,33 @@ function soulPassages(body){
   return out;
 }
 
+/* Markdown soft wrapping: the templates wrap prose at about 75 columns, and a
+   renderer that makes one paragraph per line turns that into a column of
+   fragments. Consecutive prose lines are rejoined; anything that owns its line
+   (heading, list item, quote, table row, fenced code) is left alone. */
+function reflowSoftWraps(text){
+  const KIND=line=>{
+    const t=line.trim();
+    if(!t)return 'blank';
+    if(/^(#{1,6} )/.test(t))return 'heading';
+    if(/^(-{3,}|_{3,}|\*{3,})$/.test(t))return 'rule';
+    if(/^([-*+] |\d+\. )/.test(t))return 'list';
+    if(t.startsWith('>'))return 'quote';
+    if(t.startsWith('|'))return 'table';
+    return 'prose';
+  };
+  const out=[];let fenced=false,last='blank';
+  for(const line of text.split('\n')){
+    if(/^```/.test(line.trim())){fenced=!fenced;out.push(line);last='fence';continue;}
+    if(fenced){out.push(line);continue;}
+    const kind=KIND(line);
+    if(kind==='prose'&&(last==='prose'||last==='list'||last==='quote'))
+      out[out.length-1]=out[out.length-1].replace(/\s+$/,'')+' '+line.trim();
+    else{out.push(line);last=kind;}
+  }
+  return out.join('\n');
+}
+
 /* Rendered markdown, falling back to the raw text if the vault renderer has not
    loaded. Unwritten ✎ EDIT placeholders are marked so an unfinished section is
    visible from across the page rather than buried mid-paragraph. */
@@ -746,7 +773,7 @@ function soulBodyHTML(body){
   const blocks=soulPassages(body);
   if(!blocks.length)return '<p class="dim soul-empty">Nothing written here yet.</p>';
   return blocks.map(b=>{
-    const html=render(b.text).replace(/✎ EDIT:?/g,'<span class="soul-todo">✎ unwritten</span>');
+    const html=render(reflowSoftWraps(b.text)).replace(/✎ EDIT:?/g,'<span class="soul-todo">✎ unwritten</span>');
     return b.kind==='prose'?html
       :`<aside class="soul-aside soul-aside-${b.kind}"><span class="soul-aside-label">${esc(b.label)}</span>${html}</aside>`;
   }).join('\n');
@@ -794,7 +821,7 @@ async function renderIdentity(){
 
   const doc=`<article class="soul-doc">${sections.map(s=>`
     <section class="soul-passage" id="soul-sec-${esc(s.name)}" data-passage="${esc(s.name)}">
-      <header class="soul-passage-head">
+      <div class="soul-passage-head">
         <div class="soul-passage-title">
           <h3>${esc(sectionTitle(s.name))}</h3>
           <div class="soul-passage-tags">
@@ -806,7 +833,7 @@ async function renderIdentity(){
         </div>
         ${SECTION_NOTE[s.name]?`<p class="soul-passage-note">${esc(SECTION_NOTE[s.name])}</p>`:''}
         <button class="quiet soul-edit" data-edit="${esc(s.name)}">Edit</button>
-      </header>
+      </div>
       <div class="soul-passage-body prose" data-body="${esc(s.name)}">${soulBodyHTML(s.body)}</div>
     </section>`).join('')}</article>`;
 

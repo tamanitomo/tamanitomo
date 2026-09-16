@@ -1048,7 +1048,7 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
 
 /* The reference portrait, now in the image studio beside the prompt it feeds. */
 .portrait-row{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
-.portrait-row>div{flex:1;min-width:250px}
+.portrait-row>div:not(.portrait-thumb){flex:1;min-width:250px}
 .portrait-thumb{width:170px;height:212px;object-fit:cover;border-radius:10px;border:1px solid var(--edge);flex:none}
 .portrait-empty{display:grid;place-items:center;background:var(--surface-2);color:var(--dim);font-size:13px}
 
