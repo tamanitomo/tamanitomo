@@ -1037,12 +1037,31 @@ workspaceHandlers.photos=async()=>{
   const generation=++photoPageGeneration;
   let [content,tl,jobs]=await Promise.all([api('/content?'+new URLSearchParams({kind:'image',limit:'1500',q:photoBrowse.query,day:photoBrowse.day,collection:photoBrowse.collection})),api('/timeline'),api('/jobs')]);if(current!=='photos'||generation!==photoPageGeneration)return;
   profileTimezone=content.timezone;let items=mergePhotos(content,tl);const job=jobs.jobs.find(j=>j.name?.endsWith(' image timeline'));
-  $('photos').innerHTML=`<div class="filters" style="margin-top:0"><label>Search photos<input type="search" id="photo-search" maxlength="200" placeholder="Search photos by title, prompt, or tag…"></label><label>Day<input type="date" id="photo-day"></label><label>Collection<select id="photo-collection"><option value="all">All photos</option><option value="photo session">Timeline captures</option><option value="creation">Creations</option>${tl.albums.map(a=>`<option value="album:${esc(a.name)}">${esc(a.name)}</option>`).join('')}</select></label><button class="quiet" id="photo-clear">Clear</button></div><div id="photo-grid" class="photo-library"></div><p class="dim small" id="photo-count" role="status"></p>`;
+  // One search field and a row of collection chips, the way a photo library
+  // does it; the day picker is gone, its job taken by the date rail.
+  const collections=[['all','All photos'],['photo session','Timeline'],['creation','Creations'],
+    ...tl.albums.map(a=>['album:'+a.name,a.name])];
+  $('photos').innerHTML=`
+    <div class="photo-toolbar">
+      <div class="photo-search-pill">
+        ${icon('search')}
+        <input type="search" id="photo-search" maxlength="200" placeholder="Search your photos" aria-label="Search photos">
+        <button class="photo-search-clear" id="photo-clear" aria-label="Clear search" hidden>\u2715</button>
+      </div>
+      <div class="photo-chips" id="photo-chips" role="tablist" aria-label="Collections">
+        ${collections.map(([value,label])=>`<button class="photo-chip" role="tab" data-collection="${esc(value)}"
+          aria-selected="${value===photoBrowse.collection}">${esc(label)}</button>`).join('')}
+        <button class="photo-chip photo-chip-icon" id="photo-manage-settings-btn" title="Manage photo settings" aria-label="Manage photo settings">\u2699</button>
+      </div>
+    </div>
+    <div id="photo-grid" class="photo-library"></div>
+    <div class="photo-scrubber" id="photo-scrubber" aria-hidden="true"></div>
+    <p class="dim small" id="photo-count" role="status"></p>`;
   if($('photo-manage-settings-btn'))$('photo-manage-settings-btn').onclick=openPhotoSettingsDialog;
   if($('photo-manage-settings-card-btn'))$('photo-manage-settings-card-btn').onclick=openPhotoSettingsDialog;
   const draw=()=>{
     const shown=items.map(x=>photoForCollection(x,photoBrowse.collection));
-    $('photo-grid').innerHTML=photoDays(shown).map(group=>`<section class="photo-day-group"><h3>${esc(group.day==='unknown'?'Date not recorded':stamp(group.items[0].item.at,{weekday:'long',year:'numeric'}))}<span>${group.items.length}</span></h3><div class="photo-grid">${group.items.map(({item:x,index:i})=>`
+    $('photo-grid').innerHTML=photoDays(shown).map(group=>`<section class="photo-day-group" data-day="${esc(group.day)}"><h3>${esc(group.day==='unknown'?'Date not recorded':stamp(group.items[0].item.at,{weekday:'long',year:'numeric'}))}<span>${group.items.length}</span></h3><div class="photo-grid">${group.items.map(({item:x,index:i})=>`
       <div class="photo-card" data-photo="${i}" tabindex="0" role="button" aria-label="Open ${esc(x.title)}">
         <div class="photo-wrap">
           <img ${mediaPrivacy(x)} src="${mediaUrl(x.url)}" loading="lazy" alt="${esc(x.title)}">
@@ -1097,7 +1116,59 @@ workspaceHandlers.photos=async()=>{
       };
     }
     wireRoutes($('photos'));
+    buildScrubber();
   };
+
+  /* A rail of months down the right edge, the way a photo library lets you
+     throw yourself back through a year. Labels sit at each month's real share
+     of the page, so dragging the thumb lands where the label says. */
+  let scrubTimer=null;
+  const buildScrubber=()=>{
+    const rail=$('photo-scrubber'),groups=[...$('photo-grid').querySelectorAll('.photo-day-group')];
+    if(!rail)return;
+    const height=document.documentElement.scrollHeight-window.innerHeight;
+    if(groups.length<2||height<400){rail.hidden=true;rail.innerHTML='';return;}
+    rail.hidden=false;
+    const marks=[];let lastMonth='';
+    for(const group of groups){
+      const day=group.dataset.day||'';
+      const month=day.slice(0,7);
+      if(!month||month===lastMonth)continue;
+      lastMonth=month;
+      const top=Math.min(1,Math.max(0,(group.offsetTop-90)/height));
+      marks.push({month,top,label:new Intl.DateTimeFormat(undefined,{month:'short',year:'numeric'})
+        .format(new Date(month+'-02T12:00:00'))});
+    }
+    rail.innerHTML=`<div class="photo-scrubber-thumb" id="photo-scrub-thumb"></div>`+
+      marks.map(m=>`<button class="photo-scrubber-mark" style="top:${(m.top*100).toFixed(2)}%"
+        data-scrub="${m.top}" title="Jump to ${esc(m.label)}"><span>${esc(m.label)}</span></button>`).join('');
+    moveThumb();
+  };
+  const moveThumb=()=>{
+    const thumb=$('photo-scrub-thumb');if(!thumb)return;
+    const height=document.documentElement.scrollHeight-window.innerHeight;
+    thumb.style.top=(height>0?Math.min(1,window.scrollY/height)*100:0).toFixed(2)+'%';
+  };
+  const scrubTo=fraction=>{
+    const height=document.documentElement.scrollHeight-window.innerHeight;
+    window.scrollTo({top:Math.max(0,Math.min(1,fraction))*height});
+  };
+  const railFraction=event=>{
+    const rail=$('photo-scrubber'),box=rail.getBoundingClientRect();
+    return (event.clientY-box.top)/box.height;
+  };
+  $('photo-scrubber').addEventListener('pointerdown',event=>{
+    const mark=event.target.closest('[data-scrub]');
+    $('photo-scrubber').classList.add('is-dragging');
+    $('photo-scrubber').setPointerCapture(event.pointerId);
+    scrubTo(mark?Number(mark.dataset.scrub):railFraction(event));
+  });
+  $('photo-scrubber').addEventListener('pointermove',event=>{
+    if(!$('photo-scrubber').classList.contains('is-dragging'))return;
+    event.preventDefault();scrubTo(railFraction(event));
+  });
+  for(const done of ['pointerup','pointercancel'])
+    $('photo-scrubber').addEventListener(done,()=>$('photo-scrubber').classList.remove('is-dragging'));
   let request=0,timer,scrollLoading=false;
   const load=async more=>{
     const token=++request;
@@ -1111,12 +1182,26 @@ workspaceHandlers.photos=async()=>{
       content=page;draw();
     }catch(error){if(current==='photos'&&generation===photoPageGeneration&&token===request&&$('photo-count'))$('photo-count').textContent=error.message;}
   };
-  const filter=()=>{request++;Object.assign(photoBrowse,{query:$('photo-search').value,day:$('photo-day').value,collection:$('photo-collection').value});clearTimeout(timer);timer=setTimeout(()=>{if(current==='photos'&&generation===photoPageGeneration)load(false);},180);};
-  $('photo-search').value=photoBrowse.query;$('photo-day').value=photoBrowse.day;$('photo-collection').value=photoBrowse.collection;
-  $('photo-search').oninput=filter;$('photo-day').onchange=filter;$('photo-collection').onchange=filter;
-  $('photo-clear').onclick=()=>{$('photo-search').value='';$('photo-day').value='';$('photo-collection').value='all';filter();};
+  const filter=()=>{request++;Object.assign(photoBrowse,{query:$('photo-search').value,collection:photoBrowse.collection});
+    $('photo-clear').hidden=!$('photo-search').value;
+    clearTimeout(timer);timer=setTimeout(()=>{if(current==='photos'&&generation===photoPageGeneration)load(false);},220);};
+  $('photo-search').value=photoBrowse.query;
+  $('photo-clear').hidden=!photoBrowse.query;
+  $('photo-search').oninput=filter;
+  $('photo-clear').onclick=()=>{$('photo-search').value='';filter();$('photo-search').focus();};
+  for(const chip of $('photo-chips').querySelectorAll('[data-collection]'))chip.onclick=()=>{
+    photoBrowse.collection=chip.dataset.collection;
+    for(const other of $('photo-chips').querySelectorAll('[data-collection]'))
+      other.setAttribute('aria-selected',String(other===chip));
+    filter();
+  };
   const onScroll=()=>{
-    if(current!=='photos'||generation!==photoPageGeneration||scrollLoading||!content?.next_cursor)return;
+    if(current!=='photos'||generation!==photoPageGeneration)return;
+    moveThumb();
+    $('photo-scrubber')?.classList.add('is-active');
+    clearTimeout(scrubTimer);
+    scrubTimer=setTimeout(()=>$('photo-scrubber')?.classList.remove('is-active'),2200);
+    if(scrollLoading||!content?.next_cursor)return;
     if((window.innerHeight+window.scrollY)>=document.body.offsetHeight-600){
       scrollLoading=true;
       load(true).finally(()=>{scrollLoading=false;});

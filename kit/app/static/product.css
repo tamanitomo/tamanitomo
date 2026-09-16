@@ -86,10 +86,8 @@ header{position:fixed;inset:0 auto 0 0;width:var(--rail);background:var(--bg);bo
 /* The go-to-page button is keyboard-only: Ctrl-K still clicks it. It is never
    drawn, on any width. */
 #open-search{display:none!important}
-@media(min-width:901px){
-  .top-actions-bar:not(:has(#editor-status:not([hidden]))){
-    display:none!important;
-  }
+.top-actions-bar:not(:has(#editor-status:not([hidden]))){
+  display:none!important;
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
 #navigation-backdrop{position:fixed;inset:0;z-index:28;border:0;background:color-mix(in srgb,var(--bg) 67%,transparent);backdrop-filter:blur(3px)}
@@ -165,7 +163,7 @@ body[data-page="chat"] .conversation-card #chat-message{min-height:46px;max-heig
 body[data-page="chat"] .voice-chat-panel{padding:0 18px;border-top:1px solid var(--edge);flex:none}
 body[data-page="chat"] .voice-chat-panel .actions{margin:6px 0;font-size:12px}body[data-page="chat"] .voice-chat-panel button{padding:5px 10px;font-size:12px}
 .photo-settings{margin:0 0 20px}.photo-settings>summary{font-size:13px;color:var(--dim)}.photo-settings .card{margin-top:12px}
-.photo-day-group{margin:28px 0}.photo-day-group>h3{font-size:17px;font-weight:500;display:flex;gap:12px;align-items:baseline}.photo-day-group>h3 span{font-size:12px;color:var(--dim)}
+.photo-day-group>h3 span{font-size:12px;color:var(--dim)}
 .photo-library .photo-grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:5px}.photo-library .photo-card{border:0;border-radius:4px;padding:0;overflow:hidden}.photo-library .photo-wrap{aspect-ratio:1;height:auto}.photo-library .photo-wrap img{width:100%;height:100%;object-fit:cover;transition:transform .15s}.photo-library .photo-card:hover img{transform:scale(1.035)}
 body[data-page="journals"] .paper{max-width:850px;margin:auto}body[data-page="journals"] .prose{line-height:1.9}
 @media(max-width:900px){body[data-page="chat"] main{height:calc(100dvh - 65px);padding:0}body[data-page="chat"] #chat{padding:0}body[data-page="chat"] .conversation-card{border:0;border-radius:0}.photo-library .photo-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -1596,8 +1594,8 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
 }
 .reader-picker[hidden]{display:none}
 .reader-picker>input[type=search]{margin-bottom:12px}
-.reader-picker-bar{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:10px}
-.reader-picker-bar strong{font-size:14px;min-width:150px;text-align:center}
+.reader-picker-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.reader-picker-bar strong{font-size:14px;flex:1;text-align:center}
 .reader-picker-bar .icon-button{padding:4px 9px;border:1px solid var(--edge);border-radius:6px}
 /* A month grid inside a 420px panel cannot carry the calendar page's cells. */
 .reader-picker-grid{gap:3px}
@@ -1641,4 +1639,89 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
   .reader-browse-btn{flex:1;justify-content:center}
   .reader-picker{width:calc(100vw - 36px)}
   .reader-picker-results{max-height:40vh}
+}
+
+/* ============================================================ photo library
+   A photo library reads as a wall of pictures with the dates written on it, not
+   as cards in a form. The tiles run tight and edge to edge, one search field
+   carries the text, the collections are chips, and the months live on a rail
+   down the right edge that you can throw yourself along. */
+.photo-toolbar{position:sticky;top:0;z-index:12;padding:8px 0 12px;background:var(--bg);margin-bottom:4px}
+.photo-search-pill{
+  display:flex;align-items:center;gap:10px;padding:0 14px;
+  background:var(--surface-2);border:1px solid var(--edge);border-radius:999px;
+  transition:background .15s,border-color .15s
+}
+.photo-search-pill:focus-within{background:var(--panel);border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
+.photo-search-pill svg{width:18px;height:18px;color:var(--dim);flex:none}
+.photo-search-pill input{
+  flex:1;min-width:0;background:none;border:0;padding:12px 0;font-size:15px;color:var(--ink)
+}
+.photo-search-pill input:focus{outline:none}
+.photo-search-pill input::-webkit-search-cancel-button{display:none}
+.photo-search-clear{
+  flex:none;border:0;background:none;color:var(--dim);font-size:14px;
+  padding:6px;line-height:1;border-radius:50%;cursor:pointer
+}
+.photo-search-clear:hover{background:var(--surface-3);color:var(--ink)}
+.photo-search-clear[hidden]{display:none}
+
+.photo-chips{
+  display:flex;gap:8px;margin-top:10px;overflow-x:auto;scrollbar-width:none;
+  padding-bottom:2px;-webkit-overflow-scrolling:touch
+}
+.photo-chips::-webkit-scrollbar{display:none}
+.photo-chip{
+  flex:none;padding:7px 15px;border-radius:999px;font-size:13.5px;font-weight:500;
+  background:var(--surface-2);border:1px solid var(--edge);color:var(--ink-2);cursor:pointer;
+  white-space:nowrap
+}
+.photo-chip:hover{background:var(--surface-3);color:var(--ink)}
+.photo-chip[aria-selected=true]{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent-ink);font-weight:600}
+.photo-chip-icon{margin-left:auto;padding:7px 11px;font-size:15px}
+
+.photo-day-group{margin:0 0 20px}
+.photo-day-group>h3{
+  margin:0 0 4px;padding:14px 2px 8px;
+  font-size:14px;font-weight:600;letter-spacing:-.1px;
+  display:flex;gap:10px;align-items:baseline
+}
+.photo-library .photo-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:3px}
+.photo-library .photo-card{border:0;border-radius:2px;padding:0;overflow:hidden;background:var(--surface-2)}
+.photo-library .photo-wrap{aspect-ratio:1;height:auto;border-radius:0}
+.photo-library .photo-wrap img{width:100%;height:100%;object-fit:cover;transition:transform .18s,filter .18s}
+.photo-library .photo-card:hover img{transform:scale(1.04)}
+.photo-library .photo-card:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+/* The tile is the picture; its caption belonged to a card that no longer exists. */
+.photo-library .photo-meta{display:none}
+.photo-library .pill-blur{top:5px;left:5px;font-size:10px;padding:2px 6px}
+
+.photo-scrubber{
+  position:fixed;top:132px;bottom:24px;right:2px;width:74px;z-index:14;
+  opacity:0;pointer-events:none;transition:opacity .25s
+}
+.photo-scrubber.is-active,.photo-scrubber:hover,.photo-scrubber.is-dragging{opacity:1;pointer-events:auto}
+.photo-scrubber[hidden]{display:none}
+.photo-scrubber-thumb{
+  position:absolute;right:4px;width:26px;height:26px;margin-top:-13px;border-radius:50%;
+  background:var(--accent);box-shadow:var(--shadow-2);pointer-events:none;transition:top .08s linear
+}
+.photo-scrubber.is-dragging .photo-scrubber-thumb{transform:scale(1.15);transition:none}
+.photo-scrubber-mark{
+  position:absolute;right:34px;transform:translateY(-50%);
+  padding:2px 9px;border-radius:999px;border:1px solid var(--edge);
+  background:color-mix(in srgb,var(--panel) 92%,transparent);backdrop-filter:blur(8px);
+  color:var(--ink-2);font-size:11px;font-weight:600;white-space:nowrap;cursor:pointer
+}
+.photo-scrubber-mark:hover{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+
+@media(max-width:700px){
+  .photo-library .photo-grid{grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:2px}
+  /* The tiles run to the edge of the screen, past main's gutter. */
+  #photo-grid{margin:0 -18px}
+  .photo-day-group>h3{padding-left:18px;padding-right:18px}
+  .photo-toolbar{padding-top:6px}
+  .photo-scrubber{top:122px;width:66px}
+  .photo-scrubber-mark{right:30px;font-size:10px;padding:2px 7px}
 }
