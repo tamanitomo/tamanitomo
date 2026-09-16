@@ -13,6 +13,8 @@ import pathlib
 import sys
 import urllib.parse
 import urllib.request
+
+import companion_endpoint
 from zoneinfo import ZoneInfo
 
 import companion_config as cc
@@ -38,12 +40,11 @@ def schema(wardrobe,care_enabled=False):
     return {'type':'object','properties':fields,'required':list(fields),'additionalProperties':False}
 
 
-def pulse(c,base_url,model,slot=1,now=None,apply=True,phase="pulse"):
+def pulse(c,base_url,model,slot=1,now=None,apply=True,phase="pulse",
+          allow_remote=False,api_key_env=''):
     if phase not in ('pulse','morning','winddown'):raise ValueError('Unknown presence phase')
-    # This worker is deliberately local-only, including when configuration drifts.
-    url=urllib.parse.urlsplit(base_url)
-    if url.scheme!='http' or url.hostname not in ('127.0.0.1','localhost','::1'):
-        raise ValueError('Local pulse requires a loopback model endpoint')
+    # Loopback unless this job was explicitly told otherwise.
+    companion_endpoint.verify(base_url,allow_remote,'Local pulse')
     now=now or dt.datetime.now(ZoneInfo(c.timezone))
     previous=presence.current(c)
     if not previous:raise ValueError('Initialize companion presence before enabling the local pulse')
@@ -99,7 +100,8 @@ def pulse(c,base_url,model,slot=1,now=None,apply=True,phase="pulse"):
                                 'strict':True,'schema':schema(closet,lifestyle.enabled(c))}}}
     for attempt in range(2):
         request=urllib.request.Request(base_url.rstrip('/')+'/chat/completions',
-                  data=json.dumps(payload).encode(),headers={'Content-Type':'application/json'})
+                  data=json.dumps(companion_endpoint.shape(payload,base_url)).encode(),
+                  headers=companion_endpoint.headers(api_key_env))
         with urllib.request.urlopen(request,timeout=300) as response:reply=json.load(response)
         choice=reply['choices'][0]
         if choice.get('finish_reason')!='stop':raise ValueError('Local pulse response was incomplete')
@@ -149,9 +151,12 @@ def main():
     parser.add_argument('--slot',type=int,default=1)
     parser.add_argument('--preview',action='store_true')
     parser.add_argument('--phase',choices=['pulse','morning','winddown'],default='pulse')
+    companion_endpoint.add_arguments(parser)
     args=parser.parse_args()
     print(json.dumps(pulse(cc.load(args.home),args.base_url,args.model,args.slot,
-                           apply=not args.preview,phase=args.phase),ensure_ascii=False,indent=2))
+                           apply=not args.preview,phase=args.phase,
+                           allow_remote=args.allow_remote,api_key_env=args.api_key_env),
+                     ensure_ascii=False,indent=2))
 
 
 if __name__=='__main__':

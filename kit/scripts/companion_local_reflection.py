@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse,datetime as dt,hashlib,json,pathlib,re,sqlite3,sys,urllib.parse,urllib.request
 from zoneinfo import ZoneInfo
 import companion_config as cc
+import companion_endpoint
 import companion_self as slf
 import companion_life as life
 import companion_journal as journal
@@ -120,9 +121,8 @@ def schema(kind,sources,question_ids):
       'soul_append':text(1000,True) if kind in ('weekly','monthly') else {'type':'string','enum':['']}}
     return obj(fields)
 
-def request_plan(c,kind,data,sources,base_url,model,slot):
-    url=urllib.parse.urlsplit(base_url)
-    if url.scheme!='http' or url.hostname not in ('127.0.0.1','localhost','::1'):raise ValueError('reflection requires a loopback model endpoint')
+def request_plan(c,kind,data,sources,base_url,model,slot,allow_remote=False,api_key_env=''):
+    companion_endpoint.verify(base_url,allow_remote,'Reflection')
     qs=[q['id'] for q in data['existing_questions'] if q['status'] in ('asked','open')]
     instructions=(c.soul.read_text(encoding='utf-8')+'\n\nWrite one concise structured reflection. '
       'Use the supplied period, not today by habit. Imagined episodes are your own fiction, never evidence '
@@ -147,7 +147,9 @@ def request_plan(c,kind,data,sources,base_url,model,slot):
              'max_tokens':4096,'temperature':.6,'id_slot':slot,'cache_prompt':True,
              'reasoning_effort':'low','reasoning_budget_tokens':1024,'chat_template_kwargs':{'enable_thinking':True},
              'response_format':{'type':'json_schema','json_schema':{'name':'reflection','strict':True,'schema':schema(kind,sources,qs)}}}
-    req=urllib.request.Request(base_url.rstrip('/')+'/chat/completions',data=json.dumps(payload).encode(),headers={'Content-Type':'application/json'})
+    req=urllib.request.Request(base_url.rstrip('/')+'/chat/completions',
+        data=json.dumps(companion_endpoint.shape(payload,base_url)).encode(),
+        headers=companion_endpoint.headers(api_key_env))
     with urllib.request.urlopen(req,timeout=300) as r:reply=json.load(r)
     choice=reply['choices'][0]
     if choice.get('finish_reason')!='stop':raise ValueError('reflection was truncated; nothing recorded')
@@ -210,7 +212,8 @@ def apply_plan(c,kind,day,plan,sources,now):
     if kind!='checkin':save('journal',journal.append(c,kind,{'date':day,'text':plan['reflection']}))
     return results
 
-def reflect(c,kind,base_url,model,human_id='',slot=1,now=None,planner=None):
+def reflect(c,kind,base_url,model,human_id='',slot=1,now=None,planner=None,
+            allow_remote=False,api_key_env=''):
     now=now or dt.datetime.now(ZoneInfo(c.timezone));folder=c.life/'local-reflections';folder.mkdir(parents=True,exist_ok=True)
     with file_lock(folder/(kind+'.lock')):
         flag=checkin.read(c) if kind=='checkin' else None
@@ -228,7 +231,8 @@ def reflect(c,kind,base_url,model,human_id='',slot=1,now=None,planner=None):
         data['evidence_quotes']=[{'quote_id':key,'quote':value['content']} for key,value in sources.items()]
         if saved:plan=saved['plan'];sources=saved['sources'];usage=saved.get('usage')
         else:
-            plan,usage=(planner or request_plan)(c,kind,data,sources,base_url,model,slot)
+            plan,usage=(planner or request_plan)(c,kind,data,sources,base_url,model,slot,
+                                                 allow_remote,api_key_env)
         validate(plan,kind,sources,[q['id'] for q in data['existing_questions']])
         if not saved:
             saved={'id':key,'kind':kind,'day':day,'plan':plan,'sources':sources,'usage':usage,'authored_at':now.isoformat(),'complete':False}
@@ -249,7 +253,11 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--home',type=pathlib.Path)
     p.add_argument('--kind',choices=KINDS,required=True);p.add_argument('--base-url',required=True);p.add_argument('--model',required=True)
     p.add_argument('--human-user-id',default='');p.add_argument('--slot',type=int,default=1)
-    a=p.parse_args();print(json.dumps(reflect(cc.load(a.home),a.kind,a.base_url,a.model,a.human_user_id,a.slot),ensure_ascii=False,indent=2))
+    companion_endpoint.add_arguments(p)
+    a=p.parse_args()
+    print(json.dumps(reflect(cc.load(a.home),a.kind,a.base_url,a.model,a.human_user_id,a.slot,
+                             allow_remote=a.allow_remote,api_key_env=a.api_key_env),
+                     ensure_ascii=False,indent=2))
 if __name__=='__main__':
     try:main()
     except Exception as exc:
