@@ -11,12 +11,20 @@ const THEME_NAMES={
 const DARK=['midnight','nord','ocean','emerald','amethyst','synthwave','ember','sakura','carbon'];
 const LIGHT=['daylight','parchment','mist'];
 const DEFAULTS={theme:'midnight',accent:'',follow_system:false,
-  dark_theme:'midnight',light_theme:'daylight',nav_pins:['chat','now','photos','journals']};
+  dark_theme:'midnight',light_theme:'daylight',nav_pins:['now','chat','photos','journals']};
 const KEY='companion-appearance';
 const dark=matchMedia('(prefers-color-scheme: dark)');
 
 let state=Object.assign({},DEFAULTS);
-try{const raw=localStorage.getItem(KEY);if(raw)state=Object.assign(state,JSON.parse(raw));}catch(e){}
+try{
+  const raw=localStorage.getItem(KEY);
+  if(raw){
+    state=Object.assign(state,JSON.parse(raw));
+    if(Array.isArray(state.nav_pins)&&state.nav_pins.includes('now')&&state.nav_pins[0]!=='now'){
+      state.nav_pins=['now',...state.nav_pins.filter(x=>x!=='now')];
+    }
+  }
+}catch(e){}
 
 /* Which theme is actually showing, once "match system" is taken into account. */
 function effective(){

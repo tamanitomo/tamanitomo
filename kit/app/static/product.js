@@ -40,7 +40,11 @@ for(const button of $('tabs').querySelectorAll('button'))button.onclick=()=>show
 
 /* Mobile bottom bar: the pinned destinations, then More, always last. */
 const navPins=()=>{
-  const saved=(window.Appearance&&window.Appearance.state.nav_pins)||[];
+  let saved=(window.Appearance&&window.Appearance.state.nav_pins)||[];
+  if(!saved.length)return ['now','chat','photos','journals'];
+  if(saved.includes('now')&&saved[0]!=='now'){
+    saved=['now',...saved.filter(x=>x!=='now')];
+  }
   const pins=saved.filter(id=>navDestinations.includes(id)).slice(0,4);
   return pins.length?pins:['now','chat','photos','journals'];
 };
@@ -183,15 +187,15 @@ function renderWardrobeCard(closet,s,stage=0){
 function renderHeroMetersContent(emotions,bars){
   const meters=emotions?.state?.meters||bars?.feelings?.meters||{};
   const config=[
-    {key:'warmth',label:'Warmth',icon:'🔥',color:'linear-gradient(90deg,#f43f5e,#fb923c)',defaultVal:0.8},
-    {key:'trust',label:'Trust',icon:'🛡️',color:'linear-gradient(90deg,#0ea5e9,#2dd4bf)',defaultVal:0.75},
-    {key:'irritation',label:'Irritation',icon:'⚡',color:'linear-gradient(90deg,#eab308,#facc15)',defaultVal:0.05},
-    {key:'longing',label:'Missing you',icon:'⏳',color:'linear-gradient(90deg,#8b5cf6,#c084fc)',defaultVal:0.3}
+    {key:'warmth',label:'Warmth',icon:'🔥',color:'linear-gradient(90deg,#f43f5e,#fb923c)',glow:'rgba(244,63,94,0.4)',defaultVal:0.8},
+    {key:'trust',label:'Trust',icon:'🛡️',color:'linear-gradient(90deg,#0ea5e9,#10b981)',glow:'rgba(14,165,233,0.4)',defaultVal:0.75},
+    {key:'irritation',label:'Irritation',icon:'⚡',color:'linear-gradient(90deg,#eab308,#f59e0b)',glow:'rgba(234,179,8,0.4)',defaultVal:0.05},
+    {key:'longing',label:'Missing you',icon:'⏳',color:'linear-gradient(90deg,#8b5cf6,#d946ef)',glow:'rgba(139,92,246,0.4)',defaultVal:0.3}
   ];
   return config.map(m=>{
     const raw=meters[m.key]!=null?meters[m.key]:m.defaultVal;
     const pct=Math.round(Math.max(0,Math.min(1,raw))*100);
-    return `<div class="hero-meter-item"><div class="hero-meter-label-row"><span class="hero-meter-label">${m.icon} ${m.label}</span><span class="hero-meter-pct">${pct}%</span></div><div class="hero-meter-bar-track"><div class="hero-meter-bar-fill" style="width:${pct}%;background:${m.color}"></div></div></div>`;
+    return `<div class="hero-meter-item"><div class="hero-meter-label-row"><span class="hero-meter-label"><span class="meter-icon">${m.icon}</span> ${m.label}</span><span class="hero-meter-pct">${pct}%</span></div><div class="hero-meter-bar-track"><div class="hero-meter-bar-fill" style="width:${pct}%;background:${m.color};box-shadow:0 0 8px ${m.glow}"></div></div></div>`;
   }).join('');
 }
 
@@ -267,6 +271,9 @@ workspaceHandlers.now=async()=>{
             <p class="thought-text">${esc(latestThought)}</p>
             <div class="thought-footer">
               <span class="dim small">${thoughtSource}</span>
+              <button class="act small quote-read-btn" id="home-open-journal">
+                📖 Read ${esc(d.agent)}'s Journal
+              </button>
             </div>
           </div>`:''}
 
@@ -275,9 +282,10 @@ workspaceHandlers.now=async()=>{
               <svg class="icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
               Talk with ${esc(d.agent)}
             </button>
+            ${!latestThought?`
             <button class="act small" id="home-open-journal">
               📖 Read ${esc(d.agent)}'s Journal
-            </button>
+            </button>`:''}
             <button class="quiet small" data-route="photos">
               <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
               Photos
@@ -297,6 +305,9 @@ workspaceHandlers.now=async()=>{
             </div>
             <div class="hero-meters-stack">
               ${renderHeroMetersContent(emotions,d.bars)}
+            </div>
+            <div class="hero-meters-footer">
+              <span class="dim small" style="font-size:11px">Synchronized with companion state</span>
             </div>
           </div>
         </div>
@@ -633,7 +644,7 @@ workspaceHandlers.photos=async()=>{
   let [content,tl,jobs]=await Promise.all([api('/content?'+new URLSearchParams({kind:'image',limit:'120',q:photoBrowse.query,day:photoBrowse.day,collection:photoBrowse.collection})),api('/timeline'),api('/jobs')]);if(current!=='photos'||generation!==photoPageGeneration)return;
   profileTimezone=content.timezone;let items=mergePhotos(content,tl);const job=jobs.jobs.find(j=>j.name?.endsWith(' image timeline'));
   const status=!tl.enabled?'Scheduled captures: disabled':!job?'Capture job: not installed':!job.enabled?'Scheduled captures: paused':job.last_status==='error'?'Scheduled captures: error on last run':'Scheduled captures: active';
-  $('photos').innerHTML=`<div class="home-title"><div><h2 class="page-title">Photos & Albums</h2><p class="intro">Timeline captures, generated imagery, and organized albums.</p></div>${jump('image-studio','Create an image')}</div>`+`<details class="photo-settings"><summary>${status} · settings & recent attempts</summary><div class="card"><div class="reader-tools"><div><span class="pill ${tl.enabled&&job?.enabled?'status-good':'status-warn'}">${status}</span><p class="dim small">${!tl.enabled?'Enable photo sessions in Preferences. Existing images remain available.':!job?'Enablement and job installation are separate. Use Install / repair jobs in Hermes settings.':`Schedule: ${esc(job.schedule?.expr||'Not set')} · Next: ${when(job.next_run_at)}`}</p></div>${tl.enabled?jump('health','Manage schedule'):'<button class="link-button" data-route="settings" data-preference="photos">Photo settings →</button>'}</div><span class="dim small">${tl.budget_gb} GB rolling timeline budget · Favorites are kept separately</span>${tl.attempts.length?`<details><summary>Recent capture attempts (${tl.attempts.length})</summary>${tl.attempts.slice(0,5).map(a=>`<p class="small"><span class="pill">${esc(a.status)}</span> ${when(a.at)} ${esc(a.error)}</p>`).join('')}</details>`:''}</div></details>
+  $('photos').innerHTML=`<div class="section-heading" style="margin:0 0 16px;align-items:center"><h2 class="page-title" style="margin:0">Photos</h2><div style="display:flex;gap:10px;align-items:center"><button class="quiet small" data-route="settings" data-preference="photos">⚙️ Manage settings</button></div></div>`+`<details class="photo-settings"><summary>${status} · settings & recent attempts</summary><div class="card"><div class="reader-tools"><div><span class="pill ${tl.enabled&&job?.enabled?'status-good':'status-warn'}">${status}</span><p class="dim small">${!tl.enabled?'Enable photo sessions in Preferences. Existing images remain available.':!job?'Enablement and job installation are separate. Use Install / repair jobs in Hermes settings.':`Schedule: ${esc(job.schedule?.expr||'Not set')} · Next: ${when(job.next_run_at)}`}</p></div>${tl.enabled?jump('health','Manage schedule'):'<button class="link-button" data-route="settings" data-preference="photos">Photo settings →</button>'}</div><span class="dim small">${tl.budget_gb} GB rolling timeline budget · Favorites are kept separately</span>${tl.attempts.length?`<details><summary>Recent capture attempts (${tl.attempts.length})</summary>${tl.attempts.slice(0,5).map(a=>`<p class="small"><span class="pill">${esc(a.status)}</span> ${when(a.at)} ${esc(a.error)}</p>`).join('')}</details>`:''}</div></details>
   <div class="filters"><label>Search photos<input type="search" id="photo-search" maxlength="200" placeholder="Search photos by title, prompt, or tag…"></label><label>Day<input type="date" id="photo-day"></label><label>Collection<select id="photo-collection"><option value="all">All photos</option><option value="photo session">Timeline captures</option><option value="creation">Creations</option>${tl.albums.map(a=>`<option value="album:${esc(a.name)}">${esc(a.name)}</option>`).join('')}</select></label><button class="quiet" id="photo-clear">Clear</button></div><div id="photo-grid" class="photo-library"></div><p class="dim small" id="photo-count" role="status"></p><button class="quiet" id="photo-older" hidden>Load older photos</button>`;
   const draw=()=>{
     const shown=items.map(x=>photoForCollection(x,photoBrowse.collection));
@@ -654,7 +665,7 @@ workspaceHandlers.photos=async()=>{
             ${icon('download')}
           </a>
         </div>
-      </div>`).join('')}</div></section>`).join('')||empty('photos',(photoBrowse.query||photoBrowse.day||photoBrowse.collection!=='all')?'No matching photos':'No photos in library',(photoBrowse.query||photoBrowse.day||photoBrowse.collection!=='all')?'Try another search, day or collection.':'Capture routines will populate images automatically, or generate an image via Image Studio.',jump('image-studio','Create an image'));
+      </div>`).join('')}</div></section>`).join('')||empty('photos',(photoBrowse.query||photoBrowse.day||photoBrowse.collection!=='all')?'No matching photos':'No photos in library',(photoBrowse.query||photoBrowse.day||photoBrowse.collection!=='all')?'Try another search, day or collection.':'Capture routines will populate images automatically.',jump('settings','Manage settings'));
     $('photo-count').textContent=`${shown.length} of ${content.total} images${content.scan_limited?' · scan limit reached; additional files remain in the Vault':''}`;
     for(const b of $('photo-grid').querySelectorAll('.photo-card')){
       b.onclick=e=>{
