@@ -260,6 +260,32 @@ class ReleaseManifestTests(unittest.TestCase):
         self.assertEqual(sorted(n for n in names if not (root / n).exists()), [])
         self.assertEqual(len(names), len(set(names)), 'the manifest lists something twice')
 
+    def test_commands_the_docs_and_ui_tell_people_to_run_are_shipped(self):
+        """A command a person is told to type has to exist in what they installed.
+
+        Three did not: ./tamanitomo, which START_HERE names as the way to
+        start; setup-termux.sh, the Android installer and the only platform
+        this has really been tested on; and update.sh, which the Updates panel
+        prints as the way to upgrade. All three sat in the repo and none of
+        them reached a release, so the instructions were correct and the files
+        were absent.
+        """
+        import json, re, pathlib
+        root = pathlib.Path(__file__).resolve().parent.parent
+        shipped = set(json.loads((root / 'release-files.json').read_text(encoding='utf-8')))
+        sources = [root / 'START_HERE.md', root / 'README.md', root / 'kit/app/static/settings.js']
+        named = set()
+        for src in sources:
+            if not src.exists():
+                continue
+            text = src.read_text(encoding='utf-8')
+            named |= {m for m in re.findall(r'\./([A-Za-z0-9_.-]+\.(?:sh|py|ps1))\b', text)}
+            named |= {m for m in re.findall(r'\./(tamanitomo|companion)\b', text)}
+            named |= {m for m in re.findall(r'\b(companion\.cmd)\b', text)}
+        self.assertTrue(named, 'no launch commands found in the docs; the regex has gone stale')
+        missing = sorted(n for n in named if (root / n).exists() and n not in shipped)
+        self.assertEqual(missing, [], 'documented but not shipped: ' + ', '.join(missing))
+
     def test_every_static_asset_index_html_references_is_shipped(self):
         """A script tag in index.html that has no matching manifest entry.
 
