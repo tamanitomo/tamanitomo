@@ -167,11 +167,11 @@ workspaceHandlers.roster=async()=>{
   ${d.archives.length?`<div class="card"><h2>Archived profiles</h2>${d.archives.map(a=>`<div class="actions"><span>${esc(a.id)}</span><button class="quiet" data-restore="${esc(a.id)}">Restore</button><button class="quiet" data-purge="${esc(a.id)}">Delete permanently</button></div>`).join('')}</div>`:''}`;
   if($('guide-install-hermes'))bindAction('guide-install-hermes','/install');
   if($('guide-create-companion'))$('guide-create-companion').onclick=()=>onboarding(false);
-  if($('guide-goto-env'))$('guide-goto-env').onclick=()=>navigateProfile(PROFILE||'default','environment');
+  if($('guide-goto-env'))$('guide-goto-env').onclick=()=>{aimSettings('hermes-core');navigateProfile(PROFILE||'default','settings');};
   if($('guide-goto-chat'))$('guide-goto-chat').onclick=()=>navigateProfile(PROFILE||'default','now');
   $('create-companion').onclick=()=>onboarding(false);
   bindAction('install-hermes','/install');
-  for(const b of $('roster').querySelectorAll('[data-profile]'))b.onclick=()=>{const p=d.profiles.find(p=>p.id===b.dataset.profile);if(p.installed)navigateProfile(p.id,'companion-edit');else navigateProfile(p.id,'environment');};
+  for(const b of $('roster').querySelectorAll('[data-profile]'))b.onclick=()=>{const p=d.profiles.find(p=>p.id===b.dataset.profile);if(p.installed)navigateProfile(p.id,'companion-edit');else{aimSettings('hermes-core');navigateProfile(p.id,'settings');}};
   for(const b of $('roster').querySelectorAll('[data-restore]'))b.onclick=async()=>{const name=prompt('Original profile name:');if(name)await action('/profile/restore',{archive:b.dataset.restore,profile:name},()=>render('roster'));};
   for(const b of $('roster').querySelectorAll('[data-purge]'))b.onclick=async()=>{const name=prompt('Permanently delete this archived profile, including its sessions. The external vault stays intact. Type the full archive name:\n'+b.dataset.purge);if(name===b.dataset.purge)await action('/profile/purge',{archive:name,confirm:name},()=>render('roster'));};
 };
@@ -631,29 +631,32 @@ function showNote(note,edit=false){
   for(const b of $('vault-document').querySelectorAll('.wiki-link'))b.onclick=()=>{const target=b.dataset.link;const base=note.path.split('/').slice(0,-1).join('/');return readNote((base?base+'/':'')+target+(target.endsWith('.md')?'':'.md'));};
 }
 let envState=null;
-workspaceHandlers.environment=async()=>{
+/* The Hermes environment, drawn into whichever container asks for it. The
+   unified Settings page hosts it as several of its panels; nothing below
+   knows or cares which page it landed on. */
+async function renderHermesInto(host){
   const d=await api('/environment');envState=d;
   const gateway=await api('/gateway');
   const known=roster.find(p=>p.id===PROFILE);
-  $('environment').innerHTML=heading('Hermes settings','Manage the Hermes environment behind this companion. Providers, backups, and scheduled routines all live in Hermes’s own configuration.')+
-  `<div class="card"><h2>Installation</h2><p><span class="pill">${d.runtime.managed?'Kit-managed':'Existing Hermes'}</span> <span class="dim small">${esc(d.runtime.root)}</span></p>
+  host.innerHTML=heading('Hermes settings','Manage the Hermes environment behind this companion. Providers, backups, and scheduled routines all live in Hermes’s own configuration.')+
+  `<div class="card" data-hermes-card="installation"><h2>Installation</h2><p><span class="pill">${d.runtime.managed?'Kit-managed':'Existing Hermes'}</span> <span class="dim small">${esc(d.runtime.root)}</span></p>
   <div class="actions">${!d.runtime.available?'<button class="act" id="env-install">Install Hermes</button>':'<button class="quiet" id="check-version">Check version</button><button class="quiet" id="update-hermes">Update Hermes</button>'}
   ${known&&!known.installed?'<button class="act" id="adopt-companion">Adopt as a companion</button>':''}</div><p class="dim small">The vault lives outside Hermes’s code checkout. Updates are handled by Hermes; run Health checks afterwards.</p></div>
-  <div class="card"><h2>Local companion stack</h2><p>Install a local conversation model on the Hermes host, then choose image and voice engines for this companion.</p><div class="actions"><button class="act" id="open-local-models">Local models</button><button class="quiet" id="env-stack-images">Image studio</button><button class="quiet" id="env-stack-voice">Voice studio</button></div></div>
-  ${d.runtime.available?`<div class="card" data-environment-group="1"><h2>Inference Presets & Free Cascades</h2><p class="dim small">One-click model cascades. Automatically sets your primary model and ordered fallbacks for zero downtime.</p><div id="inference-presets" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:10px"></div></div>
-  <div class="card" data-environment-group="1"><h2>Models and fallbacks</h2><p class="dim small">Choose a model available to your account. A configured model is not yet a tested response.</p><datalist id="provider-ids"></datalist>
+  <div class="card" data-hermes-card="stack"><h2>Local companion stack</h2><p>Install a local conversation model on the Hermes host, then choose image and voice engines for this companion.</p><div class="actions"><button class="act" id="open-local-models">Local models</button><button class="quiet" id="env-stack-images">Image studio</button><button class="quiet" id="env-stack-voice">Voice studio</button></div></div>
+  ${d.runtime.available?`<div class="card" data-hermes-card="presets"><h2>Inference presets & Free Cascades</h2><p class="dim small">One-click model cascades. Automatically sets your primary model and ordered fallbacks for zero downtime.</p><div id="inference-presets" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:10px"></div></div>
+  <div class="card" data-hermes-card="models"><h2>Models and fallbacks</h2><p class="dim small">Choose a model available to your account. A configured model is not yet a tested response.</p><datalist id="provider-ids"></datalist>
   <form id="models-form"><div class="form-grid"><label>Primary provider<input id="primary-provider" list="provider-ids" value="${esc(d.model.provider)}" placeholder="openrouter"></label><label>Primary model<input id="primary-model" value="${esc(d.model.default)}" placeholder="provider/model-name" required></label><label class="wide">Custom base URL (optional)<input id="primary-url" type="url" value="${esc(d.model.base_url)}" placeholder="http://localhost:11434/v1"></label></div>
   <details open><summary>Ordered fallback providers</summary><p class="dim small">Hermes tries this chain when the primary is unavailable. No provider chain can cover a complete network outage.</p><div id="fallbacks"></div><button class="quiet" id="add-fallback" type="button">Add a fallback</button></details>
   <details><summary>Models for background jobs</summary><div class="form-grid">${['loops','reflection'].map(t=>`<label>${t} provider<input id="tier-${t}-provider" list="provider-ids" value="${esc(d.tiers[t]?.provider||'')}"></label><label>${t} model<input id="tier-${t}-model" value="${esc(d.tiers[t]?.model||'')}" placeholder="Follow profile default"></label><label>${t} reasoning<select id="tier-${t}-effort">${options([['','Hermes default'],['none','None'],['low','Low'],['medium','Medium'],['high','High']],d.tiers[t]?.reasoning_effort||'')}</select></label>`).join('')}</div></details>
   <div class="actions"><button class="act">Save model configuration</button><button class="quiet" id="test-model" type="button">Test saved model chain</button><button class="quiet" id="apply-models" type="button">Apply job models</button></div></form><p class="dim small">${esc(d.restart_note)}</p></div>
-  <div class="card" data-environment-group="1"><h2>Accounts and credentials</h2><p class="dim">For ChatGPT or Grok account sign-in, choose Account sign-in / OAuth and select the provider in Hermes’s menu. The available login methods come from your installed Hermes version. You can also use an API key below. Stored keys are never sent back to this page.</p>
+  <div class="card" data-hermes-card="accounts"><h2>Accounts and credentials</h2><p class="dim">For ChatGPT or Grok account sign-in, choose Account sign-in / OAuth and select the provider in Hermes’s menu. The available login methods come from your installed Hermes version. You can also use an API key below. Stored keys are never sent back to this page.</p>
   <form id="credentials-form"><div class="form-grid"><label>Credential<select id="credential-name"><option>Loading provider catalog…</option></select></label><label>Value (blank removes it)<input id="credential-value" type="password" autocomplete="new-password"></label></div><div class="actions"><button class="act">Save credential</button></div></form><div id="credential-status" class="dim small"></div>
   <div class="actions"><button class="quiet native-console" data-console="models">Account sign-in / OAuth</button><button class="quiet native-console" data-console="messaging">Telegram & messaging</button><button class="quiet native-console" data-console="tools">Tools, voice, images & MCP</button><button class="quiet native-console" data-console="setup">Full Hermes setup</button><button class="quiet" id="advanced-config">All Hermes settings</button></div><div id="native-console"></div></div>
-  <div class="card" data-environment-group="2" id="gateway-controls"><h2>Gateway & background life</h2><p class="dim">Closing this app leaves an independently running Hermes gateway and its enabled jobs running. The host must stay awake; photos require an enabled schedule and working image provider.</p><div class="grid">${Object.entries(gateway.preflight.checks).map(([key,value])=>`<div><span class="pill ${value?'status-good':'status-warn'}">${value?'Verified':'Not verified'}</span><p class="small">${esc(key.replaceAll('_',' '))}</p></div>`).join('')}</div><p class="small dim">Gateway owner: ${esc(gateway.preflight.owner_home)}</p>${gateway.preflight.notes.map(n=>`<p class="small warn">${esc(n)}</p>`).join('')}<p class="dim">Review the hooks once, verify the provider, then start the gateway and activate the routine. Model-free maintenance remains active when the routine is paused.</p>
+  <div class="card" data-hermes-card="gateway" id="gateway-controls"><h2>Gateway & background life</h2><p class="dim">Closing this app leaves an independently running Hermes gateway and its enabled jobs running. The host must stay awake; photos require an enabled schedule and working image provider.</p><div class="grid">${Object.entries(gateway.preflight.checks).map(([key,value])=>`<div><span class="pill ${value?'status-good':'status-warn'}">${value?'Verified':'Not verified'}</span><p class="small">${esc(key.replaceAll('_',' '))}</p></div>`).join('')}</div><p class="small dim">Gateway owner: ${esc(gateway.preflight.owner_home)}</p>${gateway.preflight.notes.map(n=>`<p class="small warn">${esc(n)}</p>`).join('')}<p class="dim">Review the hooks once, verify the provider, then start the gateway and activate the routine. Model-free maintenance remains active when the routine is paused.</p>
   <div class="actions"><button class="quiet" id="review-hooks">Review & approve hooks</button><button class="quiet" id="repair-companion">Install / repair jobs</button><button class="act" id="activate-routine">Activate routine</button><button class="quiet" id="pause-routine">Pause routine</button><button class="quiet" id="doctor-companion">Check installation</button></div><div id="hook-review"></div>
   <details open><summary>Gateway service controls</summary><div class="actions">${['status','install','start','stop','restart','uninstall','restart-root'].map(a=>`<button class="quiet gateway-action" data-action="${a}">${a[0].toUpperCase()+a.slice(1)}</button>`).join('')}</div>
   <label>Gateway ownership<select id="gateway-mode"><option value="">Keep current ownership</option><option value="shared">Use the shared root gateway</option><option value="dedicated">Use this profile’s own gateway</option></select></label><button class="quiet" id="save-gateway-mode">Apply ownership</button><p class="dim small">Changing ownership can require restarting the root gateway. A shared gateway restart affects all profiles it serves.</p></details></div>
-  ${PROFILE&&PROFILE!=='default'?`<div class="card"><h2>Profile lifecycle</h2><p class="dim">Archive this profile to remove it from the roster. Its external vault stays intact, and you can restore the profile later.</p><button class="quiet" id="archive-profile">Archive ${esc(PROFILE)}</button></div>`:''}`:''}
+  ${PROFILE&&PROFILE!=='default'?`<div class="card" data-hermes-card="lifecycle"><h2>Profile lifecycle</h2><p class="dim">Archive this profile to remove it from the roster. Its external vault stays intact, and you can restore the profile later.</p><button class="quiet" id="archive-profile">Archive ${esc(PROFILE)}</button></div>`:''}`:''}
   <div id="environment-onboarding"></div>`;
   $('open-local-models').onclick=()=>showTab('local-models');$('env-stack-images').onclick=()=>showTab('image-studio');$('env-stack-voice').onclick=()=>showTab('voice');
   bindAction('env-install','/install');bindAction('check-version','/maintenance/version');
@@ -672,10 +675,10 @@ workspaceHandlers.environment=async()=>{
   bindAction('repair-companion','/maintenance/repair');bindAction('activate-routine','/maintenance/activate');bindAction('pause-routine','/maintenance/pause');bindAction('doctor-companion','/maintenance/doctor');
   $('credentials-form').onsubmit=async e=>{e.preventDefault();await post('/credentials',{name:$('credential-name').value,value:$('credential-value').value});$('credential-value').value='';notice('Credential saved. It will not be shown again.');};
   $('review-hooks').onclick=async()=>{const h=await api('/hooks');$('hook-review').innerHTML=`<details open><summary>Commands Hermes will run</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(JSON.stringify(h.hooks,null,2))}</pre><p class="dim">${esc(h.note)}</p><label>First message<input id="hook-message" value="Hello."></label><button class="act" id="approve-hooks">Approve these hooks and send my first message</button></details>`;bindAction('approve-hooks','/hooks/approve',()=>({digest:h.digest,message:$('hook-message').value}));};
-  for(const b of $('environment').querySelectorAll('.gateway-action'))b.onclick=async()=>{const affects=['stop','restart','uninstall','restart-root'].includes(b.dataset.action);if(affects&&!confirm('This can affect every profile served by the owning gateway. Continue?'))return;await action('/gateway/'+b.dataset.action,{affects_all_profiles:affects,root_restarted:false});};
+  for(const b of host.querySelectorAll('.gateway-action'))b.onclick=async()=>{const affects=['stop','restart','uninstall','restart-root'].includes(b.dataset.action);if(affects&&!confirm('This can affect every profile served by the owning gateway. Continue?'))return;await action('/gateway/'+b.dataset.action,{affects_all_profiles:affects,root_restarted:false});};
   $('save-gateway-mode').onclick=()=>{if($('gateway-mode').value)return action('/gateway/'+$('gateway-mode').value);};
   if($('archive-profile'))$('archive-profile').onclick=async()=>{const name=prompt('Type '+PROFILE+' to archive it. Stop its gateway first.');if(name===PROFILE)await action('/profile/archive',{confirm:name},()=>navigateProfile('default','roster'));};
-  for(const b of $('environment').querySelectorAll('.native-console'))b.onclick=()=>openConsole(b.dataset.console);
+  for(const b of host.querySelectorAll('.native-console'))b.onclick=()=>openConsole(b.dataset.console);
   $('advanced-config').onclick=async()=>{
     const data=await api('/config'),entries=[];
     const flatten=(value,prefix='')=>{for(const [key,item] of Object.entries(value)){const path=prefix?prefix+'.'+key:key;if(item==='[configured]')continue;if(item&&typeof item==='object'&&!Array.isArray(item))flatten(item,path);else entries.push([path,item]);}};flatten(data.config);
@@ -686,14 +689,14 @@ workspaceHandlers.environment=async()=>{
     $('config-value-form').onsubmit=async e=>{e.preventDefault();const key=$('setting-select').value==='__custom__'?$('config-key').value:$('setting-select').value;let value=$('config-value').value;const previous=entries.find(([k])=>k===key)?.[1];if(typeof previous!=='string'){try{value=JSON.parse(value);}catch{}}await action('/config',{key,value});};
   };
   // Catalog discovery runs separately so a slow Hermes import doesn't block the workspace.
-  api('/providers').then(p=>{if(current!=='environment'||!$('provider-ids'))return;providerRows=p.providers;$('provider-ids').innerHTML=p.providers.map(x=>`<option value="${esc(x.slug)}">${esc(x.label)}</option>`).join('');
+  api('/providers').then(p=>{if(!host.isConnected||!$('provider-ids'))return;providerRows=p.providers;$('provider-ids').innerHTML=p.providers.map(x=>`<option value="${esc(x.slug)}">${esc(x.label)}</option>`).join('');
     const keys=new Map();for(const row of p.providers)for(const key of row.api_key_env_vars||[])keys.set(key,row.label+' · '+key);
     for(const key of ['TELEGRAM_BOT_TOKEN','TELEGRAM_ALLOWED_USERS','DISCORD_BOT_TOKEN','DISCORD_ALLOWED_USERS'])keys.set(key,key);
     $('credential-name').innerHTML=options([...keys],'');$('credential-status').textContent=p.providers.filter(p=>p.credential_configured).map(p=>p.label+' configured').join(' · ')||'No API key detected. OAuth accounts can be managed through Provider sign-in.';
   }).catch(e=>{if($('credential-status'))$('credential-status').textContent=e.message;});
   api('/inference/presets').then(res=>{
     const c=$('inference-presets');
-    if(!c||current!=='environment'||!res.presets)return;
+    if(!c||!host.isConnected||!res.presets)return;
     c.innerHTML=res.presets.map(p=>`
       <div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:color-mix(in srgb,var(--ink) 2%,transparent);display:flex;flex-direction:column;justify-content:space-between">
         <div>
@@ -716,7 +719,7 @@ workspaceHandlers.environment=async()=>{
         try{
           const r=await post('/inference/apply-preset',{id:b.dataset.presetId});
           notice(r.note||'Preset applied.');
-          workspaceHandlers.environment();
+          renderHermesInto(host);
         }catch(err){
           b.disabled=false;b.textContent='Apply Preset';
           notice('Failed to apply preset: '+err.message);
@@ -724,7 +727,7 @@ workspaceHandlers.environment=async()=>{
       };
     }
   }).catch(()=>{});
-};
+}
 function addFallback(row){const el=document.createElement('div');el.className='row';el.style.marginBottom='10px';el.innerHTML=`<label>Provider<input class="fallback-provider" list="provider-ids" value="${esc(row.provider||'')}"></label><label>Model<input class="fallback-model" value="${esc(row.model||'')}" required></label><button class="quiet" type="button" style="flex:0 0 auto;align-self:center">Remove</button>`;el.querySelector('button').onclick=()=>el.remove();$('fallbacks').append(el);}
 let consoleId=null,consolePoll=null;
 async function openConsole(which){
@@ -742,8 +745,6 @@ async function openConsole(which){
   async function poll(){if(!consoleId||!$('terminal-screen'))return;const state=await api('/terminal/'+consoleId);$('terminal-screen').textContent=state.screen;if(state.finished){sessionStorage.removeItem('console-'+INSTALLATION+'-'+PROFILE);notice('Hermes console finished. Refresh the page to see updated settings.');return;}consolePoll=setTimeout(poll,350);}
   clearTimeout(consolePoll);await poll();$('native-console').scrollIntoView({behavior:'smooth'});
 }
-const originalHealth=renderHealth;
-workspaceHandlers.health=async()=>{await originalHealth();const d=await api('/jobs');$('health').insertAdjacentHTML('afterbegin',heading('Keeping life running','Inspect individual jobs, queue a run, or change a schedule. Hermes remains the scheduler.')+`<div class="card"><h2>Job controls</h2><div class="actions"><button class="quiet" id="job-history">Recent run history</button></div>${d.jobs.map(j=>`<div class="actions"><span style="flex:1">${esc(j.name)} <span class="dim small">${esc(j.schedule?.expr||'')}</span></span><button class="quiet job-control" data-job="${esc(j.id)}" data-action="run">Run next tick</button>${!j.no_agent?`<button class="quiet job-control" data-job="${esc(j.id)}" data-action="${j.enabled?'pause':'resume'}">${j.enabled?'Pause':'Resume'}</button>`:''}<button class="quiet job-control" data-job="${esc(j.id)}" data-action="edit">Schedule</button></div>`).join('')||'<p class="dim">No jobs installed yet. Use Install / repair jobs in Hermes & providers.</p>'}</div>`);bindAction('job-history','/jobs/history');for(const b of $('health').querySelectorAll('.job-control'))b.onclick=()=>{const payload={};if(b.dataset.action==='edit'){const schedule=prompt('New cron expression or Hermes schedule:');if(!schedule)return;payload.schedule=schedule;}return action('/jobs/'+encodeURIComponent(b.dataset.job)+'/'+b.dataset.action,payload);};};
 const imageTimeline=renderTimeline;
 workspaceHandlers.timeline=async()=>{await imageTimeline();const d=await api('/life');$('timeline').insertAdjacentHTML('afterbegin',heading('A continuing life','Their recorded days, alongside the images you choose to keep.')+`<div class="card"><h2>Recent lived state</h2>${d.events.map(e=>`<div style="padding:12px 0;border-bottom:1px solid var(--edge)"><span class="dim small">${esc(new Date(e.recorded_at).toLocaleString())}</span> <span class="pill">${e.state.confirmed===false?'Carried forward · unconfirmed':'Recorded by companion'}</span><p>${esc(e.state.activity)} · ${esc(e.state.location)}</p><span class="dim">${esc(e.state.mood)}</span></div>`).join('')||'<p class="dim">No lived state yet. After setup, the background routine starts recording their day.</p>'}</div>`);};
 

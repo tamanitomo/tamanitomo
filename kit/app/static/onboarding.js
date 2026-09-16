@@ -362,7 +362,7 @@ window.onboarding=async function(adopt){
     for(const k of Object.keys(answers))if(answers[k]===''||answers[k]==null)delete answers[k];
     const profile=draft.profile;
     action(adopt?'/adopt':'/profiles',adopt?{answers}:{profile,answers},
-           r=>navigateProfile(r.profile||PROFILE,'environment'));
+           r=>{aimSettings('hermes-core');navigateProfile(r.profile||PROFILE,'settings');});
   }
 
   basics();

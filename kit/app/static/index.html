@@ -114,7 +114,6 @@
   <section id="chat" hidden></section>
   <section id="relationship" hidden></section>
   <section id="vault" hidden></section>
-  <section id="environment" hidden></section>
   <section id="now"><div class="card dim" role="status">Loading overview…</div></section>
   <section id="timeline" hidden></section>
   <section id="photos" hidden></section>
@@ -124,13 +123,12 @@
   <section id="knows" hidden></section>
   <section id="settings" hidden></section>
   <section id="identity" hidden></section>
-  <section id="health" hidden></section>
   <section id="more" hidden></section>
 </main>
 <nav id="tabbar" class="tabbar" aria-label="Primary"></nav>
 
 <script>
-const TABS=[['now','Home'],['chat','Conversation'],['timeline','Timeline'],['photos','Photos & albums'],['journals','Journal'],['creations','Creations'],['relationship','Together'],['loops','Plans & calendar'],['knows','Memories'],['vault','Vault'],['identity','Identity'],['settings','Preferences'],['environment','Hermes settings'],['health','Jobs & health'],['roster','Companions'],['more','More']];
+const TABS=[['now','Home'],['chat','Conversation'],['timeline','Timeline'],['photos','Photos & albums'],['journals','Journal'],['creations','Creations'],['relationship','Together'],['loops','Plans & calendar'],['knows','Memories'],['vault','Vault'],['identity','Identity'],['settings','Settings'],['roster','Companions'],['more','More']];
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const params=new URLSearchParams(location.search);
@@ -295,9 +293,7 @@ async function render(name){
     if(name==='timeline')return await renderTimeline();
     if(name==='loops')return await renderLoops();
     if(name==='knows')return await renderKnows();
-    if(name==='settings')return await renderSettings();
     if(name==='identity')return await renderIdentity();
-    if(name==='health')return await renderHealth();
   }catch(e){$(name).innerHTML=`<div class="card bad">Could not load this: ${esc(e.message)}</div>`;}
 }
 
@@ -427,284 +423,6 @@ async function renderKnows(){
     <ul>${d.questions.map(q=>`<li>${esc(q.text)}</li>`).join('')||'<li class="dim">No open questions.</li>'}</ul></div>`;
   for(const b of $('knows').querySelectorAll('[data-forget]'))
     b.onclick=async()=>{await api(`/facts/${b.dataset.forget}/forget`,{method:'POST'});renderKnows();};
-}
-
-async function renderSettings(){
-  const s=await api('/settings');
-  const perm=(k)=>['yes','ask','no'].map(v=>`<option value="${v}"${s.content_permissions[k]===v?' selected':''}>${v}</option>`).join('');
-  $('settings').innerHTML=`
-  <div class="card" data-preference-panel="contact">
-    <h2>Quiet Hours & Boundaries</h2>
-    <p class="dim">Replies are always allowed at any hour. Quiet hours only govern messages the companion initiates proactively.</p>
-    <div class="row" style="margin-top:14px">
-      <label>Quiet from<input id="qs" value="${esc(s.quiet_start)}" placeholder="22:00"></label>
-      <label>until<input id="qe" value="${esc(s.quiet_end)}" placeholder="08:00"></label>
-    </div>
-    <label style="margin-top:10px;display:flex;align-items:center;gap:8px">
-      <input type="checkbox" id="adapt" ${s.adaptive_quiet?'checked':''} style="width:auto">
-      <span>Let quiet hours drift toward the hours you actually keep</span>
-    </label>
-
-    <h2 style="margin-top:28px">Outreach & Initiative</h2>
-    <p class="dim">Govern how often and in what formats your companion initiates contact outside your active chats.</p>
-    <div class="form-grid" style="margin-top:14px">
-      <div>
-        <label>Maximum proactive messages a day
-          <input id="cap" type="number" required min="1" max="100" value="${s.outreach_per_day||3}" ${s.outreach_per_day===0?'disabled':''}>
-        </label>
-        <label style="margin-top:6px;display:flex;align-items:center;gap:8px">
-          <input id="cap-unlimited" type="checkbox" ${s.outreach_per_day===0?'checked':''} style="width:auto">
-          <span>No daily limit (unlimited proactive messages)</span>
-        </label>
-      </div>
-      <label>May write first
-        <select id="out">${options([['free','Social messages welcome'],['updates_only','Only meaningful updates'],['never','Replies only']],s.outreach)}</select>
-      </label>
-      <label>Unprompted photos
-        <select id="pimage">${perm('image')}</select>
-      </label>
-      <label>Unprompted voice notes
-        <select id="pvoice">${perm('voice')}</select>
-      </label>
-    </div>
-  </div>
-
-  <div class="card" data-preference-panel="routine">
-    <h2>Daily Rhythm & Autonomy</h2>
-    <p class="dim">Independent activity windows when your companion reflects on the day, reads, or runs autonomous routines.</p>
-    <label style="margin-top:12px">Autonomy Windows (HH:MM, comma separated)
-      <input id="win" value="${esc(s.autonomy_windows.join(', '))}" placeholder="09:00, 14:00, 20:00">
-    </label>
-
-    <h2 style="margin-top:28px">Continuity & Shared Memory</h2>
-    <p class="dim">Control cross-companion knowledge sharing and shared context across profiles.</p>
-    <label style="margin-top:12px;display:flex;align-items:center;gap:8px">
-      <input type="checkbox" id="share" ${s.share_people?'checked':''} style="width:auto">
-      <span>Share what this companion learns about you with other companions</span>
-    </label>
-  </div>
-
-  <div class="card" data-preference-panel="photos">
-    <h2>Photo Sessions & Visual Timeline</h2>
-    <p class="dim">Create visual glimpses of their recorded scene every 15 minutes. Requires an active image provider; generated scenes appear in Photos & albums.</p>
-    <div class="form-grid" style="margin-top:14px">
-      <label>Image style
-        <select id="image-style">${Object.entries(s.image_styles).map(([k,v])=>`<option value="${esc(k)}" ${s.image_style===k?'selected':''}>${esc(v)}</option>`).join('')}</select>
-      </label>
-      <label>Timeline storage budget, GB
-        <input id="gb" type="number" step="0.5" min="0" value="${s.timeline_budget_gb}">
-      </label>
-    </div>
-    <label style="margin-top:14px;display:flex;align-items:center;gap:8px">
-      <input type="checkbox" id="tl" ${s.image_timeline?'checked':''} style="width:auto">
-      <span>Enable 15-minute photo sessions</span>
-    </label>
-  </div>
-
-  <div class="card" data-preference-panel="relationship">
-    <h2>Connection & Familiarity Pace</h2>
-    <p class="dim">Configure how connection and familiarity unfold over time.</p>
-    <div class="form-grid" style="margin-top:14px">
-      <label>Progression display
-        <select id="progression">${options([['off','Hide progression'],['subtle','Subtle, natural familiarity'],['milestones','Show shared milestones']],s.relationship_progression)}</select>
-      </label>
-      <label>Relationship pace
-        <select id="pace">${options([['slow','Slow and gradual'],['natural','Natural'],['quick','Open to quicker familiarity']],s.relationship_pace)}</select>
-      </label>
-      <label>Interaction with other companions
-        <select id="peer-interaction">${options([['true','Enabled'],['false','Disabled']],String(s.peer_interaction))}</select>
-      </label>
-    </div>
-
-    <h2 style="margin-top:28px">Tone & Boundaries</h2>
-    <div class="form-grid" style="margin-top:14px">
-      <label>Relationship Intimacy & Romance
-        <select id="adult-themes">${options([['false','Friendly / Platonic Only'],['true','Romantic Connection Enabled']],String(s.explicit))}</select>
-      </label>
-    </div>
-    <label style="margin-top:16px;display:flex;align-items:center;gap:8px">
-      <input type="checkbox" id="bars" ${s.bars?'checked':''} style="width:auto">
-      <span>Show connection, feelings, and closeness meters</span>
-    </label>
-  </div>
-
-  <div class="card" data-preference-panel="senses">
-    <h2>Location & Living Context</h2>
-    <p class="dim">Anchors local time, weather awareness, and realistic regional context for your shared dialogue.</p>
-    <label style="margin-top:12px">Where you live
-      <input id="loc" value="${esc(s.location)}" placeholder="Raleigh, NC">
-    </label>
-
-    <h2 style="margin-top:28px">Ambient Awareness Sensors</h2>
-    <p class="dim">Passive contextual inputs that help your companion stay grounded in reality without requiring explicit messages.</p>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:14px">
-      ${Object.entries(s.available_sensors).map(([k,blurb])=>`
-        <label style="background:var(--panel);border:1px solid var(--edge);border-radius:8px;padding:12px 14px;display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer">
-          <input type="checkbox" data-sensor="${k}" ${s.sensors.includes(k)?'checked':''} style="width:auto;margin-top:3px">
-          <div>
-            <strong style="color:var(--ink);display:block;margin-bottom:2px">${k}</strong>
-            <span class="dim small" style="line-height:1.4">${esc(blurb)}</span>
-          </div>
-        </label>`).join('')}
-    </div>
-  </div>
-
-  <div class="card" data-preference-panel="network">
-    <h2>Server & Network Reachability</h2>
-    <p class="dim">Manage reachable addresses, ports, and remote security when running as a 24/7 background companion (e.g. on Android Termux or a local server).</p>
-    
-    <h3 style="margin-top:20px;font-size:15px">Connection Endpoints</h3>
-    <div id="network-endpoints-list" style="margin-top:10px;display:flex;flex-direction:column;gap:10px">
-      <div style="background:var(--panel);border:1px solid var(--edge);border-radius:10px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-        <div>
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-            <strong style="color:var(--ink)">On-Device (Localhost)</strong>
-            <span class="pill status-good" style="font-size:11px">Direct · Bypass PIN</span>
-          </div>
-          <code id="net-localhost-url" style="font-size:13px;color:var(--accent)">http://localhost:38439</code>
-          <p class="dim small" style="margin:4px 0 0">Use this in the browser directly on the phone or host machine.</p>
-        </div>
-        <button class="quiet" type="button" id="copy-localhost-btn">Copy</button>
-      </div>
-
-      <div id="net-lan-container" style="background:var(--panel);border:1px solid var(--edge);border-radius:10px;padding:14px 16px">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px">
-          <div style="display:flex;align-items:center;gap:8px">
-            <strong style="color:var(--ink)">Local Wi-Fi Network (LAN)</strong>
-            <span class="pill status-warn" style="font-size:11px" id="net-pin-badge">Checking...</span>
-          </div>
-        </div>
-        <div id="net-lan-list" style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-          <span class="dim small">Discovering network addresses…</span>
-        </div>
-        <p class="dim small" style="margin:8px 0 0">Use these addresses to access your companion from a laptop, desktop, or tablet on your Wi-Fi.</p>
-      </div>
-    </div>
-
-    <h3 style="margin-top:28px;font-size:15px">Remote Access PIN Protection</h3>
-    <p class="dim">A simple 4-digit PIN required when connecting from another device on your local network. Localhost on the phone itself never requires a PIN.</p>
-    
-    <div style="margin-top:14px;max-width:440px">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-        <span class="pill ${s.remote_pin?'status-good':'status-warn'}" id="pin-status-pill">
-          ${s.remote_pin ? 'PIN Active' : 'No PIN (Open Access)'}
-        </span>
-        <span class="dim small" id="pin-status-text">
-          ${s.remote_pin ? 'Remote connections must enter this 4-digit PIN.' : 'Anyone on your Wi-Fi can view this workspace.'}
-        </span>
-      </div>
-
-      <label>4-Digit Security PIN
-        <div style="display:flex;gap:10px;margin-top:6px">
-          <input id="remote-pin-field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="${s.remote_pin?'••••':'e.g. 1234'}" style="letter-spacing:6px;font-size:18px;max-width:160px;text-align:center">
-          <button class="act" id="save-remote-pin" type="button">Set PIN</button>
-          ${s.remote_pin ? '<button class="quiet" id="clear-remote-pin" type="button">Remove PIN</button>' : ''}
-        </div>
-      </label>
-      <div id="pin-feedback" class="small" style="margin-top:8px" role="status"></div>
-    </div>
-  </div>
-
-  <div class="settings-save" id="settings-save" hidden><span class="settings-save-note">Unsaved changes</span><button class="act" id="save">Save preferences</button> <span id="saved" class="dim" role="status"></span></div>`;
-  api('/network').then(net=>{
-    if($('net-localhost-url'))$('net-localhost-url').textContent=net.localhost_url;
-    if($('copy-localhost-btn'))$('copy-localhost-btn').onclick=()=>{navigator.clipboard.writeText(net.localhost_url);if(typeof notice==='function')notice('Copied localhost URL');};
-    const lanList=$('net-lan-list');
-    if(lanList){
-      if(net.lan_urls&&net.lan_urls.length){
-        lanList.innerHTML=net.lan_urls.map(url=>`
-          <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);padding:8px 12px;border-radius:6px;border:1px solid var(--surface-2)">
-            <code style="color:var(--accent);font-size:13px">${esc(url)}</code>
-            <button class="quiet" type="button" style="padding:4px 10px;font-size:12px" data-copy-lan="${esc(url)}">Copy</button>
-          </div>
-        `).join('');
-        for(const b of lanList.querySelectorAll('[data-copy-lan]')){
-          b.onclick=()=>{navigator.clipboard.writeText(b.dataset.copyLan);if(typeof notice==='function')notice('Copied LAN URL');};
-        }
-      }else{
-        lanList.innerHTML='<span class="dim small">No external Wi-Fi IP detected.</span>';
-      }
-    }
-    const pinBadge=$('net-pin-badge');
-    if(pinBadge){
-      pinBadge.textContent=net.remote_pin_configured?'PIN Protected':'No PIN (Open Access)';
-      pinBadge.className='pill '+(net.remote_pin_configured?'status-good':'status-warn');
-    }
-  }).catch(()=>{});
-  const pinInput=$('remote-pin-field');
-  const savePinBtn=$('save-remote-pin');
-  const clearPinBtn=$('clear-remote-pin');
-  const pinFeedback=$('pin-feedback');
-  if(savePinBtn){
-    savePinBtn.onclick=async()=>{
-      const val=(pinInput.value||'').trim();
-      if(!val||val.length!==4||!/^\d{4}$/.test(val)){
-        pinFeedback.innerHTML='<span class="bad">PIN must be exactly 4 numeric digits.</span>';
-        return;
-      }
-      try{
-        savePinBtn.disabled=true;
-        await api('/settings',{method:'POST',body:JSON.stringify({remote_pin:val})});
-        pinFeedback.innerHTML='<span class="good">✓ 4-digit PIN saved and activated!</span>';
-        pinInput.value='';
-        setTimeout(()=>renderSettings(),1000);
-      }catch(err){
-        pinFeedback.innerHTML=`<span class="bad">${esc(err.message)}</span>`;
-      }finally{
-        savePinBtn.disabled=false;
-      }
-    };
-  }
-  if(clearPinBtn){
-    clearPinBtn.onclick=async()=>{
-      if(!confirm('Remove PIN protection? Anyone on your local Wi-Fi will be able to access the workspace without entering a PIN.'))return;
-      try{
-        clearPinBtn.disabled=true;
-        await api('/settings',{method:'POST',body:JSON.stringify({remote_pin:''})});
-        pinFeedback.innerHTML='<span class="good">✓ PIN protection removed.</span>';
-        setTimeout(()=>renderSettings(),1000);
-      }catch(err){
-        pinFeedback.innerHTML=`<span class="bad">${esc(err.message)}</span>`;
-      }finally{
-        clearPinBtn.disabled=false;
-      }
-    };
-  }
-  $('cap-unlimited').onchange=()=>{$('cap').disabled=$('cap-unlimited').checked;};
-  if($('spontaneous-nsfw')){$('spontaneous-nsfw').onchange=()=>{if($('spontaneous-nsfw').checked){if(!confirm('This setting will require a compatible image provider')){  $('spontaneous-nsfw').checked=false;}}};}
-  // The bar follows the page's dirty state, so it is present exactly when it
-  // has something to do.
-  const showSaveBar=()=>{const bar=$('settings-save');if(bar)bar.hidden=!hasEditorChanges('settings');};
-  const showSaveBarSoon=()=>setTimeout(showSaveBar,0);
-  showSaveBar();
-  $('settings').addEventListener('input',showSaveBarSoon);
-  $('settings').addEventListener('change',showSaveBarSoon);
-  $('save').onclick=async()=>{
-    if(!$('cap-unlimited').checked&&!$('cap').reportValidity())return;
-    const sensors=[...$('settings').querySelectorAll('[data-sensor]')].filter(x=>x.checked).map(x=>x.dataset.sensor);
-    try{
-      const result=await api('/settings',{method:'POST',body:JSON.stringify({
-        quiet_start:$('qs').value,quiet_end:$('qe').value,outreach:$('out').value,
-        outreach_per_day:$('cap-unlimited').checked?0:Number($('cap').value),adaptive_quiet:$('adapt').checked,
-        location:$('loc').value,sensors,
-        autonomy_windows:$('win').value.split(',').map(x=>x.trim()).filter(Boolean),
-        timeline_budget_gb:Number($('gb').value),image_timeline:$('tl').checked,image_style:$('image-style').value,
-        share_people:$('share').checked,bars:$('bars').checked,
-        relationship_progression:$('progression').value,relationship_pace:$('pace').value,
-        explicit:$('adult-themes')?$('adult-themes').value==='true':false,
-        peer_interaction:$('peer-interaction').value==='true',
-        content_permissions:{image:$('pimage').value,voice:$('pvoice').value}})});
-      if($('media-blur'))await post('/media/preferences',{
-        blur_nsfw_initially:$('media-blur').checked,
-        blur_unknown_initially:$('media-blur-unknown').checked,
-        review_before_delivery:$('media-review').checked,
-        review_provider:$('media-review-provider').value,
-        review_model:$('media-review-model').value});
-      clearEditorDirty('settings-main');clearEditorDirty('settings-media');
-      $('saved').textContent='Preferences saved';$('settings-save').hidden=true;
-      if(result.operation)await followOperation(result.operation);
-    }catch(e){$('saved').innerHTML=`<span class="bad">${esc(e.message)}</span>`;}
-  };
 }
 
 async function uploadPortrait(file){
@@ -1062,28 +780,6 @@ async function paintImageBlock(){
   };
 }
 
-async function renderHealth(){
-  const [h,cost]=await Promise.all([api('/health'),api('/cost')]);
-  const top=Math.max(1,...cost.days.map(d=>d.input));
-  $('health').innerHTML=`
-  <div class="card"><h2>System Diagnostics</h2>
-    ${h.problems.length?`<ul class="bad">${h.problems.map(p=>`<li>${esc(p)}</li>`).join('')}</ul>`
-      :'<p class="dim">All monitored services healthy.</p>'}</div>
-  <div class="card"><h2>Scheduled Jobs</h2><table><tr><th>Job</th><th>State</th><th>Last</th><th>Next</th></tr>
-    ${h.jobs.map(j=>`<tr><td>${esc(j.name)}${j.no_agent?' <span class="pill">no model</span>':''}</td>
-      <td>${j.enabled?'scheduled':'<span class="dim">paused</span>'}</td>
-      <td>${j.last_status==='error'?`<span class="bad">${esc(j.last_status)}</span>`:esc(j.last_status||'—')}</td>
-      <td class="dim">${esc((j.next_run_at||'—').slice(0,16).replace('T',' '))}</td></tr>`).join('')}</table></div>
-  <div class="card"><h2>Memory & Storage</h2>
-    <table>${h.memory.map(m=>`<tr><td>${esc(m.file)}</td><td>${m.chars.toLocaleString()} / ${m.cap.toLocaleString()}</td>
-      <td>${m.over_warn?'<span class="warn">approaching limit</span>':'<span class="dim">optimal</span>'}</td></tr>`).join('')}
-    ${h.storage.map(s=>`<tr><td>${esc(s.label)}</td><td>${s.files} files</td><td class="dim">${(s.bytes/1e6).toFixed(1)} MB</td></tr>`).join('')}
-    <tr><td>vault history</td><td colspan="2">${h.vault_repo?'<span class="dim">recording</span>':'<span class="warn">not a git repo</span>'}</td></tr></table></div>
-  <div class="card"><h2>Token Usage</h2>
-    ${cost.available?`<div class="spark">${cost.days.map(d=>`<i style="height:${Math.round(d.input/top*100)}%" title="${d.day}: ${d.input.toLocaleString()} in"></i>`).join('')}</div>
-      <p class="dim">${cost.days.length} day(s) recorded from Hermes usage log.</p>`
-      :'<p class="dim">No usage recorded yet.</p>'}</div>`;
-}
 
 setInterval(()=>{if(current==='now'&&!$('product-dialog').open)render('now').catch(()=>{});},30000);
 </script>
@@ -1095,4 +791,5 @@ setInterval(()=>{if(current==='now'&&!$('product-dialog').open)render('now').cat
 <script src="/static/onboarding.js"></script>
 <script src="/static/studios.js"></script>
 <script src="/static/voice-chat.js"></script>
+<script src="/static/settings.js"></script>
 </html>

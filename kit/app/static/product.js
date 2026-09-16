@@ -10,7 +10,7 @@ const primaryDestinations=['now','chat','photos','journals'];
 const navGroups=[
   ['Life & memories', ['identity','timeline','relationship','knows','loops','creations','vault']],
   ['Studios',         ['image-studio','voice','local-models']],
-  ['Setup & system',  ['settings','environment','health','roster']]
+  ['Setup & system',  ['settings','roster']]
 ];
 /* One line each, so the More page explains itself without being read twice. */
 const navBlurb={
@@ -19,15 +19,14 @@ const navBlurb={
   creations:'Files and things they have made',relationship:'Feelings, milestones and repair',
   loops:'Tasks, plans and open threads',knows:'What they remember about you',
   vault:'Shared notes and documents',identity:'Who they are — persona and soul',
-  settings:'Boundaries, quiet hours and appearance',environment:'Models, providers and the gateway',
-  health:'Scheduled jobs and diagnostics',roster:'All of your companions',
+  settings:'Companion, app and Hermes — all in one place',roster:'All of your companions',
   'image-studio':'Compose and generate images',voice:'Voice, speech and cloning',
   'local-models':'Run models on your own hardware'
 };
 /* The bottom bar has room for one word. */
 const navShort={now:'Home',chat:'Chat',timeline:'Timeline',photos:'Photos',journals:'Journal',
   creations:'Files',relationship:'Together',loops:'Tasks',knows:'Memory',vault:'Vault',
-  identity:'Identity',settings:'Settings',environment:'Hermes',health:'Jobs',roster:'Companions',
+  identity:'Identity',settings:'Settings',roster:'Companions',
   'image-studio':'Images',voice:'Voice','local-models':'Models',more:'More'};
 const shortLabel=id=>navShort[id]||tabLabel(id);
 const navDestinations=[...primaryDestinations,...navGroups.flatMap(([,ids])=>ids)];
@@ -56,8 +55,8 @@ function paintReviewBanner(){
   for(const host of document.querySelectorAll('#banner,#home-banner')){
     host.innerHTML=html;
     const health=host.querySelector('#header-health'),upd=host.querySelector('#header-update');
-    if(health)health.onclick=()=>showTab('health');
-    if(upd)upd.onclick=()=>showTab('environment');
+    if(health)health.onclick=()=>openSettings(null,'diagnostics');
+    if(upd)upd.onclick=()=>openSettings(null,'updates');
   }
 }
 async function refreshReviewBanner(){
@@ -198,7 +197,7 @@ if($('companion-switch-trigger'))$('companion-switch-trigger').onclick=openCompa
 $('close-dialog').onclick=async()=>{if(await confirmEditorLeave('dialog'))$('product-dialog').close();};
 $('product-dialog').addEventListener('cancel',async e=>{e.preventDefault();if(await confirmEditorLeave('dialog'))$('product-dialog').close();});
 function dialog(title,html){$('dialog-title').textContent=title;$('dialog-body').innerHTML=html;if(!$('product-dialog').open)$('product-dialog').showModal();}
-$('open-search').onclick=async()=>{if(!await confirmEditorLeave('dialog'))return;dialog('Go to page',`<input id="command-search" aria-label="Find a page" placeholder="Photos, providers, memories…"><div id="command-results" class="search-results"></div>`);const update=()=>{$('command-results').innerHTML=TABS.filter(t=>t[0]!=='more').filter(t=>(t[1]+' '+t[0]+' '+({environment:'providers models gateway administration hermes',health:'cron schedules diagnostics jobs',knows:'facts memories',vault:'files notes',settings:'contact preferences quiet hours','image-studio':'images workflows','voice':'audio cloning speech','local-models':'local models llama gguf hardware vulkan server'}[t[0]]||'')).toLowerCase().includes($('command-search').value.toLowerCase())).map(([id,label])=>`<button class="quiet" data-go="${id}">${icon(id)}${label}</button>`).join('');for(const b of $('command-results').querySelectorAll('button'))b.onclick=()=>{$('product-dialog').close();showTab(b.dataset.go);};};$('command-search').oninput=update;update();$('command-search').focus();};
+$('open-search').onclick=async()=>{if(!await confirmEditorLeave('dialog'))return;dialog('Go to page',`<input id="command-search" aria-label="Find a page" placeholder="Photos, providers, memories…"><div id="command-results" class="search-results"></div>`);const update=()=>{$('command-results').innerHTML=TABS.filter(t=>t[0]!=='more').filter(t=>(t[1]+' '+t[0]+' '+({knows:'facts memories',vault:'files notes',settings:'preferences contact quiet hours relationship awareness sensors network pin appearance updates diagnostics hermes providers models gateway credentials cron jobs schedules comfyui voice','image-studio':'images workflows','voice':'audio cloning speech','local-models':'local models llama gguf hardware vulkan server'}[t[0]]||'')).toLowerCase().includes($('command-search').value.toLowerCase())).map(([id,label])=>`<button class="quiet" data-go="${id}">${icon(id)}${label}</button>`).join('');for(const b of $('command-results').querySelectorAll('button'))b.onclick=()=>{$('product-dialog').close();showTab(b.dataset.go);};};$('command-search').oninput=update;update();$('command-search').focus();};
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();$('open-search').click();}});
 let profileTimezone;
 const stamp=(value,opts={})=>{if(!value)return 'Not recorded';const d=new Date(value);return Number.isNaN(d.getTime())?value:new Intl.DateTimeFormat(undefined,{timeZone:profileTimezone,month:'short',day:'numeric',...opts}).format(d);};
@@ -207,9 +206,16 @@ const when=value=>stamp(value,{hour:'numeric',minute:'2-digit'});
 const plain=value=>String(value||'').replace(/<!--[^]*?-->/g,'').replace(/[#*_`>\[\]]/g,'').trim();
 const excerpt=(value,n=180)=>{const text=plain(value);return text.length>n?text.slice(0,n).replace(/\s+\S*$/,'')+'…':text;};
 const empty=(symbol,title,body,button='')=>`<div class="empty-state">${icon(symbol)}<h3>${esc(title)}</h3><p>${esc(body)}</p>${button}</div>`;
-const jump=(id,label,primary=false)=>`<button class="${primary?'act':'link-button'}" data-route="${id}">${esc(label)} ${icon(id)}</button>`;
+/* A link to another page. `panel` names a panel of the Settings page, which
+   is one page with many panels rather than a page of its own. */
+const jump=(id,label,primary=false,panel='')=>`<button class="${primary?'act':'link-button'}" data-route="${id}"${panel?` data-settings-panel="${panel}"`:''}>${esc(label)} ${icon(id)}</button>`;
 let preferencePanel='contact';
-function wireRoutes(root){for(const b of root.querySelectorAll('[data-route]'))b.onclick=()=>{if(b.dataset.preference)preferencePanel=b.dataset.preference;if(b.dataset.environmentPanel){environmentPanel=Number(b.dataset.environmentPanel);environmentFocus=true;}showTab(b.dataset.route);};}
+function wireRoutes(root){
+  for(const b of root.querySelectorAll('[data-route]'))
+    b.onclick=()=>{if(b.dataset.settingsPanel)return openSettings(null,b.dataset.settingsPanel);showTab(b.dataset.route);};
+  for(const b of root.querySelectorAll('[data-settings-panel]:not([data-route])'))
+    b.onclick=()=>openSettings(null,b.dataset.settingsPanel);
+}
 function richText(raw){
   // Escape raw HTML first. Never execute HTML or fetch remote images in authored notes.
   let source=String(raw||'').replace(/<!--[^]*?-->/g,'');
@@ -525,7 +531,7 @@ workspaceHandlers.now=async()=>{
   }
 
   $('now').innerHTML=`
-  ${updateInfo?.has_update?`<div class="notice-strip" style="border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent)"><p><strong>Tamanitomo v${esc(updateInfo.latest_version)}</strong> is available. Run <code>./update.sh</code> in your host terminal to update.</p>${jump('environment','View')}</div>`:''}
+  ${updateInfo?.has_update?`<div class="notice-strip" style="border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent)"><p><strong>Tamanitomo v${esc(updateInfo.latest_version)}</strong> is available. Run <code>./update.sh</code> in your host terminal to update.</p><button class="link-button" data-settings-panel="updates">View updates</button></div>`:''}
 
   <div class="presence-sanctuary">
     <div class="presence-hero-card">
@@ -591,7 +597,7 @@ workspaceHandlers.now=async()=>{
         <div style="display:flex;justify-content:flex-end">
           <button class="link-button" id="read-latest" style="font-weight:600">Read ${esc(d.agent)}'s journal (${Math.max(1,Math.ceil(entry.words/220))} min) →</button>
         </div>
-      </article>`:empty('journals','No journal entries yet','Daily reflections are recorded automatically by the scheduled nightly routine at 4:00 AM.',jump('health','View routine status'))}
+      </article>`:empty('journals','No journal entries yet','Daily reflections are recorded automatically by the scheduled nightly routine at 4:00 AM.',jump('settings','View routine status',false,'jobs'))}
 
       </section>
 
@@ -823,7 +829,7 @@ workspaceHandlers.journals=async()=>{
       $('journal-browse-label').textContent='No entries';
       $('journal-page').innerHTML=empty('journals','No journal entries yet',
         'Daily reflections are recorded automatically by the scheduled nightly routine at 4:00 AM.',
-        jump('health','View routine status'));
+        jump('settings','View routine status',false,'jobs'));
       return;
     }
     pickerMonth=entries[0].day.slice(0,7);
@@ -1455,11 +1461,6 @@ workspaceHandlers.loops=async()=>{
 };
 
 // Management retains the native adapters; panel tabs reduce the long setup form.
-let environmentPanel=0,environmentFocus=false;
-const environmentPage=workspaceHandlers.environment;
-workspaceHandlers.environment=async()=>{await environmentPage();if(current!=='environment')return;const section=$('environment');const cards=[...section.children].filter(x=>x.classList.contains('card'));const tabs=document.createElement('div');tabs.className='segmented manage-tabs';tabs.setAttribute('role','tablist');const groups=['Overview','Models & accounts','Gateway & routine'].map((name,i)=>[name,cards.filter(card=>Number(card.dataset.environmentGroup||0)===i)]);if(groups[1][1].length){tabs.innerHTML=groups.map(([name],i)=>`<button role="tab" data-panel="${i}" aria-selected="${i===0}">${name}</button>`).join('');section.insertBefore(tabs,cards[0]);const pick=i=>{environmentPanel=i;for(const card of cards)card.hidden=!groups[i][1].includes(card);for(const b of tabs.children)b.setAttribute('aria-selected',String(+b.dataset.panel===i));};for(const b of tabs.children)b.onclick=()=>pick(+b.dataset.panel);pick(environmentPanel);}};
-const existingHealth=workspaceHandlers.health;
-workspaceHandlers.health=async()=>{await existingHealth();if(current==='health'){const box=document.createElement('div');box.className='actions';box.innerHTML=jump('environment','Gateway & routine settings')+jump('photos','Photo session status');$('health').prepend(box);wireRoutes(box);}};
 async function showGatewayActivity(){
   const data=await api('/activity');
   dialog('Gateway activity',`<p class="dim">Latest recorded job results and saved creations. Refresh to check again.</p><button class="quiet" id="refresh-activity">Refresh</button><div class="activity-feed">${data.events.map(e=>`<article class="moment-row"><div><span class="pill ${e.status==='error'?'status-bad':''}">${esc(e.status)}</span><p class="small dim">${e.at?when(e.at):'No run recorded'}</p></div><div><strong>${esc(e.title)}</strong>${e.detail?`<p class="small warn">${esc(e.detail)}</p>`:''}${e.kind==='job'?`<p class="dim small">${e.enabled?'Enabled':'Paused'} · Next: ${e.next?when(e.next):'Not scheduled'}</p>`:inlineMedia(e.media)}</div></article>`).join('')||'<p>No activity recorded yet.</p>'}</div>`);
@@ -1469,16 +1470,6 @@ const titled={identity:['Identity','Appearance specifications, persona definitio
 for(const [id,[title,description]] of Object.entries(titled)){const original=workspaceHandlers[id]||({identity:renderIdentity})[id];if(!original)continue;workspaceHandlers[id]=async()=>{await original();if(current!==id)return;const page=$(id);if(!page.querySelector('.page-title'))page.insertAdjacentHTML('afterbegin',heading(title,description));};}
 document.addEventListener('keydown',e=>{if(!$('product-dialog').open||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;if(e.key==='ArrowRight')$('next-photo')?.click();if(e.key==='ArrowLeft')$('previous-photo')?.click();});
 
-workspaceHandlers.health=async()=>{
-  const [health,jobs,cost]=await Promise.all([api('/health'),api('/jobs'),api('/cost')]);if(current!=='health')return;
-  profileTimezone=jobs.timezone;const failed=jobs.jobs.filter(j=>j.last_status==='error').length,active=jobs.jobs.filter(j=>j.enabled).length;
-  $('health').innerHTML=`<div class="home-title"><div><h2 class="page-title">Jobs & Health</h2><p class="intro">System status, scheduled cron routines, and resource metrics.</p></div><button class="quiet" id="health-repair">Install / repair jobs</button></div><div class="stat-strip"><button data-filter="all"><span>Installed jobs</span><strong>${jobs.jobs.length}</strong><span>Model tasks & routines</span></button><button data-filter="active"><span>Scheduled</span><strong>${active}</strong><span>Enabled in Hermes</span></button><button data-filter="paused"><span>Paused</span><strong>${jobs.jobs.length-active}</strong><span>Inactive routines</span></button><button data-filter="error"><span>Last run failed</span><strong>${failed}</strong><span>Inspect error history</span></button></div>
-  ${health.problems.length?`<div class="card"><h2>Needs attention</h2><ul>${health.problems.map(p=>`<li class="warn">${esc(p)}</li>`).join('')}</ul>${jump('environment','Open Hermes settings')}</div>`:'<p><span class="pill status-good">All monitored services operating normally</span></p>'}
-  <div class="filters"><label>Find a job<input id="job-search" type="search" placeholder="Photo, journal, morning…"></label><label>State<select id="job-filter"><option value="all">All jobs</option><option value="active">Scheduled</option><option value="paused">Paused</option><option value="error">Last run failed</option></select></label><button class="quiet" id="all-job-history">Run history</button><button class="quiet" id="gateway-activity">Activity feed</button><button class="quiet" data-route="environment" data-environment-panel="2">Gateway settings</button></div><div class="card" id="job-table"></div>
-  <div class="row"><div class="card"><h2>Memory capacity</h2>${health.memory.map(m=>`<div class="moment-row"><span class="small">${esc(m.file)}</span><div><strong>${Number(m.chars).toLocaleString()} / ${Number(m.cap).toLocaleString()}</strong><p class="small ${m.over_warn?'warn':'dim'}">${m.over_warn?'Approaching the limit':'Within capacity'}</p></div></div>`).join('')}</div><div class="card"><h2>Storage & history</h2>${health.storage.map(s=>`<p class="small">${esc(s.label)} <strong>${(s.bytes/1e6).toFixed(1)} MB</strong> · ${s.files} files</p>`).join('')}<p class="dim small">Vault version history ${health.vault_repo?'is recording':'is not initialized'}.</p></div></div><details><summary>Model usage · last 30 recorded days</summary>${cost.available?`<table><thead><tr><th>Day</th><th>Input tokens</th><th>Output tokens</th><th>Runs</th></tr></thead><tbody>${cost.days.slice().reverse().map(d=>`<tr><td>${esc(d.day)}</td><td>${d.input.toLocaleString()}</td><td>${d.output.toLocaleString()}</td><td>${d.runs}</td></tr>`).join('')}</tbody></table>`:'<p class="dim">No usage records are available yet.</p>'}</details>`;
-  const filter=()=>{const q=$('job-search').value.toLowerCase(),state=$('job-filter').value;const rows=jobs.jobs.filter(j=>(!q||j.name.toLowerCase().includes(q))&&(state==='all'||state==='active'&&j.enabled||state==='paused'&&!j.enabled||state==='error'&&j.last_status==='error'));$('job-table').innerHTML=rows.length?`<table><thead><tr><th>Routine</th><th>Next run</th><th>Last result</th><th>Controls</th></tr></thead><tbody>${rows.map(j=>`<tr><td><strong>${esc(j.name)}</strong><br><span class="small dim">${j.no_agent?'Local maintenance':'Model task'} · ${j.enabled?'Scheduled':'Paused'}</span><details><summary>Schedule</summary><code>${esc(j.schedule?.expr||'Not set')}</code></details></td><td>${when(j.next_run_at)}</td><td><span class="pill ${j.last_status==='error'?'status-bad':j.last_status==='ok'?'status-good':''}">${esc(j.last_status||'Not run yet')}</span></td><td><div class="actions"><button class="quiet" data-job="${esc(j.id)}" data-action="run">Run next tick</button>${!j.no_agent?`<button class="quiet" data-job="${esc(j.id)}" data-action="${j.enabled?'pause':'resume'}">${j.enabled?'Pause':'Resume'}</button>`:''}<button class="quiet" data-job="${esc(j.id)}" data-action="edit">Edit schedule</button></div></td></tr>`).join('')}</tbody></table>`:empty('health','No matching jobs','Try another search or install the companion routine.');for(const b of $('job-table').querySelectorAll('[data-job]'))b.onclick=async()=>{if(b.dataset.action==='edit'){dialog('Edit job schedule',`<form id="schedule-form"><label>Frequency<select id="schedule-preset"><option value="">Keep current / custom</option><option value="15">Every 15 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="daily">Every day</option></select></label><label id="schedule-time-label" hidden>Time<input type="time" id="schedule-time" value="09:00"></label><label>Cron expression or Hermes schedule<input id="schedule-input" value="${esc(jobs.jobs.find(j=>j.id===b.dataset.job)?.schedule?.expr||'')}" required></label><p class="dim small">For example, */15 * * * * means every 15 minutes. Times follow the Hermes configuration.</p><button class="act">Save schedule</button></form>`);const preset=()=>{const mode=$('schedule-preset').value;$('schedule-time-label').hidden=mode!=='daily';if(mode==='daily'){const [hour,minute]=$('schedule-time').value.split(':').map(Number);$('schedule-input').value=minute+' '+hour+' * * *';}else if(mode)$('schedule-input').value=mode==='60'?'0 * * * *':'*/'+mode+' * * * *';};$('schedule-preset').onchange=preset;$('schedule-time').onchange=preset;$('schedule-form').onsubmit=async e=>{e.preventDefault();const value=$('schedule-input').value;await action('/jobs/'+encodeURIComponent(b.dataset.job)+'/edit',{schedule:value});$('product-dialog').close();};}else await action('/jobs/'+encodeURIComponent(b.dataset.job)+'/'+b.dataset.action);};};
-  $('job-search').oninput=filter;$('job-filter').onchange=filter;for(const b of $('health').querySelectorAll('[data-filter]'))b.onclick=()=>{$('job-filter').value=b.dataset.filter;filter();};bindAction('health-repair','/maintenance/repair');bindAction('all-job-history','/jobs/history');$('gateway-activity').onclick=showGatewayActivity;filter();wireRoutes($('health'));
-};
 
 /* ------------------------------------------------------------- appearance UI
    Theme, light/dark behaviour and accent colour. The swatches read their
@@ -1729,49 +1720,6 @@ function wireImagesPanel(panel){
   };
 }
 
-const settingsPage=workspaceHandlers.settings||(typeof renderSettings==='function'?renderSettings:null);
-workspaceHandlers.settings=async()=>{
-  if(settingsPage)await settingsPage();if(current!=='settings')return;
-  const page=$('settings');
-  if(!page.querySelector('.page-title'))page.insertAdjacentHTML('afterbegin',heading('Preferences','Boundaries, quiet hours, appearance, and how this workspace runs.'));
-  let workspacePanel=page.querySelector('[data-preference-panel="workspace"]');
-  if(!workspacePanel){
-    workspacePanel=document.createElement('div');
-    workspacePanel.className='card';
-    workspacePanel.dataset.preferencePanel='workspace';
-    page.append(workspacePanel);
-  }
-  workspacePanel.innerHTML=appearancePanelHTML();
-  wireAppearancePanel(workspacePanel);
-
-  let imagesPanel=page.querySelector('[data-preference-panel="images"]');
-  if(!imagesPanel){
-    imagesPanel=document.createElement('div');
-    imagesPanel.className='card';
-    imagesPanel.dataset.preferencePanel='images';
-    page.append(imagesPanel);
-  }
-  imagesPanel.innerHTML=await imagesPanelHTML();
-  wireImagesPanel(imagesPanel);
-
-  const allCards=[...page.querySelectorAll('[data-preference-panel]')];
-  const oldTabs=page.querySelector('.segmented[aria-label="Preference categories"]');
-  if(oldTabs)oldTabs.remove();
-  const tabs=document.createElement('div');
-  tabs.className='segmented preference-tabs';
-  tabs.setAttribute('role','tablist');
-  tabs.setAttribute('aria-label','Preference categories');
-  tabs.innerHTML=[['contact','Contact'],['photos','Photo sessions'],['images','Image generation'],['routine','Daily rhythm'],['relationship','Relationship'],['senses','Awareness'],['network','Network & PIN'],['workspace','Appearance']].map(([id,label])=>`<button role="tab" data-preference="${id}">${label}</button>`).join('');
-  page.insertBefore(tabs,allCards[0]);
-  const pick=name=>{
-    preferencePanel=name;
-    for(const card of allCards)card.hidden=card.dataset.preferencePanel!==name;
-    for(const b of tabs.children)b.setAttribute('aria-selected',String(b.dataset.preference===name));
-  };
-  for(const b of tabs.children)b.onclick=()=>pick(b.dataset.preference);
-  pick(preferencePanel||'contact');
-};
-
 const identityBase=workspaceHandlers.identity;
 workspaceHandlers.identity=async()=>{
   await identityBase();if(current!=='identity')return;
@@ -1815,61 +1763,8 @@ workspaceHandlers.identity=async()=>{
   $('edit-full-soul').onclick=async()=>{if(!await confirmEditorLeave('identity'))return;const list=await api('/documents');let selected='SOUL.md',revision='';dialog('Edit companion documents',`<p>Every save keeps a backup. Edit the complete document, including writing created outside the kit. Other vault documents can be edited in Vault.</p><label>Document<select id="full-document">${options(list.documents.map(x=>[x,x]),selected)}</select></label><textarea id="full-soul" style="height:55vh"></textarea><button class="act" id="save-full-soul">Save document</button>`);const read=async()=>{if(!await confirmEditorLeave('dialog')){$('full-document').value=selected;return;}selected=$('full-document').value;const d=await api('/soul-document?document='+encodeURIComponent(selected));revision=d.revision;$('full-soul').value=d.text;};await read();$('full-document').onchange=read;$('save-full-soul').onclick=async()=>{await post('/soul-document',{document:selected,text:$('full-soul').value,revision});clearEditorDirty('dialog');$('product-dialog').close();await render('identity');notice('Document saved with a backup.');};};
   $('visual-builder').onclick=async()=>{if(!await confirmEditorLeave('identity'))return;const d=await api('/catalog');const rows=Object.entries(d.catalog.categories).filter(([k,v])=>v.section==='appearance');dialog('Visual creator',`<p>Choose a look, then review the complete appearance before saving.</p><label>Catalog<select id="visual-gender"><option value="female">Feminine</option><option value="male">Masculine</option></select></label><div id="visual-fields" class="form-grid"></div><button class="quiet" id="compose-look">Build description</button><label>Appearance description<textarea id="visual-description"></textarea></label><button class="act" id="save-look">Save appearance</button>`);const populate=()=>{$('visual-fields').innerHTML=rows.filter(([k,v])=>v[$('visual-gender').value]).map(([k,v])=>`<label>${esc(v.label)}<select aria-label="${esc(v.label)}" data-visual="${esc(k)}"><option value="">Leave unspecified</option>${options(v[$('visual-gender').value].map(r=>[r.text,r.label]),'')}<option value="__custom__">Write your own…</option></select><input aria-label="Custom ${esc(v.label)}" hidden placeholder="Your description"></label>`).join('');for(const select of $('visual-fields').querySelectorAll('select'))select.onchange=()=>{select.nextElementSibling.hidden=select.value!=='__custom__';};};populate();$('visual-gender').onchange=populate;$('compose-look').onclick=()=>{$('visual-description').value=[...$('visual-fields').querySelectorAll('select')].map(s=>s.value==='__custom__'?s.nextElementSibling.value:s.value).filter(Boolean).join(' ').replaceAll('{A}',chatName()).replaceAll('{AS_LOWER}','they').replaceAll('{AS}','They').replaceAll('{AP}','their').replaceAll('{AO}','them');};$('save-look').onclick=async()=>{const body=$('visual-description').value.trim();if(!body)throw Error('Build or write an appearance first.');await post('/identity-repair',{appearance:body});await post('/identity/appearance',{body});$('product-dialog').close();await render('identity');notice('Appearance saved.');};};
 };
+
+/* The Voice studio's page and its known voices. The studio itself is drawn by
+   studios.js; the Settings page reuses this same list for the engine picker. */
 TABS.push(['voice','Voice studio']);const voiceSection=document.createElement('section');voiceSection.id='voice';voiceSection.hidden=true;document.querySelector('main').append(voiceSection);if(!$('tabs').querySelector('[data-tab="voice"]')){const voiceNav=document.createElement('button');voiceNav.dataset.tab='voice';voiceNav.innerHTML=icon('voice')+'<span>Voice studio</span>';voiceNav.onclick=()=>showTab('voice');($('tabs').querySelector('.nav-more')||$('tabs').lastElementChild||$('tabs')).append(voiceNav);}
 const voiceChoices={edge:['en-US-AriaNeural','en-US-GuyNeural','en-GB-SoniaNeural'],piper:['en_US-lessac-medium'],kittentts:['Jasper','Bella','Luna','Bruno','Rosie','Hugo','Kiki','Leo'],openai:['alloy','echo','fable','onyx','nova','shimmer'],xai:['eve','ara','rex','sal','leo'],gemini:['Kore','Puck','Charon','Aoede'],neutts:[],elevenlabs:[],minimax:['English_expressive_narrator'],mistral:[]};
-workspaceHandlers.voice=async()=>{
- const d=await api('/voice'),tts=d.tts;
- $('voice').innerHTML=heading('Voice studio','Choose how your companion sounds. Local engines run on the computer hosting the kit; cloud engines use their connected accounts.')+`<div class="card"><form id="voice-form"><div class="form-grid"><label>Speech engine<select id="voice-provider">${options([['edge','Edge · online, no API key'],['piper','Piper · local'],['kittentts','KittenTTS · local'],['neutts','NeuTTS · local reference voice'],['openai','OpenAI'],['xai','xAI / Grok'],['elevenlabs','ElevenLabs'],['minimax','MiniMax'],['gemini','Gemini'],['mistral','Mistral']],tts.provider||'edge')}</select></label><label id="voice-picker-label">Voice<select id="voice-picker" aria-label="Voice"></select><input id="voice-custom" aria-label="Custom voice name or ID" hidden placeholder="Voice name or ID"></label><label id="voice-speed-label">Speaking speed <output id="speed-value">1</output>×<input id="voice-speed" type="range" min="0.7" max="1.5" step="0.05" value="1"></label></div><label id="voice-pitch-label" hidden>Pitch <output id="pitch-value">0</output><input id="voice-pitch" type="range" min="-12" max="12" step="1" value="0"></label><div id="voice-reference" hidden><p>Use a clear WAV recording, 1–30 seconds, and the exact words spoken. Choose a voice you have permission to use.</p><label>Reference audio<input id="voice-clip" type="file" accept=".wav,audio/wav"></label><label>Words spoken in the clip<textarea id="voice-transcript">${esc(tts.neutts?.ref_text||'')}</textarea></label><p>${tts.neutts?.ref_audio?'A reference clip is configured.':'No reference clip configured; Hermes uses its default sample.'}</p></div><div class="actions"><button class="act">Save voice</button><button type="button" class="quiet" id="install-local-voice">Install selected local engine</button><button type="button" class="quiet" id="voice-install">Full speech setup</button></div></form></div><div class="card"><h2>Try the saved voice</h2><label>Speech verification phrase<input id="voice-sample" type="text" readonly value="Hello! It’s really good to spend a little time together." style="background:color-mix(in srgb,var(--ink) 3%,transparent);color:var(--ink-2);cursor:default"></label><button class="act" id="preview-voice">Generate preview</button><div id="voice-player"></div><p class="dim">Cloud previews may use account credits. Missing local dependencies appear as an error; use Install / configure engines to install them through Hermes setup.</p></div>`;
- const update=()=>{const provider=$('voice-provider').value,cfg=tts[provider]||{},value=cfg.voice||cfg.voice_id||voiceChoices[provider][0]||'';const known=voiceChoices[provider].includes(value);$('voice-picker').innerHTML=options(voiceChoices[provider].map(v=>[v,v]),value)+'<option value="__custom__">Write your own…</option>';$('voice-picker').value=known?value:'__custom__';$('voice-custom').value=known?'':value;$('voice-custom').hidden=known;$('voice-picker-label').hidden=provider==='neutts';$('voice-reference').hidden=provider!=='neutts';$('voice-speed-label').hidden=!['edge','openai','xai','minimax','kittentts'].includes(provider);$('voice-pitch-label').hidden=provider!=='minimax';$('voice-pitch').value=cfg.pitch||0;$('pitch-value').textContent=$('voice-pitch').value;$('install-local-voice').hidden=!['piper','neutts','kittentts'].includes(provider);$('voice-speed').value=cfg.speed||1;$('speed-value').textContent=$('voice-speed').value;};update();$('voice-provider').onchange=update;$('voice-picker').onchange=()=>{$('voice-custom').hidden=$('voice-picker').value!=='__custom__';};$('voice-speed').oninput=()=>{$('speed-value').textContent=$('voice-speed').value;};
- $('voice-pitch').oninput=()=>{$('pitch-value').textContent=$('voice-pitch').value;};$('install-local-voice').onclick=()=>action('/voice/install',{provider:$('voice-provider').value});
- $('voice-form').onsubmit=async e=>{e.preventDefault();const file=$('voice-clip').files[0];if(file&&$('voice-provider').value==='neutts'){const r=await fetch(scoped('/api/voice/reference'),{method:'POST',headers:{'content-type':'application/octet-stream',...(token?{'x-companion-token':token}:{})},body:file});if(!r.ok)throw Error((await r.json()).detail);}await action('/voice',{provider:$('voice-provider').value,voice:$('voice-picker').value==='__custom__'?$('voice-custom').value:$('voice-picker').value,speed:+$('voice-speed').value,pitch:+$('voice-pitch').value,transcript:$('voice-transcript').value});};
- $('voice-install').onclick=async()=>{showTab('environment');await environmentPage();environmentPanel=1;await workspaceHandlers.environment();if($('native-console'))await openConsole('setup');};
- $('preview-voice').onclick=()=>action('/voice/preview',{text:$('voice-sample').value},r=>{$('voice-player').innerHTML=`<audio controls src="${mediaUrl(r.audio+'?t='+Date.now())}"></audio>`;});
-};
-
-
-
-const settingsWithMedia=workspaceHandlers.settings;
-workspaceHandlers.settings=async()=>{
-  await settingsWithMedia();if(current!=='settings')return;
-  const photosPanel=$('settings').querySelector('[data-preference-panel="photos"]');
-  if(!photosPanel)return;
-  let box=$('media-privacy-box');
-  if(!box){
-    box=document.createElement('div');
-    box.id='media-privacy-box';
-    box.style.marginTop='28px';
-    box.style.borderTop='1px solid var(--edge)';
-    box.style.paddingTop='24px';
-    photosPanel.append(box);
-  }
-  const prefs=await api('/media/preferences');const scanner=await api('/media/scanner');
-  box.innerHTML=`<h2>Media privacy & review</h2><div class="card"><h3>Private image scanner</h3><p>NudeNet runs on this host. The model is about 12 MB and uses roughly 150 MB of memory while scanning. It detects exposed intimate anatomy; it does not check scene accuracy or all sexual content.</p><p class="dim small">${scanner.installed?'Installed':'Optional download · requires internet for installation'}${scanner.selected?' · Selected for this companion':''}</p><button class="quiet" id="install-local-scanner">${scanner.installed?'Check installation':'Install local scanner'}</button> <button class="act" id="use-local-scanner" ${scanner.installed?'':'disabled'}>Use for this companion</button></div><label class="inline-label"><input id="media-blur" type="checkbox" ${prefs.blur_nsfw_initially?'checked':''}>Blur NSFW initially</label><p class="dim small">Sensitive images can be blurred. Unreviewed images stay blurred when the option below is enabled. Open a photo to reveal it.</p><label class="inline-label"><input id="media-blur-unknown" type="checkbox" ${prefs.blur_unknown_initially!==false?'checked':''}>Blur unreviewed images and failed scans</label><label class="inline-label"><input id="media-review" type="checkbox" ${prefs.review_before_delivery?'checked':''}>Review generated images before delivery</label><p class="dim small">Local NudeNet scanning keeps images on this host and detects exposed intimate anatomy. It does not check clothed sexual activity. A remote vision reviewer can also check scene and clothing. Failed scans hold the image for inspection; no remote fallback is used.</p><div class="form-grid"><label>Review provider<input id="media-review-provider" value="${esc(prefs.review_provider)}" placeholder="local-nsfw for private CPU scanning"></label><label>Review model (unused for local-nsfw)<input id="media-review-model" value="${esc(prefs.review_model)}" placeholder="Use configured compression model"></label></div>`;
-  $('install-local-scanner').onclick=async()=>{await action('/media/scanner/install',{},()=>render('settings'));};
-  $('use-local-scanner').onclick=async()=>{await post('/media/scanner/use',{});await render('settings');notice('Private scanning enabled. Failed scans stay blurred.');};
-};
-
-const environmentWithUpdates=workspaceHandlers.environment;
-workspaceHandlers.environment=async()=>{
-  await environmentWithUpdates();
-  if(current!=='environment')return;
-  const d=await api('/updates').catch(()=>({version:'2.1.0'}));
-  const box=document.createElement('div');
-  box.id='kit-updates';
-  box.className='card';
-  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-    <h2 style="margin:0">Companion Kit Updates · v${esc(d.version)}</h2>
-    ${d.has_update?`<span class="pill status-warn">Update v${esc(d.latest_version)} Available</span>`:`<span class="pill status-good">Up to Date</span>`}
-  </div>
-  ${d.has_update?`<div style="background:color-mix(in srgb,var(--warn) 10%,transparent);border-left:3px solid var(--warn);padding:12px 14px;border-radius:6px;margin-bottom:14px">
-    <strong style="color:var(--warn)">A new release (v${esc(d.latest_version)}) is available on GitHub!</strong>
-    <p class="dim small" style="margin:4px 0 0">To apply this update cleanly and verify all dependencies, run the turnkey updater on your host machine:</p>
-    <pre style="background:var(--bg);padding:8px 12px;border-radius:6px;margin:8px 0;font-size:12.5px;color:var(--good)">./update.sh</pre>
-    ${d.release_url?`<a href="${esc(d.release_url)}" target="_blank" class="small" style="color:var(--accent);display:inline-block">View Release Notes on GitHub →</a>`:''}
-  </div>`:`<p class="dim small" style="margin:0 0 10px">You are running the latest version of Companion Kit.</p>`}
-  <details style="margin-top:14px">
-    <summary class="small dim">Terminal update commands</summary>
-    <pre style="background:var(--bg);padding:10px 12px;border-radius:6px;margin:6px 0;font-size:12px">./update.sh          # Updates Companion Kit, dependencies, and restarts service\n./update.sh --hermes # Also updates Hermes agent runtime</pre>
-  </details>`;
-  $('environment').append(box);
-};

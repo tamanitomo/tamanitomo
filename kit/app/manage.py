@@ -607,8 +607,26 @@ def register(app, select, load, operations):
     def jobs():
         from kit.cli.common import _read_jobs
         rt,p,h=context()
-        return {'timezone':cc.load(h).timezone,'jobs':[{k:row.get(k) for k in ('id','name','schedule','enabled','no_agent','model','model_provider','last_status','next_run_at')}
-                        for row in _read_jobs(h/'cron/jobs.json')['jobs']]}
+        # The settings page edits these jobs in place, so it needs the whole
+        # picture per job: which model answers it, how hard it is told to think,
+        # and what went wrong the last time it ran.
+        fields=('id','name','schedule','enabled','no_agent','model','provider','base_url',
+                'reasoning_effort','last_status','last_error','last_run_at','next_run_at',
+                'script','deliver','skills')
+        rows=[]
+        for row in _read_jobs(h/'cron/jobs.json')['jobs']:
+            out={k:row.get(k) for k in fields}
+            # Two spellings of the same field exist in the wild.
+            out['provider']=row.get('provider') or row.get('model_provider')
+            out['model_provider']=out['provider']
+            prompt=row.get('prompt') or ''
+            out['prompt']=prompt
+            # There is no per-job token budget in Hermes. Prompt size is the
+            # honest stand-in: it is what this job actually sends every run.
+            out['prompt_chars']=len(prompt)
+            out['last_error']=hr.redact(str(row.get('last_error') or ''))[:600] or None
+            rows.append(out)
+        return {'timezone':cc.load(h).timezone,'jobs':rows}
 
     @app.post('/api/jobs/{ident}/{action}')
     def job_action(ident:str,action:str,payload:dict):
@@ -619,7 +637,30 @@ def register(app, select, load, operations):
         if not row:raise ValueError('Job not found in this profile')
         if row.get('no_agent') and action=='pause':raise ValueError('Model-free continuity and maintenance jobs remain active. Pause the model-backed routine instead.')
         args=['cron',action,ident]
-        if action=='edit':args+=['--schedule',text(payload.get('schedule'),'schedule',120)]
+        if action=='edit':
+            # Every field is optional; only what the page actually changed is
+            # passed through, so an edit to one never blanks the others.
+            if payload.get('schedule') is not None:
+                args+=['--schedule',text(payload.get('schedule'),'schedule',120)]
+            if payload.get('name') is not None:
+                args+=['--name',text(payload.get('name'),'name',200)]
+            if payload.get('prompt') is not None:
+                # A job prompt is a paragraph, so newlines are allowed here
+                # where text() would reject them as control characters.
+                prompt=payload.get('prompt')
+                if not isinstance(prompt,str) or len(prompt)>20000 or not prompt.strip():
+                    raise ValueError('prompt must be text of at most 20000 characters')
+                args+=['--prompt',prompt.strip()]
+            if payload.get('model') is not None:
+                args+=['--model',text(payload.get('model'),'model',200,empty=True)]
+            if payload.get('provider') is not None:
+                args+=['--provider',text(payload.get('provider'),'provider',120,empty=True)]
+            effort=payload.get('reasoning_effort')
+            if effort is not None:
+                if effort not in ('','none','low','medium','high'):
+                    raise ValueError('Unknown reasoning effort')
+                args+=['--reasoning-effort',effort]
+            if len(args)==3:raise ValueError('Nothing to change on this job')
         return op('Job '+action,lambda rt,p,h,report:{'output':hr.redact(rt.run(args,home=h).stdout),
             'note':'Run now queues a job for the next scheduler tick; the owning gateway must be running.' if action=='run' else 'Saved by Hermes.'})
 

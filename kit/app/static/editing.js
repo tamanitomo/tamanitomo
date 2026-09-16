@@ -1,12 +1,15 @@
 /* One leave guard for persisted editors, including refresh and browser close. */
 const dirtyEditors=new Set();
-const trackedEditorFields='#note-text, #full-soul, #feelings-controls input, #feelings-controls select, #feelings-controls textarea, #companion-edit-form input, #companion-edit-form select, #companion-edit-form textarea, #settings input, #settings select, #settings textarea, #identity textarea';
+const trackedEditorFields='#note-text, #full-soul, #feelings-controls input, #feelings-controls select, #feelings-controls textarea, #companion-edit-form input, #companion-edit-form select, #companion-edit-form textarea, #settings-panel input:not([type=search]), #settings-panel select, #settings-panel textarea, #identity textarea';
 function editorScope(element){
   if(element.closest('#product-dialog'))return 'dialog';
   if(element.closest('#feelings-settings-form'))return 'relationship-settings';
   if(element.closest('#feelings-experience-form'))return 'relationship-experience';
   if(element.closest('#identity'))return 'identity-'+(element.dataset.section||'appearance');
-  if(element.closest('#settings'))return element.id.startsWith('media-')?'settings-media':'settings-main';
+  // Settings is one panel at a time, each with its own save, so the whole
+  // open panel is a single scope. The index and its search box are not
+  // editors and are excluded by the selector above.
+  if(element.closest('#settings-panel'))return 'settings-main';
   return element.closest('section')?.id;
 }
 function recordEditorChange(event){

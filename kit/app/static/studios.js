@@ -33,7 +33,7 @@ workspaceHandlers['companion-edit']=async()=>{
  const [d,catalog]=await Promise.all([api('/profile/editor'),api('/catalog')]);
  const groups=[['Identity',['agent','human','names','pronoun_set','human_pronoun_set','agent_type','persona','boundary','birthdate','age','timezone']],['Appearance & contact',['image_style','image_timeline','image_mode','content_permissions','outreach','outreach_per_day','quiet_start','quiet_end','share_people']],['More companion settings',Object.keys(d.config).filter(k=>!['agent','human','names','pronoun_set','human_pronoun_set','agent_type','persona','boundary','birthdate','age','timezone','image_style','image_timeline','image_mode','content_permissions','outreach','outreach_per_day','quiet_start','quiet_end','share_people'].includes(k))]];
  const choices={...profileChoices,timezone:[...new Set([d.config.timezone,...catalog.timezones])].map(z=>[z,z]),persona:Object.entries(catalog.personas).map(([k,v])=>[k,v.label]),boundary:Object.entries(catalog.boundaries).map(([k,v])=>[k,v.label]),image_style:Object.entries(catalog.image_styles).map(([k,v])=>[k,v.label])};
- $('companion-edit').innerHTML=heading('Edit '+d.display_name,'Your companion’s current configuration and authored identity, prefilled from their files.')+`<div class="actions"><button class="quiet" data-editor-route="roster">← All companions</button><button class="quiet" data-editor-route="voice">Voice studio</button><button class="quiet" data-editor-route="image-studio">Image studio</button><button class="quiet" data-editor-route="environment">Hermes settings</button></div><form id="companion-edit-form"><div class="card"><label>Display name <span class="dim small">The name shown in this workspace</span><input id="editor-display-name" value="${esc(d.display_name)}" required maxlength="100"></label></div>${groups.map(([label,keys],i)=>`<details class="card" ${i<2?'open':''}><summary>${label}</summary><div class="form-grid">${keys.map(k=>fieldHTML(k,d.config[k],choices[k]||[],d.fixed.includes(k))).join('')}</div></details>`).join('')}<div class="card"><h2>Who they are</h2><p class="dim">Personality, appearance, boundaries and shared history live in their SOUL, which Identity reads as a document and edits a section at a time. This page is for the configuration around it.</p><div class="actions"><button type="button" class="quiet" data-editor-route="identity">Open Identity \u2192</button></div></div><div class="actions"><button class="act">Save companion</button><button type="button" class="quiet" id="reload-companion">Reload current files</button></div></form>`;
+ $('companion-edit').innerHTML=heading('Edit '+d.display_name,'Your companion’s current configuration and authored identity, prefilled from their files.')+`<div class="actions"><button class="quiet" data-editor-route="roster">← All companions</button><button class="quiet" data-editor-route="voice">Voice studio</button><button class="quiet" data-editor-route="image-studio">Image studio</button><button class="quiet" data-editor-route="settings">Settings</button></div><form id="companion-edit-form"><div class="card"><label>Display name <span class="dim small">The name shown in this workspace</span><input id="editor-display-name" value="${esc(d.display_name)}" required maxlength="100"></label></div>${groups.map(([label,keys],i)=>`<details class="card" ${i<2?'open':''}><summary>${label}</summary><div class="form-grid">${keys.map(k=>fieldHTML(k,d.config[k],choices[k]||[],d.fixed.includes(k))).join('')}</div></details>`).join('')}<div class="card"><h2>Who they are</h2><p class="dim">Personality, appearance, boundaries and shared history live in their SOUL, which Identity reads as a document and edits a section at a time. This page is for the configuration around it.</p><div class="actions"><button type="button" class="quiet" data-editor-route="identity">Open Identity \u2192</button></div></div><div class="actions"><button class="act">Save companion</button><button type="button" class="quiet" id="reload-companion">Reload current files</button></div></form>`;
  for(const b of $('companion-edit').querySelectorAll('[data-editor-route]'))b.onclick=()=>showTab(b.dataset.editorRoute);
   $('editor-unlimited').onchange=()=>{$('companion-edit').querySelector('[data-config=outreach_per_day]').disabled=$('editor-unlimited').checked;};
  $('reload-companion').onclick=async()=>{if(await confirmEditorLeave('companion-edit'))render('companion-edit');};
@@ -510,15 +510,31 @@ async function showTrash(){
  }
 }
 
-// Keep every native Hermes page and plugin available inside the workspace.
-const environmentStudioBase=workspaceHandlers.environment;
-workspaceHandlers.environment=async()=>{
- await environmentStudioBase();if(current!=='environment')return;
- const focusGateway=environmentFocus;environmentFocus=false;const page=$('environment'),legacy=document.createElement('details');legacy.className='card';legacy.innerHTML='<summary>Companion environment & native command-line setup</summary>';while(page.firstChild)legacy.append(page.firstChild);page.append(legacy);if(focusGateway)legacy.open=true;
- const host=document.createElement('div');host.innerHTML=heading('Hermes settings','The complete dashboard from your installed Hermes, with its own configuration forms, skills, MCP connections, and system tools.')+`<div class="actions"><button class="quiet" id="dashboard-gateway">Gateway & routine</button><button class="act" id="dashboard-local-models">Local models & weights</button><button class="quiet" id="dashboard-images">Image studio</button><button class="quiet" id="dashboard-voice">Voice studio</button></div><div class="actions" id="hermes-pages">${[['','Overview'],['config','Configuration'],['models','Models'],['env','Credentials'],['skills','Skills'],['mcp','MCP'],['plugins','Plugins'],['sessions','Sessions'],['cron','Jobs'],['logs','Logs'],['analytics','Usage'],['channels','Channels'],['pairing','Pairing'],['webhooks','Webhooks'],['system','System']].map(([path,label])=>`<button class="quiet" data-hermes-page="${path}">${label}</button>`).join('')}</div><div id="hermes-dashboard-frame"><p class="card">Starting the installed Hermes dashboard…</p></div>`;page.prepend(host);if(focusGateway){page.insertBefore(legacy,host);legacy.querySelector('[data-panel="2"]')?.click();}if($('kit-updates'))page.append($('kit-updates'));$('dashboard-gateway').onclick=()=>{legacy.open=true;legacy.querySelector('[data-panel="2"]')?.click();$('gateway-controls')?.scrollIntoView({block:'start'});};$('dashboard-local-models').onclick=()=>showTab('local-models');$('dashboard-images').onclick=()=>showTab('image-studio');$('dashboard-voice').onclick=()=>showTab('voice');
- try{const d=await post('/dashboard/start');if(current!=='environment')return;const iframe=document.createElement('iframe');iframe.title='Hermes dashboard';iframe.className='hermes-dashboard';const open=path=>{iframe.src=d.prefix+'/'+path+(PROFILE&&PROFILE!=='default'?'?profile='+encodeURIComponent(PROFILE):'');};$('hermes-dashboard-frame').replaceChildren(iframe);open('');for(const b of $('hermes-pages').children)b.onclick=()=>{open(b.dataset.hermesPage);for(const other of $('hermes-pages').children)other.setAttribute('aria-pressed',String(other===b));};}
- catch(e){$('hermes-dashboard-frame').innerHTML=`<div class="card"><h3>Dashboard needs attention</h3><p>${esc(e.message)}</p><button class="quiet" id="retry-dashboard">Retry dashboard</button><p>Native command-line setup remains available below.</p></div>`;$('retry-dashboard').onclick=()=>render('environment');legacy.open=true;}
-};
+/* The installed Hermes's own dashboard, embedded. It is a panel of the unified
+   Settings page now rather than a page that swallows the native forms, so the
+   chips below choose which Hermes screen the frame shows. */
+async function renderHermesDashboardInto(host){
+ host.innerHTML=`<h2>Hermes dashboard</h2>
+  <p class="dim">The complete dashboard from your installed Hermes, with its own configuration forms, skills, MCP connections and system tools. Everything in the frame is Hermes's own interface.</p>
+  <div class="chip-row" id="hermes-pages">${[['','Overview'],['config','Configuration'],['models','Models'],['env','Credentials'],['skills','Skills'],['mcp','MCP'],['plugins','Plugins'],['sessions','Sessions'],['cron','Jobs'],['logs','Logs'],['analytics','Usage'],['channels','Channels'],['pairing','Pairing'],['webhooks','Webhooks'],['system','System']].map(([path,label],i)=>`<button type="button" class="chip" data-hermes-page="${path}" aria-pressed="${String(i===0)}">${label}</button>`).join('')}</div>
+  <div id="hermes-dashboard-frame"><p class="dim">Starting the installed Hermes dashboard…</p></div>`;
+ const chips=host.querySelector('#hermes-pages');
+ try{
+  const d=await post('/dashboard/start');
+  if(!host.isConnected)return;
+  const iframe=document.createElement('iframe');
+  iframe.title='Hermes dashboard';iframe.className='hermes-dashboard';
+  const open=path=>{iframe.src=d.prefix+'/'+path+(PROFILE&&PROFILE!=='default'?'?profile='+encodeURIComponent(PROFILE):'');};
+  host.querySelector('#hermes-dashboard-frame').replaceChildren(iframe);open('');
+  for(const b of chips.children)b.onclick=()=>{
+   open(b.dataset.hermesPage);
+   for(const other of chips.children)other.setAttribute('aria-pressed',String(other===b));
+  };
+ }catch(e){
+  host.querySelector('#hermes-dashboard-frame').innerHTML=`<div class="notice-strip"><p><strong>The dashboard could not start.</strong> ${esc(e.message)}</p><button class="quiet" id="retry-dashboard">Try again</button></div>`;
+  host.querySelector('#retry-dashboard').onclick=()=>renderHermesDashboardInto(host);
+ }
+}
 Object.assign(voiceChoices,{chatterbox:[],audio8:[],pockettts:['alba','anna','azelma','cosette','eponine','fantine','javert','marius'],qwen3tts:['Ryan','Aiden','Vivian','Serena','Ono_Anna','Sohee']});
 const VOICE_ENGINE_DETAILS={
  edge:{name:'Edge TTS',badge:'Free · Zero setup',cat:'cloud',desc:'High quality cloud neural voices with no setup or API key required.'},
@@ -666,7 +682,7 @@ workspaceHandlers.voice=async()=>{
   chip.onclick=()=>{$('studio-voice-text').value=chip.dataset.sample;};
  }
  $('studio-install-voice').onclick=()=>action('/voice/install',{provider:selected});
- $('studio-native-voice').onclick=async()=>{current='environment';await workspaceHandlers.environment();for(const [id] of TABS)$(id).hidden=id!=='environment';$('environment').querySelector('details').open=true;await openConsole('tools');};
+ $('studio-native-voice').onclick=async()=>{await openSettings(null,'hermes-accounts');await openConsole('tools');};
  $('voice-studio-form').onsubmit=async e=>{
   e.preventDefault();
   if($('voice-inherit')?.checked){await action('/voice/inherit',{});return;}

@@ -2285,3 +2285,108 @@ body[data-page="chat"] main{padding:0}
 .tag-vocab{margin-top:8px;font-size:12.5px;padding:7px 9px;background:var(--bg);
   border:1px dashed var(--edge-2);border-radius:8px}
 .tag-vocab:focus{outline:none;border-style:solid;border-color:var(--accent)}
+
+/* =========================================================== settings page
+   One page, three groups, one panel at a time. The index on the left is the
+   whole map of what is configurable; the panel on the right is the only thing
+   that can be edited, so nothing saves a field that is out of sight. */
+.settings-shell{display:grid;grid-template-columns:266px minmax(0,1fr);gap:26px;align-items:start}
+.settings-nav{position:sticky;top:24px;display:flex;flex-direction:column;gap:22px;
+  max-height:calc(100vh - 48px);overflow:auto;padding-right:4px;scrollbar-width:thin}
+.settings-search{margin:0}
+.settings-search input{padding:9px 12px;font-size:13.5px}
+.settings-group{display:flex;flex-direction:column;gap:2px}
+.settings-group[hidden]{display:none}
+.settings-group h3{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);
+  font-weight:700;margin:0 0 8px 12px;display:flex;flex-direction:column;gap:3px}
+.settings-group h3 small{font-size:11px;letter-spacing:0;text-transform:none;color:var(--faint);
+  font-weight:400;line-height:1.35;max-width:24ch}
+.settings-link{display:flex;flex-direction:column;gap:2px;text-align:left;width:100%;
+  padding:9px 12px;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--dim)}
+.settings-link[hidden]{display:none}
+.settings-link strong{font-size:14px;font-weight:550;color:var(--ink-2)}
+.settings-link small{font-size:11.5px;line-height:1.35;color:var(--faint)}
+.settings-link:hover{background:var(--surface-2)}
+.settings-link:hover strong{color:var(--ink)}
+.settings-link[aria-current=true]{background:var(--accent-soft);border-color:var(--accent-line)}
+.settings-link[aria-current=true] strong{color:var(--accent-ink)}
+.settings-body>.card{margin:0}
+.settings-body .card:last-child{margin-bottom:0}
+#settings-panel>h2:first-child{margin-top:0}
+#settings-panel .section-subheading{margin:26px 0 12px;font-size:13px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--faint);font-weight:650}
+#settings-panel .form-grid{margin-bottom:6px}
+
+/* A switch that says what it is doing, rather than a tick you have to hunt for. */
+.toggle-stack{display:flex;flex-direction:column;gap:8px}
+.toggle-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;
+  margin:12px 0 0;padding:12px 14px;border:1px solid var(--edge);border-radius:10px;
+  background:var(--surface-2);cursor:pointer;transition:border-color .15s,background .15s}
+.toggle-row:hover{border-color:var(--edge-2)}
+.toggle-row.is-on{border-color:var(--accent-line);background:var(--accent-soft)}
+.toggle-row input[type=checkbox]{display:none}
+.toggle-row .switch-slider{flex:none}
+.toggle-row.is-on .switch-slider{background:var(--accent)}
+.toggle-row.is-on .switch-slider:before{transform:translateX(16px)}
+.toggle-copy{display:flex;flex-direction:column;gap:2px;min-width:0}
+.toggle-copy strong{font-size:14px;font-weight:550;color:var(--ink);text-transform:none}
+.toggle-copy small{font-size:12.5px;color:var(--dim);line-height:1.45}
+.toggle-state{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--faint)}
+.toggle-row.is-on .toggle-state{color:var(--accent-ink)}
+
+/* Every panel ends the same way: what it does, and whether it worked. */
+.panel-footer{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  margin-top:24px;padding-top:18px;border-top:1px solid var(--edge)}
+.panel-footer .dim{margin-left:2px}
+
+/* Read-only pairs — what a setting currently is, before it may be changed. */
+.fact-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:2px;margin:18px 0 22px}
+.fact-list>div{display:flex;flex-direction:column;gap:3px;padding:12px 14px;
+  background:var(--surface-2);border:1px solid var(--edge);border-radius:9px}
+.fact-list dt{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);font-weight:700}
+.fact-list dd{margin:0;font-size:14px;color:var(--ink)}
+
+.endpoint-row{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:14px 16px;margin-bottom:10px;background:var(--surface-2);border:1px solid var(--edge);border-radius:10px}
+.endpoint-row code{display:block;margin:5px 0 3px;color:var(--accent);font-size:13px}
+.endpoint-row small{display:block;line-height:1.4}
+.pin-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.pin-row input{max-width:160px;letter-spacing:8px;text-align:center;font-size:18px}
+
+.command-block{background:var(--bg);border:1px solid var(--edge);border-radius:8px;
+  padding:12px 14px;margin:10px 0;font-size:12.5px;line-height:1.6;color:var(--ink-2)}
+
+.chip-row{display:flex;flex-wrap:wrap;gap:6px;margin:16px 0 18px}
+.chip{border:1px solid var(--edge);border-radius:18px;padding:6px 13px;font-size:12.5px;
+  background:var(--surface-2);color:var(--dim)}
+.chip:hover{color:var(--ink);border-color:var(--edge-2)}
+.chip[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent-ink)}
+
+/* One job, opened out: what runs it, when, and what it did last time. */
+.job-row{margin:0 0 8px;border:1px solid var(--edge);border-radius:10px;background:var(--surface-2);overflow:hidden}
+.job-row.is-failing{border-color:var(--bad-line)}
+.job-row>summary{display:flex;justify-content:space-between;align-items:center;gap:14px;
+  padding:14px 16px;list-style:none}
+.job-row>summary::-webkit-details-marker{display:none}
+.job-row[open]>summary{border-bottom:1px solid var(--edge);background:var(--surface-3)}
+.job-name{display:flex;flex-direction:column;gap:3px;min-width:0}
+.job-name strong{font-size:14px;font-weight:550;color:var(--ink)}
+.job-name small{font-size:12px;overflow-wrap:anywhere}
+.job-state{display:flex;gap:6px;flex-wrap:wrap;flex:none}
+.job-body{padding:18px 16px 16px}
+.job-body .fact-list{margin-top:0}
+.job-prompt textarea{min-height:120px;font-size:13px}
+.job-row .panel-footer{margin-top:18px}
+
+@media(max-width:1000px){
+  .settings-shell{grid-template-columns:1fr}
+  .settings-nav{position:static;max-height:none;overflow:visible;
+    flex-direction:row;flex-wrap:wrap;gap:18px 26px}
+  .settings-search{flex:1 1 100%}
+  .settings-group{flex:1 1 220px}
+  .toggle-row{grid-template-columns:auto minmax(0,1fr);row-gap:4px}
+  .toggle-state{grid-column:2;justify-self:start}
+  .job-row>summary{flex-direction:column;align-items:flex-start}
+}
+.panel-bare{min-width:0}
+.panel-bare>.card:last-child{margin-bottom:0}
