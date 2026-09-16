@@ -468,112 +468,71 @@ function chatMessagesHtml(messages){
 
 function inlineMedia(item){const url=mediaUrl(item.url);const p=item.path?` data-photo-path="${esc(item.path)}"`:'';const u=` data-photo-url="${esc(item.url)}"`;if(item.kind==='image'&&item.blur)return `<details class="media-reveal"><summary><img class="chat-media concealed-media" src="${url}" alt="Concealed image"><span>Reveal sensitive or unreviewed image</span></summary><div class="chat-media-card" onclick="openChatPhoto(this.querySelector('img'))"${p}${u}><img class="chat-media" src="${url}" alt="${esc(item.title)}" loading="lazy"></div></details>`;return item.kind==='image'?`<div class="chat-media-card" onclick="openChatPhoto(this.querySelector('img'))"${p}${u}><img class="chat-media" src="${url}" alt="${esc(item.title)}" loading="lazy"><div class="chat-media-bar"><span class="chat-media-caption">${esc(item.title||'Photo')}</span><button type="button" class="chat-media-zoom">Zoom 🔍</button></div></div>`:item.kind==='audio'?`<div class="chat-audio-card"><audio class="chat-media" controls preload="metadata" src="${url}"></audio><div class="chat-audio-caption">🎵 ${esc(item.title||'Voice note')}</div></div>`:item.kind==='video'?`<video class="chat-media" controls preload="none" src="${url}"></video>`:'';}
 function openChatPhoto(imgEl){if(!imgEl)return;const card=imgEl.closest('.chat-media-card');const path=card?.dataset.photoPath||'';const url=card?.dataset.photoUrl||imgEl.src;const title=imgEl.alt||'Photo';if(typeof openPhotoViewer==='function'){openPhotoViewer({url,path,title,at:new Date().toISOString()});}else{window.open(url,'_blank');}}
-function renderIntimacyCard(intimacy, companionName){
-  if(!intimacy)return '';
-  const score=intimacy.score||0;
-  const stage=intimacy.stage||0;
-  const stageName=esc(intimacy.stage_name||'Just Met');
-  const paceLabel={slow:'Gradual rhythm',natural:'Natural rhythm',quick:'Quick familiarity'}[intimacy.pace]||intimacy.pace;
-  const adultStatus=intimacy.permanent_friend?'<span class="pill bad">Friendship</span>':intimacy.nsfw_revoked?'<span class="pill">Friendship</span>':intimacy.explicit_opted_in?'<span class="pill good">Romantic connection open</span>':'<span class="pill">Friendly connection</span>';
+/* How things are between you, in one card.
+
+   This was two: an "Emotional Atmosphere" card with five meters and a mood, and
+   a "Relationship & Connection Dynamic" card with the stage ladder — both
+   answering the same question, one above the other, with the stage name printed
+   twice inside the second. The meters live on Home as well, so the page was the
+   third place to read the same numbers. One card now: where you are, how it
+   feels, and what governs it. */
+function relationshipNow(bars,intimacy,companionName){
+  const feelings=bars&&bars.feelings;
+  if(!feelings&&!intimacy)return '';
   const stages=['Just Met','Flirting','Chemistry','Intimacy','Bonded'];
-  return `<div class="card intimacy-escalation-card" style="margin-bottom:20px;border-top:3px solid var(--accent)">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
-      <div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:20px">💖</span>
-          <h2 style="margin:0">Relationship & Connection Dynamic</h2>
-          <span class="pill ${stage>=3?'good':''}">${stageName}</span>
-        </div>
-        <p class="dim small" style="margin:4px 0 0;max-width:560px">${esc(intimacy.description)}</p>
-      </div>
-      <div style="text-align:right">
-        <div style="font-size:20px;font-weight:700;color:var(--accent)">${stageName}</div>
-        <div class="dim small">${paceLabel}</div>
-      </div>
+  const stage=intimacy?(intimacy.stage||0):0;
+  const score=intimacy?(intimacy.score||0):0;
+  const paceLabel=intimacy?({slow:'Gradual',natural:'Natural',quick:'Quick'}[intimacy.pace]||intimacy.pace):'';
+
+  // Real state, kept. Boundaries that have actually been crossed are not a detail.
+  const standing=intimacy&&intimacy.permanent_friend?
+    `<div class="notice-strip rel-standing is-firm"><p><strong>Friendship established.</strong>
+      After repeated boundary violations, ${esc(companionName)} has stepped back to friendship. This does not reopen.</p></div>`
+    :intimacy&&intimacy.nsfw_revoked?
+    `<div class="notice-strip rel-standing"><p><strong>Stepped back to friendship.</strong>
+      Your relationship is rooted in friendship and affectionate companionship.</p></div>`:'';
+
+  const facts=[
+    intimacy?['Stage',esc(intimacy.stage_name||stages[stage]||'Just Met')]:null,
+    intimacy?['Pace',esc(paceLabel)]:null,
+    feelings?['Temperament',esc(feelings.personality||'—')]:null,
+    feelings&&feelings.mood?['Mood',esc(feelings.mood)+(feelings.mood_at?` · ${esc(ago(feelings.mood_at))}`:'')]:null,
+    intimacy&&intimacy.violations_count?['Boundary violations',String(intimacy.violations_count)]:null,
+  ].filter(Boolean);
+
+  return `<div class="card rel-now">
+    <div class="section-heading" style="margin-top:0">
+      <h2>How things are between you</h2>
+      ${intimacy?`<span class="pill ${stage>=3?'status-good':''}">${esc(intimacy.stage_name||stages[stage])} · ${score}%</span>`:''}
     </div>
-    <div style="margin:16px 0 10px">
-      <div style="height:10px;background:color-mix(in srgb,var(--ink) 8%,transparent);border-radius:6px;overflow:hidden;position:relative">
-        <div style="height:100%;width:${score}%;background:linear-gradient(90deg,var(--accent),var(--accent),var(--accent));border-radius:6px;transition:width 0.3s ease"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:color-mix(in srgb,var(--ink) 50%,transparent);margin-top:6px">
-        ${stages.map((stg,idx)=>`<span style="${stage>=idx?'color:#fff;font-weight:600':''}">${stg}</span>`).join('')}
-      </div>
-    </div>
-    ${intimacy.permanent_friend?`
-    <div class="card" style="margin-top:14px;background:color-mix(in srgb,var(--bad) 8%,transparent);border-left:4px solid var(--bad);padding:14px">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:18px">🤝</span>
-        <strong style="color:var(--bad);font-size:14px">Friendship Established</strong>
-      </div>
-      <p class="dim small" style="margin:6px 0 0;line-height:1.45">Following repeated boundary violations, trust was fractured. ${esc(companionName)} has stepped back to friendship. Private and romantic closeness is closed.</p>
-    </div>`:intimacy.nsfw_revoked?`
-    <div class="card" style="margin-top:14px;background:color-mix(in srgb,var(--ink) 3%,transparent);border-left:4px solid var(--dim);padding:14px">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:18px">🕊️</span>
-        <strong style="color:var(--ink-2);font-size:14px">Relationship Stepped Back</strong>
-      </div>
-      <p class="dim small" style="margin:6px 0 0;line-height:1.45">Your relationship is rooted in friendship and affectionate companionship.</p>
+    ${intimacy&&intimacy.description?`<p class="dim">${esc(intimacy.description)}</p>`:''}
+    ${intimacy?`<div class="rel-ladder">
+      <div class="rel-ladder-track"><div class="rel-ladder-fill" style="width:${score}%"></div></div>
+      <div class="rel-ladder-labels">${stages.map((name,i)=>
+        `<span class="${stage>=i?'is-reached':''}">${name}</span>`).join('')}</div>
     </div>`:''}
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:14px">
-      <div style="background:color-mix(in srgb,var(--ink) 3%,transparent);padding:14px;border-radius:10px;border:1px solid color-mix(in srgb,var(--ink) 6%,transparent)">
-        <strong style="font-size:13px;display:block;margin-bottom:6px">💬 Connection & Chemistry</strong>
-        <p class="dim small" style="margin:0;line-height:1.45">Companions naturally banter, tease, and reciprocate affection as mutual trust deepens. At Stage 4 (Bonded), warmth, closeness, and affection unfold organically in private moments without artificial pressure.</p>
-      </div>
-      <div style="background:color-mix(in srgb,var(--ink) 3%,transparent);padding:14px;border-radius:10px;border:1px solid color-mix(in srgb,var(--ink) 6%,transparent)">
-        <strong style="font-size:13px;display:block;margin-bottom:6px">🔒 Agency & Mutual Respect</strong>
-        <p class="dim small" style="margin:0;line-height:1.45">${esc(companionName)} holds genuine agency. Mutual respect is essential; repeated boundary violations will cause your companion to step back to friendship.</p>
-      </div>
-    </div>
-    ${intimacy.violations_count?`<div style="margin-top:12px;padding:10px 14px;background:color-mix(in srgb,var(--bad) 12%,transparent);border-left:3px solid var(--bad);border-radius:6px"><strong style="color:var(--bad);font-size:12.5px">⚠️ Boundary Violations Recorded (${intimacy.violations_count} / 2)</strong><p class="dim small" style="margin:2px 0 0">${intimacy.violations_count>=2?'Two violations occurred. Relationship has stepped back to friendship.':'A boundary violation was recorded. Mutual respect and space are required for trust to rebuild.'}</p></div>`:''}
-    <div style="display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap">
-      ${adultStatus}
-    </div>
+    ${standing}
+    ${feelings?feelingMeters(feelings.meters):''}
+    ${facts.length?`<dl class="fact-list">${facts.map(([k,v])=>
+      `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`:''}
+    <details class="rel-explainer">
+      <summary class="small dim">How closeness works here</summary>
+      <p class="dim small">Companions banter, tease and reciprocate affection as mutual trust deepens; at Bonded, warmth is expressed freely and naturally.</p>
+      <p class="dim small">${esc(companionName)} holds genuine agency. Mutual respect is the condition of all of it — repeated boundary violations step the relationship back to friendship permanently.</p>
+    </details>
   </div>`;
-}
-function connectionSignals(bars){
-  if(!bars)return '';
-  if(bars.feelings)return feelingsSummary(bars.feelings);
-  const rows=[['Feeling the gap',bars.feeling_the_gap,'Based on time since your last message.','⏱️'],['Recent wellbeing',bars.wellbeing,'Based on the last recorded moods.','🌱']];
-  return `<div class="card connection-signals"><h2>How things feel lately</h2><div class="row" style="gap:16px;margin-top:12px">${rows.map(([label,value,description,emoji])=>{
-    const pct=value==null?null:Math.round(value*100);
-    return `<div class="signal" style="background:var(--panel);border:1px solid var(--surface-3);border-radius:10px;padding:14px;flex:1">
-      <div class="signal-heading" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <span style="font-weight:600;font-size:13.5px">${emoji} ${esc(label)}</span>
-        <strong style="color:${pct!=null?(pct>65?'var(--good)':pct>35?'var(--warn)':'var(--bad)'):'var(--dim)'}">${pct==null?'Not enough history':pct+'%'}</strong>
-      </div>
-      ${value==null?'':`<div style="background:var(--surface-2);height:6px;border-radius:3px;overflow:hidden;margin:8px 0 6px"><div style="background:linear-gradient(90deg,var(--accent),var(--good));height:100%;width:${Math.max(0,Math.min(100,pct))}%;border-radius:3px;transition:width .3s"></div></div>`}
-      <p class="dim small" style="margin:0">${description}</p>
-    </div>`;
-  }).join('')}</div><p class="dim small" style="margin-top:10px">These indicators describe recent state, not relationship progress.</p></div>`;
 }
 workspaceHandlers.relationship=async()=>{
   const d=await api('/relationship');const s=d.settings;
   const companionName=chatName()||'Your companion';
   $('relationship').innerHTML=heading('Your story together','Small firsts, familiar rituals, and jokes that only make sense between you. A shared history grows through experience.')+
-  connectionSignals(d.bars)+
-  renderIntimacyCard(d.intimacy,companionName)+
-  `<div class="story-hero-card">
-    <div class="story-hero-text">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
-        <span style="font-size:24px">✨</span>
-        <h3 style="margin:0">Shared Journey with ${esc(companionName)}</h3>
-      </div>
-      <p class="dim" style="margin:0;max-width:560px">Milestones, memorable moments, and personal history that define your relationship over time.</p>
-    </div>
-    <div style="display:flex;gap:16px;align-items:center">
-      <div style="text-align:right">
-        <div style="font-size:20px;font-weight:700;color:#fff">${d.moments?d.moments.length:0}</div>
-        <div class="dim small">Moments recorded</div>
-      </div>
-      ${d.milestones?`<div style="text-align:right">
-        <div style="font-size:20px;font-weight:700;color:var(--warn)">${d.milestones.filter(m=>m.earned).length} / ${d.milestones.length}</div>
-        <div class="dim small">Milestones earned</div>
-      </div>`:''}
-    </div>
-  </div>`+
+  relationshipNow(d.bars,d.intimacy,companionName)+
   (s.relationship_progression==='milestones'?`
-  <div class="card" style="margin-bottom:20px">
-    <h2>Relationship Milestones</h2>
+  <div class="card">
+    <div class="section-heading" style="margin-top:0">
+      <h2>Milestones</h2>
+      <span class="pill">${d.milestones?d.milestones.filter(m=>m.earned).length:0} of ${d.milestones.length} earned</span>
+    </div>
     <div class="milestone-badge-grid">
       ${d.milestones.map(m=>`
         <div class="milestone-card ${m.earned?'is-earned':''}">
@@ -586,14 +545,12 @@ workspaceHandlers.relationship=async()=>{
     </div>
   </div>`:'')+
   '<div id="feelings-controls"></div>'+
-  `<div class="card" style="margin-top:20px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div>
-        <h2 style="margin:0">Shared History (${d.moments.length})</h2>
-        <p class="dim small" style="margin:2px 0 0">Memorable moments and milestones preserved through your time together.</p>
-      </div>
-      <span class="dim small">Authentic ledger</span>
+  `<div class="card">
+    <div class="section-heading" style="margin-top:0">
+      <h2>Moments</h2>
+      <span class="pill">${d.moments.length} recorded</span>
     </div>
+    <p class="dim">Things worth keeping, written down as they happened.</p>
     <div class="moment-timeline">
       ${d.moments.length?d.moments.slice().reverse().map(m=>`
         <div class="moment-card">

@@ -101,7 +101,8 @@ def evolve(c,data,outfit,previous,closet,now):
             raise ValueError('ACTIVITY OVERDUE: start the next activity, or give an explicit delay_reason; extending duration_minutes alone is not a transition')
     result=initial(previous,c);result['routine_choice']=choice;result['delay_reason']=data.get('delay_reason','');result.setdefault('wearing_since',{});actions=data.get('care_actions',[]);additions=data.get('wardrobe_additions',[])
     old_ids={x['id'] for x in previous['state']['outfit']} if previous else set()
-    new_ids=set(outfit);known={x['id']:x for x in closet}
+    new_ids={x['id'] if isinstance(x,dict) else x for x in outfit}
+    known={x['id']:x for x in (closet.values() if isinstance(closet,dict) else closet)}
     if len({x['id'] for x in additions})!=len(additions):raise ValueError('Duplicate wardrobe addition')
     for item in additions:
         if item['id'] in known:raise ValueError('Shopping must add a new clothing ID')

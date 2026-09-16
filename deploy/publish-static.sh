@@ -1,23 +1,35 @@
 #!/usr/bin/env bash
 # Publish the workspace front end to the host that actually serves it.
 #
-# her.example.com is an nginx container on TamanitomoHost. It proxies /api/ and
-# /media/ to the Python app over Tailscale, but serves / and /static/ from its
-# own filesystem — a separate copy of kit/app/static. Restarting the app
-# therefore ships the backend and nothing a person can see, which is how the
-# settings rewrite sat finished and invisible for an afternoon: the API had the
-# new endpoints while the browser was still loading a build from lunchtime.
+# A common deployment puts nginx in front of the app: it proxies /api/ and
+# /media/ to the Python service but serves / and /static/ from its own copy of
+# kit/app/static. Restarting the service then ships the backend and nothing a
+# person can see — the API answering on new endpoints while the browser loads
+# whatever was copied across last. This is the missing half of that deploy.
 #
-# This is the missing half of that deploy. It also checks, because a sync that
-# reports success while nginx serves something else is the failure being fixed.
+# It verifies against the bytes on the serving host rather than against what
+# rsync believes it sent, because a sync that reports success while nginx
+# serves something else is the failure being fixed.
+#
+# Point it at your own host. Nothing here is specific to one installation:
+#
+#   COMPANION_STATIC_REMOTE   ssh destination            (default: companion-web)
+#   COMPANION_STATIC_DIR      directory nginx serves     (default: /srv/companion/static)
+#   COMPANION_WEB_CONTAINER   docker container, if any   (default: companion-web)
 #
 #   deploy/publish-static.sh              publish
 #   deploy/publish-static.sh --dry-run    show what would change
 #   deploy/publish-static.sh --no-backup  skip the snapshot
 set -euo pipefail
 
-REMOTE="${COMPANION_STATIC_REMOTE:-tamanitomo-host}"
-REMOTE_DIR="${COMPANION_STATIC_DIR:-/mnt/user/appdata/companion-kit/static}"
+# Your own host belongs here, not in the repository. This file is ignored by
+# git, so a public checkout carries the defaults and yours stays local.
+LOCAL_ENV="$(dirname "${BASH_SOURCE[0]}")/publish-static.env"
+# shellcheck disable=SC1090
+[ -f "$LOCAL_ENV" ] && . "$LOCAL_ENV"
+
+REMOTE="${COMPANION_STATIC_REMOTE:-companion-web}"
+REMOTE_DIR="${COMPANION_STATIC_DIR:-/srv/companion/static}"
 CONTAINER="${COMPANION_WEB_CONTAINER:-companion-web}"
 LOCAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../kit/app/static" && pwd)"
 
@@ -26,7 +38,7 @@ for arg in "$@"; do
   case "$arg" in
     --dry-run) dry_run=1 ;;
     --no-backup) backup=0 ;;
-    -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done

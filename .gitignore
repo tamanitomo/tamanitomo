@@ -71,3 +71,4 @@ Thumbs.db
 .vscode/
 *.sublime-project
 *.sublime-workspace
+deploy/publish-static.env
