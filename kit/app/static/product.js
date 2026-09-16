@@ -600,6 +600,17 @@ workspaceHandlers.journals=async()=>{
     newerBtn.onclick=newer?()=>choose(newer.id):null;
     $('journal-browse-label').textContent=shortDay(entry.day);
     pickerMonth=entry.day.slice(0,7);
+    const dayPhotos=await api('/content?'+new URLSearchParams({kind:'image',limit:'12',day:entry.day}))
+      .then(r=>r.items.filter(x=>x.kind==='image')).catch(()=>[]);
+    if(!alive()||selection!==token)return;
+    const strip=dayPhotos.length?`
+      <div class="journal-day-photos">
+        <span class="eyebrow">${dayPhotos.length} ${dayPhotos.length===1?'picture':'pictures'} from this day</span>
+        <div class="journal-day-strip">${dayPhotos.map((x,i)=>`
+          <button class="journal-day-shot" data-day-photo="${i}" aria-label="Open ${esc(x.title)}">
+            <img ${mediaPrivacy(x)} src="${mediaUrl(x.url)}" loading="lazy" alt="${esc(x.title)}">
+          </button>`).join('')}</div>
+      </div>`:'';
     $('journal-page').innerHTML=`<div class="paper">
       <div class="paper-head">
         <span class="eyebrow" style="color:var(--faint)">Daily reflection · ${Math.max(1,Math.ceil(entry.words/220))} min read</span>
@@ -607,11 +618,14 @@ workspaceHandlers.journals=async()=>{
       </div>
       <h2>${esc(dayFormat(entry.day))}</h2>
       <div class="prose">${richText(entry.text)}</div>
+      ${strip}
       <div class="paper-foot">
         <span style="font-family:Georgia,serif;font-style:italic;color:var(--faint);font-size:14px">Written during nightly introspection</span>
         <span class="dim small">${entry.words.toLocaleString()} words · ${esc(entry.source)}</span>
       </div>
     </div>`;
+    for(const b of $('journal-page').querySelectorAll('[data-day-photo]'))
+      b.onclick=()=>openPhotoViewer(dayPhotos[+b.dataset.dayPhoto],dayPhotos,+b.dataset.dayPhoto);
     $('journal-page').scrollIntoView({block:'start',behavior:'smooth'});
   };
 
@@ -961,23 +975,9 @@ async function openPhotoSettingsDialog(){
       </p>
     </div>
 
-    <label style="display:flex;align-items:center;gap:10px;font-weight:650;cursor:pointer;margin:0">
-      <input type="checkbox" id="dlg-photo-timeline" ${isEnabled?'checked':''} style="width:auto;cursor:pointer">
-      <span>Enable 15-minute visual timeline captures</span>
-    </label>
-
-    <div class="form-grid">
-      <label style="margin:0">
-        Image style
-        <select id="dlg-photo-style" style="margin-top:6px">
-          ${Object.entries(styles).map(([k,v])=>`<option value="${esc(k)}" ${k===currentStyle?'selected':''}>${esc(v)}</option>`).join('')}
-        </select>
-      </label>
-      <label style="margin:0">
-        Storage budget (GB)
-        <input type="number" id="dlg-photo-budget" step="0.5" min="0.5" value="${budget}" style="margin-top:6px">
-      </label>
-    </div>
+    <p class="dim small" style="margin:0">
+      Captures ${isEnabled?'on':'off'} · ${esc(styles[currentStyle]||currentStyle||'no style set')} · ${esc(String(budget))} GB budget.
+    </p>
 
     <div style="border-top:1px solid var(--edge);padding-top:14px;display:flex;flex-direction:column;gap:10px">
       <span class="eyebrow" style="margin:0;font-size:11px;letter-spacing:0.08em">Privacy & Review</span>
@@ -993,7 +993,7 @@ async function openPhotoSettingsDialog(){
 
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-top:8px;padding-top:16px;border-top:1px solid var(--edge)">
       <button class="quiet small" id="dlg-photo-jump-settings" type="button">
-        Open all Settings →
+        Capture settings in Preferences →
       </button>
       <div style="display:flex;gap:10px">
         <button class="quiet" id="dlg-photo-cancel" type="button">Cancel</button>
@@ -1001,7 +1001,7 @@ async function openPhotoSettingsDialog(){
       </div>
     </div>
   </div>`;
-  dialog('Manage Photo Settings', html);
+  dialog('Photo review', html);
 
   $('dlg-photo-cancel').onclick=()=>$('product-dialog').close();
   $('dlg-photo-jump-settings').onclick=()=>{
@@ -1013,19 +1013,12 @@ async function openPhotoSettingsDialog(){
     const btn=$('dlg-photo-save');
     btn.disabled=true;
     try{
-      await Promise.all([
-        post('/settings',{
-          image_timeline:$('dlg-photo-timeline').checked,
-          timeline_budget_gb:parseFloat($('dlg-photo-budget').value)||5,
-          image_style:$('dlg-photo-style').value
-        }),
-        post('/media/preferences',{
-          blur_nsfw_initially:$('dlg-photo-blur').checked,
-          blur_unknown_initially:$('dlg-photo-blur-unknown').checked
-        })
-      ]);
+      await post('/media/preferences',{
+        blur_nsfw_initially:$('dlg-photo-blur').checked,
+        blur_unknown_initially:$('dlg-photo-blur-unknown').checked
+      });
       $('product-dialog').close();
-      notice('Photo settings saved.');
+      notice('Photo review settings saved.');
       await render('photos');
     }catch(e){
       notice('Failed to save settings: '+e.message);
