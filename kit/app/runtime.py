@@ -365,3 +365,55 @@ def messages_page(c, session, limit=200, before=None):
 
 def messages(c, session, limit=200):
     return messages_page(c,session,limit)['messages']
+
+
+# Sources that are the companion working, not the companion talking. The feed is
+# the conversation, so scheduled runs, sub-agents and tool calls stay out of it.
+FEED_EXCLUDED_SOURCES=('cron','subagent','tool','config-audit','local-default-audit','local-tool-proof')
+
+
+def feed_page(c, limit=60, before=None):
+    """Every message the person and the companion have exchanged, on any channel.
+
+    Hermes keeps one session per conversation and one row per channel, so the
+    history of a companion who is talked to on Telegram in the morning and in
+    this workspace at night is split across rows that each tell only part of it.
+    This reads across all of them at once, newest first, and hands back the
+    channel each message arrived on so the feed can show where it happened.
+    """
+    if type(limit)!=int or not 1<=limit<=200:raise ValueError('History page size must be 1-200')
+    cursor=_page_cursor(before)
+    with session_db(c) as state:
+        if state is None:return {'messages':[],'next_cursor':None}
+        con,columns,scope,params=state
+        cols={r[1] for r in con.execute('PRAGMA table_info(messages)')}
+        if not {'role','content','timestamp','session_id'}<=cols:
+            raise ValueError('Unsupported Hermes messages schema')
+        source='s.source' if 'source' in columns else "''"
+        conditions=[scope.replace('profile_name',"s.profile_name"),
+                    "m.role IN ('user','assistant')"]
+        values=list(params)
+        if 'source' in columns:
+            conditions.append(f"lower(coalesce(s.source,'')) NOT IN ({','.join('?'*len(FEED_EXCLUDED_SOURCES))})")
+            values.extend(FEED_EXCLUDED_SOURCES)
+        if '_compressed_summary' in cols:conditions.append('coalesce(m._compressed_summary,0)=0')
+        if {'active','compacted'}<=cols:conditions.append('(m.active=1 OR m.compacted=1)')
+        if cursor:
+            if type(cursor[1])!=int:raise ValueError('Invalid message cursor')
+            conditions.append('(coalesce(m.timestamp,0),m.rowid)<(?,?)');values.extend(cursor)
+        sql=(f'SELECT m.rowid AS _cursor_id,m.role,m.content,m.timestamp,'
+             f'm.session_id AS session,{source} AS source '
+             f'FROM messages m JOIN sessions s ON s.id=m.session_id '
+             f"WHERE {' AND '.join(conditions)} "
+             f'ORDER BY coalesce(m.timestamp,0) DESC,m.rowid DESC LIMIT ?')
+        rows=[dict(r) for r in con.execute(sql,(*values,limit+1))]
+        more=len(rows)>limit;rows=rows[:limit]
+        next_cursor=_encode_cursor(rows[-1]['timestamp'] or 0,rows[-1]['_cursor_id']) if more else None
+        for row in rows:del row['_cursor_id']
+        return {'messages':list(reversed(rows)),'next_cursor':next_cursor}
+
+
+def latest_session(c):
+    """The conversation a new message should continue, or None to start one."""
+    rows=sessions_page(c,1)['sessions']
+    return rows[0]['id'] if rows else None

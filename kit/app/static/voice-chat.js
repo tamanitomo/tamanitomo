@@ -1,6 +1,6 @@
 /* Push-to-talk; microphone tracks stop before any transcription or playback. */
 let browserVoice=null,voiceReplyRequested=false;
-function voiceControlsBusy(busy){for(const id of ['session-select','new-chat','send-message'])if($(id))$(id).disabled=busy;if($('chat-message'))$('chat-message').readOnly=busy;}
+function voiceControlsBusy(busy){if($('send-message'))$('send-message').disabled=busy;if($('chat-message'))$('chat-message').readOnly=busy;}
 function stopBrowserVoice(){if(browserVoice){browserVoice.cancelled=true;browserVoice.recorder?.state==='recording'&&browserVoice.recorder.stop();browserVoice.stream?.getTracks().forEach(t=>t.stop());browserVoice.audio?.pause();clearTimeout(browserVoice.timer);}voiceReplyRequested=false;if(!activeOperation)voiceControlsBusy(false);}
 window.addEventListener('pagehide',stopBrowserVoice);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopBrowserVoice();});

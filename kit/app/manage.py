@@ -681,9 +681,8 @@ def register(app, select, load, operations):
     @app.get('/api/sessions')
     def session_list(before:str|None=None,limit:int=100): return hr.sessions_page(load(),limit,before)
 
-    @app.get('/api/sessions/{ident}')
-    def session_messages(ident:str,before:str|None=None,limit:int=200):
-        c=load();page=hr.messages_page(c,ident,limit,before);rows=page['messages']
+    def _attach_media(c,rows):
+        """Resolve the pictures, audio and video a message refers to."""
         from .content import catalog
         references=[]
         for row in rows:
@@ -701,7 +700,19 @@ def register(app, select, load, operations):
                 copy=next((copy for copy in item.get('copies',[item]) if copy['path'] in paths or str(c.data/copy['path']) in paths),None)
                 if copy:row['attachments'].append({**item,**copy})
                 if len(row['attachments'])==12:break
-        return {**page,'messages':rows,'session':ident}
+        return rows
+
+    @app.get('/api/sessions/{ident}')
+    def session_messages(ident:str,before:str|None=None,limit:int=200):
+        c=load();page=hr.messages_page(c,ident,limit,before)
+        return {**page,'messages':_attach_media(c,page['messages']),'session':ident}
+
+    @app.get('/api/feed')
+    def conversation_feed(before:str|None=None,limit:int=60):
+        """One conversation, across every channel it happened on."""
+        c=load();page=hr.feed_page(c,limit,before)
+        return {**page,'messages':_attach_media(c,page['messages']),
+                'session':hr.latest_session(c),'agent':c.agent}
 
     @app.get('/api/activity')
     def activity():
