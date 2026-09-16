@@ -412,11 +412,41 @@ def feed_page(c, limit=60, before=None):
         rows=[dict(r) for r in con.execute(sql,(*values,limit+1))]
         more=len(rows)>limit;rows=rows[:limit]
         next_cursor=_encode_cursor(rows[-1]['timestamp'] or 0,rows[-1]['_cursor_id']) if more else None
-        for row in rows:del row['_cursor_id']
+        mine=read_workspace_sessions(c)
+        for row in rows:
+            del row['_cursor_id']
+            if row.get('session') in mine:row['source']='tamanitomo'
         return {'messages':list(reversed(rows)),'next_cursor':next_cursor}
 
 
 RESUMABLE_SOURCES=('cli','desktop','tui')
+
+
+def workspace_sessions_path(c):
+    """Sessions this workspace started, so the feed can say where they happened.
+
+    Hermes records a chat sent from here as a `cli` session, indistinguishable
+    from one typed at a real terminal. The difference matters to the person
+    reading the feed, so the workspace notes its own as it makes them.
+    """
+    return Path(c.home)/'.companion-kit-sessions.json'
+
+
+def read_workspace_sessions(c):
+    try:
+        rows=json.loads(workspace_sessions_path(c).read_text(encoding='utf-8'))
+        return {str(x) for x in rows} if isinstance(rows,list) else set()
+    except (OSError,ValueError,TypeError):return set()
+
+
+def note_workspace_session(c,session):
+    """Remember one, keeping the file small enough to read on every feed page."""
+    if not session:return
+    known=read_workspace_sessions(c)
+    if session in known:return
+    rows=[*sorted(known),str(session)][-400:]
+    try:cp.atomic_write(workspace_sessions_path(c),json.dumps(rows))
+    except OSError:pass
 
 
 def latest_session(c):

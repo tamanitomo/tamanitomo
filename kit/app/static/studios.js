@@ -731,6 +731,105 @@ function wirePortrait(){
  };
 }
 
+/* ------------------------------------------------- workflow controls, humanely
+
+   A ComfyUI workflow is a graph of nodes, and editing one used to mean editing
+   its JSON by hand in a textarea — impossible on a phone and unpleasant
+   anywhere. The parts a person actually turns are few and well known: which
+   checkpoint, which LoRAs and how strongly, how many steps, how hard the
+   guidance, what size. Those are lifted out of the graph and given real
+   controls; the JSON stays underneath, authoritative, and is written back.   */
+
+let comfyModelCache={};
+async function comfyModels(endpoint){
+  if(!endpoint)return {};
+  if(comfyModelCache[endpoint])return comfyModelCache[endpoint];
+  try{
+    const r=await post('/images/check',{endpoint});
+    comfyModelCache[endpoint]=r.models||{};
+  }catch(error){comfyModelCache[endpoint]={};}
+  return comfyModelCache[endpoint];
+}
+
+/* Nodes of a class, in graph order, so the list is stable between renders. */
+const nodesOfClass=(workflow,...classes)=>Object.entries(workflow||{})
+  .filter(([,node])=>classes.includes(node?.class_type))
+  .sort((a,b)=>Number(a[0])-Number(b[0]));
+
+/* A slider and its number, kept in step, for a value that has a sensible range. */
+function sliderRow(id,label,value,min,max,step,hint){
+  return `<label class="studio-slider" for="${id}">
+    <span class="studio-slider-head"><span>${esc(label)}</span>
+      <output for="${id}" id="${id}-out">${esc(String(value))}</output></span>
+    <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${value}">
+    ${hint?`<small class="dim">${esc(hint)}</small>`:''}
+  </label>`;
+}
+function wireSliders(root){
+  for(const range of root.querySelectorAll('input[type=range]')){
+    const out=root.querySelector('#'+range.id+'-out');
+    if(out)range.addEventListener('input',()=>{out.textContent=range.value;});
+  }
+}
+
+/* Prompt parts are comma-separated tags. They are shown as tags and written
+   back as `a, b, c`, so what reaches the model is never a run-on line. */
+function tagsFromText(text){
+  return String(text||'').split(',').map(x=>x.trim()).filter(Boolean);
+}
+function tagFieldHTML(key,label,text,hint){
+  const tags=tagsFromText(text);
+  return `<div class="tag-field" data-tag-field="${esc(key)}">
+    <div class="tag-field-head"><strong>${esc(label)}</strong>${hint?`<small class="dim">${esc(hint)}</small>`:''}</div>
+    <div class="tag-list" data-tags>${tags.map((t,i)=>
+      `<span class="tag-chip">${esc(t)}<button type="button" class="tag-remove" data-remove="${i}" aria-label="Remove ${esc(t)}">✕</button></span>`).join('')}
+    </div>
+    <input class="tag-input" data-tag-input placeholder="Add a tag, then Enter" aria-label="Add a tag to ${esc(label)}">
+  </div>`;
+}
+/* One delegated handler for every tag field on the page. */
+function wireTagFields(root,onChange){
+  root.addEventListener('click',event=>{
+    const remove=event.target.closest('[data-remove]');
+    if(!remove)return;
+    const field=remove.closest('[data-tag-field]');
+    const tags=readTags(field);
+    tags.splice(Number(remove.dataset.remove),1);
+    writeTags(field,tags);onChange&&onChange();
+  });
+  root.addEventListener('keydown',event=>{
+    const input=event.target.closest('[data-tag-input]');
+    if(!input)return;
+    const field=input.closest('[data-tag-field]');
+    if(event.key===','||event.key==='Enter'){
+      event.preventDefault();
+      const value=input.value.trim().replace(/,+$/,'');
+      if(!value)return;
+      writeTags(field,[...readTags(field),...tagsFromText(value)]);
+      input.value='';onChange&&onChange();
+    }else if(event.key==='Backspace'&&!input.value){
+      const tags=readTags(field);
+      if(!tags.length)return;
+      tags.pop();writeTags(field,tags);onChange&&onChange();
+    }
+  });
+  // A tag typed and then left behind should not be lost on save.
+  root.addEventListener('blur',event=>{
+    const input=event.target.closest('[data-tag-input]');
+    if(!input||!input.value.trim())return;
+    const field=input.closest('[data-tag-field]');
+    writeTags(field,[...readTags(field),...tagsFromText(input.value)]);
+    input.value='';onChange&&onChange();
+  },true);
+}
+const readTags=field=>[...field.querySelectorAll('.tag-chip')].map(chip=>chip.firstChild.textContent.trim());
+function writeTags(field,tags){
+  const unique=[...new Set(tags.filter(Boolean))];
+  field.querySelector('[data-tags]').innerHTML=unique.map((t,i)=>
+    `<span class="tag-chip">${esc(t)}<button type="button" class="tag-remove" data-remove="${i}" aria-label="Remove ${esc(t)}">✕</button></span>`).join('');
+}
+const tagFieldValue=field=>readTags(field).join(', ');
+
 workspaceHandlers['image-studio']=async()=>{
  const [d,portrait]=await Promise.all([api('/images'),api('/portrait')]);
  let settings=d.settings,revision=d.revision,presetIndex=0;const defaults=d.effective;
@@ -961,8 +1060,17 @@ workspaceHandlers['image-studio']=async()=>{
  function readPreset(){
   const p=settings.presets[presetIndex];if(!p||!$('preset-name'))return;
   p.name=$('preset-name').value;p.category=$('preset-category').value;p.endpoint=$('preset-endpoint')?.value||'';p.include_identity=$('preset-include-identity')?.checked??true;
-  p.parts={...p.parts};for(const input of $('image-preset-editor').querySelectorAll('[data-preset-part]'))p.parts[input.dataset.presetPart]=input.value;
-  p.negative=$('preset-negative')?.value||'';for(const k of ['width','height','steps','cfg','seed','denoise'])if($('preset-'+k))p[k]=Number($('preset-'+k).value);
+  // Tags are stored the way the model wants them: comma separated, no strays.
+  p.parts={...p.parts};
+  for(const field of $('image-preset-editor').querySelectorAll('[data-tag-field]')){
+    const key=field.dataset.tagField,value=tagFieldValue(field);
+    if(key==='__negative')p.negative=value;else p.parts[key]=value;
+  }
+  if($('preset-size')){
+    const [w,h]=String($('preset-size').value).split('\u00d7').map(Number);
+    if(w&&h){p.width=w;p.height=h;}
+  }
+  for(const k of ['steps','cfg','seed','denoise'])if($('preset-'+k))p[k]=Number($('preset-'+k).value);
   if(p.provider==='comfyui'){try{p.workflow=JSON.parse($('preset-workflow').value);p.mappings=JSON.parse($('preset-mappings').value);}catch(e){}}
   else if(p.provider==='openai'){p.model=$('preset-model').value;p.api_key_env=$('preset-key-env').value;}
  }
@@ -1019,20 +1127,261 @@ workspaceHandlers['image-studio']=async()=>{
   updateActiveLaneBadge();
  }
 
- function drawPreset(){
+ async function drawPreset(){
   menus();const p=settings.presets[presetIndex];
   if(!p){$('image-preset-editor').innerHTML='<p class="dim">Add a named workflow or API provider to begin. Each can specialize in a different image style.</p>';return;}
-  $('image-preset-editor').innerHTML=`<div class="form-grid"><label>Name<input id="preset-name" value="${esc(p.name)}" placeholder="Comfy – PlantMilk"></label><label>Image type<select id="preset-category">${options(d.categories.map(v=>[v,formLabel(v)]),p.category)}</select></label>${p.provider!=='hermes'?`<label>Endpoint<input id="preset-endpoint" type="url" value="${esc(p.endpoint)}"></label>`:''}${p.provider==='hermes'?`<p class="dim">Hermes provider: ${esc(p.hermes_provider||'Follow current Hermes default')} · ${esc(p.model||'Provider default')}${p.available===false?' · Reconnect this provider in Hermes settings':''}</p>`:''}${p.provider==='openai'?`<label>Model<input id="preset-model" value="${esc(p.model||'')}" placeholder="Model supported by this API"></label><label>API-key environment variable<input id="preset-key-env" value="${esc(p.api_key_env||'OPENAI_API_KEY')}"></label>`:''}${['width','height','steps','cfg','seed','denoise'].filter(k=>(k!=='denoise'||p.requires_reference)&&p.provider==='comfyui'||(p.provider==='openai'&&['width','height'].includes(k))).map(k=>`<label>${formLabel(k)}${k==='seed'?' (−1 random)':''}<input id="preset-${k}" type="number" step="${['cfg','denoise'].includes(k)?'.05':'1'}" value="${p[k]??({width:832,height:1216,steps:18,cfg:5,seed:-1,denoise:.35})[k]}"></label>`).join('')}</div><details open><summary>Structured prompt · PlantMilk-style separation</summary><label class="inline-label switch-container" style="margin:8px 0"><input id="preset-include-identity" type="checkbox" ${p.include_identity!==false?'checked':''}><span class="switch-slider"></span><span class="switch-label">Include the companion’s identity (turn off for scenery)</span></label><div class="form-grid">${d.parts.map(k=>`<label>${formLabel(k)} ${k==='identity'?'<span class="dim small">Blank follows companion identity; use this for model-specific identity tags</span>':''}<textarea data-preset-part="${k}">${esc(p.parts?.[k]||'')}</textarea></label>`).join('')}</div><label ${p.provider!=='comfyui'?'hidden':''}>Negative prompt<textarea id="preset-negative">${esc(p.negative||'')}</textarea></label></details>${p.provider==='comfyui'?`<div class="actions"><button class="quiet" id="check-comfy">Test connection & list models</button><button class="quiet" id="add-workflow-lora">Add LoRA node</button><button class="quiet" id="derive-img2img">Create image-to-image copy</button></div><div id="comfy-models"></div><details><summary>Workflow nodes & control mappings</summary><p class="dim">Use ComfyUI’s Export (API) format. Mappings are [node ID, input name].</p><label>API workflow<textarea id="preset-workflow" class="code-editor">${esc(JSON.stringify(p.workflow,null,2))}</textarea></label><label>Input mappings<textarea id="preset-mappings" class="code-editor">${esc(JSON.stringify(p.mappings,null,2))}</textarea></label></details>`:''}<div class="actions" style="margin-top:14px"><button class="quiet" id="export-image-preset">Download this preset</button><button class="quiet" id="duplicate-image-preset">Duplicate preset</button><button class="quiet" id="remove-image-preset">Remove preset</button></div>`;
-  $('preset-name').onchange=()=>{readPreset();menus();};
-  $('export-image-preset').onclick=()=>{readPreset();downloadJSON(p.id+'.json',p);};
-  $('duplicate-image-preset').onclick=()=>{readPreset();const copy=structuredClone(p);copy.id='preset-'+presetSuffix();copy.name+=' copy';settings.presets.push(copy);presetIndex=settings.presets.length-1;drawPreset();};
-  $('remove-image-preset').onclick=()=>{settings.presets.splice(presetIndex,1);for(const k in routeValues)if(routeValues[k]===p.id)delete routeValues[k];if(defaultId===p.id)defaultId='';presetIndex=0;drawPreset();};
-  if($('derive-img2img'))$('derive-img2img').onclick=async()=>{const copy=await post('/images/img2img',{preset:p.id,denoise:.35});copy.id='img2img-'+presetSuffix();settings.presets.push(copy);presetIndex=settings.presets.length-1;drawPreset();notice('Created from the saved recipe. Save this copy, then preview it with your reference portrait.');};
-  if($('check-comfy'))$('check-comfy').onclick=async()=>{readPreset();const r=await post('/images/check',{endpoint:p.endpoint});$('comfy-models').innerHTML=`<p class="status-good">Connected · ${r.nodes.length} node types available</p><div class="form-grid">${Object.entries(p.workflow).filter(([id,n])=>['CheckpointLoaderSimple','LoraLoader','UpscaleModelLoader'].includes(n.class_type)).map(([id,n])=>Object.entries(n.inputs).filter(([k,v])=>!Array.isArray(v)).map(([k,v])=>`<label>${esc(n.class_type+' '+id+' · '+k)}${r.models[k]?`<select data-node-id="${id}" data-node-input="${k}">${options([['','Choose installed model'],...r.models[k].map(v=>[v,v])],v)}</select>`:`<input data-node-id="${id}" data-node-input="${k}" type="number" step="0.05" value="${esc(v)}">`}</label>`).join('')).join('')}</div>`;for(const input of $('comfy-models').querySelectorAll('[data-node-id]'))input.onchange=()=>{p.workflow[input.dataset.nodeId].inputs[input.dataset.nodeInput]=input.type==='number'?Number(input.value):input.value;$('preset-workflow').value=JSON.stringify(p.workflow,null,2);};};
-  if($('add-workflow-lora'))$('add-workflow-lora').onclick=()=>{readPreset();const checkpoints=Object.entries(p.workflow).filter(([id,n])=>n.class_type==='CheckpointLoaderSimple');if(checkpoints.length!==1)throw Error('Use the workflow editor to connect LoRAs in a multi-checkpoint workflow.');const base=checkpoints[0][0],id=String(Math.max(0,...Object.keys(p.workflow).map(Number).filter(Number.isFinite))+1);for(const node of Object.values(p.workflow))for(const [k,v] of Object.entries(node.inputs))if(Array.isArray(v)&&v[0]===base&&[0,1].includes(v[1]))node.inputs[k]=[id,v[1]];p.workflow[id]={class_type:'LoraLoader',inputs:{model:[base,0],clip:[base,1],lora_name:'CHOOSE_YOUR_LORA.safetensors',strength_model:1,strength_clip:1}};$('preset-workflow').value=JSON.stringify(p.workflow,null,2);notice('LoRA added. Test the connection to choose an installed LoRA and set its strengths.');};
+  const comfy=p.provider==='comfyui';
+  const models=comfy?await comfyModels(p.endpoint):{};
+  const loras=models.lora_name||[];
+  const checkpoints=models.ckpt_name||[];
+  const loraNodes=comfy?nodesOfClass(p.workflow,'LoraLoader'):[];
+  const ckptNodes=comfy?nodesOfClass(p.workflow,'CheckpointLoaderSimple'):[];
+  const SIZES=[[832,1216,'Portrait 832×1216'],[1216,832,'Landscape 1216×832'],[1024,1024,'Square 1024'],
+    [768,1152,'Portrait 768×1152'],[1152,768,'Landscape 1152×768'],[512,768,'Small portrait']];
+  const sizeValue=`${p.width||832}×${p.height||1216}`;
+  const knownSize=SIZES.some(([w,h])=>`${w}×${h}`===sizeValue);
+  const PART_HINT={quality:'Rendering quality, not subject',identity:'Leave empty to follow the companion',
+    scene:'Where and what is happening',wardrobe:'What they are wearing',
+    lighting:'How the scene is lit',camera:'Lens, framing, distance'};
+
+  $('image-preset-editor').innerHTML=`
+    <div class="form-grid">
+      <label>Name<input id="preset-name" value="${esc(p.name)}" placeholder="Comfy – PlantMilk"></label>
+      <label>Image type
+        <select id="preset-category">
+          <option value="">Not assigned yet</option>
+          ${options(d.categories.map(v=>[v,formLabel(v)]),p.category||'')}
+        </select>
+        <small class="dim">Assign it to a lane once you have tested it.</small>
+      </label>
+      ${p.provider!=='hermes'?`<label>Endpoint<input id="preset-endpoint" type="url" value="${esc(p.endpoint)}"></label>`:''}
+      ${p.provider==='hermes'?`<p class="dim">Hermes provider: ${esc(p.hermes_provider||'Follow current Hermes default')} · ${esc(p.model||'Provider default')}${p.available===false?' · Reconnect this provider in Hermes settings':''}</p>`:''}
+      ${p.provider==='openai'?`<label>Model<input id="preset-model" value="${esc(p.model||'')}" placeholder="Model supported by this API"></label>
+        <label>API-key environment variable<input id="preset-key-env" value="${esc(p.api_key_env||'OPENAI_API_KEY')}"></label>`:''}
+    </div>
+
+    ${comfy?`
+    <div class="card studio-block">
+      <h3>Model</h3>
+      ${ckptNodes.length?ckptNodes.map(([id,node])=>`
+        <label>Checkpoint
+          <select data-ckpt-node="${esc(id)}">
+            ${checkpoints.length?options(checkpoints.map(v=>[v,v]),node.inputs.ckpt_name)
+              :`<option value="${esc(node.inputs.ckpt_name||'')}">${esc(node.inputs.ckpt_name||'—')}</option>`}
+          </select>
+        </label>`).join(''):'<p class="dim small">This workflow loads its model another way.</p>'}
+      ${!checkpoints.length?'<p class="dim small">Connect to ComfyUI to choose from the models it has.</p>':''}
+    </div>
+
+    <div class="card studio-block">
+      <div class="studio-block-head"><h3>LoRAs</h3>
+        <button type="button" class="quiet small" id="add-lora-row" ${loras.length?'':'disabled'}>Add LoRA</button></div>
+      ${loraNodes.length?`<div class="lora-stack">${loraNodes.map(([id,node])=>`
+        <div class="lora-row" data-lora-node="${esc(id)}">
+          <div class="lora-row-head">
+            <select data-lora-name aria-label="LoRA file">
+              ${loras.length?options(loras.map(v=>[v,v.replace(/\\.safetensors$/,'')]),node.inputs.lora_name)
+                :`<option value="${esc(node.inputs.lora_name||'')}">${esc((node.inputs.lora_name||'').replace(/\\.safetensors$/,''))}</option>`}
+            </select>
+            <button type="button" class="quiet small lora-drop" data-drop-lora="${esc(id)}" aria-label="Remove this LoRA">✕</button>
+          </div>
+          <div class="lora-strengths">
+            ${sliderRow('lora-'+id+'-model','Model',Number(node.inputs.strength_model??1),-1,2,0.05)}
+            ${sliderRow('lora-'+id+'-clip','Text',Number(node.inputs.strength_clip??1),-1,2,0.05)}
+          </div>
+        </div>`).join('')}</div>`
+        :'<p class="dim small">No LoRAs in this workflow yet.</p>'}
+      ${loras.length?`<p class="dim small">${loras.length} available on this ComfyUI.</p>`
+        :'<p class="dim small">Test the connection below to load the LoRAs this ComfyUI has.</p>'}
+    </div>
+
+    <div class="card studio-block">
+      <h3>Render</h3>
+      <div class="form-grid">
+        <label>Size
+          <select id="preset-size">
+            ${options(SIZES.map(([w,h,label])=>[`${w}×${h}`,label]),sizeValue)}
+            ${knownSize?'':`<option value="${esc(sizeValue)}" selected>Custom ${esc(sizeValue)}</option>`}
+          </select>
+        </label>
+        <label>Seed
+          <span class="seed-row">
+            <input id="preset-seed" type="number" step="1" value="${p.seed??-1}">
+            <button type="button" class="quiet small" id="preset-seed-random" title="Random each render">↻</button>
+          </span>
+          <small class="dim">−1 picks a new one every time.</small>
+        </label>
+      </div>
+      ${sliderRow('preset-steps','Steps',p.steps??18,4,60,1,'More steps, more detail and more time.')}
+      ${sliderRow('preset-cfg','Guidance',p.cfg??5,1,12,0.1,'How strictly the prompt is followed.')}
+      ${p.requires_reference?sliderRow('preset-denoise','Change from the reference',p.denoise??0.35,0.05,1,0.05,'Low keeps the original; high reinvents it.'):''}
+    </div>
+
+    <div class="card studio-block">
+      <div class="studio-block-head"><h3>Prompt</h3>
+        <label class="inline-label switch-container" style="margin:0">
+          <input id="preset-include-identity" type="checkbox" ${p.include_identity!==false?'checked':''}>
+          <span class="switch-slider"></span><span class="switch-label">Include the companion</span>
+        </label></div>
+      <div class="tag-fields">
+        ${d.parts.map(k=>tagFieldHTML(k,formLabel(k),p.parts?.[k]||'',PART_HINT[k]||'')).join('')}
+        ${tagFieldHTML('__negative','Negative',p.negative||'','What to keep out')}
+      </div>
+    </div>
+
+    <div class="studio-block-actions">
+      <button type="button" class="act" id="test-preset">Test render</button>
+      <button type="button" class="quiet" id="check-comfy">Check connection</button>
+      <button type="button" class="quiet" id="derive-img2img">Make an image-to-image copy</button>
+      <span class="dim small" id="test-preset-status" role="status"></span>
+    </div>
+    <div id="test-preset-result"></div>
+    <div id="comfy-models"></div>
+
+    <details class="studio-advanced">
+      <summary>The raw workflow</summary>
+      <p class="dim small">ComfyUI's Export (API) format. The controls above write into this.</p>
+      <label>API workflow<textarea id="preset-workflow" class="code-editor">${esc(JSON.stringify(p.workflow,null,2))}</textarea></label>
+      <label>Input mappings<textarea id="preset-mappings" class="code-editor">${esc(JSON.stringify(p.mappings,null,2))}</textarea></label>
+    </details>`
+    :`<div class="card studio-block">
+      <div class="studio-block-head"><h3>Prompt</h3>
+        <label class="inline-label switch-container" style="margin:0">
+          <input id="preset-include-identity" type="checkbox" ${p.include_identity!==false?'checked':''}>
+          <span class="switch-slider"></span><span class="switch-label">Include the companion</span>
+        </label></div>
+      <div class="tag-fields">
+        ${d.parts.map(k=>tagFieldHTML(k,formLabel(k),p.parts?.[k]||'',PART_HINT[k]||'')).join('')}
+      </div>
+    </div>
+    <div class="studio-block-actions"><button type="button" class="act" id="test-preset">Test render</button>
+      <span class="dim small" id="test-preset-status" role="status"></span></div>
+    <div id="test-preset-result"></div>`}
+
+    <div class="actions studio-danger">
+      <button type="button" class="quiet" id="export-image-preset">Download</button>
+      <button type="button" class="quiet" id="duplicate-image-preset">Duplicate</button>
+      <button type="button" class="quiet" id="remove-image-preset">Delete this workflow</button>
+    </div>`;
+
+  wireSliders($('image-preset-editor'));
+  wirePresetControls(p);
  }
 
- drawPreset();
+ /* Every control writes straight into the preset, so the raw JSON underneath is
+    always what the sliders say. */
+ function wirePresetControls(p){
+  const root=$('image-preset-editor');
+  if($('preset-name'))$('preset-name').onchange=()=>{readPreset();menus();};
+  if($('preset-seed-random'))$('preset-seed-random').onclick=()=>{$('preset-seed').value=-1;readPreset();};
+  for(const select of root.querySelectorAll('[data-ckpt-node]'))select.onchange=()=>{
+    p.workflow[select.dataset.ckptNode].inputs.ckpt_name=select.value;syncWorkflowText(p);};
+  for(const row of root.querySelectorAll('[data-lora-node]')){
+    const id=row.dataset.loraNode,node=p.workflow[id];
+    row.querySelector('[data-lora-name]').onchange=e=>{node.inputs.lora_name=e.target.value;syncWorkflowText(p);};
+    const model=$('lora-'+id+'-model'),clip=$('lora-'+id+'-clip');
+    if(model)model.addEventListener('change',()=>{node.inputs.strength_model=Number(model.value);syncWorkflowText(p);});
+    if(clip)clip.addEventListener('change',()=>{node.inputs.strength_clip=Number(clip.value);syncWorkflowText(p);});
+  }
+  for(const drop of root.querySelectorAll('[data-drop-lora]'))drop.onclick=()=>{
+    removeLoraNode(p,drop.dataset.dropLora);drawPreset();};
+  if($('add-lora-row'))$('add-lora-row').onclick=async()=>{
+    const models=await comfyModels(p.endpoint);
+    addLoraNode(p,(models.lora_name||[])[0]);drawPreset();};
+  if($('preset-size'))$('preset-size').onchange=()=>readPreset();
+
+  wireTagFields(root,()=>readPreset());
+
+  $('export-image-preset').onclick=()=>{readPreset();downloadJSON(p.id+'.json',p);};
+  $('duplicate-image-preset').onclick=()=>{readPreset();const copy=structuredClone(p);
+    copy.id='preset-'+presetSuffix();copy.name+=' copy';settings.presets.push(copy);
+    presetIndex=settings.presets.length-1;drawPreset();};
+  $('remove-image-preset').onclick=()=>{
+    if(!confirm('Delete "'+p.name+'"? Any lane pointing at it falls back to the default.'))return;
+    settings.presets.splice(presetIndex,1);
+    for(const k in routeValues)if(routeValues[k]===p.id)delete routeValues[k];
+    if(defaultId===p.id)defaultId='';
+    presetIndex=Math.max(0,presetIndex-1);drawPreset();
+    notice('Workflow deleted. Save to keep the change.');};
+  if($('derive-img2img'))$('derive-img2img').onclick=async()=>{
+    const copy=await post('/images/img2img',{preset:p.id,denoise:.35});
+    copy.id='img2img-'+presetSuffix();settings.presets.push(copy);
+    presetIndex=settings.presets.length-1;drawPreset();};
+  if($('check-comfy'))$('check-comfy').onclick=async()=>{
+    readPreset();delete comfyModelCache[p.endpoint];
+    $('comfy-models').innerHTML='<p class="dim small">Checking…</p>';
+    try{
+      const r=await post('/images/check',{endpoint:p.endpoint});
+      comfyModelCache[p.endpoint]=r.models||{};
+      $('comfy-models').innerHTML=`<p class="status-good">Connected · ${(r.models?.ckpt_name||[]).length} models · ${(r.models?.lora_name||[]).length} LoRAs</p>`;
+      drawPreset();
+    }catch(error){$('comfy-models').innerHTML=`<p class="bad">${esc(error.message)}</p>`;}
+  };
+  if($('test-preset'))$('test-preset').onclick=async()=>testPreset(p);
+ }
+
+ /* A LoRA loader sits in a chain: model and clip come from the node before it,
+    and whatever consumed the last one now consumes this. Adding or removing one
+    has to mend that chain or the graph stops rendering. */
+ function loraChain(workflow){return nodesOfClass(workflow,'LoraLoader').map(([id])=>id);}
+ function rewire(workflow,fromId,toRef){
+  for(const node of Object.values(workflow)){
+    for(const [key,value] of Object.entries(node.inputs||{})){
+      if(Array.isArray(value)&&String(value[0])===String(fromId))node.inputs[key]=[toRef[0],value[1]];
+    }
+  }
+ }
+ function addLoraNode(p,name){
+  if(!name)return;
+  const chain=loraChain(p.workflow);
+  const lastId=chain[chain.length-1];
+  const source=lastId||(nodesOfClass(p.workflow,'CheckpointLoaderSimple')[0]||[])[0];
+  if(!source)return;
+  const newId=String(Math.max(0,...Object.keys(p.workflow).map(Number))+1);
+  // Everything that read from the end of the chain now reads from the new node.
+  rewire(p.workflow,source,[newId]);
+  p.workflow[newId]={class_type:'LoraLoader',inputs:{
+    model:[source,0],clip:[source,lastId?1:1],
+    lora_name:name,strength_model:0.8,strength_clip:0.8}};
+  syncWorkflowText(p);
+ }
+ function removeLoraNode(p,id){
+  const node=p.workflow[id];if(!node)return;
+  const modelSource=node.inputs.model,clipSource=node.inputs.clip;
+  for(const other of Object.values(p.workflow)){
+    for(const [key,value] of Object.entries(other.inputs||{})){
+      if(!Array.isArray(value)||String(value[0])!==String(id))continue;
+      other.inputs[key]=value[1]===1?[...clipSource]:[...modelSource];
+    }
+  }
+  delete p.workflow[id];
+  syncWorkflowText(p);
+ }
+ function syncWorkflowText(p){
+  if($('preset-workflow'))$('preset-workflow').value=JSON.stringify(p.workflow,null,2);
+ }
+
+ /* Renders this workflow as it stands, with no lane assigned. The server reads
+    the preset by id, so the edits have to be saved before it can see them. */
+ async function testPreset(p){
+  readPreset();
+  const status=$('test-preset-status'),out=$('test-preset-result');
+  status.textContent='Saving\u2026';out.innerHTML='';
+  $('test-preset').disabled=true;
+  try{
+   await saveSettings('');
+   status.textContent='Rendering\u2026';
+   await action('/images/generate',{preset:p.id,category:p.category||'portrait',parts:p.parts||{}},r=>{
+     out.innerHTML=r.image
+       ? `<img class="studio-test-shot ${r.blur?'concealed-media':''}" src="${mediaUrl(r.image)}" alt="Test render">`
+       : '<p class="dim small">Rendered. It is in Photos.</p>';
+     status.textContent='Done \u00b7 saved to Photos';
+   });
+  }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
+  finally{$('test-preset').disabled=false;}
+ }
+
+ await drawPreset();
  $('image-preset-select').onchange=e=>{readPreset();presetIndex=Number(e.target.value);drawPreset();};
  $('add-comfy-preset').onclick=async()=>{readPreset();const p=await api('/images/modular-template');p.id='comfy-'+presetSuffix();settings.presets.push(p);presetIndex=settings.presets.length-1;drawPreset();showStudioView('presets');};
  $('add-cloud-preset').onclick=()=>{readPreset();settings.presets.push({id:'api-'+presetSuffix(),name:'Image API',provider:'openai',category:'portrait',endpoint:'https://api.openai.com/v1',api_key_env:'OPENAI_API_KEY',model:'',width:1024,height:1024,parts:{},negative:''});presetIndex=settings.presets.length-1;drawPreset();showStudioView('presets');};

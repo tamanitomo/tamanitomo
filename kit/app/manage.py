@@ -748,6 +748,9 @@ def register(app, select, load, operations):
             r=rt.chat(args,home=h,report=report)
             after=hr.sessions(c)
             new=getattr(r,'session',None) or next((row['id'] for row in after if row['id'] not in before and row.get('source') in ('cli','desktop','tui')),session)
+            # Hermes files this as a cli session; the feed should still be able
+            # to say it happened here rather than at a terminal.
+            hr.note_workspace_session(c,new)
             return {'response':ANSI_TEXT(r.stdout),'session':new,
                     'messages':hr.messages(c,new) if new else [],
                     'note':'Hermes owns this conversation. All channels share this profile’s identity, memory, and lived state.'}

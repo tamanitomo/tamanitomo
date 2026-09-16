@@ -195,6 +195,7 @@ const CHANNELS={
   whatsapp:{label:'WhatsApp',mark:'●'},
   sms:{label:'SMS',mark:'✉'},
   email:{label:'Email',mark:'✉'},
+  tamanitomo:{label:'Tamanitomo',mark:'◈'},
   cli:{label:'Terminal',mark:'⌫'},
   terminal:{label:'Terminal',mark:'⌫'},
   tui:{label:'Terminal',mark:'⌫'},

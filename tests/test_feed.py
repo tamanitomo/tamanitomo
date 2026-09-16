@@ -65,6 +65,19 @@ class FeedTests(unittest.TestCase):
         self.assertTrue(all(row['content'].strip() for row in rows))
         self.assertEqual(len(rows),6)
 
+    def test_a_message_sent_from_here_says_so(self):
+        """Hermes files a chat sent from this workspace as a `cli` session, the
+        same as one typed at a terminal. The feed should still be able to tell
+        the reader which of the two it was."""
+        from kit.app import runtime as hr
+        rows=self.get('/feed').json()['messages']
+        self.assertNotIn('tamanitomo',{r['source'] for r in rows})
+        hr.note_workspace_session(self.f.c,'web')
+        rows=self.get('/feed').json()['messages']
+        by_source={r['content']:r['source'] for r in rows}
+        self.assertEqual(by_source['at the desk'],'tamanitomo')
+        self.assertEqual(by_source['on the train'],'telegram')
+
     def test_another_companions_conversation_is_never_shown(self):
         rows=self.get('/feed').json()['messages']
         self.assertNotIn('not yours',[r['content'] for r in rows])
