@@ -1749,20 +1749,20 @@ body[data-page="chat"] main{padding:0}
 /* --------------------------------------------------------- message bubbles */
 .bubble{
   position:relative;align-self:flex-start;max-width:min(78%,560px);
-  padding:9px 14px;border-radius:16px 16px 16px 5px;
+  padding:10px 15px;border-radius:19px 19px 19px 8px;
   background:var(--surface-3);border:1px solid transparent;
   font-size:15px;line-height:1.55;white-space:normal
 }
 .bubble.user{
-  align-self:flex-end;border-radius:16px 16px 5px 16px;
+  align-self:flex-end;border-radius:19px 19px 8px 19px;
   background:var(--accent);color:var(--on-accent)
 }
-/* A run from one sender: only the first and last bubble keep the tail corners. */
-.bubble:not(.starts-run){border-top-left-radius:6px;margin-top:-4px}
-.bubble:not(.ends-run){border-bottom-left-radius:6px}
-.bubble.user:not(.starts-run){border-top-left-radius:16px;border-top-right-radius:6px}
-.bubble.user:not(.ends-run){border-bottom-left-radius:16px;border-bottom-right-radius:6px}
-.bubble:not(.ends-run){border-bottom-left-radius:6px}
+/* A run from one sender stays rounded; only the corner facing the rest of the
+   run tightens, and not to a square. */
+.bubble:not(.starts-run){border-top-left-radius:9px;margin-top:-2px}
+.bubble:not(.ends-run){border-bottom-left-radius:9px}
+.bubble.user:not(.starts-run){border-top-left-radius:19px;border-top-right-radius:9px}
+.bubble.user:not(.ends-run){border-bottom-left-radius:19px;border-bottom-right-radius:9px}
 .bubble.ends-run{margin-bottom:6px}
 .bubble .message-body{word-break:break-word;white-space:pre-wrap}
 /* Replies here run to paragraphs, not one-liners; they need to breathe inside
@@ -1780,15 +1780,17 @@ body[data-page="chat"] main{padding:0}
 }
 .bubble .avatar.bubble-face>span{display:grid;place-items:center;width:100%;height:100%}
 .bubble small{
-  display:flex;align-items:center;gap:7px;margin-top:4px;font-size:10.5px;
-  opacity:.72;justify-content:flex-start
+  display:flex;align-items:center;gap:8px;margin-top:6px;font-size:11.5px;
+  font-weight:500;opacity:.9;justify-content:flex-start
 }
 .bubble.user small{justify-content:flex-end}
 .bubble-channel{
-  font-weight:700;letter-spacing:.04em;text-transform:uppercase;font-size:9.5px;
-  padding:1px 6px;border-radius:5px;background:color-mix(in srgb,currentColor 15%,transparent)
+  font-weight:700;letter-spacing:.04em;text-transform:uppercase;font-size:10px;
+  padding:2px 7px;border-radius:6px;background:color-mix(in srgb,currentColor 18%,transparent)
 }
-.bubble.user.sending{opacity:.72}
+.bubble.user.sending{opacity:.78}
+.bubble .bubble-status{font-variant-numeric:tabular-nums}
+.bubble.sending .bubble-status{font-style:italic}
 .bubble.user.send-error{background:var(--bad-bg);color:var(--ink);border-color:var(--bad)}
 
 /* Each channel gets its own tint, on both sides of the conversation, so where a
@@ -1971,3 +1973,10 @@ body[data-page="chat"] main{padding:0}
   .composer-route-info,.composer-active-route{flex-wrap:wrap;gap:8px}
   .composer-box-header{row-gap:4px}
 }
+
+/* The review count on Home, beside the switcher, for the layout where the rail
+   that usually carries it is not on screen. */
+.home-banner:empty{display:none}
+.home-banner .link-button{padding:4px 10px;font-size:12px;border-radius:999px;
+  border:1px solid currentColor;line-height:1.2}
+@media(min-width:901px){.home-banner{display:none}}

@@ -807,15 +807,7 @@ workspaceHandlers['image-studio']=async()=>{
      </div>
     </div>
 
-    <div class="card" style="background:color-mix(in srgb,var(--accent) 5%,transparent);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);padding:14px;border-radius:10px;margin-top:14px">
-      <div style="display:flex;align-items:flex-start;gap:10px">
-        <span style="font-size:1.2rem">🛡️</span>
-        <div>
-          <strong style="color:var(--accent);font-size:13px;display:block">Companion Agency & Realism Policy</strong>
-          <p class="dim small" style="margin:4px 0 0;line-height:1.45">Image studio test generations verify model workflows, lighting, and rendering using standard benchmark scenes. Guided generation of intimate or unconsented imagery without companion agency is disabled. Intimate photos are shared authentically through mutual relationship progression.</p>
-        </div>
-      </div>
-    </div>
+    <p class="dim small studio-scope-note">Test renders use standard benchmark scenes to check the workflow, not the companion.</p>
 
     <!-- Controls & Action Footer -->
     <div class="composer-footer" style="margin-top:16px">

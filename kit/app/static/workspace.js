@@ -270,6 +270,7 @@ workspaceHandlers.chat=async()=>{
     try{
       const result=await action('/chat',{message,session:chatSession},async r=>{
         showTyping(false);
+        $('chat-stream')?.remove();
         const pending=$(tempId);
         if(pending){
           pending.classList.remove('sending');
@@ -299,6 +300,7 @@ workspaceHandlers.chat=async()=>{
       if(result.status!=='complete')throw Error(result.error||'Message could not be completed. Your draft is saved.');
     }catch(error){
       showTyping(false);
+      $('chat-stream')?.remove();
       voiceReplyRequested=false;
       const pending=$(tempId);
       if(pending){

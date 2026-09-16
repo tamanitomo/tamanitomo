@@ -38,6 +38,39 @@ $('tabs').innerHTML=`<div class="nav-primary-section">${navigationButtons(primar
   navGroups.map(([label,ids],i)=>`<details class="nav-group-collapsible" ${i<1?'open':''}><summary>${esc(label)}</summary><div class="nav-group-items">${navigationButtons(ids)}</div></details>`).join('');
 for(const button of $('tabs').querySelectorAll('button'))button.onclick=()=>showTab(button.dataset.tab);
 
+/* The review count and the update notice. Both belong to the workspace rather
+   than to any one page, so they are drawn wherever the layout has room and are
+   refreshed as you move around rather than only when Home happens to render. */
+let reviewState={problems:0,update:null},reviewCheckedAt=0,reviewChecking=false;
+function setReviewBanner(problems,updateInfo){
+  reviewState={problems:problems|0,update:updateInfo||reviewState.update};
+  reviewCheckedAt=Date.now();
+  paintReviewBanner();
+}
+function paintReviewBanner(){
+  const {problems,update}=reviewState;
+  const html=problems
+    ? `<button class="link-button small" id="header-health" style="color:var(--bad)"><span aria-hidden="true">⚠️</span> ${problems} item${problems===1?'':'s'} to review</button>`
+    : (update?.has_update
+      ? `<button class="link-button small" id="header-update" style="color:var(--warn)">✨ Update v${esc(update.latest_version)} available</button>`:'');
+  for(const host of document.querySelectorAll('#banner,#home-banner')){
+    host.innerHTML=html;
+    const health=host.querySelector('#header-health'),upd=host.querySelector('#header-update');
+    if(health)health.onclick=()=>showTab('health');
+    if(upd)upd.onclick=()=>showTab('environment');
+  }
+}
+async function refreshReviewBanner(){
+  if(reviewChecking||Date.now()-reviewCheckedAt<30000)return paintReviewBanner();
+  reviewChecking=true;
+  try{
+    const d=await api('/overview');
+    reviewState.problems=(d.problems||[]).length;reviewCheckedAt=Date.now();
+    paintReviewBanner();
+  }catch(error){/* leave the last known count in place */}
+  finally{reviewChecking=false;}
+}
+
 /* Mobile bottom bar. Home holds the left corner and More the right; between
    them are up to four slots the person chooses, so nothing they rely on is ever
    more than one tap away and the two fixed ends never move. */
@@ -63,6 +96,7 @@ window.productNavigate=name=>{
   const tabs=$('tabs');
   if(tabs){const parent=tabs.querySelector(`details:has([data-tab="${name}"])`);if(parent)parent.open=true;}
   if($('crumb-page'))$('crumb-page').textContent=tabLabel(name);
+  refreshReviewBanner();
   if($('crumb-agent'))$('crumb-agent').textContent=$('who')?.textContent||'Companion';
   document.body.classList.remove('menu-open');
   for(const b of $('tabs').querySelectorAll('button[data-tab]'))b.setAttribute('aria-current',String(b.dataset.tab===name));
@@ -415,11 +449,7 @@ workspaceHandlers.now=async()=>{
   profileTimezone=d.timezone;$('who').textContent=d.agent;if($('crumb-agent'))$('crumb-agent').textContent=d.agent;
   if($('companion-avatar-pill'))$('companion-avatar-pill').outerHTML=
     faceHtml(d.agent,'profile-avatar-pill').replace('class="avatar has-face','id="companion-avatar-pill" class="avatar has-face');
-  let bannerHTML=d.problems.length?`<button class="link-button small" id="header-health" style="color:var(--bad)"><span aria-hidden="true">⚠️</span> ${d.problems.length} item${d.problems.length===1?'':'s'} to review</button>`:'';
-  if(!bannerHTML&&updateInfo?.has_update){bannerHTML=`<button class="link-button small" id="header-update" style="color:var(--warn)">✨ Update v${esc(updateInfo.latest_version)} available</button>`;}
-  $('banner').innerHTML=bannerHTML;
-  if($('header-health'))$('header-health').onclick=()=>showTab('health');
-  if($('header-update'))$('header-update').onclick=()=>showTab('environment');
+  setReviewBanner(d.problems.length,updateInfo);
 
   const s=d.state?.state;
   const photo=content.items.find(x=>x.kind==='image');
@@ -460,6 +490,7 @@ workspaceHandlers.now=async()=>{
           <div class="presence-name-header">
             <h1 class="presence-name">${esc(d.agent)}</h1>
             ${(roster||[]).length>1?`<button type="button" class="quiet small presence-switch" id="presence-switch">\u21c4 Switch</button>`:''}
+            <span id="home-banner" class="home-banner"></span>
           </div>
 
           <div class="presence-status-stack">

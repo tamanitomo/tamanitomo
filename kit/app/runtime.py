@@ -416,7 +416,15 @@ def feed_page(c, limit=60, before=None):
         return {'messages':list(reversed(rows)),'next_cursor':next_cursor}
 
 
+RESUMABLE_SOURCES=('cli','desktop','tui')
+
+
 def latest_session(c):
-    """The conversation a new message should continue, or None to start one."""
-    rows=sessions_page(c,1)['sessions']
-    return rows[0]['id'] if rows else None
+    """The conversation a new message should continue, or None to start one.
+
+    Only sessions this workspace could have opened are resumable; the feed reads
+    every channel, but a Telegram thread cannot be picked up from here.
+    """
+    for row in sessions_page(c,40)['sessions']:
+        if str(row.get('source') or '').lower() in RESUMABLE_SOURCES:return row['id']
+    return None
