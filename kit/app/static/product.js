@@ -492,11 +492,14 @@ workspaceHandlers.now=async()=>{
 
       <div class="section-heading"><h2>Recent moments & captures</h2>${jump('photos','Open photo library')}</div>
       <div class="grid">
-        ${content.items.slice(0,3).map((x,i)=>`
-          <button class="card photo-card" data-home-file="${i}">
+        ${(content.items.filter(x=>x.kind==='image').slice(0,6).length?content.items.filter(x=>x.kind==='image').slice(0,6):content.items.slice(0,6)).map(x=>{
+          const originalIndex=content.items.indexOf(x);
+          return `
+          <button class="card photo-card" data-home-file="${originalIndex}">
             ${x.kind==='image'?`<div class="photo-wrap"><img ${mediaPrivacy(x)} src="${mediaUrl(x.url)}" loading="lazy" alt="${esc(x.title)}"></div>`:`<div class="file-art">${icon(x.kind==='writing'?'journals':'creations')}</div>`}
             <div class="photo-meta"><p>${esc(x.title)}</p><small>${esc(x.kind)} · ${when(x.at)}</small></div>
-          </button>`).join('')||'<p class="dim">Photos and captures appear here as your companion records their day.</p>'}
+          </button>`;
+        }).join('')||'<p class="dim">Photos and captures appear here as your companion records their day.</p>'}
       </div>
     </div>
 
@@ -506,13 +509,6 @@ workspaceHandlers.now=async()=>{
 
       <div class="section-heading"><h2>Current presence & closet</h2></div>
       ${renderWardrobeCard(closet,s,stage)}
-
-      <div class="card">
-        <span class="eyebrow">Conversation status</span>
-        <p>${esc(d.thread?.available?d.thread.register:'No active conversation thread.')}</p>
-        <p class="dim small">${d.thread?.last_from_human?'Last message '+ago(d.thread.last_from_human):'Thread synchronized across channels (Web, Telegram, Discord).'}</p>
-        ${jump('chat','Open conversation')}
-      </div>
     </div>
   </div>`;
 
