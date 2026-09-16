@@ -181,8 +181,10 @@ workspaceHandlers.chat=async()=>{
   chatSession=chatSession||sessionStorage.getItem(chatKey('session'));
   if(chatSession&&!d.sessions.some(s=>s.id===chatSession))d.sessions.push({id:chatSession,title:'Saved conversation',source:'history'});
   const moodLabel=emotions?.intimacy?`${emotions.intimacy.stage_badge} · ${emotions.intimacy.score}%`:(emotions?.state?.mood||'How things feel');
+  const channelIcons={telegram:'📱 Telegram',discord:'💬 Discord',cli:'💻 Terminal',terminal:'💻 Terminal',desktop:'🌐 Web',history:'📜 History'};
+  const sessionLabel=s=>(channelIcons[s.source]||('💬 '+(s.source||'Web')))+' — '+(s.title||(s.id?s.id.slice(0,14):'Conversation'));
   $('chat').innerHTML=
-  `<div class="card conversation-card"><div class="conversation-header"><div class="avatar">${esc(chatName().slice(0,1))}</div><div><strong>${esc(chatName())}</strong><div class="dim small">${emotions?.state?.enabled||emotions?.intimacy?`<button type="button" class="link-button small" id="chat-feeling" title="View intimacy escalation, feelings, and routines">${esc(moodLabel)}</button>`:'Your shared conversation'}</div></div><button class="quiet" id="new-chat">New chat</button></div><details class="conversation-history"><summary>Conversations</summary><label>Conversation<select id="session-select"><option value="">New app conversation</option>${options(d.sessions.map(s=>[s.id,(s.title||s.id.slice(0,14))+' · '+s.source]),chatSession)}</select></label><button type="button" class="quiet" id="older-sessions" ${d.next_cursor?'':'hidden'}>Load older conversations</button></details>
+  `<div class="card conversation-card"><div class="conversation-header"><div class="avatar">${esc(chatName().slice(0,1))}</div><div><strong>${esc(chatName())}</strong><div class="dim small">${emotions?.state?.enabled||emotions?.intimacy?`<button type="button" class="link-button small" id="chat-feeling" title="View intimacy escalation, feelings, and routines">${esc(moodLabel)}</button>`:'Your shared conversation'}</div></div><button class="quiet" id="new-chat">New chat</button></div><details class="conversation-history"><summary>Conversations & channels</summary><label>Conversation<select id="session-select"><option value="">✨ New conversation</option>${options(d.sessions.map(s=>[s.id,sessionLabel(s)]),chatSession)}</select></label><button type="button" class="quiet" id="older-sessions" ${d.next_cursor?'':'hidden'}>Load older conversations</button></details>
   <div class="chat-archive-controls" id="chat-archive-controls" hidden><button type="button" class="quiet" id="older-messages">Load older messages</button><span class="dim small" id="history-status" role="status"></span></div>
   <div id="chat-log" class="chat-log" role="log" aria-live="polite"></div>
   <form id="chat-form"><label class="sr-only" for="chat-message">Your message</label><textarea rows="1" id="chat-message" placeholder="What’s on your mind?" required maxlength="30000"></textarea><div class="actions"><button class="act" id="send-message">Send</button><span class="dim small" id="chat-status" role="status">Enter to send · Shift+Enter for a new line</span></div></form></div>`;
@@ -197,7 +199,7 @@ workspaceHandlers.chat=async()=>{
       const page=await api('/sessions?before='+encodeURIComponent(sessionsCursor));
       if(current!=='chat'||pageGeneration!==chatPageGeneration)return;
       const select=$('session-select');
-      for(const row of page.sessions){const existing=[...select.options].find(o=>o.value===row.id);const label=(row.title||row.id.slice(0,14))+' · '+row.source;if(existing)existing.textContent=label;else select.insertAdjacentHTML('beforeend',options([[row.id,label]],chatSession));}
+      for(const row of page.sessions){const existing=[...select.options].find(o=>o.value===row.id);const label=sessionLabel(row);if(existing)existing.textContent=label;else select.insertAdjacentHTML('beforeend',options([[row.id,label]],chatSession));}
       sessionsCursor=page.next_cursor;button.hidden=!sessionsCursor;
     }finally{button.disabled=false;button.textContent='Load older conversations';}
   };
@@ -333,12 +335,20 @@ function mountOlderMessages(cursor,generation,session){
   const controls=$('chat-archive-controls');if(!controls)return;
   controls.hidden=!cursor;
   const button=$('older-messages');
+  const log=$('chat-log');
+  if(log){
+    log.onscroll=()=>{
+      if(log.scrollTop<60 && !button.disabled && !button.hidden){
+        button.click();
+      }
+    };
+  }
   button.onclick=async()=>{
     button.disabled=true;button.textContent='Loading earlier messages…';
     try{
       const page=await api('/sessions/'+encodeURIComponent(session)+'?before='+encodeURIComponent(cursor));
       if(current!=='chat'||generation!==chatLoadGeneration||session!==chatSession)return;
-      const log=$('chat-log'),height=log.scrollHeight,top=log.scrollTop;
+      const height=log.scrollHeight,top=log.scrollTop;
       log.insertAdjacentHTML('afterbegin',chatMessagesHtml(page.messages));
       log.scrollTop=top+log.scrollHeight-height;
       cursor=page.next_cursor;button.hidden=!cursor;

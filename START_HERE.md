@@ -1,6 +1,6 @@
 # Start here
 
-Companion Kit is a browser workspace for a persistent Hermes companion: conversation, identity, memories, daily life, photos and voice. It contains no preconfigured person, credentials, private images, model weights or cloned voices. You set up your own companion and use your own model accounts — or your own hardware.
+Tamanitomo (魂の友 — "Soul of a Friend") is a browser workspace for a persistent Hermes companion: conversation, identity, memories, daily life, photos and voice. It contains no preconfigured person, credentials, private images, model weights or cloned voices. You set up your own companion and use your own model accounts — or your own hardware.
 
 For the project overview and the two-minute install, see [README.md](README.md). This page is the longer walkthrough for a first install.
 
@@ -12,8 +12,8 @@ Any machine with internet access, a modern browser and room for Hermes plus opti
 
 ## Install
 
-1. Put the kit somewhere permanent and writable — `git clone` it, or extract the release ZIP into a folder such as `C:\CompanionKit`. Do not run it from inside the ZIP, and do not put your vault inside the application code folder.
-2. Run **`./companion`** (Linux, macOS, WSL) or double-click **companion.cmd** (Windows). The launcher provisions Python when needed, installs dependencies into its own `.venv` and opens your browser. Keep the terminal window open — first launch needs internet, and errors stay visible there.
+1. Put the kit somewhere permanent and writable — `git clone` it, or extract the release ZIP into a folder such as `C:\Tamanitomo`. Do not run it from inside the ZIP, and do not put your vault inside the application code folder.
+2. Run **`./tamanitomo`** (or **`./companion`**) (Linux, macOS, WSL) or double-click **companion.cmd** (Windows). The launcher provisions Python when needed, installs dependencies into its own `.venv` and opens your browser. Keep the terminal window open — first launch needs internet, and errors stay visible there.
 3. Select **Kit-managed Hermes** for a new Hermes installation, or **Existing Hermes** if you already use Hermes. Complete installation and provider sign-in under **Hermes settings**.
 4. Open **Companions → Create a companion**. A short guided interview asks how you want things to feel and proposes a personality and a set of boundaries, then shows you every value it chose before anything is written — you can edit any of them, or skip the questions and fill the fields in directly. Already running Hermes? Use **Adopt** instead; your existing `SOUL.md` is left byte-for-byte alone.
 5. Configure a primary model and only the fallback providers you want to pay for/use. Test the saved model chain. Open **Conversation**, send a short message and verify it appears in history.

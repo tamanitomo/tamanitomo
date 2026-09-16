@@ -906,3 +906,139 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
 .licence-note dt{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
 .licence-note dd{margin:2px 0 0;font-size:13.5px;font-weight:600}
 .licence-note p{margin:0}
+
+/* ============================================================
+   Tamanitomo: Living Room & Presence Sanctuary
+   ============================================================ */
+.presence-sanctuary{margin-bottom:28px}
+.presence-hero-card{
+  background:linear-gradient(145deg, var(--panel) 0%, color-mix(in srgb, var(--accent) 7%, var(--panel)) 100%);
+  border:1px solid var(--edge);
+  border-radius:var(--r-xl);
+  padding:32px;
+  box-shadow:var(--shadow-2);
+  position:relative;
+  overflow:hidden;
+}
+.presence-hero-card::before{
+  content:'';
+  position:absolute;
+  top:-60px;right:-60px;
+  width:220px;height:220px;
+  background:radial-gradient(circle, var(--accent-soft) 0%, transparent 70%);
+  pointer-events:none;
+}
+.presence-main-row{display:flex;align-items:center;gap:24px;position:relative}
+.presence-avatar-frame{position:relative;flex:none}
+.presence-avatar-img{
+  width:88px;height:88px;border-radius:24px;object-fit:cover;
+  border:2px solid var(--edge-2);box-shadow:var(--shadow-1);display:block;
+}
+.presence-avatar-placeholder{
+  width:88px;height:88px;border-radius:24px;
+  background:linear-gradient(135deg, var(--surface-2), var(--surface-3));
+  border:2px solid var(--accent-line);
+  color:var(--accent-ink);
+  font-size:38px;font-weight:600;
+  display:grid;place-items:center;
+  box-shadow:var(--shadow-1);
+}
+.presence-pulse-dot{
+  position:absolute;bottom:2px;right:2px;
+  width:16px;height:16px;border-radius:50%;
+  background:var(--good);
+  border:3px solid var(--panel);
+  box-shadow:0 0 10px var(--good);
+  animation:presence-pulse 2.8s infinite ease-in-out;
+}
+@keyframes presence-pulse{
+  0%,100%{transform:scale(1);opacity:1}
+  50%{transform:scale(1.15);opacity:.85}
+}
+.presence-identity-block{flex:1;min-width:0}
+.presence-tag-line{display:flex;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap}
+.presence-name{font-size:34px;font-weight:700;letter-spacing:-1px;margin:2px 0 10px;line-height:1.15}
+.presence-vibe-chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.presence-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:12.5px;padding:5px 12px;border-radius:20px;
+  background:var(--surface-2);border:1px solid var(--edge);
+  color:var(--ink-2);line-height:1.3;
+}
+.presence-chip.activity-chip{background:var(--accent-soft);border-color:var(--accent-line);color:var(--ink)}
+.presence-chip.mood-chip{background:color-mix(in srgb,var(--warn) 10%,var(--surface-2));border-color:var(--warn-line)}
+
+.presence-thought-quote{
+  margin:24px 0 20px;
+  padding:18px 22px 18px 46px;
+  background:color-mix(in srgb,var(--bg) 60%,transparent);
+  border:1px solid var(--edge);
+  border-left:3px solid var(--accent);
+  border-radius:var(--r-md);
+  position:relative;
+}
+.presence-thought-quote .quote-mark{
+  position:absolute;top:10px;left:14px;
+  font-size:36px;font-family:Georgia,serif;
+  color:var(--accent);line-height:1;opacity:.6;
+}
+.thought-text{
+  font:italic 15px/1.65 Georgia,serif;
+  color:var(--ink);
+  margin:0 0 8px;
+}
+.thought-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}
+
+.presence-actions-bar{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px;position:relative}
+.presence-actions-bar button{padding:10px 18px;font-size:13.5px}
+
+/* ============================================================
+   Tamanitomo: Shared Interactive Calendar
+   ============================================================ */
+.calendar-card{background:var(--panel);border:1px solid var(--edge);border-radius:var(--r-lg);padding:24px;margin-bottom:24px}
+.calendar-top-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.calendar-nav-group{display:flex;align-items:center;gap:10px}
+.calendar-month-title{font-size:19px;font-weight:600;letter-spacing:-.3px;margin:0}
+.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.calendar-day-head{
+  text-align:center;font-size:11.5px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--dim);padding:8px 0;
+}
+.calendar-cell{
+  min-height:76px;padding:8px;border-radius:var(--r-sm);
+  background:var(--surface);border:1px solid var(--edge);
+  display:flex;flex-direction:column;justify-content:space-between;
+  cursor:pointer;transition:background .15s,border-color .15s;text-align:left;
+}
+.calendar-cell:hover{background:var(--surface-2);border-color:var(--edge-2)}
+.calendar-cell.is-other-month{opacity:.35;background:transparent;border-color:transparent}
+.calendar-cell.is-today{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--surface))}
+.calendar-cell.is-selected{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 1px var(--accent)}
+.calendar-cell-date{font-size:12.5px;font-weight:600;color:var(--ink-2)}
+.calendar-cell.is-today .calendar-cell-date{color:var(--accent);font-weight:700}
+.calendar-indicators{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.cal-dot{width:7px;height:7px;border-radius:50%;background:var(--dim);display:inline-block}
+.cal-dot.has-mission{background:var(--accent)}
+.cal-dot.has-photo{background:var(--good)}
+.cal-dot.has-journal{background:var(--warn)}
+.cal-badge-pill{font-size:10px;padding:2px 5px;border-radius:4px;background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
+
+.calendar-selected-day-pane{
+  margin-top:20px;padding:18px 20px;
+  background:var(--surface-2);border:1px solid var(--edge);
+  border-radius:var(--r-md);
+}
+.cal-events-list{display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.cal-event-row{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;padding:9px 12px;background:var(--panel);
+  border:1px solid var(--edge);border-radius:6px;font-size:13px;
+}
+
+@media(max-width:700px){
+  .presence-main-row{flex-direction:column;align-items:flex-start}
+  .presence-avatar-img,.presence-avatar-placeholder{width:72px;height:72px;border-radius:20px}
+  .presence-name{font-size:26px}
+  .calendar-cell{min-height:56px;padding:4px}
+  .calendar-cell-date{font-size:11px}
+}

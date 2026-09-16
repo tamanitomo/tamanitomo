@@ -159,7 +159,15 @@ function renderWardrobeCard(closet,s){
 }
 
 workspaceHandlers.now=async()=>{
-  const [d,content,journal,timeline,closet,updateInfo]=await Promise.all([api('/overview'),api('/content'),api('/journals'),api('/timeline'),api('/closet').catch(()=>null),api('/updates').catch(()=>null)]);
+  const [d,content,journal,timeline,closet,updateInfo,emotions]=await Promise.all([
+    api('/overview'),
+    api('/content'),
+    api('/journals'),
+    api('/timeline'),
+    api('/closet').catch(()=>null),
+    api('/updates').catch(()=>null),
+    api('/feelings').catch(()=>null)
+  ]);
   if(current!=='now')return;
   profileTimezone=d.timezone;$('who').textContent=d.agent;$('crumb-agent').textContent=d.agent;
   let bannerHTML=d.problems.length?`<button class="link-button small" id="header-health">${d.problems.length} item${d.problems.length===1?'':'s'} to review</button>`:'';
@@ -167,15 +175,146 @@ workspaceHandlers.now=async()=>{
   $('banner').innerHTML=bannerHTML;
   if($('header-health'))$('header-health').onclick=()=>showTab('health');
   if($('header-update'))$('header-update').onclick=()=>showTab('environment');
-  const s=d.state?.state,photo=content.items.find(x=>x.kind==='image'),entry=journal.entries[0];
-  $('now').innerHTML=`<div class="home-title"><div><h2 class="page-title">${esc(d.agent)} · Overview</h2><p class="intro">${stamp(new Date().toISOString(),{weekday:'long',year:'numeric'})} <span class="dim">· ${esc(d.timezone)}</span></p></div>${jump('chat','Start a conversation',true)}</div>
+
+  const s=d.state?.state;
+  const photo=content.items.find(x=>x.kind==='image');
+  const entry=journal.entries[0];
+  const currentOutfit=closet?.wearing?.map(x=>x.description||x.id).join(', ')||(s?.outfit||'');
+  const feelingBadge=emotions?.intimacy?`${emotions.intimacy.stage_badge} (${emotions.intimacy.score}%)`:'';
+
+  let latestThought='';
+  let thoughtSource='';
+  if(entry?.text){
+    const clean=entry.text.replace(/^[#*_`>\s-]+/gm,'').trim();
+    const match=clean.match(/.*?[.!?](?:\s|$)/);
+    latestThought=match?match[0].trim():clean.slice(0,180);
+    thoughtSource=`From ${esc(d.agent)}'s journal · ${esc(entry.day)}`;
+  }else if(s?.private_stance){
+    latestThought=s.private_stance;
+    thoughtSource='Current inner stance';
+  }
+
+  $('now').innerHTML=`
   ${d.problems.length?`<div class="notice-strip"><p>${esc(d.problems[0])}${d.problems.length>1?` · ${d.problems.length-1} more to review`:''}</p>${jump('health','Review')}</div>`:''}
-  ${updateInfo?.has_update?`<div class="notice-strip" style="border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent)"><p><strong>Companion Kit v${esc(updateInfo.latest_version)}</strong> is available. Run <code>./update.sh</code> in your host terminal to update.</p>${jump('environment','View')}</div>`:''}
-  <div class="home-hero"><div class="hero-copy"><span class="eyebrow">${s?.confirmed===false?'Last known scene · carried forward':'Current state'} ${d.state?'· '+ago(d.state.recorded_at):''}</span><h2>${esc(s?excerpt(s.activity,190):'System ready.')}</h2><p>${esc(s?excerpt(s.mood,190):'Autonomous routines, journal reflections, and media will appear here as they run.')}</p>${s?.location?`<span class="pill">${esc(excerpt(s.location,100))}</span>`:''}<div class="actions">${jump('timeline','Activity timeline')}${jump('relationship','Relationship ledger')}</div></div><div class="hero-image">${photo?`<img ${mediaPrivacy(photo)} src="${mediaUrl(photo.url)}" alt="${esc(photo.title)}"><div class="image-caption">Recent capture · ${esc(photo.title)}</div>`:`<div class="hero-empty"><div>${icon('photos')}<p>No photos or captures saved yet.</p>${jump('photos','Open photo library')}</div></div>`}</div></div>
-  <div class="stat-strip"><button data-route="photos"><span>Photos & captures</span><strong>${content.items.filter(x=>x.kind==='image').length}</strong><span>${timeline.enabled?'Scheduled captures active':'Scheduled captures paused'}</span></button><button data-route="journals"><span>Journal entries</span><strong>${journal.total??journal.entries.length}</strong><span>${entry?'Latest · '+entry.day:'No entries yet'}</span></button><button data-route="creations"><span>Vault media</span><strong>${content.items.filter(x=>x.source==='creation').length}</strong><span>Files & creations</span></button><button data-route="loops"><span>Tasks & threads</span><strong>${d.loops.length+d.missions.length}</strong><span>Active queue items</span></button></div>
-  ${connectionSignals(d.bars)}<div class="home-columns"><div><div class="section-heading"><h2>Latest journal entry</h2>${jump('journals','All entries')}</div>${entry?`<article class="card journal-preview"><span class="eyebrow">Journal · ${esc(entry.day)}</span><h3>Daily reflection</h3><p>${esc(excerpt(entry.text,470))}</p><button class="link-button" id="read-latest">Read the entry →</button></article>`:empty('journals','No journal entries yet','Daily summaries are saved here automatically by the scheduled journal routine.',jump('health','View routine status'))}<div class="section-heading"><h2>Recent media & files</h2>${jump('creations','View all')}</div><div class="grid">${content.items.slice(0,3).map((x,i)=>`<button class="card photo-card" data-home-file="${i}">${x.kind==='image'?`<div class="photo-wrap"><img ${mediaPrivacy(x)} src="${mediaUrl(x.url)}" loading="lazy" alt="${esc(x.title)}"></div>`:`<div class="file-art">${icon(x.kind==='writing'?'journals':'creations')}</div>`}<div class="photo-meta"><p>${esc(x.title)}</p><small>${esc(x.kind)} · ${when(x.at)}</small></div></button>`).join('')||'<p class="dim">Images and generated files appear here automatically.</p>'}</div></div>
-  <div><div class="section-heading"><h2>Context & state</h2></div><div class="card"><span class="eyebrow">Current objectives</span><p>${esc(s?.wants?.join(' · ')||'No pending objectives recorded.')}</p>${s?.private_stance?`<details><summary>Internal stance</summary><p class="dim">${esc(s.private_stance)}</p></details>`:''}</div>${renderWardrobeCard(closet,s)}<div class="card"><span class="eyebrow">Recent states</span>${d.moods.slice(0,3).map(m=>`<div class="moment-row"><time>${m.at?when(m.at):'Recorded'}</time><p>${esc(m.mood)}</p></div>`).join('')||'<p class="dim">No states recorded yet.</p>'}</div><div class="card"><span class="eyebrow">Conversation status</span><p>${esc(d.thread?.available?d.thread.register:'No active conversation thread.')}</p><p class="dim small">${d.thread?.last_from_human?'Last message '+ago(d.thread.last_from_human):'Thread state synchronized across channels.'}</p>${jump('chat','Open conversation')}</div></div></div>`;
-  wireRoutes($('now'));if($('read-latest'))$('read-latest').onclick=()=>{selectedJournal=entry.id;showTab('journals');};
+  ${updateInfo?.has_update?`<div class="notice-strip" style="border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent)"><p><strong>Tamanitomo v${esc(updateInfo.latest_version)}</strong> is available. Run <code>./update.sh</code> in your host terminal to update.</p>${jump('environment','View')}</div>`:''}
+
+  <div class="presence-sanctuary">
+    <div class="presence-hero-card">
+      <div class="presence-main-row">
+        <div class="presence-avatar-frame">
+          ${photo?`<img class="presence-avatar-img" ${mediaPrivacy(photo)} src="${mediaUrl(photo.url)}" alt="${esc(d.agent)}">`:`<div class="presence-avatar-placeholder">${esc(d.agent.slice(0,1))}</div>`}
+          <span class="presence-pulse-dot" title="Active presence"></span>
+        </div>
+        <div class="presence-identity-block">
+          <div class="presence-tag-line">
+            <span class="eyebrow" style="color:var(--accent-ink);letter-spacing:.1em">TAMANITOMO · SOUL OF A FRIEND</span>
+            ${feelingBadge?`<span class="pill status-good" style="font-size:11.5px;font-weight:600">${esc(feelingBadge)}</span>`:''}
+            <span class="dim small" style="margin-left:auto">${stamp(new Date().toISOString(),{weekday:'short',month:'short',day:'numeric'})} · ${esc(d.timezone)}</span>
+          </div>
+          <h1 class="presence-name">${esc(d.agent)}</h1>
+          <div class="presence-vibe-chips">
+            ${s?.activity?`<span class="presence-chip activity-chip">✨ ${esc(s.activity)}</span>`:''}
+            ${s?.location?`<span class="presence-chip location-chip">📍 ${esc(s.location)}</span>`:''}
+            ${s?.mood?`<span class="presence-chip mood-chip">💭 ${esc(s.mood)}</span>`:''}
+            ${currentOutfit?`<span class="presence-chip outfit-chip">👗 ${esc(currentOutfit)}</span>`:''}
+          </div>
+        </div>
+      </div>
+
+      ${latestThought?`
+      <div class="presence-thought-quote">
+        <div class="quote-mark">“</div>
+        <p class="thought-text">${esc(latestThought)}</p>
+        <div class="thought-footer">
+          <span class="dim small">${thoughtSource}</span>
+          ${entry?`<button class="link-button small" id="read-latest-thought">Read entry in Journal →</button>`:''}
+        </div>
+      </div>`:''}
+
+      <div class="presence-actions-bar">
+        <button class="act" data-route="chat">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Talk with ${esc(d.agent)}
+        </button>
+        <button class="quiet" data-route="journals">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15z"/></svg>
+          Open Journal
+        </button>
+        <button class="quiet" data-route="photos">
+          <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          Photos & Moments
+        </button>
+        <button class="quiet" data-route="loops">
+          <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Plans & Calendar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-strip">
+    <button data-route="photos"><span>Photos & captures</span><strong>${content.items.filter(x=>x.kind==='image').length}</strong><span>${timeline.enabled?'Scheduled captures active':'Scheduled captures paused'}</span></button>
+    <button data-route="journals"><span>Journal entries</span><strong>${journal.total??journal.entries.length}</strong><span>${entry?'Latest · '+entry.day:'No entries yet'}</span></button>
+    <button data-route="loops"><span>Plans & calendar</span><strong>${d.loops.length+d.missions.length}</strong><span>Shared calendar items</span></button>
+    <button data-route="relationship"><span>Closeness & stage</span><strong>${emotions?.intimacy?emotions.intimacy.stage_badge.split('·')[0].trim():'Bond'}</strong><span>${emotions?.intimacy?emotions.intimacy.score+'% attunement':'Tamagotchi progression'}</span></button>
+  </div>
+
+  ${connectionSignals(d.bars)}
+
+  <div class="home-columns">
+    <div>
+      <div class="section-heading"><h2>From the journal</h2>${jump('journals','All reflections')}</div>
+      ${entry?`
+      <article class="card journal-preview" style="border-radius:var(--r-lg);padding:26px">
+        <span class="eyebrow" style="color:var(--dim)">Nightly reflection · ${esc(entry.day)}</span>
+        <h3 style="margin:10px 0 14px">${new Intl.DateTimeFormat(undefined,{weekday:'long',month:'short',day:'numeric'}).format(new Date(entry.day+'T12:00:00'))}</h3>
+        <p style="margin:0 0 16px;line-height:1.7">${esc(excerpt(entry.text,420))}</p>
+        <button class="link-button" id="read-latest" style="font-weight:600">Read entry (${Math.max(1,Math.ceil(entry.words/220))} min) →</button>
+      </article>`:empty('journals','No journal entries yet','Daily reflections are recorded automatically by the scheduled nightly routine at 4:00 AM.',jump('health','View routine status'))}
+
+      <div class="section-heading"><h2>Recent moments & captures</h2>${jump('photos','Open photo library')}</div>
+      <div class="grid">
+        ${content.items.slice(0,3).map((x,i)=>`
+          <button class="card photo-card" data-home-file="${i}">
+            ${x.kind==='image'?`<div class="photo-wrap"><img ${mediaPrivacy(x)} src="${mediaUrl(x.url)}" loading="lazy" alt="${esc(x.title)}"></div>`:`<div class="file-art">${icon(x.kind==='writing'?'journals':'creations')}</div>`}
+            <div class="photo-meta"><p>${esc(x.title)}</p><small>${esc(x.kind)} · ${when(x.at)}</small></div>
+          </button>`).join('')||'<p class="dim">Photos and captures appear here as your companion records their day.</p>'}
+      </div>
+    </div>
+
+    <div>
+      <div class="section-heading"><h2>Current presence & closet</h2></div>
+      ${renderWardrobeCard(closet,s)}
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <h2 style="margin:0">Active plans & calendar</h2>
+          <span class="pill">${d.missions.length} item${d.missions.length===1?'':'s'}</span>
+        </div>
+        ${d.missions.length?`
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${d.missions.slice(0,3).map(m=>`
+            <div style="padding:8px 10px;background:var(--surface);border:1px solid var(--edge);border-radius:6px;font-size:13px">
+              <strong style="color:var(--ink)">${esc(m.title)}</strong>
+              ${m.wanted_by?`<span class="dim small" style="display:block;margin-top:2px">📅 Target: ${esc(m.wanted_by)}</span>`:''}
+            </div>`).join('')}
+        </div>`:''
+        }
+        <div style="margin-top:14px">${jump('loops','Open shared calendar')}</div>
+      </div>
+
+      <div class="card">
+        <span class="eyebrow">Conversation status</span>
+        <p>${esc(d.thread?.available?d.thread.register:'No active conversation thread.')}</p>
+        <p class="dim small">${d.thread?.last_from_human?'Last message '+ago(d.thread.last_from_human):'Thread synchronized across channels (Web, Telegram, Discord).'}</p>
+        ${jump('chat','Open conversation')}
+      </div>
+    </div>
+  </div>`;
+
+  wireRoutes($('now'));
+  if($('read-latest'))$('read-latest').onclick=()=>{selectedJournal=entry.id;showTab('journals');};
+  if($('read-latest-thought'))$('read-latest-thought').onclick=()=>{selectedJournal=entry.id;showTab('journals');};
   for(const b of $('now').querySelectorAll('[data-home-file]'))b.onclick=()=>openContent(content.items[Number(b.dataset.homeFile)]);
 };
 let selectedJournal=null;
@@ -183,7 +322,7 @@ const journalBrowse={query:'',month:''};
 let journalPageGeneration=0;
 workspaceHandlers.journals=async()=>{
   const pageGeneration=++journalPageGeneration;
-  $('journals').innerHTML=heading('Journal','Daily companion reflections generated from lived context.')+`<div class="filters"><label>Search entries<input id="journal-search" type="search" maxlength="200" placeholder="Search entries by topic or keyword…"></label><label>Month<input type="month" id="journal-month"></label><button class="quiet" id="journal-clear">Clear</button></div><p id="journal-status" class="dim small" role="status"></p><div id="journal-warnings"></div><div class="reader-layout"><details class="journal-browser" id="journal-browser" ${matchMedia('(max-width:900px)').matches?'':'open'}><summary id="journal-picker-label">Browse entries</summary><div class="reader-list" id="journal-list"></div><button class="quiet" id="journal-older" hidden>Load older entries</button></details><article id="journal-page"></article></div>`;
+  $('journals').innerHTML=heading('Journal','Daily reflections written by your companion in their own voice during their nightly ritual.')+`<div class="filters"><label>Search entries<input id="journal-search" type="search" maxlength="200" placeholder="Search entries by topic or keyword…"></label><label>Month<input type="month" id="journal-month"></label><button class="quiet" id="journal-clear">Clear</button></div><p id="journal-status" class="dim small" role="status"></p><div id="journal-warnings"></div><div class="reader-layout"><details class="journal-browser" id="journal-browser" ${matchMedia('(max-width:900px)').matches?'':'open'}><summary id="journal-picker-label">Browse entries</summary><div class="reader-list" id="journal-list"></div><button class="quiet" id="journal-older" hidden>Load older entries</button></details><article id="journal-page"></article></div>`;
   $('journal-search').value=journalBrowse.query;$('journal-month').value=journalBrowse.month;
   let entries=[],cursor=null,request=0,selection=0,timer;
   const alive=()=>current==='journals'&&pageGeneration===journalPageGeneration;
@@ -201,7 +340,18 @@ workspaceHandlers.journals=async()=>{
       <span style="font-weight:600;font-size:13px;color:var(--ink-2)">📅 ${esc(entry.day)}</span>
       <button class="journal-nav-btn" id="journal-next-btn" ${nextEntry?'':'disabled'} style="${nextEntry?'':'opacity:0.4;cursor:default'}">Older (${nextEntry?esc(nextEntry.day):'none'}) →</button>
     </div>
-    <div class="paper"><span class="eyebrow">Daily reflection · ${Math.max(1,Math.ceil(entry.words/220))} min read</span><h2>${new Intl.DateTimeFormat(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'}).format(new Date(entry.day+'T12:00:00'))}</h2><div class="prose">${richText(entry.text)}</div><p class="small dim">Source: ${esc(entry.source)} · ${entry.words.toLocaleString()} words</p></div>`;
+    <div class="paper">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid color-mix(in srgb,var(--surface-2) 20%,transparent);padding-bottom:10px">
+        <span class="eyebrow" style="color:var(--faint)">Daily reflection · ${Math.max(1,Math.ceil(entry.words/220))} min read</span>
+        <span class="pill" style="border-color:color-mix(in srgb,var(--surface-2) 30%,transparent);color:var(--faint)">Nightly Entry</span>
+      </div>
+      <h2>${new Intl.DateTimeFormat(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'}).format(new Date(entry.day+'T12:00:00'))}</h2>
+      <div class="prose">${richText(entry.text)}</div>
+      <div style="margin-top:34px;padding-top:16px;border-top:1px solid color-mix(in srgb,var(--surface-2) 20%,transparent);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <span style="font-family:Georgia,serif;font-style:italic;color:var(--faint);font-size:14px">Written during nightly introspection</span>
+        <span class="dim small">${entry.words.toLocaleString()} words · ${esc(entry.source)}</span>
+      </div>
+    </div>`;
     if($('journal-prev-btn')&&prevEntry)$('journal-prev-btn').onclick=()=>choose(prevEntry.id);
     if($('journal-next-btn')&&nextEntry)$('journal-next-btn').onclick=()=>choose(nextEntry.id);
     if(fromPicker&&matchMedia('(max-width:900px)').matches){$('journal-browser').open=false;$('journal-page').scrollIntoView({block:'start'});}
@@ -640,37 +790,118 @@ workspaceHandlers.knows=async()=>{
   filterFacts();
 };
 
+let calYear=new Date().getFullYear(),calMonth=new Date().getMonth(),selectedCalDate=null;
 workspaceHandlers.loops=async()=>{
   const [d,m]=await Promise.all([api('/overview'),api('/missions')]);if(current!=='loops')return;
   const missions=m.missions||[];
   const loops=d.loops||[];
   const openCount=missions.filter(x=>x.status==='open').length;
 
-  $('loops').innerHTML=heading('Plans & activities','Autonomous background tasks, research queue, and cross-session conversational threads.')+
+  const monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const monthTitle=`${monthNames[calMonth]} ${calYear}`;
+
+  // Build month cells
+  const firstDayIndex=new Date(calYear,calMonth,1).getDay();
+  const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
+  const todayStr=new Date().toISOString().slice(0,10);
+  selectedCalDate=selectedCalDate||todayStr;
+
+  let calendarCellsHtml='';
+  // Empty leading days
+  for(let i=0;i<firstDayIndex;i++){
+    calendarCellsHtml+=`<div class="calendar-cell is-other-month"></div>`;
+  }
+  for(let day=1;day<=daysInMonth;day++){
+    const dayStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const isToday=dayStr===todayStr;
+    const isSelected=dayStr===selectedCalDate;
+    const dayMissions=missions.filter(x=>x.wanted_by===dayStr);
+
+    calendarCellsHtml+=`
+      <div class="calendar-cell ${isToday?'is-today':''} ${isSelected?'is-selected':''}" data-cal-date="${esc(dayStr)}">
+        <span class="calendar-cell-date">${day}</span>
+        <div class="calendar-indicators">
+          ${dayMissions.length?`<span class="cal-badge-pill" title="${esc(dayMissions.map(x=>x.title).join(', '))}">${dayMissions.length} event${dayMissions.length===1?'':'s'}</span>`:''}
+        </div>
+      </div>`;
+  }
+
+  const selectedDayMissions=missions.filter(x=>x.wanted_by===selectedCalDate);
+
+  $('loops').innerHTML=heading('Plans & calendar','Shared schedule, commitments, autonomous investigations, and open threads.')+
   `<div class="stat-strip">
-    <div class="stat-item"><span>Active tasks</span><strong>${openCount}</strong><span class="dim small">In the autonomy queue</span></div>
-    <div class="stat-item"><span>Total queued</span><strong>${missions.length}</strong><span class="dim small">Missions & investigations</span></div>
+    <div class="stat-item"><span>Active tasks</span><strong>${openCount}</strong><span class="dim small">Autonomy & calendar queue</span></div>
+    <div class="stat-item"><span>Total scheduled</span><strong>${missions.length}</strong><span class="dim small">Missions & reminders</span></div>
     <div class="stat-item"><span>Open threads</span><strong>${loops.length}</strong><span class="dim small">Conversational continuity</span></div>
   </div>
+
+  <div class="card calendar-card">
+    <div class="calendar-top-bar">
+      <div class="calendar-nav-group">
+        <button class="icon-button" id="cal-prev" aria-label="Previous month">←</button>
+        <h2 class="calendar-month-title">${esc(monthTitle)}</h2>
+        <button class="icon-button" id="cal-next" aria-label="Next month">→</button>
+        <button class="quiet small" id="cal-today">Today</button>
+      </div>
+      <div class="actions" style="margin:0">
+        <a class="quiet small" href="/api/calendar.ics" download="${esc(d.agent)}-calendar.ics" style="text-decoration:none">📅 Export iCal (.ics)</a>
+      </div>
+    </div>
+
+    <div class="calendar-grid">
+      <div class="calendar-day-head">Sun</div>
+      <div class="calendar-day-head">Mon</div>
+      <div class="calendar-day-head">Tue</div>
+      <div class="calendar-day-head">Wed</div>
+      <div class="calendar-day-head">Thu</div>
+      <div class="calendar-day-head">Fri</div>
+      <div class="calendar-day-head">Sat</div>
+      ${calendarCellsHtml}
+    </div>
+
+    <div class="calendar-selected-day-pane">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <strong>Events & commitments for ${esc(selectedCalDate)}</strong>
+        <span class="pill">${selectedDayMissions.length} scheduled</span>
+      </div>
+      ${selectedDayMissions.length?`
+      <div class="cal-events-list">
+        ${selectedDayMissions.map(x=>`
+          <div class="cal-event-row">
+            <div>
+              <strong>${esc(x.title)}</strong>
+              ${x.detail?`<p style="margin:2px 0 0;color:var(--dim)">${esc(x.detail)}</p>`:''}
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="pill ${x.status==='open'?'status-good':x.status==='dropped'?'status-bad':''}">${esc(x.status)}</span>
+              ${x.status==='open'?`<button class="quiet small-btn" data-drop="${esc(x.id)}">Drop</button>`:''}
+            </div>
+          </div>`).join('')}
+      </div>`:
+      '<p class="dim small" style="margin:8px 0 0">No events or commitments on this date.</p>'
+      }
+    </div>
+  </div>
+
   <div class="planner-layout">
     <div class="planner-column">
       <div class="card">
-        <h2>Add Task or Research Item</h2>
+        <h2>Add Shared Event or Task</h2>
         <div class="form-grid">
-          <label class="wide">What do you want looked into?
-            <input id="mtitle" placeholder="e.g. Research lodging options for weekend trip" required>
+          <label class="wide">What is happening or to be done?
+            <input id="mtitle" placeholder="e.g. Dinner reservation at 7pm, or Research flight options" required>
           </label>
           <label class="wide">Details & constraints
-            <input id="mdetail" placeholder="Budget, preferences, specific requirements">
+            <input id="mdetail" placeholder="Time, location, specific requests or questions">
           </label>
-          <label>Target completion date
-            <input id="mwhen" placeholder="YYYY-MM-DD" type="date">
+          <label>Target or event date
+            <input id="mwhen" placeholder="YYYY-MM-DD" type="date" value="${esc(selectedCalDate)}">
           </label>
         </div>
         <div class="actions" style="margin-top:14px">
-          <button class="act" id="madd">Add to queue</button>
+          <button class="act" id="madd">Save to shared calendar</button>
         </div>
-        <p class="dim small" style="margin-top:10px">Processed during scheduled autonomy windows. Outbound updates respect quiet hours and daily message caps.</p>
+        <p class="dim small" style="margin-top:10px">Your companion references and remembers all calendar items during conversation and autonomous routines.</p>
       </div>
 
       <div class="card">
@@ -689,7 +920,7 @@ workspaceHandlers.loops=async()=>{
     <div class="planner-column">
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-          <h2 style="margin:0">Task Queue (${missions.length})</h2>
+          <h2 style="margin:0">All Scheduled Tasks (${missions.length})</h2>
           <span class="pill ${openCount>0?'status-good':''}">${openCount} active</span>
         </div>
         <div class="missions-container">
@@ -711,10 +942,34 @@ workspaceHandlers.loops=async()=>{
     </div>
   </div>`;
 
+  $('cal-prev').onclick=async()=>{
+    calMonth--;
+    if(calMonth<0){calMonth=11;calYear--;}
+    await workspaceHandlers.loops();
+  };
+  $('cal-next').onclick=async()=>{
+    calMonth++;
+    if(calMonth>11){calMonth=0;calYear++;}
+    await workspaceHandlers.loops();
+  };
+  $('cal-today').onclick=async()=>{
+    calYear=new Date().getFullYear();
+    calMonth=new Date().getMonth();
+    selectedCalDate=todayStr;
+    await workspaceHandlers.loops();
+  };
+  for(const cell of $('loops').querySelectorAll('[data-cal-date]')){
+    cell.onclick=async()=>{
+      selectedCalDate=cell.dataset.calDate;
+      if($('mwhen'))$('mwhen').value=selectedCalDate;
+      await workspaceHandlers.loops();
+    };
+  }
+
   $('madd').onclick=async()=>{
     const title=$('mtitle').value.trim();if(!title)return;
     await api('/missions',{method:'POST',body:JSON.stringify({title,detail:$('mdetail').value,wanted_by:$('mwhen').value})});
-    notice('Task added to queue.');
+    notice('Event saved to shared calendar.');
     await workspaceHandlers.loops();
   };
   for(const b of $('loops').querySelectorAll('[data-drop]')){

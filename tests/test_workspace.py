@@ -366,6 +366,16 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(self.get('/api/appearance','nova').json()['appearance']['theme'],'ocean')
         self.assertEqual(self.get('/api/appearance','rowan').json()['appearance']['theme'],'ember')
 
+    def test_calendar_ics_export(self):
+        self.post('/api/missions',{'title':'Dinner with Alex','detail':'Table for two','wanted_by':'2026-09-20'})
+        res=self.get('/api/calendar.ics')
+        self.assertEqual(res.status_code,200)
+        self.assertIn('text/calendar',res.headers.get('content-type',''))
+        self.assertIn('BEGIN:VCALENDAR',res.text)
+        self.assertIn('SUMMARY:Dinner with Alex',res.text)
+        self.assertIn('DTSTART;VALUE=DATE:20260920',res.text)
+        self.assertIn('END:VCALENDAR',res.text)
+
     def test_shared_session_database_never_returns_another_profile(self):
         db=self.root/'state.db'
         with contextlib.closing(sqlite3.connect(db)) as con:

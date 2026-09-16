@@ -73,7 +73,7 @@ def build(home=None,token='',state_dir=None):
         runtime,profile=select()
         return cc.load(runtime.home(profile))
 
-    app=FastAPI(title='companion-kit',docs_url=None,redoc_url=None,openapi_url=None)
+    app=FastAPI(title='tamanitomo',docs_url=None,redoc_url=None,openapi_url=None)
     app.state.runtimes=runtimes
     import threading
     app.state.write_locks={key:threading.Lock() for key in runtimes}
@@ -406,6 +406,42 @@ def build(home=None,token='',state_dir=None):
         import companion_missions as missions
         try:return missions.update(c,mission,'dropped','withdrawn in the app')
         except ValueError as exc:raise HTTPException(400,str(exc))
+
+    @app.get('/api/calendar.ics')
+    def calendar_ics():
+        c=load()
+        import companion_missions as missions
+        from fastapi.responses import Response
+        import hashlib
+        all_missions=missions.missions(c,None)
+        lines=[
+            "BEGIN:VCALENDAR",
+            "VERSION:2.0",
+            "PRODID:-//Tamanitomo//Companion Calendar//EN",
+            f"X-WR-CALNAME:{c.agent}'s Calendar",
+        ]
+        for m in all_missions:
+            wb=m.get('wanted_by')
+            if not wb:continue
+            clean_date=wb.replace('-','')
+            uid=m.get('id',hashlib.sha256(m.get('title','').encode()).hexdigest()[:16])
+            status='CONFIRMED' if m.get('status')=='open' else 'CANCELLED' if m.get('status')=='dropped' else 'COMPLETED'
+            lines.extend([
+                "BEGIN:VEVENT",
+                f"UID:{uid}@tamanitomo",
+                f"DTSTAMP:{dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
+                f"DTSTART;VALUE=DATE:{clean_date}",
+                f"SUMMARY:{m.get('title')}",
+                f"DESCRIPTION:{m.get('detail','')}",
+                f"STATUS:{status}",
+                "END:VEVENT"
+            ])
+        lines.append("END:VCALENDAR")
+        return Response(
+            content="\r\n".join(lines),
+            media_type="text/calendar",
+            headers={"Content-Disposition":f'attachment; filename="{c.agent}-calendar.ics"'}
+        )
 
     def document_paths(c):
         paths={'SOUL.md':pathlib.Path(c.soul).resolve()}

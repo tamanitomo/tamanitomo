@@ -266,7 +266,7 @@ if [[ "$NON_INTERACTIVE" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
 
     if [[ ! -f "$KIT_DIR/kit/cli/main.py" ]]; then
       echo -e "${BOLD}5. GitHub Access (For Private Repository)${RESET}"
-      echo -e "${DIM}   If nightspades/companion-kit is private, supply a GitHub Personal Access Token (PAT).${RESET}"
+      echo -e "${DIM}   If tamanitomo/tamanitomo is private, supply a GitHub Personal Access Token (PAT).${RESET}"
       if [[ -z "$GITHUB_TOKEN" ]]; then
         read -r -p "   GitHub Token (press Enter to skip): " GITHUB_TOKEN
       else
@@ -409,7 +409,7 @@ if [[ "$SYS_ARCH" == "aarch64" || "$SYS_ARCH" == "arm64" ]]; then
 
   # 3. Remote download from GitHub wheelhouse branch
   if [[ $(find "$WHEELS_DIR" -maxdepth 1 -name "*.whl" 2>/dev/null | wc -l) -lt 10 ]]; then
-    WHEEL_URL="https://raw.githubusercontent.com/nightspades/companion-kit/wheelhouse-aarch64/companion-wheels-aarch64.tar.gz"
+    WHEEL_URL="https://raw.githubusercontent.com/tamanitomo/tamanitomo/wheelhouse-aarch64/companion-wheels-aarch64.tar.gz"
     CURL_AUTH=()
     if [[ -n "$GITHUB_TOKEN" ]]; then
       CURL_AUTH=(-H "Authorization: token $GITHUB_TOKEN")
@@ -423,9 +423,9 @@ if [[ "$SYS_ARCH" == "aarch64" || "$SYS_ARCH" == "arm64" ]]; then
 
     # 4. Git clone fallback for private/custom forks
     if [[ $(find "$WHEELS_DIR" -maxdepth 1 -name "*.whl" 2>/dev/null | wc -l) -lt 10 ]]; then
-      GIT_URL="https://github.com/nightspades/companion-kit.git"
+      GIT_URL="https://github.com/tamanitomo/tamanitomo.git"
       if [[ -n "$GITHUB_TOKEN" ]]; then
-        GIT_URL="https://${GITHUB_TOKEN}@github.com/nightspades/companion-kit.git"
+        GIT_URL="https://${GITHUB_TOKEN}@github.com/tamanitomo/tamanitomo.git"
       fi
       GIT_TMP="$HERMES_HOME/.wheelhouse-git-tmp"
       rm -rf "$GIT_TMP"
@@ -584,14 +584,14 @@ mkdir -p "$VAULT_DIR"
 if [[ ! -f "$KIT_DIR/kit/cli/main.py" ]]; then
   echo -e "  Cloning Companion Kit repository..."
   mkdir -p "$(dirname "$KIT_DIR")"
-  REPO_URL="https://github.com/nightspades/companion-kit.git"
+  REPO_URL="https://github.com/tamanitomo/tamanitomo.git"
   if [[ -n "$GITHUB_TOKEN" ]]; then
-    REPO_URL="https://${GITHUB_TOKEN}@github.com/nightspades/companion-kit.git"
+    REPO_URL="https://${GITHUB_TOKEN}@github.com/tamanitomo/tamanitomo.git"
   fi
   if ! git clone "$REPO_URL" "$KIT_DIR"; then
-    echo -e "${RED}Error: Failed to clone companion-kit repository.${RESET}" >&2
+    echo -e "${RED}Error: Failed to clone tamanitomo repository.${RESET}" >&2
     if [[ -z "$GITHUB_TOKEN" ]]; then
-      echo -e "${YELLOW}If nightspades/companion-kit is private, pass your GitHub token:${RESET}" >&2
+      echo -e "${YELLOW}If tamanitomo/tamanitomo is private, pass your GitHub token:${RESET}" >&2
       echo -e "  bash setup-termux.sh --github-token <YOUR_GITHUB_TOKEN> ...${RESET}" >&2
     fi
     exit 1

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Companion Kit — Safe Turnkey Updater
-# Updates Companion Kit from GitHub, synchronizes Python dependencies,
+# Tamanitomo (魂の友) — Safe Turnkey Updater
+# Updates Tamanitomo from GitHub, synchronizes Python dependencies,
 # optionally updates Hermes agent, and safely restarts the background service.
 # ==============================================================================
 set -euo pipefail
@@ -19,7 +19,7 @@ RESTART_SERVICE=1
 BRANCH="main"
 
 usage() {
-  echo -e "${BOLD}Companion Kit — Turnkey Updater${RESET}"
+  echo -e "${BOLD}Tamanitomo — Turnkey Updater${RESET}"
   echo ""
   echo "Usage:"
   echo "  ./update.sh [OPTIONS]"
@@ -46,7 +46,7 @@ cd "$SCRIPT_DIR"
 
 echo -e "${BOLD}${CYAN}"
 echo "  ╔═══════════════════════════════════════════════════════════════╗"
-echo "  ║             Companion Kit — Safe Turnkey Updater              ║"
+echo "  ║           Tamanitomo (魂の友) — Safe Turnkey Updater           ║"
 echo "  ╚═══════════════════════════════════════════════════════════════╝"
 echo -e "${RESET}"
 
@@ -72,7 +72,7 @@ CURRENT_COMMIT="$(git rev-parse --short HEAD)"
 TARGET_COMMIT="$(git rev-parse --short "origin/${BRANCH}")"
 
 if [[ "$CURRENT_COMMIT" == "$TARGET_COMMIT" ]]; then
-  echo -e "${GREEN}✓ Companion Kit is already up to date on commit ${CURRENT_COMMIT}.${RESET}"
+  echo -e "${GREEN}✓ Tamanitomo is already up to date on commit ${CURRENT_COMMIT}.${RESET}"
 else
   echo -e "  Updating from ${DIM}${CURRENT_COMMIT}${RESET} to ${GREEN}${TARGET_COMMIT}${RESET}..."
   git checkout "$BRANCH"
@@ -80,7 +80,7 @@ else
     echo -e "${RED}! Fast-forward merge failed. Resetting safely to origin/${BRANCH}...${RESET}"
     git reset --hard "origin/${BRANCH}"
   }
-  echo -e "${GREEN}✓ Companion Kit code successfully updated.${RESET}"
+  echo -e "${GREEN}✓ Tamanitomo code successfully updated.${RESET}"
 fi
 
 # Re-apply stash if any

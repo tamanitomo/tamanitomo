@@ -1,8 +1,8 @@
-<h1 align="center">companion-kit</h1>
+<h1 align="center">tamanitomo · 魂の友</h1>
 
 <p align="center">
-  <strong>Give your local AI a life that continues when you close the window.</strong><br>
-  A companion workspace built on <a href="https://hermes-agent.nousresearch.com/">Hermes</a> —
+  <strong>Soul of a Friend — Give your AI companion a life that continues when you close the window.</strong><br>
+  A sovereign companion workspace built on <a href="https://hermes-agent.nousresearch.com/">Hermes Agent</a> —
   runs on your hardware, keeps its memory on your disk, and cannot message you at 3am.
 </p>
 
@@ -18,13 +18,12 @@
 Character apps give you someone to talk to, and keep them. The conversation lives on their servers,
 the memory is theirs, the model is theirs, and the character can be changed or removed without you.
 
-companion-kit is the other arrangement. The companion lives in a folder you own, on a machine you
-control, backed by whichever model you point it at — a 26B on your own GPU, or a cloud API, or a
-local model with a cloud fallback for when the hardware is busy. Nothing here phones home. There is
+Tamanitomo (魂の友 — "Soul of a Friend") is the other arrangement. The companion lives in a folder you own, on a machine you
+control, backed by whichever model you point it at — a local model on your own GPU, or a cloud API (OpenRouter, Grok, DeepSeek, OpenAI). Nothing here phones home. There is
 no account, no telemetry, and no server component you do not run yourself.
 
 What you get is not a chatbot with a persona field. It is a companion with a **present** it can be
-honest about, a **memory that keeps evidence separate from fiction**, and **limits on when it may
+honest about, a **memory that keeps evidence separate from fiction**, a **daily journal written in their own voice**, and **limits on when it may
 contact you that are enforced in code rather than requested in a prompt**.
 
 ## Start here
@@ -40,12 +39,12 @@ Two doors, depending on where you are:
 You need Hermes, and the app can install it for you.
 
 ```sh
-git clone https://github.com/YOUR-ACCOUNT/companion-kit
-cd companion-kit
-./companion
+git clone https://github.com/tamanitomo/tamanitomo
+cd tamanitomo
+./tamanitomo
 ```
 
-The workspace opens in your browser. Choose **Kit-managed Hermes**, let it install, then
+The workspace opens in your browser. Choose **Tamanitomo-managed Hermes**, let it install, then
 **Create a companion**. The interview asks seven questions about how you want things to feel and
 proposes the rest — and shows you every setting it chose before anything is written.
 

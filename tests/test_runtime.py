@@ -322,7 +322,7 @@ class HandoffFreshnessTests(unittest.TestCase):
         self.c.life.mkdir(parents=True,exist_ok=True)
         self.active=self.c.soul_dir/'ActiveContext.md'
         self.active.write_text('## Right now\n\nMid-way through the roof repair.\n',encoding='utf-8')
-        self.now=dt.datetime.now(dt.timezone.utc)
+        self.now=dt.datetime(2026,9,9,14,0,tzinfo=dt.timezone.utc)
 
     def age(self,hours):
         when=(self.now-dt.timedelta(hours=hours)).timestamp()

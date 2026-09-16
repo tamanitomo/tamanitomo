@@ -61,8 +61,8 @@ def check_github_update(current_version: str) -> dict:
     }
     try:
         req = urllib.request.Request(
-            'https://api.github.com/repos/nightspades/companion-kit/releases/latest',
-            headers={'User-Agent': 'Companion-Kit-Updater', 'Accept': 'application/vnd.github.v3+json'}
+            'https://api.github.com/repos/tamanitomo/tamanitomo/releases/latest',
+            headers={'User-Agent': 'Tamanitomo-Updater', 'Accept': 'application/vnd.github.v3+json'}
         )
         with urllib.request.urlopen(req, timeout=3) as r:
             if r.status == 200:
