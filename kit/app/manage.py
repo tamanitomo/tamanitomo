@@ -589,6 +589,62 @@ def register(app, select, load, operations):
         return {'models':models,'provider':provider,'base_url':base_url,'source':source,
                 'cache_key':key,'note':note}
 
+    @app.get('/api/models/providers')
+    def models_providers():
+        """The providers this profile can actually reach, discovered rather than assumed.
+
+        Three signals, because no one of them is complete. `credential_configured`
+        only notices a provider's own API-key variable, so it misses a Mistral
+        wired up as `custom` and an OpenAI signed in through OAuth. A non-empty
+        model cache is the strongest evidence there is — Hermes only caches a
+        live /v1/models result that came back populated, which means the
+        credential worked. And the profile's own default belongs in the list
+        whether or not anything else has noticed it."""
+        rt,_,h=context()
+        cfg=config(h).get('model') or {}
+        cache={}
+        try:cache=json.loads((h/'provider_models_cache.json').read_text(encoding='utf-8'))
+        except Exception:pass
+        labels={}
+        try:
+            for row in (rt.catalog() if rt.info()['available'] else []) or []:
+                labels[str(row.get('slug') or '').lower()]=row.get('label') or row.get('slug')
+        except Exception:pass
+
+        rows,seen={},set()
+        def add(provider,base_url,ready,why):
+            key=f'custom:{base_url.rstrip("/")}' if base_url else provider
+            if not key or key in seen:return
+            seen.add(key)
+            models=len((cache.get(key) or {}).get('models') or [])
+            label=labels.get(provider) or provider or 'Custom endpoint'
+            if base_url:
+                host=base_url.split('//')[-1].split('/')[0]
+                label=f'{label} · {host}' if provider and provider!='custom' else host
+            rows[key]={'key':key,'provider':provider,'base_url':base_url,'label':label,
+                       'models':models,'ready':bool(ready or models),'why':why}
+
+        # 1. whatever this profile is set to use right now
+        add(str(cfg.get('provider') or '').lower(),str(cfg.get('base_url') or ''),True,'this profile')
+        # 2. anything with a populated cache — proof a credential worked
+        for key,entry in cache.items():
+            if not (entry or {}).get('models'):continue
+            if key.startswith('custom:'):add('custom',key[len('custom:'):],True,'reachable')
+            else:add(key.lower(),'',True,'reachable')
+        # 3. anything holding an API key, even if never listed
+        try:
+            from companion_gateway import _env_values
+            values=_env_values(h)
+            for row in (rt.catalog() if rt.info()['available'] else []) or []:
+                if any(bool(values.get(k) or os.environ.get(k)) for k in row.get('api_key_env_vars',[])):
+                    add(str(row.get('slug') or '').lower(),'',True,'key configured')
+        except Exception:pass
+
+        order=sorted(rows.values(),key=lambda r:(r['why']!='this profile',-r['models'],r['label'].lower()))
+        return {'providers':order,'profile':{'provider':str(cfg.get('provider') or ''),
+                                             'base_url':str(cfg.get('base_url') or ''),
+                                             'model':str(cfg.get('default') or '')}}
+
     @app.post('/api/environment')
     def save_environment(payload:dict):
         rt,p,h=context()

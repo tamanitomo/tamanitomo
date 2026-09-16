@@ -506,23 +506,15 @@ const settingsPanels=[
  render:host=>renderHermesDashboardInto(host)},
 ];
 
-/* Somewhere to move every job at once. The three axes have to travel together:
-   a stored endpoint outranks the provider, so changing the model alone leaves
-   jobs pointed at whatever served the last one. */
-const JOB_PROVIDER_PRESETS=[
-  {id:'mistral',  label:'Mistral',            provider:'custom', model:'mistral-medium-3.5', base_url:'',
-   hint:'Hosted. Uses the credential saved under Accounts & credentials.'},
-  {id:'openai',   label:'OpenAI',             provider:'openai', model:'gpt-4o',             base_url:'',
-   hint:'Hosted. Needs OPENAI_API_KEY.'},
-  {id:'anthropic',label:'Anthropic',          provider:'anthropic', model:'claude-sonnet-5', base_url:'',
-   hint:'Hosted. Needs ANTHROPIC_API_KEY.'},
-  {id:'openrouter',label:'OpenRouter',        provider:'openrouter', model:'',               base_url:'',
-   hint:'Hosted. One key, many models — name the model yourself.'},
-  {id:'local',    label:'Local server',       provider:'custom', model:'',                   base_url:'http://127.0.0.1:11434/v1',
-   hint:'llama.cpp, Ollama or anything OpenAI-shaped on this machine.'},
-  {id:'default',  label:'Follow the profile', provider:'',       model:'',                   base_url:'',
-   hint:'Clears all three, so jobs use whatever the profile default is.'},
-];
+/* The providers this profile can actually reach, discovered rather than
+   guessed. A hardcoded list gets this wrong in exactly the ways that matter:
+   a Mistral wired up as `custom` does not answer to "mistral", and an OpenAI
+   signed in through OAuth is `openai-codex`, not `openai`. */
+let providerChoices=null;
+function knownProviders(){
+  if(!providerChoices)providerChoices=api('/models/providers').catch(()=>({providers:[],profile:{}}));
+  return providerChoices;
+}
 
 /* Model lists, asked for once per provider+endpoint pair and remembered for the
    page. A name typed by hand is always accepted — the list is there to save
@@ -626,10 +618,8 @@ async function renderJobsPanel(host){
     <summary><strong>Move every job to another provider</strong>
       <small class="dim">Model, provider and endpoint together, across all ${jobs.filter(j=>!j.no_agent).length} model-backed jobs</small></summary>
     <div class="routing-body">
-      <div class="chip-row" id="routing-presets">
-        ${JOB_PROVIDER_PRESETS.map(x=>`<button type="button" class="chip" data-preset="${esc(x.id)}">${esc(x.label)}</button>`).join('')}
-      </div>
-      <p class="dim small" id="routing-hint">Pick a starting point, then adjust anything below before applying.</p>
+      <div class="chip-row" id="routing-presets"><span class="dim small">Finding your providers…</span></div>
+      <p class="dim small" id="routing-hint">Pick a provider, then adjust anything below before applying.</p>
       <div class="form-grid">
         <label>Provider<input id="routing-provider" list="provider-ids" placeholder="custom, openai, anthropic…"></label>
         <label>Model${modelPickerHTML('routing','')}
@@ -772,18 +762,28 @@ async function renderJobsPanel(host){
   for(const id of ['#routing-provider','#routing-base-url'])
     host.querySelector(id).addEventListener('change',buildRoutingPicker);
 
-  /* Presets fill the three fields; nothing is sent until Apply. */
-  for(const b of host.querySelectorAll('[data-preset]'))b.onclick=()=>{
-    const preset=JOB_PROVIDER_PRESETS.find(x=>x.id===b.dataset.preset);
-    host.querySelector('#routing-provider').value=preset.provider;
-    routingModel.value=preset.model;
-    routingPicker.querySelector('[data-model-custom]').value=preset.model;
-    host.querySelector('#routing-base-url').value=preset.base_url;
-    buildRoutingPicker();
-    host.querySelector('#routing-hint').textContent=preset.hint;
-    for(const other of host.querySelectorAll('[data-preset]'))
-      other.setAttribute('aria-pressed',String(other===b));
-  };
+  /* A chip per reachable provider, plus a way back to the profile default.
+     Choosing one sets the provider and endpoint and reloads the model list;
+     nothing is sent until Apply. */
+  knownProviders().then(d=>{
+    if(!host.isConnected)return;
+    const strip=host.querySelector('#routing-presets');
+    const rows=[...d.providers.map(r=>({...r,preset:false})),
+                {key:'__default__',label:'Follow the profile',provider:'',base_url:'',models:0,preset:true}];
+    strip.innerHTML=rows.map(r=>`<button type="button" class="chip" data-choice="${esc(r.key)}">${esc(r.label)}${r.models?` <span class="dim">${r.models}</span>`:''}</button>`).join('');
+    for(const b of strip.children)b.onclick=()=>{
+      const row=rows.find(x=>x.key===b.dataset.choice);
+      host.querySelector('#routing-provider').value=row.provider||'';
+      host.querySelector('#routing-base-url').value=row.base_url||'';
+      routingModel.value='';
+      routingPicker.querySelector('[data-model-custom]').value='';
+      buildRoutingPicker();
+      host.querySelector('#routing-hint').textContent=row.preset
+        ? 'Clears all three, so jobs follow whatever the profile default is.'
+        : `${row.label} — ${row.models} model${row.models===1?'':'s'} known. Pick one below, or leave the model empty to follow the profile default.`;
+      for(const other of strip.children)other.setAttribute('aria-pressed',String(other===b));
+    };
+  });
   host.querySelector('#routing-apply').onclick=async()=>{
     const status=host.querySelector('#routing-status');
     const count=jobs.filter(j=>!j.no_agent).length;
@@ -806,12 +806,24 @@ async function renderJobsPanel(host){
   bindAction('jobs-repair','/maintenance/repair');
   draw();
 
-  /* Model names are long and easy to mistype, so offer the ones Hermes knows. */
-  api('/providers').then(p=>{
+  /* The provider field autocompletes to what this profile can actually reach,
+     with the rest of the catalogue behind it for anything not set up yet. */
+  Promise.all([knownProviders(),api('/providers').catch(()=>({providers:[]}))]).then(([mine,all])=>{
     if(!host.isConnected)return;
     const list=document.createElement('datalist');
     list.id='provider-ids';
-    list.innerHTML=p.providers.map(x=>`<option value="${esc(x.slug)}">${esc(x.label)}</option>`).join('');
+    const seen=new Set();
+    const rows=[];
+    for(const r of mine.providers){
+      if(!r.provider||seen.has(r.provider))continue;
+      seen.add(r.provider);
+      rows.push([r.provider,`${r.label} · ${r.models} model${r.models===1?'':'s'}`]);
+    }
+    for(const r of all.providers){
+      if(!r.slug||seen.has(r.slug))continue;
+      seen.add(r.slug);rows.push([r.slug,r.label]);
+    }
+    list.innerHTML=rows.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('');
     host.append(list);
   }).catch(()=>{});
 }
