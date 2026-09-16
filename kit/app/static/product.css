@@ -2186,3 +2186,8 @@ body[data-page="chat"] main{padding:0}
   .fallback-row,.lane-row{flex-wrap:wrap;row-gap:6px}
   .fallback-row>span,.lane-row-name{min-width:0;flex-basis:100%}
 }
+
+/* A vocabulary for the boxes most people have no words for. */
+.tag-vocab{margin-top:8px;font-size:12.5px;padding:7px 9px;background:var(--bg);
+  border:1px dashed var(--edge-2);border-radius:8px}
+.tag-vocab:focus{outline:none;border-style:solid;border-color:var(--accent)}

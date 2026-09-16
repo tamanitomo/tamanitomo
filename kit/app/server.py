@@ -177,7 +177,8 @@ def build(home=None,token='',state_dir=None):
             selection.reset(current)
         response.headers['Referrer-Policy']='no-referrer'
         response.headers['X-Content-Type-Options']='nosniff'
-        if request.url.path.startswith(('/api','/media')):response.headers['Cache-Control']='no-store'
+        if request.url.path.startswith(('/api','/media')) and 'Cache-Control' not in response.headers:
+            response.headers['Cache-Control']='no-store'
         return response
 
     @app.get('/api/overview')
@@ -600,7 +601,9 @@ def build(home=None,token='',state_dir=None):
         import companion_portrait as pt
         path=pt.portrait_path(c)
         if not path.is_file():raise HTTPException(404)
-        return FileResponse(path)
+        stat=path.stat()
+        return FileResponse(path,headers={'Cache-Control':'private, max-age=604800',
+                                          'ETag':f'"{int(stat.st_mtime)}-{stat.st_size}"'})
 
     @app.post('/api/portrait')
     def upload_portrait(data:bytes=Body(...,media_type='application/octet-stream')):

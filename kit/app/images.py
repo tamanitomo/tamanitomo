@@ -49,6 +49,23 @@ def register(app,select,load):
     def template():
         return JSONResponse(media.template(),headers={'Content-Disposition':'attachment; filename="comfy-plantmilk-template.json"'})
 
+    @app.get('/api/images/companion-parts')
+    def companion_parts():
+        """What the companion is, and what they are doing, as prompt text.
+
+        The same blocks the scheduled captures use, so a workflow filled from
+        here matches what the companion sends unprompted.
+        """
+        import companion_portrait as portrait
+        c=load()
+        scene,_=portrait.scene_block(c)
+        record=(c.state() or {}).get('state',{}) if hasattr(c,'state') else {}
+        wardrobe=record.get('outfit') if isinstance(record,dict) else ''
+        if isinstance(wardrobe,list):
+            wardrobe=', '.join(str(x.get('description') or x.get('id') or x) for x in wardrobe)
+        return {'identity':portrait.identity_block(c),'scene':str(scene or ''),
+                'wardrobe':str(wardrobe or '')}
+
     @app.post('/api/images/prompt')
     def prompt(payload:dict):
         return media.compile(load(),payload.get('preset',''),payload.get('category','portrait'),payload.get('parts'))
@@ -72,7 +89,9 @@ def register(app,select,load):
         if Path(name).name!=name or Path(name).suffix not in ('.png','.jpg','.webp'):raise HTTPException(404,'Image not found')
         root=(load().data/'creations'/'image-studio').resolve();path=(root/name).resolve()
         if path.parent!=root or not path.is_file():raise HTTPException(404,'Image not found')
-        return FileResponse(path)
+        stat=path.stat()
+        return FileResponse(path,headers={'Cache-Control':'private, max-age=604800',
+                                          'ETag':f'"{int(stat.st_mtime)}-{stat.st_size}"'})
 
     @app.get('/api/images/modular-template')
     def modular_template():

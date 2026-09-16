@@ -744,6 +744,29 @@ let comfyModelCache={};
 let missingVersions={};
 let modelFamilies={};
 
+/* Ways of framing and lighting a shot, for people who do not think in these
+   terms. Picking one adds its tags; they can still be typed by hand. */
+const CAMERA_LOOKS=[
+  ['close-up portrait, shallow depth of field, 85mm','Close portrait'],
+  ['upper body shot, eye level, 50mm','Head and shoulders'],
+  ['full body shot, standing, 35mm','Full body'],
+  ['wide shot, environment visible, 24mm','Wide, room visible'],
+  ['over the shoulder, candid framing','Over the shoulder'],
+  ['low angle, looking up','From below'],
+  ['high angle, looking down','From above'],
+  ['dutch angle, slight tilt','Tilted'],
+];
+const LIGHTING_LOOKS=[
+  ['soft natural window light, overcast','Soft daylight'],
+  ['golden hour, warm rim light','Golden hour'],
+  ['blue hour, cool ambient','Dusk'],
+  ['candlelight, warm low key','Candlelit'],
+  ['neon signage, cyan and magenta rim light','Neon'],
+  ['harsh midday sun, strong shadows','Harsh sun'],
+  ['studio three point lighting, softbox key','Studio'],
+  ['single lamp, dark room, high contrast','One lamp, dark room'],
+];
+
 /* What each installed file says it was trained for, read from its own header.
    Cached on the server, so this is one small request. */
 async function loadModelFamilies(refresh){
@@ -809,7 +832,7 @@ function wireSliders(root){
 function tagsFromText(text){
   return String(text||'').split(',').map(x=>x.trim()).filter(Boolean);
 }
-function tagFieldHTML(key,label,text,hint,collapsed){
+function tagFieldHTML(key,label,text,hint,collapsed,vocabulary){
   const tags=tagsFromText(text);
   return `<details class="tag-field" data-tag-field="${esc(key)}" ${collapsed?'':'open'}>
     <summary class="tag-field-head"><strong>${esc(label)}</strong>
@@ -818,6 +841,10 @@ function tagFieldHTML(key,label,text,hint,collapsed){
     <div class="tag-list" data-tags>${tags.map((t,i)=>
       `<span class="tag-chip">${esc(t)}<button type="button" class="tag-remove" data-remove="${i}" aria-label="Remove ${esc(t)}">✕</button></span>`).join('')}
     </div>
+    ${vocabulary?`<select class="tag-vocab" data-tag-vocab aria-label="Add a ${esc(label.toLowerCase())} to ${esc(label)}">
+      <option value="">Pick a ${esc(label.toLowerCase())}\u2026</option>
+      ${vocabulary.map(([value,name])=>`<option value="${esc(value)}">${esc(name)}</option>`).join('')}
+    </select>`:''}
     <input class="tag-input" data-tag-input placeholder="Add a tag, then Enter" aria-label="Add a tag to ${esc(label)}">
   </details>`;
 }
@@ -830,6 +857,13 @@ function wireTagFields(root,onChange){
     const tags=readTags(field);
     tags.splice(Number(remove.dataset.remove),1);
     writeTags(field,tags);onChange&&onChange();
+  });
+  root.addEventListener('change',event=>{
+    const picker=event.target.closest('[data-tag-vocab]');
+    if(!picker||!picker.value)return;
+    const field=picker.closest('[data-tag-field]');
+    writeTags(field,[...readTags(field),...tagsFromText(picker.value)]);
+    picker.value='';onChange&&onChange();
   });
   root.addEventListener('keydown',event=>{
     const input=event.target.closest('[data-tag-input]');
@@ -1080,6 +1114,19 @@ workspaceHandlers['image-studio']=async()=>{
     [768,1152,'Portrait 768×1152'],[1152,768,'Landscape 1152×768'],[512,768,'Small portrait']];
   const sizeValue=`${p.width||832}×${p.height||1216}`;
   const clipNode=comfy?nodesOfClass(p.workflow,'CLIPSetLastLayer')[0]:null;
+  // Every other node that names a file the host has a list for.
+  const LOADERS=[
+    ['VAELoader','vae_name','VAE','vae_name'],
+    ['CLIPLoader','clip_name','Text encoder','clip_name'],
+    ['DualCLIPLoader','clip_name1','Text encoder 1','clip_name'],
+    ['DualCLIPLoader','clip_name2','Text encoder 2','clip_name'],
+    ['UNETLoader','unet_name','UNET','unet_name'],
+    ['UnetLoaderGGUF','unet_name','UNET','unet_name'],
+  ];
+  const loaderRows=comfy?LOADERS.flatMap(([cls,field,title,pool])=>
+    nodesOfClass(p.workflow,cls)
+      .filter(([,node])=>node.inputs&&field in node.inputs)
+      .map(([id,node])=>[id,node,field,title,models[pool]||[]])):[];
   const checkpointName=ckptNodes.length?ckptNodes[0][1].inputs.ckpt_name:'';
   const checkpointFamily=(modelFamilies[checkpointName]||{}).family||'';
   const clipSkipValue=clipNode?Math.abs(Number(clipNode[1].inputs.stop_at_clip_layer??-2)):2;
@@ -1114,6 +1161,13 @@ workspaceHandlers['image-studio']=async()=>{
               :`<option value="${esc(node.inputs.ckpt_name||'')}">${esc(node.inputs.ckpt_name||'—')}</option>`}
           </select>
         </label>`).join(''):'<p class="dim small">This workflow loads its model another way.</p>'}
+      ${loaderRows.map(([id,node,field,title,pool])=>`
+        <label>${esc(title)}
+          <select data-loader-node="${esc(id)}" data-loader-field="${esc(field)}">
+            ${pool.length?groupedModelOptions(pool,node.inputs[field],'')
+              :`<option value="${esc(node.inputs[field]||'')}">${esc(node.inputs[field]||'\u2014')}</option>`}
+          </select>
+        </label>`).join('')}
       <p class="model-family" data-family-badge hidden></p>
       ${!checkpoints.length?'<p class="dim small">Connect to ComfyUI to choose from the models it has.</p>':''}
     </div>
@@ -1183,8 +1237,12 @@ workspaceHandlers['image-studio']=async()=>{
           <input id="preset-include-identity" type="checkbox" ${p.include_identity!==false?'checked':''}>
           <span class="switch-slider"></span><span class="switch-label">Include the companion</span>
         </label></div>
+      <div class="studio-actions" style="margin-top:0">
+        <button type="button" class="quiet" id="insert-companion">Use ${esc(chatName())}\u2019s details</button>
+      </div>
       <div class="tag-fields">
-        ${d.parts.map(k=>tagFieldHTML(k,formLabel(k),p.parts?.[k]||'',PART_HINT[k]||'')).join('')}
+        ${d.parts.map(k=>tagFieldHTML(k,formLabel(k),p.parts?.[k]||'',PART_HINT[k]||'',false,
+          k==='camera'?CAMERA_LOOKS:k==='lighting'?LIGHTING_LOOKS:null)).join('')}
         ${tagFieldHTML('__negative','Negative',p.negative||'','What to keep out',true)}
       </div>
     </div>
@@ -1268,6 +1326,9 @@ workspaceHandlers['image-studio']=async()=>{
   const clipNode=nodesOfClass(p.workflow||{},'CLIPSetLastLayer')[0];
   if($('preset-name'))$('preset-name').onchange=()=>{readPreset();menus();};
   if($('preset-seed-random'))$('preset-seed-random').onclick=()=>{$('preset-seed').value=-1;readPreset();};
+  for(const select of root.querySelectorAll('[data-loader-node]'))select.onchange=()=>{
+    p.workflow[select.dataset.loaderNode].inputs[select.dataset.loaderField]=select.value;
+    syncWorkflowText(p);};
   for(const select of root.querySelectorAll('[data-ckpt-node]'))select.onchange=()=>{
     p.workflow[select.dataset.ckptNode].inputs.ckpt_name=select.value;
     syncWorkflowText(p);drawPreset();};
@@ -1293,6 +1354,28 @@ workspaceHandlers['image-studio']=async()=>{
       await comfyModels(p.endpoint);
       drawPreset();notice(file+' downloaded.');
     }catch(error){get.disabled=false;get.textContent='\u2193';notice('Download failed: '+error.message);}
+  };
+  if($('insert-companion'))$('insert-companion').onclick=async()=>{
+    const button=$('insert-companion');
+    button.disabled=true;
+    try{
+      const parts=await api('/images/companion-parts');
+      let filled=0;
+      for(const [key,value] of Object.entries(parts)){
+        if(!value)continue;
+        const field=root.querySelector(`[data-tag-field="${key}"]`);
+        if(!field)continue;
+        // Their own words go in as one entry: these are sentences, not tags.
+        const existing=readTags(field);
+        if(existing.includes(value.trim()))continue;
+        writeTags(field,[...existing,value.trim()]);
+        field.open=true;filled++;
+      }
+      readPreset();
+      notice(filled?`Filled ${filled} from ${chatName()}\u2019s current state.`
+        :'Nothing new to add \u2014 those boxes already have it.');
+    }catch(error){notice('Could not read their details: '+error.message);}
+    finally{button.disabled=false;}
   };
   if($('rescan-models'))$('rescan-models').onclick=async()=>{
     const button=$('rescan-models');

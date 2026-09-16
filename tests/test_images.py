@@ -211,3 +211,45 @@ class ModelScanTests(unittest.TestCase):
         import tempfile
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
+
+
+class MediaCacheTests(unittest.TestCase):
+    """The person's own pictures should be fetched once, not on every page."""
+
+    def setUp(self):
+        from tests import test_workspace as workspace
+        self.f = workspace.WorkspaceTests(); self.f.setUp(); self.addCleanup(self.f.doCleanups)
+        self.rel = 'photos/cached.png'
+        target = self.f.c.data / self.rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b'\x89PNG\r\n\x1a\n' + b'0' * 64)
+
+    def get(self, **headers):
+        return self.f.client.get('/api/content/file', params={'profile': 'nova', 'path': self.rel},
+                                 headers={**self.f.headers, **headers})
+
+    def test_a_picture_is_cacheable_and_carries_its_identity(self):
+        response = self.get()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('private', response.headers['cache-control'])
+        self.assertIn('max-age', response.headers['cache-control'])
+        self.assertTrue(response.headers.get('etag'))
+
+    def test_an_unchanged_picture_is_answered_without_its_bytes(self):
+        tag = self.get().headers['etag']
+        again = self.get(**{'If-None-Match': tag})
+        self.assertEqual(again.status_code, 304)
+        self.assertEqual(again.content, b'')
+
+    def test_a_replaced_picture_is_fetched_again(self):
+        """The tag is the file's identity, so rewriting it must invalidate."""
+        import os, time
+        tag = self.get().headers['etag']
+        target = self.f.c.data / self.rel
+        target.write_bytes(b'\x89PNG\r\n\x1a\n' + b'1' * 128)
+        os.utime(target, (time.time() + 5, time.time() + 5))
+        self.assertEqual(self.get(**{'If-None-Match': tag}).status_code, 200)
+
+    def test_the_api_itself_is_still_never_cached(self):
+        response = self.f.client.get('/api/overview', params={'profile': 'nova'}, headers=self.f.headers)
+        self.assertEqual(response.headers.get('cache-control'), 'no-store')

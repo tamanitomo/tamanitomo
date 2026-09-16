@@ -1,5 +1,6 @@
 """Profile-owned content catalog for the companion desktop app."""
 from __future__ import annotations
+from fastapi import Request
 import datetime as dt
 import hashlib
 from functools import lru_cache
@@ -196,7 +197,7 @@ def register(app,load):
     from .scanner import register as register_scanner
     register_scanner(app,load)
     from fastapi import HTTPException
-    from fastapi.responses import FileResponse
+    from fastapi.responses import FileResponse, Response
     @app.get('/api/media/preferences')
     def media_preferences():return review.preferences(load())
     @app.post('/api/media/preferences')
@@ -263,6 +264,14 @@ def register(app,load):
         if p.stat().st_size>2_000_000:raise ValueError('This document is too large to preview. Download it instead.')
         return {'text':p.read_text(encoding='utf-8'),'path':path}
     @app.get('/api/content/file')
-    def content_file(path:str,download:bool=False):
+    def content_file(request:Request,path:str,download:bool=False):
         p=resolve(load(),path)
-        return FileResponse(p,filename=p.name if download else None,headers={'Content-Security-Policy':"default-src 'none'; sandbox",'X-Content-Type-Options':'nosniff'})
+        stat=p.stat()
+        tag=f'"{int(stat.st_mtime)}-{stat.st_size}"'
+        headers={'Content-Security-Policy':"default-src 'none'; sandbox",
+                 'X-Content-Type-Options':'nosniff',
+                 'Cache-Control':'private, max-age=604800',
+                 'ETag':tag}
+        if request.headers.get('if-none-match')==tag:
+            return Response(status_code=304,headers=headers)
+        return FileResponse(p,filename=p.name if download else None,headers=headers)
