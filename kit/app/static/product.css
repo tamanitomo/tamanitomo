@@ -2186,6 +2186,25 @@ body[data-page="chat"] main{padding:0}
 .modesty-note{margin:8px 2px 0;line-height:1.5;padding:8px 10px;border-radius:8px;
   background:var(--surface-2);border:1px solid var(--edge)}
 
+/* The words actually sent to an image model, shown inside the section they
+   were derived from: visible while reading, not buried in a settings page. */
+.image-block{margin:14px 0 4px;padding:14px 16px;border-radius:10px;
+  border:1px solid var(--accent-line);border-left:3px solid var(--accent);
+  background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
+.image-block-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.image-block-head strong{font-size:13px;letter-spacing:.01em}
+.image-block-text{margin:0;font-size:13px;line-height:1.65;color:var(--ink);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}
+.image-block-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
+.image-block-actions .quiet{padding:6px 11px;font-size:12.5px}
+
+/* A small control that sits on a heading line without crowding it. */
+.chip-button{border:1px solid var(--edge);border-radius:20px;padding:5px 12px;
+  background:var(--surface-2);color:var(--ink-2);font-size:12.5px;font-weight:550;
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex:none}
+.chip-button:hover{background:var(--accent-soft);color:var(--accent-ink);border-color:var(--accent-line)}
+.chip-button:disabled{opacity:.55}
+
 /* Getting set up: each step says where it stands without being asked. */
 .setup-checklist{list-style:none;counter-reset:setup;margin:0 0 22px;padding:0;
   display:flex;flex-direction:column;gap:10px}

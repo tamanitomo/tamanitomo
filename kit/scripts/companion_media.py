@@ -160,8 +160,11 @@ def effective(c):
     data=load(c)
     if data.get('inherit') and c.profile:
         own_identity=data.get('identity_override')
+        own_source=data.get('identity_source')
         data=copy.deepcopy(load(cc.load(c.hermes_root)))
         data['identity_override']=own_identity
+        if own_source is not None:data['identity_source']=own_source
+        else:data.pop('identity_source',None)
         for preset in data.get('presets',[]):
             preset.get('parts',{}).pop('identity',None)
     return data
@@ -179,6 +182,7 @@ def endpoint(value):
 def validate(data):
     if not isinstance(data,dict) or data.get('version')!=1:raise ValueError('Expected image preset format version 1')
     if data.get('identity_override') is not None and (not isinstance(data['identity_override'],str) or len(data['identity_override'])>20000):raise ValueError('Identity prompt is too long')
+    if 'identity_source' in data and not isinstance(data['identity_source'],str):raise ValueError('Invalid identity source marker')
     if not isinstance(data.get('inherit',False),bool):raise ValueError('Inheritance must be true or false')
     presets=data.get('presets',[])
     if not isinstance(presets,list) or len(presets)>100:raise ValueError('At most 100 presets are supported')

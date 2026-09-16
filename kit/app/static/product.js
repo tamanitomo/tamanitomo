@@ -1595,14 +1595,11 @@ async function imagesPanelHTML(){
   </div>
 
   <h3 class="section-subheading">How they are described to a provider</h3>
-  <label class="inline-label switch-container" style="margin-bottom:10px">
-    <input id="set-follow-soul" type="checkbox" ${following?'checked':''}>
-    <span class="switch-slider"></span>
-    <span class="switch-label">Use the appearance from their SOUL</span>
-  </label>
-  <textarea id="set-image-identity" aria-label="Appearance sent to the image provider"
-    ${following?'disabled':''}>${esc(settings.identity_override||identity.identity||'')}</textarea>
-  <small class="dim">Overrides what Identity says, for pictures only.</small>
+  <p class="dim small" style="margin:0 0 12px">${following
+    ? 'The whole appearance section of their SOUL is being sent as written.'
+    : 'A shorter block derived from their SOUL is being sent.'}
+    It is written and edited on the <button type="button" class="link-button" id="set-goto-identity">Identity page</button>,
+    inside the appearance section it comes from.</p>
   <div class="studio-actions">
     <button class="act" id="set-images-save">Save image settings</button>
     <span class="dim small" id="set-images-saved" role="status"></span>
@@ -1611,9 +1608,8 @@ async function imagesPanelHTML(){
 
 function wireImagesPanel(panel){
   const status=panel.querySelector('#set-comfy-status');
-  const follow=panel.querySelector('#set-follow-soul');
-  const identity=panel.querySelector('#set-image-identity');
-  if(follow)follow.onchange=()=>{identity.disabled=follow.checked;};
+  const goto=panel.querySelector('#set-goto-identity');
+  if(goto)goto.onclick=()=>render('identity');
 
   /* Setting up should report itself rather than wait to be asked, so the first
      step says "Detected" on its own once ComfyUI answers. */
@@ -1677,9 +1673,6 @@ function wireImagesPanel(panel){
         hash_lookup:Boolean(hash&&hash.checked),
         ...(key?{api_key:key}:{})});
       if(key)setState(panel.querySelector('#setup-key-state'),'Saved','is-done');
-      const images=await api('/images');
-      await post('/images',{revision:images.revision,settings:{...images.settings,
-        identity_override:follow.checked?null:identity.value}});
       saved.textContent='Saved';
     }catch(error){saved.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
   };

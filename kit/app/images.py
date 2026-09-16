@@ -52,20 +52,18 @@ def register(app,select,load):
 
     @app.get('/api/images/companion-parts')
     def companion_parts():
-        """What the companion is, and what they are doing, as prompt text.
+        """What the companion is, and what they are doing, box by box.
 
         The same blocks the scheduled captures use, so a workflow filled from
-        here matches what the companion sends unprompted.
+        here matches what the companion sends unprompted. Identity is the saved
+        image block when there is one, which is what keeps a likeness the same
+        from one picture to the next.
         """
         import companion_portrait as portrait
+        import companion_image_identity as block
         c=load()
-        scene,_=portrait.scene_block(c)
-        record=(c.state() or {}).get('state',{}) if hasattr(c,'state') else {}
-        wardrobe=record.get('outfit') if isinstance(record,dict) else ''
-        if isinstance(wardrobe,list):
-            wardrobe=', '.join(str(x.get('description') or x.get('id') or x) for x in wardrobe)
-        return {'identity':portrait.identity_block(c),'scene':str(scene or ''),
-                'wardrobe':str(wardrobe or '')}
+        parts=portrait.prompt_parts(c)
+        return {**parts,'identity_saved':block.state(c)['saved']}
 
     @app.post('/api/images/prompt')
     def prompt(payload:dict):

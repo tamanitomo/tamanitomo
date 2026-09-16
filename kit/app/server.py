@@ -646,6 +646,41 @@ def build(home=None,token='',state_dir=None):
                                    provider=str(payload.get('provider') or ''))
         except (ValueError,OSError) as exc:raise HTTPException(400,str(exc))
 
+    @app.get('/api/image-identity')
+    def image_block():
+        """The stable description sent to image models, and whether it is current."""
+        import companion_image_identity as block
+        return block.state(load())
+
+    @app.post('/api/image-identity')
+    def set_image_block(payload:dict|None=None):
+        """Keep a block, or go back to sending the SOUL prose.
+
+        A block typed or edited by hand is stamped against the appearance as it
+        stands now: editing it is how a person says this is the one I want.
+        """
+        import companion_image_identity as block
+        payload=payload or {}
+        c=load()
+        try:
+            if payload.get('follow'):return block.follow(c)
+            return block.save(c,str(payload.get('text') or ''))
+        except (ValueError,OSError) as exc:raise HTTPException(400,str(exc))
+        except FileExistsError as exc:raise HTTPException(409,str(exc))
+
+    @app.post('/api/image-identity/propose')
+    def propose_image_block(payload:dict|None=None):
+        """Ask a model to derive the block from the appearance section.
+
+        It proposes; it does not write. `POST /api/image-identity` commits.
+        """
+        import companion_image_identity as block
+        payload=payload or {}
+        try:
+            return block.propose(load(),model=str(payload.get('model') or ''),
+                                 provider=str(payload.get('provider') or ''))
+        except (ValueError,OSError) as exc:raise HTTPException(400,str(exc))
+
     @app.get('/api/health')
     def health():
         c=load()

@@ -80,11 +80,71 @@ def scene_block(c,record=None):
     if not scene:return '',None
     state=scene['state']
     outfit=', '.join(item['description'] for item in state.get('outfit',[]))
-    parts=[state.get('activity',''),f"in {state.get('location','')}" if state.get('location') else '']
+    # Locations get recorded however they were written — "the kitchen" wants an
+    # "in", "in the car on the highway" already has one.
+    place=state.get('location','')
+    if place and not re.match(r'(in|on|at|by|near|inside|outside|under|beside)\b',place.strip(),re.I):
+        place='in '+place
+    parts=[state.get('activity',''),place]
     if outfit:parts.append(f'wearing {outfit}')
     visual=state.get('visual') or {}
     parts.extend(f'{key}: {value}' for key,value in visual.items() if value)
     return ', '.join(p for p in parts if p),scene
+
+# Daylight by the clock, for the times nothing recorded the light. Approximate
+# on purpose: a picture wants to know it is golden hour, not the sun's azimuth.
+DAYLIGHT=((5,'soft dawn light'),(8,'bright morning light'),(11,'midday daylight'),
+          (16,'warm late afternoon light'),(19,'golden hour, low sun'),(21,'blue hour dusk'))
+INDOOR_WORDS=('indoors','inside','room','bedroom','kitchen','living room','office','home',
+              'car','bed','sofa','couch','bath','shower','studio','cafe','restaurant','shop')
+OUTDOOR_WORDS=('beach','park','street','road','highway','trail','forest','garden','field',
+               'mountain','coast','shore','outside','outdoors','sky','city')
+
+
+def lighting_guess(c,location='',now=None):
+    """What the light is probably doing, when nothing recorded it.
+
+    A guess, and only ever used where the field would otherwise be blank: a
+    recorded `visual.lighting` always wins.
+    """
+    import datetime as dt
+    try:
+        zone=dt.timezone.utc if not c.timezone else __import__('zoneinfo').ZoneInfo(c.timezone)
+    except Exception:zone=dt.timezone.utc
+    hour=(now or dt.datetime.now(zone)).hour
+    place=str(location or '').lower()
+    outdoor=any(w in place for w in OUTDOOR_WORDS)
+    indoor=any(w in place for w in INDOOR_WORDS) and not outdoor
+    # Before dawn and after dusk there is no daylight to describe, whatever the
+    # table's last row says.
+    if hour<5 or hour>=22:
+        return 'warm indoor lamplight' if indoor else 'night, ambient streetlight'
+    daylight=DAYLIGHT[0][1]
+    for start,label in DAYLIGHT:
+        if hour>=start:daylight=label
+    if indoor:return daylight+' through a window'
+    return daylight
+
+
+def prompt_parts(c,record=None):
+    """The recorded moment, split into the boxes a workflow actually has.
+
+    `scene_block` joins everything into one line because a single-prompt
+    workflow has nowhere else to put it. A workflow with separate conditioning
+    wants the outfit in wardrobe and the light in lighting, so the scene is left
+    holding only what it is: where she is and what she is doing.
+    """
+    from companion_presence import current
+    scene=record if record is not None else current(c)
+    state=(scene or {}).get('state',{}) if scene else {}
+    outfit=', '.join(item['description'] for item in state.get('outfit',[]) if item.get('description'))
+    visual=state.get('visual') or {}
+    location=state.get('location','')
+    where=', '.join(p for p in (state.get('activity',''),location) if p)
+    return {'identity':identity_block(c),'scene':where,'wardrobe':outfit,
+            'lighting':visual.get('lighting') or lighting_guess(c,location),
+            'camera':visual.get('framing') or ''}
+
 
 def recorded_overrides(c,record=None):
     scene,record=scene_block(c,record)

@@ -889,6 +889,7 @@ async function renderIdentity(){
         <button class="quiet soul-edit" data-edit="${esc(s.name)}">Edit</button>
       </div>
       <div class="soul-passage-body prose" data-body="${esc(s.name)}">${soulBodyHTML(s.body)}</div>
+      ${s.name==='appearance'?'<div class="image-block" id="image-block" hidden></div>':''}
     </section>`).join('')}</article>`;
 
   $('identity').innerHTML=hero+warn+
@@ -964,6 +965,86 @@ async function renderIdentity(){
       read(name);
       notice('Saved. The whole file was backed up first.');
     }catch(e){msg.innerHTML=`<span class="bad">${esc(e.message)}</span>`;save.disabled=false;}
+    // The appearance changed, so the derived image block may no longer match it.
+    if(name==='appearance')paintImageBlock();
+  };
+
+  paintImageBlock();
+}
+
+/* The appearance section is prose, written for a person. An image model reads a
+   prompt as a bag of phrases, so a second, shorter description of the same
+   person sits beside it — the one actually sent to a provider. It is derived
+   from the section above once and then held still, because a likeness stays the
+   same across pictures by sending the same words, not by re-summarising. */
+async function paintImageBlock(){
+  const host=$('image-block');
+  if(!host)return;
+  let state;
+  try{state=await api('/image-identity');}
+  catch(error){host.hidden=true;return;}
+  if(!state.has_appearance){host.hidden=true;return;}
+  host.hidden=false;
+  const body=state.saved
+    ? `<p class="image-block-text" data-image-block-text>${esc(state.text)}</p>`
+    : `<p class="dim small">Not written yet \u2014 the whole section above is being sent as-is,
+        which dilutes the traits that fix a likeness.</p>`;
+  host.innerHTML=`
+    <div class="image-block-head">
+      <strong>\u{1F3A8} Sent to image models</strong>
+      ${state.stale?'<span class="pill status-warn">appearance changed</span>'
+        :state.saved?'<span class="pill status-good">current</span>':''}
+    </div>
+    ${body}
+    ${state.stale?`<p class="dim small">The section above was edited after this was written,
+      so the two no longer describe the same person.</p>`:''}
+    <div class="image-block-actions">
+      <button class="quiet" id="image-block-write">${state.saved?'Rewrite it':'Write it'}</button>
+      ${state.saved?'<button class="quiet" id="image-block-edit">Edit by hand</button>':''}
+      ${state.saved?'<button class="quiet" id="image-block-follow">Stop using it</button>':''}
+      <span class="dim small" id="image-block-status" role="status"></span>
+    </div>`;
+
+  const status=$('image-block-status');
+  $('image-block-write').onclick=async()=>{
+    if(!confirm(state.saved
+      ? 'Ask a model to rewrite this from the appearance section? You will see it before it is kept.'
+      : 'Ask a model to write this from the appearance section? You will see it before it is kept.'))return;
+    $('image-block-write').disabled=true;
+    status.textContent='Reading the appearance section\u2026';
+    try{
+      const proposed=await api('/image-identity/propose',{method:'POST',body:'{}'});
+      status.textContent='';
+      dialog('Sent to image models',`
+        <p class="dim small">Derived from the appearance section. Nothing is saved until you keep it.</p>
+        <textarea id="image-block-draft" style="height:26vh">${esc(proposed.identity)}</textarea>
+        <button class="act" id="image-block-keep">Keep it</button>`);
+      $('image-block-keep').onclick=async()=>{
+        await api('/image-identity',{method:'POST',
+          body:JSON.stringify({text:$('image-block-draft').value})});
+        $('product-dialog').close();await paintImageBlock();
+        notice('Kept. Every picture from here uses these words.');
+      };
+    }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
+    finally{if($('image-block-write'))$('image-block-write').disabled=false;}
+  };
+  if($('image-block-edit'))$('image-block-edit').onclick=()=>{
+    dialog('Sent to image models',`
+      <p class="dim small">Comma-separated phrases. Your edit is kept as-is and marked current.</p>
+      <textarea id="image-block-draft" style="height:26vh">${esc(state.text)}</textarea>
+      <button class="act" id="image-block-keep">Save</button>`);
+    $('image-block-keep').onclick=async()=>{
+      try{
+        await api('/image-identity',{method:'POST',
+          body:JSON.stringify({text:$('image-block-draft').value})});
+        $('product-dialog').close();await paintImageBlock();notice('Saved.');
+      }catch(error){notice(error.message);}
+    };
+  };
+  if($('image-block-follow'))$('image-block-follow').onclick=async()=>{
+    if(!confirm('Send the whole appearance section to image models instead?'))return;
+    await api('/image-identity',{method:'POST',body:JSON.stringify({follow:true})});
+    await paintImageBlock();notice('The section above is sent as-is again.');
   };
 }
 

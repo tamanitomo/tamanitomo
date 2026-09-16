@@ -1110,7 +1110,7 @@ workspaceHandlers['image-studio']=async()=>{
 
  function readPreset(){
   const p=settings.presets[presetIndex];if(!p||!$('preset-name'))return;
-  p.name=$('preset-name').value;p.category=$('preset-category').value;p.endpoint=$('preset-endpoint')?.value||'';p.include_identity=$('preset-include-identity')?.checked??true;
+  p.name=$('preset-name').value;p.category=$('preset-category').value;p.endpoint=$('preset-endpoint')?.value||'';
   // Tags are stored the way the model wants them: comma separated, no strays.
   p.parts={...p.parts};
   for(const field of $('image-preset-editor').querySelectorAll('[data-tag-field]')){
@@ -1304,18 +1304,9 @@ workspaceHandlers['image-studio']=async()=>{
 
     <div class="card studio-block">
       <div class="studio-block-head"><h3>4 · Prompt</h3>
-        <label class="inline-label switch-container" style="margin:0">
-          <input id="preset-include-identity" type="checkbox" ${p.include_identity!==false?'checked':''}>
-          <span class="switch-slider"></span><span class="switch-label">Include ${esc(chatName())}</span>
-        </label></div>
-      <p class="dim small identity-note">Leave Identity empty and this fills it from her SOUL at
-        render time, so she stays current as she changes. Type in it \u2014 or paste below \u2014 and your
-        text wins instead.${(p.parts?.identity||'').trim()?
-          ' <strong>Identity has text, so that is what renders.</strong>':''}</p>
-      <div class="studio-actions" style="margin-top:0">
-        <button type="button" class="quiet" id="insert-companion">Paste her details now</button>
-        <span class="dim small">A snapshot of how she looks today \u2014 it will not follow her.</span>
-      </div>
+        <button type="button" class="chip-button" id="insert-companion"
+          title="Fill these boxes from ${esc(chatName())}\u2019s saved image identity and what she is doing now"
+          >\u21e5 Fill from ${esc(chatName())}</button></div>
       <div class="tag-fields">
         ${d.parts.map(k=>tagFieldHTML(k,formLabel(k),p.parts?.[k]||'',PART_HINT[k]||'',false,
           k==='camera'?CAMERA_LOOKS:k==='lighting'?LIGHTING_LOOKS:null)).join('')}
@@ -1345,10 +1336,9 @@ workspaceHandlers['image-studio']=async()=>{
     </details>`
     :`<div class="card studio-block">
       <div class="studio-block-head"><h3>Prompt</h3>
-        <label class="inline-label switch-container" style="margin:0">
-          <input id="preset-include-identity" type="checkbox" ${p.include_identity!==false?'checked':''}>
-          <span class="switch-slider"></span><span class="switch-label">Include the companion</span>
-        </label></div>
+        <button type="button" class="chip-button" id="insert-companion-simple"
+          title="Fill these boxes from ${esc(chatName())}\u2019s saved image identity and what she is doing now"
+          >\u21e5 Fill from ${esc(chatName())}</button></div>
       <div class="tag-fields">
         ${d.parts.map(k=>tagFieldHTML(k,formLabel(k),p.parts?.[k]||'',PART_HINT[k]||'')).join('')}
       </div>
@@ -1437,28 +1427,35 @@ workspaceHandlers['image-studio']=async()=>{
       drawPreset();notice(file+' downloaded.');
     }catch(error){get.disabled=false;get.textContent='\u2193';notice('Download failed: '+error.message);}
   };
-  if($('insert-companion'))$('insert-companion').onclick=async()=>{
-    const button=$('insert-companion');
+  /* Fill the boxes from who she is and what she is doing. Identity comes from
+     the saved image block, which is the whole reason a likeness holds still
+     between pictures; the rest is this moment and is replaced, not appended,
+     because yesterday's outfit is not a tag you want to keep collecting. */
+  const fillFromCompanion=async button=>{
     button.disabled=true;
     try{
       const parts=await api('/images/companion-parts');
-      let filled=0;
-      for(const [key,value] of Object.entries(parts)){
-        if(!value)continue;
+      const filled=[];
+      for(const key of ['identity','scene','wardrobe','lighting','camera']){
+        const value=(parts[key]||'').trim();
         const field=root.querySelector(`[data-tag-field="${key}"]`);
-        if(!field)continue;
-        // Their own words go in as one entry: these are sentences, not tags.
-        const existing=readTags(field);
-        if(existing.includes(value.trim()))continue;
-        writeTags(field,[...existing,value.trim()]);
-        field.open=true;filled++;
+        if(!value||!field)continue;
+        const tags=tagsFromText(value);
+        if(JSON.stringify(readTags(field))===JSON.stringify(tags))continue;
+        writeTags(field,tags);
+        field.open=true;filled.push(formLabel(key));
       }
       readPreset();
-      notice(filled?`Filled ${filled} from ${chatName()}\u2019s current state.`
-        :'Nothing new to add \u2014 those boxes already have it.');
+      if(!filled.length){notice('Those boxes already match her.');return;}
+      notice(`Filled ${filled.join(', ')} from ${chatName()}\u2019s current state.`);
+      if(!parts.identity_saved)
+        notice('Identity is the raw SOUL prose \u2014 write her image identity on the '+
+          'Identity page for a likeness that holds still between pictures.');
     }catch(error){notice('Could not read their details: '+error.message);}
     finally{button.disabled=false;}
   };
+  for(const id of ['insert-companion','insert-companion-simple'])
+    if($(id))$(id).onclick=()=>fillFromCompanion($(id));
   if($('rescan-models'))$('rescan-models').onclick=async()=>{
     const button=$('rescan-models');
     button.disabled=true;button.textContent='Reading headers\u2026';
