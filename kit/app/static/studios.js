@@ -1804,26 +1804,42 @@ workspaceHandlers['local-models']=async()=>{
     </div>
     <p class="dim small" style="margin-bottom:18px">GGUF weights discovered on storage (<code>/mnt/nvme2/models/</code> and <code>~/models/</code>). 1-click activate automatically applies Vulkan GPU offloading and pairs vision projectors.</p>
     ${diskModels.length?`<div class="grid">
-      ${diskModels.map(m=>`
-        <div class="card" style="margin-bottom:0;display:flex;flex-direction:column;justify-content:space-between;border-color:${m.active?'var(--accent)':'var(--edge)'}">
+      ${diskModels.map(m=>{
+        const dangerous = Boolean(d.safety_limit_gb && m.size_gb > d.safety_limit_gb);
+        return `
+        <div class="card" style="margin-bottom:0;display:flex;flex-direction:column;justify-content:space-between;border-color:${m.active?'var(--accent)':(dangerous?'var(--bad)':'var(--edge)')}">
           <div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <span class="pill">${esc(m.family)}</span>
-              <span class="small dim">${m.size_gb} GB</span>
+              <span class="small ${dangerous?'status-bad':'dim'}">${m.size_gb} GB${dangerous?' · ⚠️ Danger':''}</span>
             </div>
             <h3 style="font-size:14px;word-break:break-all;margin:6px 0 10px">${esc(m.name)}</h3>
             ${m.mmproj ? '<p class="small" style="color:var(--accent);margin:0 0 8px">👁 Multimodal Vision mmproj included</p>' : ''}
+            ${dangerous ? `<p class="small" style="color:var(--bad);margin:0 0 8px">⚠️ Exceeds ${d.safety_limit_gb} GB mobile limit (causes Android LMK crash)</p>` : ''}
           </div>
           <div style="margin-top:14px;display:flex;flex-direction:column;gap:6px">
             ${m.active
               ? '<span class="pill status-good" style="width:100%;text-align:center;display:block">● Active on GPU</span>'
-              : `<button type="button" class="act small" style="width:100%" data-quick-switch="${esc(m.path)}" data-quick-alias="${esc(m.alias)}">⚡ Activate & Offload</button>`}
-            <button type="button" class="quiet small" style="width:100%" data-quick-assign="${esc(m.alias||m.name)}">Assign to ${esc(companionName)}</button>
+              : (dangerous
+                  ? `<button type="button" class="quiet small" style="width:100%;opacity:0.6;cursor:not-allowed" disabled>⚠️ Exceeds Mobile Limit</button>`
+                  : `<button type="button" class="act small" style="width:100%" data-quick-switch="${esc(m.path)}" data-quick-alias="${esc(m.alias)}">⚡ Activate & Offload</button>`)}
+            <button type="button" class="quiet small" style="width:100%" data-quick-assign="${esc(m.alias||m.name)}" ${dangerous?'disabled':''}>Assign to ${esc(companionName)}</button>
           </div>
         </div>
-      `).join('')}
+      `;}).join('')}
     </div>`:'<p class="dim">No GGUF models discovered in storage. Place <code>.gguf</code> files into <code>/mnt/nvme2/models/</code> or <code>~/models/</code> and refresh.</p>'}
   </div>`;
+
+  const ctxOptions = d.is_mobile ? `
+    <option value="4096" selected>4,096 tokens (4k - Mobile Recommended)</option>
+    <option value="2048">2,048 tokens (2k - Low Memory)</option>
+    <option value="8192">8,192 tokens (8k - Extended Context)</option>
+  ` : `
+    <option value="131072" selected>131,072 tokens (128k - Recommended)</option>
+    <option value="65536">65,536 tokens (64k)</option>
+    <option value="32768">32,768 tokens (32k)</option>
+    <option value="16384">16,384 tokens (16k)</option>
+  `;
 
   const advancedHTML=`<details class="card">
     <summary><strong>Advanced Engine Parameters & Custom Offload</strong></summary>
@@ -1845,10 +1861,7 @@ workspaceHandlers['local-models']=async()=>{
           <div>
             <label>Context Window Size
               <select id="model-switch-ctx">
-                <option value="131072" selected>131,072 tokens (128k - Recommended)</option>
-                <option value="65536">65,536 tokens (64k)</option>
-                <option value="32768">32,768 tokens (32k)</option>
-                <option value="16384">16,384 tokens (16k)</option>
+                ${ctxOptions}
               </select>
             </label>
           </div>
@@ -1860,6 +1873,18 @@ workspaceHandlers['local-models']=async()=>{
       </form>
     </div>
   </details>`;
+
+  const mobileBanner = d.is_mobile ? `<div class="card" style="border-left:4px solid var(--accent);background:var(--bg-soft, #1e2025);margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span style="font-size:16px">📱</span>
+      <strong style="font-size:14px">Mobile Hardware Guardrails Active (Android / Termux)</strong>
+    </div>
+    <p class="small dim" style="margin:0">
+      Available RAM: <strong>${d.host_memory ? (d.host_memory.available_mb/1024).toFixed(1)+' GB' : 'Android'}</strong>
+      (Total: ${d.host_memory ? (d.host_memory.total_mb/1024).toFixed(1)+' GB' : 'N/A'}).
+      Safety limit enforced: models capped at <strong>${d.safety_limit_gb || 2.8} GB</strong> to prevent Android Low Memory Killer (LMK) termination. Thermal concurrency capped at 4 threads.
+    </p>
+  </div>` : '';
 
   const ollamaHTML=`<details class="card">
     <summary><strong>Ollama Engine & Catalog Downloads</strong> (Optional)</summary>
@@ -1885,6 +1910,7 @@ workspaceHandlers['local-models']=async()=>{
   </details>`;
 
   $('local-models').innerHTML=heading('Local Models & Hardware Engine','Configure your Vulkan-accelerated local inference engine, switch GGUF weights, and assign models to '+esc(companionName)+'.')+`
+    ${mobileBanner}
     ${heroCard}
     ${libraryHTML}
     ${advancedHTML}

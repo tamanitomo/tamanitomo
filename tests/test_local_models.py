@@ -65,6 +65,47 @@ class LocalStackTests(unittest.TestCase):
             self.assertEqual(row['status'],'failed');start.assert_not_called()
         self.assertEqual(self.client.post('/api/local-models/install').status_code,401)
 
+    def test_memory_guardrails_and_mobile_status(self):
+        mem = lm.get_host_memory()
+        self.assertIn('total_mb', mem)
+        self.assertIn('available_mb', mem)
+        self.assertIn('is_mobile', mem)
+
+        # Test safety validation on mobile
+        safe, msg = lm.validate_model_safety(5.2, {'is_mobile': True, 'available_mb': 5000, 'total_mb': 12000})
+        self.assertFalse(safe)
+        self.assertIn('exceeds mobile safety limit', msg)
+
+        # Safe compact model on mobile
+        safe_mob, msg_mob = lm.validate_model_safety(1.5, {'is_mobile': True, 'available_mb': 5000, 'total_mb': 12000})
+        self.assertTrue(safe_mob)
+
+        # Model exceeding available RAM on mobile
+        safe_tight, msg_tight = lm.validate_model_safety(2.0, {'is_mobile': True, 'available_mb': 1000, 'total_mb': 12000})
+        self.assertFalse(safe_tight)
+        self.assertIn('requires more than the available system RAM', msg_tight)
+
+        # Mobile-aware status endpoint
+        with patch.object(lm, 'is_mobile', return_value=True):
+            data = self.get('/api/local-models').json()
+            self.assertTrue(data['is_mobile'])
+            self.assertEqual(data['safety_limit_gb'], 2.8)
+            self.assertEqual(data['recommendations'], lm.MOBILE_MODELS)
+
+        with patch.object(lm, 'is_mobile', return_value=False):
+            data_desktop = self.get('/api/local-models').json()
+            self.assertFalse(data_desktop['is_mobile'])
+            self.assertIsNone(data_desktop['safety_limit_gb'])
+            self.assertEqual(data_desktop['recommendations'], lm.MODELS)
+
+    def test_mobile_pull_blocks_large_models(self):
+        with patch.object(lm, 'is_mobile', return_value=True), patch.object(lm, 'start') as start:
+            row = self.wait(self.post('/api/local-models/pull', {'model': 'qwen3:8b-q4_K_M'}))
+            self.assertEqual(row['status'], 'failed')
+            self.assertIn('exceeds mobile safety limit', row.get('error', ''))
+            start.assert_not_called()
+
+
     def test_connected_oauth_presets_are_drafts_and_preserve_saved_routes(self):
         connected=[{'id':'hermes-openai-codex','name':'ChatGPT','provider':'hermes','hermes_provider':'openai-codex',
                     'model':'','category':'realistic','parts':{},'endpoint':'','active':True,'available':True}]

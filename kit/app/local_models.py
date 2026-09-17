@@ -21,6 +21,135 @@ MODELS = [
     {'id': 'qwen3:14b-q4_K_M', 'name': 'Qwen3 14B · more capable', 'gb': 9.3, 'memory': '24–32+ GB RAM; roughly 12–16 GB free GPU memory for acceleration', 'context': 8192},
 ]
 
+MOBILE_MODELS = [
+    {'id': 'smollm2:1.7b-instruct-q4_K_M', 'name': 'SmolLM2 1.7B · ultra-compact mobile', 'gb': 1.0, 'memory': '4 GB RAM; fast & battery-efficient on mobile CPU', 'context': 4096},
+    {'id': 'qwen2.5:1.5b-instruct-q4_K_M', 'name': 'Qwen 2.5 1.5B · lightweight mobile', 'gb': 1.1, 'memory': '4–6 GB RAM; excellent reasoning for mobile footprint', 'context': 4096},
+    {'id': 'llama3.2:1b-instruct-q4_K_M', 'name': 'Llama 3.2 1B · compact mobile', 'gb': 0.8, 'memory': '4 GB RAM; minimal battery & memory overhead', 'context': 4096},
+    {'id': 'llama3.2:3b-instruct-q4_K_M', 'name': 'Llama 3.2 3B · high-capability mobile', 'gb': 2.0, 'memory': '6–8 GB RAM; balance of capability and memory', 'context': 4096},
+]
+
+MOBILE_MAX_MODEL_GB = 2.8
+
+def is_mobile() -> bool:
+    """Detect if running in an Android / Termux or mobile container environment."""
+    override = os.environ.get('TAMANITOMO_IS_MOBILE') or os.environ.get('COMPANION_IS_MOBILE')
+    if override in ('1', 'true', 'yes'):
+        return True
+    if override in ('0', 'false', 'no'):
+        return False
+    if os.environ.get('TERMUX_VERSION') or 'com.termux' in os.environ.get('PREFIX', ''):
+        return True
+    if os.path.exists('/data/data/com.termux') or os.path.exists('/system/build.prop'):
+        return True
+    if 'ANDROID_ROOT' in os.environ or 'ANDROID_DATA' in os.environ:
+        return True
+    return False
+
+def get_host_memory() -> dict:
+    """Return memory metrics (in MB) and mobile environment status.
+    Returns: {'total_mb': int, 'available_mb': int, 'is_mobile': bool}
+    """
+    total_mb = 0
+    available_mb = 0
+    mobile = is_mobile()
+
+    # 1. Linux / Android (/proc/meminfo)
+    if os.path.exists('/proc/meminfo'):
+        try:
+            with open('/proc/meminfo', 'r', encoding='utf-8') as f:
+                meminfo = {}
+                for line in f:
+                    parts = line.split(':')
+                    if len(parts) == 2:
+                        key = parts[0].strip()
+                        val_str = parts[1].strip().split()[0]
+                        if val_str.isdigit():
+                            meminfo[key] = int(val_str)
+                total_kb = meminfo.get('MemTotal', 0)
+                avail_kb = meminfo.get('MemAvailable')
+                if avail_kb is None:
+                    avail_kb = meminfo.get('MemFree', 0) + meminfo.get('Buffers', 0) + meminfo.get('Cached', 0)
+                total_mb = total_kb // 1024
+                available_mb = avail_kb // 1024
+        except Exception:
+            pass
+
+    # 2. Darwin (macOS)
+    if total_mb == 0 and platform.system() == 'Darwin':
+        try:
+            res = subprocess.run(['sysctl', '-n', 'hw.memsize'], capture_output=True, text=True, timeout=2)
+            if res.returncode == 0 and res.stdout.strip().isdigit():
+                total_mb = int(res.stdout.strip()) // (1024 * 1024)
+                available_mb = int(total_mb * 0.5)
+        except Exception:
+            pass
+
+    # 3. Windows
+    if total_mb == 0 and os.name == 'nt':
+        try:
+            import ctypes
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                total_mb = int(stat.ullTotalPhys // (1024 * 1024))
+                available_mb = int(stat.ullAvailPhys // (1024 * 1024))
+        except Exception:
+            pass
+
+    if total_mb == 0:
+        total_mb = 8192
+        available_mb = 4096
+
+    return {
+        'total_mb': total_mb,
+        'available_mb': available_mb,
+        'is_mobile': mobile,
+    }
+
+def validate_model_safety(model_size_gb: float, mem_info: dict | None = None) -> tuple[bool, str]:
+    """Validate whether a model of given size in GB can safely run on this host.
+    Returns (is_safe, message).
+    On mobile devices, hard-caps models at 2.8 GB to prevent Android LMK termination.
+    """
+    if mem_info is None:
+        mem_info = get_host_memory()
+
+    if mem_info.get('is_mobile'):
+        if model_size_gb > MOBILE_MAX_MODEL_GB:
+            return False, (
+                f"Model size ({model_size_gb:.1f} GB) exceeds mobile safety limit ({MOBILE_MAX_MODEL_GB:.1f} GB). "
+                f"On Android/Termux, models larger than {MOBILE_MAX_MODEL_GB:.1f} GB trigger the Android Low Memory Killer (LMK) "
+                f"which crashes Termux and terminates background companion services. "
+                f"Please choose a mobile-optimized model (SmolLM2 1.7B, Qwen 2.5 1.5B, or Llama 3.2 1B/3B)."
+            )
+
+    avail_mb = mem_info.get('available_mb', 0)
+    avail_gb = avail_mb / 1024.0
+    if avail_gb > 0 and (model_size_gb * 1.15) > avail_gb:
+        msg = (
+            f"Model size ({model_size_gb:.1f} GB) requires more than the available system RAM "
+            f"({avail_gb:.1f} GB available of {mem_info.get('total_mb', 0) / 1024.0:.1f} GB total). "
+            f"Loading this model may cause system instability or process termination."
+        )
+        if mem_info.get('is_mobile'):
+            return False, msg
+        return True, f"Warning: {msg}"
+
+    return True, "Model size is within safe hardware parameters."
+
+
 def request(path, payload=None, timeout=5):
     req = urllib.request.Request(
         BASE + path,
@@ -53,6 +182,34 @@ def binary(rt):
 def _service_status(unit_name=None):
     if not unit_name:
         unit_name = default_llama_service()
+
+    # 1. Termux runit support
+    prefix = os.environ.get('PREFIX', '/data/data/com.termux/files/usr')
+    sv_bin = shutil.which('sv') or (Path(prefix) / 'bin/sv' if (Path(prefix) / 'bin/sv').is_file() else None)
+    sv_dir = Path(prefix) / 'var/service'
+    if sv_bin and (sv_dir / unit_name).exists():
+        try:
+            res = subprocess.run([str(sv_bin), 'status', str(sv_dir / unit_name)], capture_output=True, text=True, timeout=3)
+            out = res.stdout.strip()
+            is_run = out.startswith('run:')
+            pid = 0
+            m_pid = re.search(r'\(pid\s+(\d+)\)', out)
+            if m_pid:
+                pid = int(m_pid.group(1))
+            return {
+                'found': True,
+                'unit': unit_name,
+                'service_mgr': 'runit',
+                'active_state': 'active' if is_run else 'inactive',
+                'sub_state': 'running' if is_run else 'stopped',
+                'main_pid': pid,
+                'memory_mb': 0,
+                'exec_start': str(sv_dir / unit_name / 'run'),
+            }
+        except Exception:
+            pass
+
+    # 2. Linux / systemd support
     try:
         res = subprocess.run(
             ["systemctl", "--user", "show", unit_name,
@@ -69,6 +226,7 @@ def _service_status(unit_name=None):
         return {
             'found': True,
             'unit': unit_name,
+            'service_mgr': 'systemd',
             'active_state': props.get('ActiveState', 'inactive'),
             'sub_state': props.get('SubState', 'dead'),
             'main_pid': int(props.get('MainPID', '0') or 0),
@@ -79,7 +237,13 @@ def _service_status(unit_name=None):
         return {'found': False}
 
 def _scan_available_models():
-    dirs = [Path('/mnt/nvme2/models'), Path.home() / 'models', Path('/models')]
+    dirs = [
+        Path('/mnt/nvme2/models'),
+        Path.home() / 'models',
+        Path('/models'),
+        Path.home() / 'storage/shared/models',
+        Path('/sdcard/models'),
+    ]
     results = []
     seen = set()
     for d in dirs:
@@ -99,6 +263,7 @@ def _scan_available_models():
                     nl = p.name.lower()
                     if 'gemma' in nl: family = 'Gemma'
                     elif 'qwen' in nl: family = 'Qwen'
+                    elif 'smollm' in nl: family = 'SmolLM'
                     elif 'ornith' in nl: family = 'Ornith'
                     elif 'llama' in nl: family = 'Llama'
                     elif 'mistral' in nl: family = 'Mistral'
@@ -191,6 +356,10 @@ def status(rt):
         m['alias'] = alias
         m['active'] = bool(m['path'] in exec_start or (loaded_model and loaded_model.get('id') == alias))
 
+    mem = get_host_memory()
+    is_mob = mem.get('is_mobile', False)
+    recommendations = MOBILE_MODELS if is_mob else MODELS
+
     return {
         'online': online,
         'engine': engine_type,
@@ -203,8 +372,11 @@ def status(rt):
         'models': models,
         'installed': bool(srv.get('found') or binary(rt)),
         'directory': str(directory(rt)),
-        'recommendations': MODELS,
+        'recommendations': recommendations,
         'platform': platform.system(),
+        'is_mobile': is_mob,
+        'host_memory': mem,
+        'safety_limit_gb': MOBILE_MAX_MODEL_GB if is_mob else None,
     }
 
 def asset_name():
@@ -300,6 +472,19 @@ def server_control(rt, action: str, report=None):
         srv = _service_status('llama-server')
     if srv.get('found'):
         unit = srv['unit']
+        # Handle Termux runit
+        if srv.get('service_mgr') == 'runit':
+            prefix = os.environ.get('PREFIX', '/data/data/com.termux/files/usr')
+            sv_bin = shutil.which('sv') or str(Path(prefix) / 'bin/sv')
+            sv_dir = Path(prefix) / 'var/service'
+            cmd_action = 'up' if action == 'start' else ('down' if action == 'stop' else 'restart')
+            if report: report(f"Running sv {cmd_action} {unit}")
+            res = subprocess.run([sv_bin, cmd_action, str(sv_dir / unit)], capture_output=True, text=True)
+            if res.returncode != 0:
+                raise ValueError(f"Failed to {action} {unit}: {res.stderr.strip()}")
+            return {'ok': True, 'action': action, 'note': f'{unit} ({action}) completed via termux-services.'}
+
+        # Handle systemd
         if report: report(f"Running systemctl --user {action} {unit}")
         res = subprocess.run(["systemctl", "--user", action, unit], capture_output=True, text=True)
         if res.returncode != 0:
@@ -326,11 +511,30 @@ def switch_model(rt, model_path: str, alias: str = '', ctx_size: int = 131072, r
     if src.suffix.lower() != '.gguf':
         raise ValueError("Selected model must be a .gguf file")
 
+    mem = get_host_memory()
+    size_gb = round(src.stat().st_size / (1024**3), 2)
+    safe, msg = validate_model_safety(size_gb, mem)
+    if not safe:
+        raise ValueError(msg)
+
     if not alias:
         alias = src.stem.lower().replace('-it', '').replace('-abliterated', '').replace('-uncensored', '')[:24]
 
     mmprojs = [m for m in src.parent.glob('*.gguf') if 'mmproj' in m.name.lower()]
     mmproj_arg = f" --mmproj {mmprojs[0]}" if mmprojs else ""
+
+    # Hardware & platform safety scaling
+    if mem.get('is_mobile'):
+        ctx_size = min(ctx_size, 4096)
+        threads = min(os.cpu_count() or 4, 4)
+        threads_batch = threads
+        mem_high = '3500M'
+        mem_max = '4500M'
+    else:
+        threads = 8
+        threads_batch = 8
+        mem_high = '22G'
+        mem_max = '24G'
 
     service_name = default_llama_service()
     dropin_dir = Path.home() / f'.config/systemd/user/{service_name}.service.d'
@@ -340,10 +544,10 @@ def switch_model(rt, model_path: str, alias: str = '', ctx_size: int = 131072, r
     llama_bin = os.environ.get('LLAMA_SERVER_BIN') or shutil.which('llama-server') or 'llama-server'
     content = f"""[Service]
 ExecStart=
-ExecStart={llama_bin} --model {src} --alias {alias} --host 127.0.0.1 --port 11434 --ctx-size {ctx_size} --parallel 2 --n-gpu-layers 99 --threads 8 --threads-batch 8 --batch-size 1024 --ubatch-size 256 --cache-ram 0 --ctx-checkpoints 1 --jinja --chat-template-kwargs '{{"enable_thinking":false}}' --reasoning off --cache-type-k q4_0 --cache-type-v q4_0 --flash-attn on --predict 4096 --no-warmup{mmproj_arg}
+ExecStart={llama_bin} --model {src} --alias {alias} --host 127.0.0.1 --port 11434 --ctx-size {ctx_size} --parallel 2 --n-gpu-layers 99 --threads {threads} --threads-batch {threads_batch} --batch-size 1024 --ubatch-size 256 --cache-ram 0 --ctx-checkpoints 1 --jinja --chat-template-kwargs '{{"enable_thinking":false}}' --reasoning off --cache-type-k q4_0 --cache-type-v q4_0 --flash-attn on --predict 4096 --no-warmup{mmproj_arg}
 Restart=no
-MemoryHigh=22G
-MemoryMax=24G
+MemoryHigh={mem_high}
+MemoryMax={mem_max}
 MemorySwapMax=1G
 LimitCORE=0
 KillMode=control-group
@@ -352,9 +556,10 @@ TimeoutStopSec=20
     if report: report(f"Configuring local server for {alias}...")
     dropin_file.write_text(content, encoding='utf-8')
 
-    subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
-    if report: report("Restarting model server on Vulkan GPU...")
-    subprocess.run(["systemctl", "--user", "restart", service_name], check=True)
+    if shutil.which('systemctl'):
+        subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+        if report: report("Restarting model server on Vulkan GPU...")
+        subprocess.run(["systemctl", "--user", "restart", service_name], check=True)
 
     online = False
     for _ in range(40):
@@ -376,8 +581,13 @@ TimeoutStopSec=20
     }
 
 def pull(rt, ident, report):
-    choice = next((m for m in MODELS if m['id'] == ident), None)
+    all_models = MOBILE_MODELS + MODELS
+    choice = next((m for m in all_models if m['id'] == ident), None)
     if not choice: raise ValueError('Choose a recommended model weight variant')
+    mem = get_host_memory()
+    safe, msg = validate_model_safety(choice['gb'], mem)
+    if not safe:
+        raise ValueError(msg)
     start(rt, report)
     root = directory(rt); root.mkdir(parents=True, exist_ok=True)
     if shutil.disk_usage(root).free < choice['gb'] * 1_000_000_000 * 1.2: raise ValueError('Not enough free disk space for these model weights')
@@ -404,7 +614,7 @@ def assign(rt, home, ident):
     try:
         tags = request('/api/tags')
         names = {m.get('name') for m in tags.get('models', [])}
-        if ident in names or any(m['id'] == ident for m in MODELS):
+        if ident in names or any(m['id'] == ident for m in MODELS) or any(m['id'] == ident for m in MOBILE_MODELS):
             is_ollama = True
     except Exception:
         pass
