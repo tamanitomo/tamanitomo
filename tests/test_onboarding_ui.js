@@ -49,19 +49,19 @@ for(let pick=0;pick<4;pick++){
 }
 
 // "Like a brilliant colleague" must produce a colleague, not a romance.
-const colleague=derive(QUIZ.map((q,i)=>i===4?3:null),catalog);
+const colleague=derive(QUIZ.map((q,i)=>i===7?3:null),catalog);
 assert.equal(colleague.agent_type,'colleague');
 assert.notEqual(colleague.boundary,'girlfriend');
 
 // "Like a partner" must not quietly become a colleague.
-const partner=derive(QUIZ.map((q,i)=>i===4?2:null),catalog);
+const partner=derive(QUIZ.map((q,i)=>i===7?2:null),catalog);
 assert.equal(partner.agent_type,'companion');
 
 // The contact questions set what they say they set.
-const quiet=derive(QUIZ.map((q,i)=>i===5?2:(i===6?2:null)),catalog);
+const quiet=derive(QUIZ.map((q,i)=>i===6?2:null),catalog);
 assert.equal(quiet.permit_image,'no');
 assert.equal(quiet.outreach,'never');
-const open=derive(QUIZ.map((q,i)=>i===5?0:(i===6?0:null)),catalog);
+const open=derive(QUIZ.map((q,i)=>i===6?0:null),catalog);
 assert.equal(open.permit_image,'yes');
 assert.equal(open.outreach,'free');
 assert.equal(open.outreach_per_day,6);

@@ -206,6 +206,7 @@
   "tests/test_media_review.py",
   "tests/test_missions.py",
   "tests/test_notes.py",
+  "tests/test_onboarding.py",
   "tests/test_onboarding_ui.js",
   "tests/test_outbox.py",
   "tests/test_peer.py",

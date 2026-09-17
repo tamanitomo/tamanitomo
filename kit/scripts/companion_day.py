@@ -51,17 +51,28 @@ def schema_fields():
 def _validate(value, schema, name):
     # Small schema subset shared with the structured worker. Reject malformed agent writes too.
     if 'anyOf' in schema:
+        reasons=[]
         for option in schema['anyOf']:
             try:_validate(value,option,name);return
-            except ValueError:pass
-        raise ValueError(f'Invalid {name}')
+            except ValueError as exc:reasons.append(str(exc))
+        # Name every option's reason. A bare 'Invalid next' gives the model nothing to correct, so it
+        # resends the same shape and the pulse fails on the same field for hours.
+        raise ValueError(f'Invalid {name}: '+' / '.join(dict.fromkeys(reasons)))
     kinds=schema['type'];kinds=kinds if isinstance(kinds,list) else [kinds]
     kind=('null' if value is None else 'boolean' if isinstance(value,bool) else
           'integer' if isinstance(value,int) else 'string' if isinstance(value,str) else
           'object' if isinstance(value,dict) else 'array' if isinstance(value,list) else 'unknown')
     if kind not in kinds:raise ValueError(f'Invalid {name}: expected {kinds}')
     if kind=='object':
-        if set(value)!=set(schema['properties']):raise ValueError(f'Invalid fields in {name}')
+        if set(value)!=set(schema['properties']):
+            # Say which keys are wrong. 'Invalid fields in visual' does not tell the model whether to add
+            # or drop a key, so a retry repeats the same mistake and the tick fails identically.
+            missing=sorted(set(schema['properties'])-set(value))
+            extra=sorted(set(value)-set(schema['properties']))
+            detail=[]
+            if missing:detail.append('missing: '+', '.join(missing))
+            if extra:detail.append('unexpected: '+', '.join(extra))
+            raise ValueError(f'Invalid fields in {name} ({"; ".join(detail)})')
         for key,item in value.items():_validate(item,schema['properties'][key],f'{name}.{key}')
     elif kind=='array':
         if len(value)>schema['maxItems']:raise ValueError(f'Too many {name}')

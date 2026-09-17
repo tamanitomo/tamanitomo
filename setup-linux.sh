@@ -18,7 +18,7 @@ RED=$'\033[0;31m'
 RESET=$'\033[0m'
 
 # Default values
-COMPANION_NAME="Aura"
+COMPANION_NAME="Sam"
 HUMAN_NAME="Friend"
 PRIMARY_PROVIDER="openrouter"
 OPENROUTER_KEY=""
@@ -44,7 +44,7 @@ Usage:
   bash setup-linux.sh [OPTIONS]
 
 Options:
-  --name <name>             Companion display name (default: Aura)
+  --name <name>             Companion display name (default: Sam)
   --human <name>            Your name / what companion calls you (default: Friend)
   --provider <provider>     Primary AI provider: openrouter, openai, xai, deepseek (default: openrouter)
   --openrouter-key <key>    OpenRouter API Key
@@ -399,46 +399,30 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
 fi
 
 # ------------------------------------------------------------------------------
-# Step 6: Initialize / Configure Companion Profile
+# Step 6: Environment Ready for Web Onboarding
 # ------------------------------------------------------------------------------
-COMPANION_JSON="$HERMES_HOME/companion.json"
-ANSWERS_JSON="$HOME/.companion-init-answers.json"
+echo -e "${CYAN}→ Environment provisioned. Leaving profiles at 0 for interactive web onboarding...${RESET}"
 
-if [[ "$DRY_RUN" -eq 0 ]]; then
-  cat > "$ANSWERS_JSON" <<EOF
-{
-  "agent_type": "companion",
-  "name": "${COMPANION_NAME}",
-  "human_name": "${HUMAN_NAME}",
-  "relationship_framing": "companion",
-  "contact_cadence": "balanced",
-  "quiet_hours": "23:00-08:00"
-}
-EOF
-
-  echo -e "${CYAN}→ Initializing companion profile for ${COMPANION_NAME}...${RESET}"
-  "$KIT_DIR/.venv/bin/python" "$KIT_DIR/bin/tamanitomo" --home "$HERMES_HOME" upgrade --answers "$ANSWERS_JSON" >/dev/null 2>&1 || \
-  "$KIT_DIR/.venv/bin/python" "$KIT_DIR/bin/tamanitomo" --home "$HERMES_HOME" init --answers "$ANSWERS_JSON" >/dev/null 2>&1 || true
-
-  # Ensure companion.json models block is set
+# Save model configuration to Hermes config.yaml if provider and model were supplied
+if [[ "$DRY_RUN" -eq 0 && -n "$MODEL_CHOICE" ]]; then
   "$KIT_DIR/.venv/bin/python" -c "
-import json, os
-path = '$COMPANION_JSON'
-d = {}
-if os.path.exists(path):
+import yaml, os
+cfg_path = '$HERMES_HOME/config.yaml'
+cfg = {}
+if os.path.exists(cfg_path):
     try:
-        with open(path, 'r', encoding='utf-8') as f:
-            d = json.load(f)
+        with open(cfg_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f) or {}
     except Exception:
         pass
-d.setdefault('models', {})
-d['models']['chat'] = {'provider': '$PRIMARY_PROVIDER', 'model': '$MODEL_CHOICE', 'reasoning_effort': 'medium'}
-d['models']['loops'] = {'provider': '$PRIMARY_PROVIDER', 'model': '$MODEL_CHOICE', 'reasoning_effort': 'medium'}
-d['models']['reflection'] = {'provider': '$PRIMARY_PROVIDER', 'model': '$MODEL_CHOICE', 'reasoning_effort': 'medium'}
-if '$REMOTE_PIN':
-    d['remote_pin'] = '$REMOTE_PIN'
-with open(path, 'w', encoding='utf-8') as f:
-    json.dump(d, f, indent=2)
+cfg.setdefault('model', {})
+if isinstance(cfg['model'], str):
+    cfg['model'] = {'default': cfg['model']}
+cfg['model']['default'] = '$MODEL_CHOICE'
+if '$PRIMARY_PROVIDER':
+    cfg['model']['provider'] = '$PRIMARY_PROVIDER'
+with open(cfg_path, 'w', encoding='utf-8') as f:
+    yaml.safe_dump(cfg, f)
 " || true
 fi
 
@@ -467,8 +451,9 @@ echo -e "${BOLD}${GREEN}========================================================
 echo -e "${BOLD}${GREEN}  ✓ Tamanitomo Linux Setup Complete! ${RESET}"
 echo -e "${BOLD}${GREEN}================================================================${RESET}"
 echo ""
-echo -e "  ${BOLD}Companion Name:${RESET}    ${COMPANION_NAME}"
-echo -e "  ${BOLD}Primary Model:${RESET}     ${MODEL_CHOICE} (${PRIMARY_PROVIDER})"
+echo -e "  ${BOLD}Interactive Setup:${RESET} Open ${CYAN}http://localhost:${PORT}${RESET} in your browser"
+echo -e "                       to begin your interactive onboarding and bring ${BOLD}${COMPANION_NAME}${RESET} to life!"
+echo -e "  ${BOLD}Primary Model:${RESET}     ${MODEL_CHOICE:-'(Configure in Web Onboarding)'} (${PRIMARY_PROVIDER:-'Cloud'})"
 echo -e "  ${BOLD}Local Workspace:${RESET}   ${CYAN}http://localhost:${PORT}${RESET}"
 if [[ "$LOCAL_IP" != "127.0.0.1" ]]; then
   echo -e "  ${BOLD}LAN / Wi-Fi URL:${RESET}   ${CYAN}http://${LOCAL_IP}:${PORT}${RESET}"
@@ -487,4 +472,4 @@ fi
 echo -e "  • CLI Menu:      ${DIM}${KIT_DIR}/bin/tamanitomo${RESET}"
 echo -e "  • Run Doctor:    ${DIM}${KIT_DIR}/bin/tamanitomo doctor${RESET}"
 echo ""
-echo -e "${BOLD}Enjoy chatting with ${COMPANION_NAME}!${RESET}"
+echo -e "${BOLD}Open ${CYAN}http://localhost:${PORT}${RESET} to begin!${RESET}"

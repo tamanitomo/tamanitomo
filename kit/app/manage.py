@@ -6,9 +6,13 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import shutil
+import subprocess
 import sys
 import tempfile
+import threading
+import time
 import uuid
 import yaml
 import itertools
@@ -16,6 +20,9 @@ from fastapi import HTTPException, Request
 from . import runtime as hr
 import companion_config as cc
 import companion_platform as cp
+
+_ONBOARDING_OAUTH_SESSIONS = {}
+_ONBOARDING_OAUTH_LOCK = threading.Lock()
 
 # Workspace appearance. Themes are defined in static/product.css; this list is the
 # validation allowlist, and the two groups decide what "match system" switches between.
@@ -354,7 +361,249 @@ def register(app, select, load, operations):
             if not source.is_dir() or source.is_symlink(): raise ValueError('Archive not found')
             shutil.rmtree(source)
             return {'deleted':ident,'vault_preserved':True}
-        return op('Delete archived profile',action)
+    @app.get('/api/onboarding/environment')
+    def onboarding_environment():
+        rt, p, h = context()
+        c = load()
+        from kit.cli.roster import discover
+        installed = []
+        for name, home in discover(rt.root):
+            if not home.is_symlink() and (home / cc.CONFIG_NAME).exists():
+                installed.append(name or 'default')
+
+        from companion_gateway import _env_values, preflight, status
+        env = _env_values(c.home)
+        root_env = _env_values(c.hermes_root)
+        token = env.get('TELEGRAM_BOT_TOKEN') or root_env.get('TELEGRAM_BOT_TOKEN') or os.environ.get('TELEGRAM_BOT_TOKEN') or ''
+        users = env.get('TELEGRAM_ALLOWED_USERS') or root_env.get('TELEGRAM_ALLOWED_USERS') or os.environ.get('TELEGRAM_ALLOWED_USERS') or ''
+
+        gw_pre = preflight(c)
+        is_connected = bool(gw_pre.get('connected')) or (bool(token) and bool(gw_pre.get('alive')))
+
+        cfg = config(h)
+        root_cfg = config(c.hermes_root)
+        model_cfg = cfg.get('model') or root_cfg.get('model') or {}
+        if isinstance(model_cfg, str):
+            model_name = model_cfg
+            provider_name = ''
+        else:
+            model_name = model_cfg.get('default') or model_cfg.get('model') or ''
+            provider_name = model_cfg.get('provider') or ''
+
+        catalog_rows = rt.catalog() if rt.info()['available'] else []
+        has_cred = False
+        for row in (catalog_rows or FALLBACK_CATALOG):
+            if any(bool(env.get(k) or root_env.get(k) or os.environ.get(k)) for k in row.get('api_key_env_vars', [])):
+                has_cred = True
+                break
+        auth_file = c.hermes_root / 'auth.json'
+        if auth_file.exists():
+            try:
+                auth_data = json.loads(auth_file.read_text(encoding='utf-8'))
+                if auth_data.get('active_provider') or auth_data.get('credential_pool'):
+                    has_cred = True
+            except Exception:
+                pass
+
+        return {
+            'profiles_count': len(installed),
+            'has_installed_profiles': len(installed) > 0,
+            'telegram': {
+                'configured': bool(token),
+                'has_token': bool(token),
+                'token_preview': (token[:6] + '...' + token[-4:]) if token and len(token) > 10 else '',
+                'has_user_id': bool(users),
+                'user_id': users,
+                'is_connected': is_connected,
+            },
+            'inference': {
+                'configured': bool(model_name and has_cred),
+                'model': model_name,
+                'provider': provider_name,
+                'has_credential': has_cred,
+            }
+        }
+
+    @app.post('/api/onboarding/telegram')
+    def onboarding_telegram(payload: dict):
+        rt, p, h = context()
+        c = load()
+        token = text(payload.get('token', ''), 'Telegram Bot Token', 200, empty=True)
+        user_id = text(payload.get('user_id', ''), 'Telegram User ID', 200, empty=True)
+        if token and not re.match(r'^\d+:[A-Za-z0-9_-]{20,}$', token):
+            raise ValueError('Invalid Telegram Bot Token format. Tokens look like: 123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ')
+        if user_id and not re.match(r'^[\d,\s-]+$', user_id):
+            raise ValueError('Telegram User ID must be numeric (e.g. from @userinfobot)')
+
+        for target_home in dict.fromkeys([c.home, c.hermes_root]):
+            env_path = target_home / '.env'
+            with cp.file_lock(target_home / '.companion-env.lock'):
+                lines = env_path.read_text(encoding='utf-8').splitlines() if env_path.exists() else []
+                lines = [l for l in lines if not re.match(r'^\s*(?:export\s+)?TELEGRAM_(?:BOT_TOKEN|ALLOWED_USERS)\s*=', l)]
+                if token:
+                    lines.append(f'TELEGRAM_BOT_TOKEN={json.dumps(token)}')
+                if user_id:
+                    clean_users = ','.join(re.findall(r'\d+', user_id))
+                    lines.append(f'TELEGRAM_ALLOWED_USERS={json.dumps(clean_users)}')
+                cp.atomic_write(env_path, '\n'.join(lines) + '\n')
+                if os.name != 'nt':
+                    env_path.chmod(0o600)
+        return {'saved': True, 'configured': bool(token)}
+
+    @app.post('/api/onboarding/inference')
+    def onboarding_inference(payload: dict):
+        rt, p, h = context()
+        c = load()
+        provider = text(payload.get('provider', ''), 'Provider', 100, empty=True).lower()
+        model = text(payload.get('model', ''), 'Model', 300, empty=True)
+        api_key = text(payload.get('api_key', ''), 'API Key', 1000, empty=True)
+
+        if api_key and provider:
+            rows = rt.catalog() if rt.info()['available'] else []
+            p_row = next((r for r in (rows or FALLBACK_CATALOG) if r.get('id') == provider or r.get('slug') == provider), None)
+            env_var = p_row.get('api_key_env_vars', [None])[0] if p_row else None
+            if not env_var:
+                env_var = {
+                    'openrouter': 'OPENROUTER_API_KEY',
+                    'openai': 'OPENAI_API_KEY',
+                    'xai': 'XAI_API_KEY',
+                    'deepseek': 'DEEPSEEK_API_KEY',
+                    'anthropic': 'ANTHROPIC_API_KEY',
+                    'groq': 'GROQ_API_KEY',
+                }.get(provider, f"{provider.upper()}_API_KEY")
+
+            for target_home in dict.fromkeys([c.home, c.hermes_root]):
+                env_path = target_home / '.env'
+                with cp.file_lock(target_home / '.companion-env.lock'):
+                    lines = env_path.read_text(encoding='utf-8').splitlines() if env_path.exists() else []
+                    lines = [l for l in lines if not re.match(r'^\s*(?:export\s+)?' + re.escape(env_var) + r'\s*=', l)]
+                    lines.append(f'{env_var}={json.dumps(api_key)}')
+                    cp.atomic_write(env_path, '\n'.join(lines) + '\n')
+                    if os.name != 'nt':
+                        env_path.chmod(0o600)
+
+        if model:
+            def mutate(cfg):
+                cfg.setdefault('model', {})
+                if isinstance(cfg['model'], str):
+                    cfg['model'] = {'default': cfg['model']}
+                cfg['model']['default'] = model
+                if provider:
+                    cfg['model']['provider'] = provider
+            save_config(c.hermes_root, mutate)
+            save_config(h, mutate)
+
+        return {'saved': True, 'model': model, 'provider': provider}
+
+    @app.post('/api/onboarding/oauth/start')
+    def onboarding_oauth_start(payload: dict):
+        rt, p, h = context()
+        provider = text(payload.get('provider', 'xai-oauth'), 'Provider', 50).lower()
+        if provider not in ('xai-oauth', 'openai-codex', 'qwen-oauth', 'minimax-oauth'):
+            raise ValueError('Unsupported OAuth provider')
+
+        sid = secrets.token_hex(8)
+        sess = {
+            'session_id': sid,
+            'provider': provider,
+            'status': 'pending',
+            'url': '',
+            'code': '',
+            'created_at': time.time(),
+        }
+        cmd = rt.command() + ['auth', 'add', provider, '--type', 'oauth', '--no-browser', '--timeout', '300']
+        try:
+            proc = subprocess.Popen(
+                cmd, env=rt.env(), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, bufsize=1
+            )
+        except Exception as exc:
+            raise ValueError(f'Failed to start OAuth flow: {exc}')
+
+        sess['proc'] = proc
+        with _ONBOARDING_OAUTH_LOCK:
+            _ONBOARDING_OAUTH_SESSIONS[sid] = sess
+
+        def _worker():
+            out_lines = []
+            err_lines = []
+            def _read_out():
+                for line in iter(proc.stdout.readline, ''):
+                    out_lines.append(line)
+                    m_url = re.search(r'https?://[^\s)]+', line)
+                    if m_url and not sess.get('url'):
+                        sess['url'] = m_url.group(0)
+                    m_code = re.search(r'(?:user_code=([A-Za-z0-9_-]+)|code:\s*([A-Za-z0-9_-]+))', line, re.IGNORECASE)
+                    if m_code and not sess.get('code'):
+                        sess['code'] = m_code.group(1) or m_code.group(2)
+                proc.stdout.close()
+
+            def _read_err():
+                for line in iter(proc.stderr.readline, ''):
+                    err_lines.append(line)
+                proc.stderr.close()
+
+            t_out = threading.Thread(target=_read_out, daemon=True)
+            t_err = threading.Thread(target=_read_err, daemon=True)
+            t_out.start()
+            t_err.start()
+            ret = proc.wait()
+            t_out.join(timeout=2)
+            t_err.join(timeout=2)
+
+            with _ONBOARDING_OAUTH_LOCK:
+                if sess.get('cancelled'):
+                    sess['status'] = 'cancelled'
+                elif ret == 0:
+                    sess['status'] = 'approved'
+                else:
+                    sess['status'] = 'error'
+                    sess['error'] = hr.redact(''.join(err_lines) or ''.join(out_lines))[-1000:]
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+        deadline = time.time() + 3.5
+        while time.time() < deadline:
+            if sess.get('url') or sess.get('status') in ('approved', 'error'):
+                break
+            time.sleep(0.15)
+
+        return {
+            'session_id': sid,
+            'provider': provider,
+            'verification_url': sess.get('url', ''),
+            'user_code': sess.get('code', ''),
+            'status': sess.get('status', 'pending'),
+            'error': sess.get('error'),
+        }
+
+    @app.get('/api/onboarding/oauth/poll/{ident}')
+    def onboarding_oauth_poll(ident: str):
+        with _ONBOARDING_OAUTH_LOCK:
+            sess = _ONBOARDING_OAUTH_SESSIONS.get(ident)
+        if not sess:
+            raise HTTPException(status_code=404, detail='OAuth session not found')
+        return {
+            'session_id': ident,
+            'provider': sess.get('provider'),
+            'status': sess.get('status', 'pending'),
+            'verification_url': sess.get('url', ''),
+            'user_code': sess.get('code', ''),
+            'error': sess.get('error'),
+        }
+
+    @app.post('/api/onboarding/oauth/cancel/{ident}')
+    def onboarding_oauth_cancel(ident: str):
+        with _ONBOARDING_OAUTH_LOCK:
+            sess = _ONBOARDING_OAUTH_SESSIONS.get(ident)
+        if sess and sess.get('proc'):
+            sess['cancelled'] = True
+            try:
+                sess['proc'].terminate()
+            except Exception:
+                pass
+            sess['status'] = 'cancelled'
+        return {'cancelled': True}
 
     @app.get('/api/environment')
     def environment():

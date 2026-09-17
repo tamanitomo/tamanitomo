@@ -6,7 +6,7 @@ readiness for risqué / intimate media, and strictly enforces agency,
 context-appropriateness, and severe penalties for boundary pushing/coercion.
 """
 from __future__ import annotations
-import datetime as dt, math, pathlib, re, sys
+import datetime as dt, json, math, pathlib, re, sqlite3, sys
 from typing import Dict, Any, List, Optional
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -19,7 +19,7 @@ STAGES = [
         'name': 'Just Met',
         'badge': 'Just Met',
         'min_score': 0,
-        'max_score': 19,
+        'max_score': 24,
         'can_flirt': False,
         'can_tease': False,
         'can_intimate': False,
@@ -27,29 +27,29 @@ STAGES = [
     },
     {
         'stage': 1,
-        'name': 'Flirting',
-        'badge': 'Flirting',
-        'min_score': 20,
-        'max_score': 44,
-        'can_flirt': True,
+        'name': 'Friends',
+        'badge': 'Friends',
+        'min_score': 25,
+        'max_score': 49,
+        'can_flirt': False,
         'can_tease': True,
         'can_intimate': False,
         'desc': (
-            'Warmth and playful banter. Flirting is welcomed from both sides, even if not immediately reciprocated. '
-            'Playful glimpses and teasing photos may occur. Chemistry builds naturally when met positively.'
+            'Warmth, camaraderie, and playful banter. Comfortable friendship where teasing is natural, '
+            'but romantic flirting is premature.'
         ),
     },
     {
         'stage': 2,
         'name': 'Chemistry',
         'badge': 'Chemistry',
-        'min_score': 45,
+        'min_score': 50,
         'max_score': 69,
         'can_flirt': True,
         'can_tease': True,
         'can_intimate': False,
         'desc': (
-            'Electric tension and genuine attraction. Playful vulnerability, affectionate teasing, and deeper emotional sharing.'
+            'Electric tension and genuine attraction. Playful vulnerability, affectionate flirting, and deeper emotional sharing.'
         ),
     },
     {
@@ -126,37 +126,96 @@ def compute(c, now=None) -> Dict[str, Any]:
     ]
     violation_count = len(intimacy_violations)
 
-    # Active connection days approximation from experiences
-    days_span = 1
-    if all_experiences:
-        try:
-            earliest = dt.datetime.fromisoformat(all_experiences[0]['at'])
-            days_span = max(1, (now - earliest).days + 1)
-        except Exception:
-            days_span = 1
-
     pace = getattr(c, 'relationship_pace', 'natural')
     pace_mult = PACE_MULTIPLIERS.get(pace, 1.0)
 
-    # Base score computation
-    # 1. Emotional bedrock: Trust & Warmth (up to 55 points)
-    if temperament == 'guarded':
-        # Guarded requires high trust
-        bedrock = (trust * 0.7 + warmth * 0.3) * 55.0
-    elif temperament == 'expressive':
-        # Expressive responds heavily to warmth
-        bedrock = (trust * 0.4 + warmth * 0.6) * 55.0
-    else: # steady
-        bedrock = (trust * 0.5 + warmth * 0.5) * 55.0
+    # Gather active interaction dates from connection experiences and session store
+    active_dates = set()
+    for e in connections:
+        if 'at' in e:
+            try:
+                active_dates.add(dt.datetime.fromisoformat(e['at']).date())
+            except Exception:
+                pass
 
-    # 2. Earned connection time & shared moments (up to 45 points, scaled by pace)
-    connection_score = min(45.0, (len(connections) * 3.5 + min(days_span, 30) * 1.5) * pace_mult)
+    db = c.home / 'state.db'
+    if db.exists():
+        con = None
+        try:
+            resolved = db.resolve()
+            scope = "lower(coalesce(s.profile_name,'')) IN ('','default')" if c.is_root else "lower(coalesce(s.profile_name,''))=?"
+            params = () if c.is_root else (c.profile.lower(),)
+            con = sqlite3.connect(resolved.as_uri() + '?mode=ro', uri=True, timeout=1)
+            con.execute('PRAGMA query_only=ON')
+            query = f"""SELECT m.timestamp FROM messages m JOIN sessions s ON s.id=m.session_id
+                        WHERE m.role='user' AND {scope} AND coalesce(m.content,'')<>''"""
+            for row in con.execute(query, params):
+                try:
+                    ts = float(row[0])
+                    msg_date = dt.datetime.fromtimestamp(ts, dt.timezone.utc).date()
+                    active_dates.add(msg_date)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        finally:
+            if con:
+                con.close()
 
-    raw_score = bedrock + connection_score
+    active_days = len(active_dates)
+    if not active_days and connections:
+        active_days = 1
 
-    # 3. Penalties for hurt & irritation
-    hurt_mult = 1.4 if temperament == 'expressive' else 1.0
-    raw_score -= (hurt * 40.0 * hurt_mult + irritation * 20.0)
+    # Base score computation:
+    # A fresh companion on Day 0 starts at 0 points (Stage 0: Just Met).
+    if active_days == 0 and not connections:
+        earned_score = 0.0
+    else:
+        # Stage 0 ramp: ~6.25 pts per active day with connections to reach Friends (25 pts) in ~3-4 days
+        stage0_days = min(4, active_days)
+        stage0_points = min(25.0, stage0_days * 6.0 * pace_mult + min(2.0, len(connections) * 0.5))
+        if active_days >= 4 and stage0_points < 25.0:
+            stage0_points = 25.0
+
+        # Stage 1+ slow burn: ~1.25 points per active day past Friends (~56 days to reach Bonded 90 pts)
+        days_past_friends = max(0, active_days - 4)
+        slow_burn_points = days_past_friends * 1.25 * pace_mult
+        earned_score = stage0_points + min(75.0, slow_burn_points)
+
+        # Scale by trust & warmth factor (emotional health)
+        expected_trust = 0.7 if temperament == 'steady' else 0.65 if temperament == 'expressive' else 0.5
+        trust_norm = trust / expected_trust
+        warmth_norm = warmth / 0.65
+        trust_factor = max(0.2, min(1.0, (trust_norm * 0.6 + warmth_norm * 0.4)))
+        earned_score *= trust_factor
+
+        # Penalties for hurt & irritation
+        hurt_mult = 1.4 if temperament == 'expressive' else 1.0
+        earned_score -= (hurt * 35.0 * hurt_mult + irritation * 15.0)
+
+    # Inactivity decay:
+    # If the user is silent > 24 hours, lose ~1.2 points per 24 hours of silence.
+    # Floor is 25.0 (Stage 1 Friends) if Stage 1 was ever achieved, or 0.0 if not.
+    import companion_thread
+    thread = companion_thread.read(c, now)
+    hours_since_human = thread.get('hours_since_human')
+    if hours_since_human is None and connections:
+        try:
+            latest_conn = max(dt.datetime.fromisoformat(e['at']) for e in connections if 'at' in e)
+            if latest_conn.tzinfo is None:
+                latest_conn = latest_conn.replace(tzinfo=dt.timezone.utc)
+            hours_since_human = max(0.0, (now.astimezone(dt.timezone.utc) - latest_conn.astimezone(dt.timezone.utc)).total_seconds() / 3600.0)
+        except Exception:
+            pass
+
+    if hours_since_human is not None and hours_since_human > 24.0:
+        silent_days = (hours_since_human - 24.0) / 24.0
+        decay = silent_days * 1.2
+        if earned_score >= 25.0 or active_days >= 4:
+            # Stage 1 Friends is the floor for inactivity decay
+            earned_score = max(25.0, earned_score - decay)
+        else:
+            earned_score = max(0.0, earned_score - decay)
 
     # Check permanent friend status (persisted on disk so 2 violations permanently lock friendship)
     perm_file = c.home / '.permanent-friend.json'
@@ -169,23 +228,17 @@ def compute(c, now=None) -> Dict[str, Any]:
     permanent_friend = perm_file.exists() or (violation_count >= 2)
     nsfw_revoked = revoked_file.exists()
 
-    # 4. Severe penalties for intimacy coercion / boundary violations
-    # Each violation deducts 30 points and rolls back intimacy progress
-    raw_score -= (violation_count * 30.0)
+    # Penalties for boundary violations (can drop score below 25)
+    earned_score -= (violation_count * 30.0)
 
-    score = max(0, min(100, int(round(raw_score))))
+    score = max(0, min(100, int(round(earned_score))))
 
     # Cap stage if adult themes were not enabled at companion creation,
     # or if permanent friend lock is active, or if nsfw was revoked mid-relationship
     explicit_opted_in = getattr(c, 'explicit', False) and not nsfw_revoked
-    if permanent_friend:
-        # Two instances of coercion makes the companion a friend permanently
-        score = min(score, 44)
-    elif nsfw_revoked:
-        # Turning off adult themes locks at Flirting (Stage 1) permanently
-        score = min(score, 44)
+    if permanent_friend or nsfw_revoked:
+        score = min(score, 49)  # Locked at Friends (Stage 1) max
     elif not explicit_opted_in and score >= 90:
-        # Capped at Intimacy max (89)
         score = 89
 
     # Determine stage
@@ -277,14 +330,20 @@ def render(c, intimacy_state: Optional[Dict[str, Any]] = None) -> str:
             )
         return '\n'.join(lines) + '\n'
 
-    if intimacy_state['stage'] >= 1:
+    if intimacy_state['stage'] >= 2:
         lines.append(
-            "WARMTH & BANTER: From Stage 1, playful banter and warmth are welcomed. "
-            "If met positively, let connection build naturally. If ignored or redirected, step back gracefully with no bitterness."
+            "CHEMISTRY & FLIRTING: Mutual romantic chemistry is unlocked. Playful flirting, teasing, "
+            "and affectionate banter are welcomed. If ignored or redirected, step back gracefully with no bitterness."
+        )
+    elif intimacy_state['stage'] == 1:
+        lines.append(
+            "FRIENDS (WARMTH & BANTER): Warmth, camaraderie, and playful banter are welcomed. "
+            "Teasing is natural between friends, but romantic flirting is premature. "
+            "If met positively, let connection build naturally. If ignored or redirected, step back gracefully."
         )
     else:
         lines.append(
-            "JUST MET: You are new acquaintances. Keep interactions respectful, friendly, and observant. Flirting is premature."
+            "JUST MET: You are new acquaintances. Keep interactions respectful, friendly, and observant. Flirting and teasing are premature."
         )
 
     if intimacy_state['intimacy_ready']:

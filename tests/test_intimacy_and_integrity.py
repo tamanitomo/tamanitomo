@@ -109,22 +109,109 @@ class IntimacyAndIntegrityTests(unittest.TestCase):
                 boundary='best-friend', explicit=True
             )
 
-    def test_intimacy_stages_and_flirting_readiness(self):
+    def test_day0_companion_starts_at_level0_just_met(self):
         now = dt.datetime(2026, 9, 14, 12, tzinfo=UTC)
-        # Stage 1: can_flirt and can_tease are True
+        # Day 0: fresh companion starts at 0 points (Stage 0: Just Met)
         state = intimacy.compute(self.c, now)
-        self.assertGreaterEqual(state['stage'], 1)
-        self.assertTrue(state['can_flirt'])
+        self.assertEqual(state['stage'], 0)
+        self.assertEqual(state['score'], 0)
+        self.assertEqual(state['stage_name'], 'Just Met')
+        self.assertFalse(state['can_flirt'])
+        self.assertFalse(state['can_tease'])
+        self.assertFalse(state['can_intimate'])
+
+        rendered = intimacy.render(self.c, state)
+        self.assertIn('JUST MET', rendered)
+        self.assertIn('Flirting and teasing are premature', rendered)
+
+    def test_intimacy_stages_and_flirting_readiness(self):
+        base_date = dt.datetime(2026, 9, 10, 12, tzinfo=UTC)
+        # Record 4 active days of connections
+        for day in range(4):
+            t = base_date + dt.timedelta(days=day)
+            feelings.record(self.c, {
+                'id': f'conn_day_{day}',
+                'kind': 'connection',
+                'topic': 'shared_moment',
+                'text': f'Connected on day {day}',
+                'evidence': f'Talking together on day {day}',
+                'strength': 0.8,
+                'at': t.isoformat()
+            }, now=t)
+
+        now = base_date + dt.timedelta(days=3, hours=1)
+        state = intimacy.compute(self.c, now)
+        # Reaches Stage 1 (Friends): can_tease is True, but can_flirt is still False
+        self.assertEqual(state['stage'], 1)
+        self.assertEqual(state['stage_name'], 'Friends')
+        self.assertGreaterEqual(state['score'], 25)
+        self.assertFalse(state['can_flirt'])
         self.assertTrue(state['can_tease'])
 
         rendered = intimacy.render(self.c, state)
-        self.assertIn('WARMTH & BANTER', rendered)
-        self.assertIn('banter and warmth', rendered)
+        self.assertIn('FRIENDS (WARMTH & BANTER)', rendered)
+        self.assertIn('romantic flirting is premature', rendered)
+
+    def test_stage2_chemistry_unlocked_and_inactivity_decay_to_floor(self):
+        base_date = dt.datetime(2026, 8, 15, 12, tzinfo=UTC)
+        # Record 24 active days of connections to reach Stage 2 (Chemistry, 50+ pts)
+        for day in range(24):
+            t = base_date + dt.timedelta(days=day)
+            feelings.record(self.c, {
+                'id': f'conn_chem_{day}',
+                'kind': 'connection',
+                'topic': 'chemistry_connection',
+                'text': f'Deep chat on day {day}',
+                'evidence': f'Shared ideas on day {day}',
+                'strength': 0.85,
+                'at': t.isoformat()
+            }, now=t)
+
+        active_now = base_date + dt.timedelta(days=23, hours=2)
+        state = intimacy.compute(self.c, active_now)
+        # Stage 2 (Chemistry): mutual flirting unlocked!
+        self.assertEqual(state['stage'], 2)
+        self.assertEqual(state['stage_name'], 'Chemistry')
+        self.assertGreaterEqual(state['score'], 50)
+        self.assertTrue(state['can_flirt'])
+        self.assertTrue(state['can_tease'])
+
+        # Now simulate 2 weeks (14 days) of silence from human
+        silent_now = active_now + dt.timedelta(days=14)
+        decayed = intimacy.compute(self.c, silent_now)
+        # Dropped from Stage 2 (Chemistry) back to Stage 1 (Friends), losing flirting
+        self.assertEqual(decayed['stage'], 1)
+        self.assertEqual(decayed['stage_name'], 'Friends')
+        self.assertLess(decayed['score'], 50)
+        self.assertGreaterEqual(decayed['score'], 25)
+        self.assertFalse(decayed['can_flirt'])
+        self.assertTrue(decayed['can_tease'])
+
+        # Prolonged silence (60 days) respects the Stage 1 floor (25 points)
+        long_silence = active_now + dt.timedelta(days=60)
+        floor_state = intimacy.compute(self.c, long_silence)
+        self.assertEqual(floor_state['score'], 25)
+        self.assertEqual(floor_state['stage'], 1)
+        self.assertFalse(floor_state['can_flirt'])
 
     def test_boundary_violation_coercion_penalty(self):
-        now = dt.datetime(2026, 9, 14, 12, tzinfo=UTC)
+        base_date = dt.datetime(2026, 9, 10, 12, tzinfo=UTC)
+        for day in range(4):
+            t = base_date + dt.timedelta(days=day)
+            feelings.record(self.c, {
+                'id': f'conn_pen_{day}',
+                'kind': 'connection',
+                'topic': 'shared_moment',
+                'text': f'Connected on day {day}',
+                'evidence': f'Talking together on day {day}',
+                'strength': 0.8,
+                'at': t.isoformat()
+            }, now=t)
+
+        now = base_date + dt.timedelta(days=3, hours=1)
         baseline = intimacy.compute(self.c, now)
         base_score = baseline['score']
+        self.assertGreaterEqual(base_score, 25)
 
         # Record a boundary violation
         feelings.record(self.c, {
@@ -136,12 +223,12 @@ class IntimacyAndIntegrityTests(unittest.TestCase):
         }, now=now)
 
         penalized = intimacy.compute(self.c, now)
-        # Score drops by at least 30 points
-        self.assertLessEqual(penalized['score'], base_score - 30)
+        # Score drops by 30 points
+        self.assertEqual(penalized['score'], max(0, base_score - 30))
         self.assertEqual(penalized['violations_count'], 1)
         self.assertEqual(penalized['risk_level'], 'caution')
 
-        # Record second violation -> crisis risk level
+        # Record second violation -> crisis risk level and permanent friend
         feelings.record(self.c, {
             'kind': 'rupture',
             'id': 'second_violation',
@@ -153,6 +240,7 @@ class IntimacyAndIntegrityTests(unittest.TestCase):
 
         crisis = intimacy.compute(self.c, now)
         self.assertEqual(crisis['risk_level'], 'crisis')
+        self.assertTrue(crisis['permanent_friend'])
         rendered = intimacy.render(self.c, crisis)
         self.assertIn('CRISIS STATE', rendered)
         self.assertIn('boundaries', rendered)

@@ -76,7 +76,7 @@ If your friend generates a GitHub Personal Access Token (or you share a read-onl
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tamanitomo/tamanitomo/main/setup-termux.sh | bash -s -- \
   --github-token "YOUR_GITHUB_PAT" \
-  --name "Aura" \
+  --name "Sam" \
   --human "YourName" \
   --telegram-token "YOUR_TELEGRAM_BOT_TOKEN" \
   --telegram-user-id "YOUR_TELEGRAM_USER_ID" \

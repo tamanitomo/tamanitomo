@@ -18,7 +18,7 @@ RED='\033[0;31m'
 RESET='\033[0m'
 
 # Default values
-COMPANION_NAME="Aura"
+COMPANION_NAME="Sam"
 HUMAN_NAME="Friend"
 TELEGRAM_TOKEN=""
 TELEGRAM_USER_ID=""
@@ -45,7 +45,7 @@ Usage:
   bash setup-termux.sh [OPTIONS]
 
 Options:
-  --name <name>             Companion display name (default: Aura)
+  --name <name>             Companion display name (default: Sam)
   --human <name>            Your name / what companion calls you (default: Friend)
   --provider <provider>     Primary AI provider: openrouter, openai, xai, deepseek (default: openrouter)
   --openrouter-key <key>    OpenRouter API Key
@@ -674,62 +674,32 @@ else
 fi
 
 # ------------------------------------------------------------------------------
-# Step 6: Initialize Companion Profile (companion init)
+# Step 6: Environment Ready for Web Onboarding
 # ------------------------------------------------------------------------------
-echo -e "${CYAN}→ Initializing ${COMPANION_NAME}'s companion profile...${RESET}"
-ANSWERS_JSON="$HOME_DIR/.companion-init-answers.json"
-cat > "$ANSWERS_JSON" <<EOF
-{
-  "agent": "${COMPANION_NAME}",
-  "human": "${HUMAN_NAME}",
-  "human_names": "${HUMAN_NAME}",
-  "agent_type": "companion",
-  "pronoun_set": "she",
-  "human_pronoun_set": "he",
-  "persona": "warm",
-  "boundary": "best-friend",
-  "outreach": "free",
-  "outreach_per_day": 5,
-  "cron_active": "active",
-  "quiet_start": "23:00",
-  "quiet_end": "08:00",
-  "image_mode": "external",
-  "image_style": "none",
-  "image_timeline": false,
-  "vault": "${VAULT_DIR}",
-  "timezone": "$(getprop persist.sys.timezone 2>/dev/null || cat /etc/timezone 2>/dev/null || echo 'UTC')",
-  "location": ""
-}
-EOF
+echo -e "${CYAN}→ Environment provisioned. Leaving profiles at 0 for interactive web onboarding...${RESET}"
 
-export PYTHONPATH="${KIT_DIR}:${KIT_DIR}/kit/scripts"
-"$VENV_DIR/bin/python" -m kit.cli.main init --home "$HERMES_HOME" --answers "$ANSWERS_JSON" --force || true
-rm -f "$ANSWERS_JSON"
-
-# Configure companion.json to use the selected cloud provider
-COMPANION_JSON="$HERMES_HOME/companion.json"
-if [[ -f "$COMPANION_JSON" ]]; then
+# Save model configuration to Hermes config.yaml if provider and model were supplied
+if [[ -n "$MODEL_CHOICE" ]]; then
   "$VENV_DIR/bin/python" -c "
-import json
-path = '$COMPANION_JSON'
-try:
-    with open(path, 'r', encoding='utf-8') as f:
-        d = json.load(f)
-    d.setdefault('models', {})
-    d['models']['chat'] = {'provider': '$PRIMARY_PROVIDER', 'model': '$MODEL_CHOICE', 'reasoning_effort': 'medium'}
-    d['models']['loops'] = {'provider': '$PRIMARY_PROVIDER', 'model': '$MODEL_CHOICE', 'reasoning_effort': 'medium'}
-    d['models']['reflection'] = {'provider': '$PRIMARY_PROVIDER', 'model': '$MODEL_CHOICE', 'reasoning_effort': 'medium'}
-    if '$REMOTE_PIN':
-        d['remote_pin'] = '$REMOTE_PIN'
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(d, f, indent=2)
-except Exception as e:
-    pass
+import yaml, os
+cfg_path = '$HERMES_HOME/config.yaml'
+cfg = {}
+if os.path.exists(cfg_path):
+    try:
+        with open(cfg_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception:
+        pass
+cfg.setdefault('model', {})
+if isinstance(cfg['model'], str):
+    cfg['model'] = {'default': cfg['model']}
+cfg['model']['default'] = '$MODEL_CHOICE'
+if '$PRIMARY_PROVIDER':
+    cfg['model']['provider'] = '$PRIMARY_PROVIDER'
+with open(cfg_path, 'w', encoding='utf-8') as f:
+    yaml.safe_dump(cfg, f)
 " || true
 fi
-
-# Sync and register cron routines with Hermes Agent
-"$VENV_DIR/bin/python" -m kit.cli.main repair --home "$HERMES_HOME" >/dev/null 2>&1 || true
 
 # ------------------------------------------------------------------------------
 # Step 7: Configure 24/7 Background Supervision (termux-services / runit)
@@ -851,17 +821,16 @@ echo -e "${BOLD}${GREEN}========================================================
 echo -e "${BOLD}${GREEN}  ✓ Tamanitomo Setup Complete! ${RESET}"
 echo -e "${BOLD}${GREEN}================================================================${RESET}"
 echo ""
-echo -e "  ${BOLD}Companion Name:${RESET}    ${COMPANION_NAME}"
-echo -e "  ${BOLD}Primary Model:${RESET}     ${MODEL_CHOICE} (${PRIMARY_PROVIDER})"
-echo -e "  ${BOLD}On-Device URL:${RESET}     ${CYAN}http://localhost:${PORT}${RESET} (open in phone browser, PIN bypassed)"
-echo -e "  ${BOLD}LAN / Wi-Fi URL:${RESET}   ${CYAN}http://${LOCAL_IP}:${PORT}${RESET} (from laptop or tablet on Wi-Fi)"
+echo -e "  ${BOLD}Interactive Setup:${RESET}   Open ${CYAN}http://localhost:${PORT}${RESET} (or ${CYAN}http://${LOCAL_IP}:${PORT}${RESET}) in your browser"
+echo -e "                         to begin your interactive onboarding and bring ${BOLD}${COMPANION_NAME}${RESET} to life!"
+echo -e "  ${BOLD}Primary Model:${RESET}       ${MODEL_CHOICE:-'(Configure in Web Onboarding)'} (${PRIMARY_PROVIDER:-'Cloud'})"
 if [[ -n "$REMOTE_PIN" ]]; then
-  echo -e "  ${BOLD}Remote Access PIN:${RESET} ${GREEN}Active (${REMOTE_PIN})${RESET}"
+  echo -e "  ${BOLD}Remote Access PIN:${RESET}   ${GREEN}Active (${REMOTE_PIN})${RESET}"
 else
-  echo -e "  ${BOLD}Remote Access PIN:${RESET} ${YELLOW}None (Open to local network)${RESET}"
+  echo -e "  ${BOLD}Remote Access PIN:${RESET}   ${YELLOW}None (Open to local network)${RESET}"
 fi
 if [[ -n "$TELEGRAM_TOKEN" ]]; then
-  echo -e "  ${BOLD}Telegram Bot:${RESET}      ${GREEN}Connected${RESET} (open Telegram and start chatting)"
+  echo -e "  ${BOLD}Telegram Bot:${RESET}        ${GREEN}Configured${RESET}"
 fi
 echo ""
 echo -e "${BOLD}Important Android Termux Tips:${RESET}"
@@ -874,4 +843,4 @@ echo -e "     • Check gateway:   ${DIM}sv status tamanitomo-gateway${RESET}"
 echo -e "     • Check workspace: ${DIM}sv status tamanitomo-workspace${RESET}"
 echo -e "     • Restart:         ${DIM}sv restart tamanitomo-gateway${RESET}"
 echo ""
-echo -e "${BOLD}Enjoy chatting with ${COMPANION_NAME}!${RESET}"
+echo -e "${BOLD}Open ${CYAN}http://${LOCAL_IP}:${PORT}${RESET} to begin!${RESET}"

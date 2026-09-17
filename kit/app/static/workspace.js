@@ -174,6 +174,7 @@ workspaceHandlers.roster=async()=>{
   for(const b of $('roster').querySelectorAll('[data-profile]'))b.onclick=()=>{const p=d.profiles.find(p=>p.id===b.dataset.profile);if(p.installed)navigateProfile(p.id,'companion-edit');else{aimSettings('hermes-core');navigateProfile(p.id,'settings');}};
   for(const b of $('roster').querySelectorAll('[data-restore]'))b.onclick=async()=>{const name=prompt('Original profile name:');if(name)await action('/profile/restore',{archive:b.dataset.restore,profile:name},()=>render('roster'));};
   for(const b of $('roster').querySelectorAll('[data-purge]'))b.onclick=async()=>{const name=prompt('Permanently delete this archived profile, including its sessions. The external vault stays intact. Type the full archive name:\n'+b.dataset.purge);if(name===b.dataset.purge)await action('/profile/purge',{archive:name,confirm:name},()=>render('roster'));};
+  if(!d.profiles.some(p=>p.installed))setTimeout(()=>onboarding(false),50);
 };
 /* The create/adopt flow lives in onboarding.js, which defines window.onboarding(). */
 /* ---------------------------------------------------------------------- chat
@@ -479,7 +480,7 @@ function openChatPhoto(imgEl){if(!imgEl)return;const card=imgEl.closest('.chat-m
 function relationshipNow(bars,intimacy,companionName){
   const feelings=bars&&bars.feelings;
   if(!feelings&&!intimacy)return '';
-  const stages=['Just Met','Flirting','Chemistry','Intimacy','Bonded'];
+  const stages=['Just Met','Friends','Chemistry','Intimacy','Bonded'];
   const stage=intimacy?(intimacy.stage||0):0;
   const score=intimacy?(intimacy.score||0):0;
   const paceLabel=intimacy?({slow:'Gradual',natural:'Natural',quick:'Quick'}[intimacy.pace]||intimacy.pace):'';
