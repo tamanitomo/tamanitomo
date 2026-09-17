@@ -16,6 +16,35 @@ import companion_preread as preread
 import companion_day as day
 
 class LifestyleTests(unittest.TestCase):
+    def test_seeded_clothing_never_names_a_garment_it_is_not(self):
+        """A description is all an image model gets, so it has to name the garment.
+
+        The outfit reaches an image prompt as a flat list of descriptions with
+        no category beside them. "bikini panties" is a cut of underwear to a
+        person and a swimsuit to an image model, which duly painted one over a
+        sleep tee. "trunks" and "vest" fail the same way in the other direction.
+        These words are correct under swimwear and nowhere else.
+        """
+        import re
+        source = (pathlib.Path(__file__).resolve().parent.parent
+                  / 'kit/scripts/companion_lifestyle.py').read_text(encoding='utf-8')
+        confusable = ('bikini', 'trunks', 'swimsuit', 'boardshorts', 'vest')
+        offenders = []
+        for line in source.splitlines():
+            match = re.search(r'\b(\w*_desc)\s*=\s*(.+)$', line)
+            if not match:
+                continue
+            name, value = match.group(1), match.group(2).lower()
+            if name.startswith('swim'):
+                continue
+            for word in confusable:
+                # "bikini-cut briefs" and "trunk-cut boxer briefs" name the
+                # garment and qualify the cut, which is the fix, not the fault.
+                if re.search(r'\b' + word + r'\b(?!-(?:cut|style))', value):
+                    offenders.append(f'{name}: {word}')
+        self.assertEqual(offenders, [],
+            'these read as a different garment than intended: ' + ', '.join(offenders))
+
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         root=pathlib.Path(self.tmp.name)
@@ -113,7 +142,7 @@ class LifestyleTests(unittest.TestCase):
         # 1. Female young romantic companion (sporty, expressive, and revealing)
         c_comp_f = cc.Companion(agent_type='companion', pronoun_set='she', age=22, persona='romantic')
         w_comp_f = {i['id']: i['description'] for i in life.build_starter_wardrobe(c_comp_f)}
-        self.assertIn('bikini panties with subtle lace trim', w_comp_f['closet-underwear-1'])
+        self.assertIn('bikini-cut briefs with subtle lace trim', w_comp_f['closet-underwear-1'])
         self.assertIn('sundress', w_comp_f['closet-occasion'])
         self.assertIn('bikini', w_comp_f['closet-swimwear'])
         self.assertIn('cardigan', w_comp_f['closet-cardigan'])
@@ -169,4 +198,3 @@ class LifestyleTests(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
-

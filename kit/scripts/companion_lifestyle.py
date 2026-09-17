@@ -232,7 +232,7 @@ def build_starter_wardrobe(c, palette='auto'):
             elif is_mature:
                 und_desc = f'{color} smooth high-rise breathable cotton briefs'
             elif persona in ('romantic', 'social', 'warm'):
-                und_desc = f'{color} soft stretch-cotton bikini panties with subtle lace trim'
+                und_desc = f'{color} soft stretch-cotton bikini-cut briefs with subtle lace trim'
             else:
                 und_desc = f'{color} seamless stretch cotton-modal hipster briefs'
         else:
@@ -243,7 +243,7 @@ def build_starter_wardrobe(c, palette='auto'):
             elif is_mature:
                 und_desc = f'{color} relaxed woven cotton button-fly boxers'
             elif persona in ('adventurous', 'sharp'):
-                und_desc = f'{color} fitted athletic moisture-wicking trunks'
+                und_desc = f'{color} fitted athletic moisture-wicking trunk-cut boxer briefs'
             else:
                 und_desc = f'{color} comfortable stretch-cotton boxer briefs'
 
@@ -271,7 +271,7 @@ def build_starter_wardrobe(c, palette='auto'):
             elif persona in ('adventurous', 'sharp'):
                 act_top_desc = f'{color} breathable athletic muscle tank'
             else:
-                act_top_desc = f'{color} breathable cotton athletic training vest'
+                act_top_desc = f'{color} breathable sleeveless cotton athletic training top'
             top_suffix = 'training-vest'
 
         # 3. Active Bottoms
@@ -502,7 +502,7 @@ def build_starter_wardrobe(c, palette='auto'):
         jean_use = 'smart casual Fridays and travel days'
     else:
         if is_she:
-            jean_desc = 'fitted low-rise distressed blue jeans paired with a cropped fit' if not is_mature else 'comfortable classic dark-wash straight-leg stretch jeans'
+            jean_desc = 'fitted low-rise distressed blue jeans with a cropped hem' if not is_mature else 'comfortable classic dark-wash straight-leg stretch jeans'
         else:
             jean_desc = 'comfortable vintage-wash relaxed straight-leg blue jeans' if is_young else 'comfortable classic dark-wash straight-leg stretch jeans'
         jean_use = 'errands, cafes and days out'
