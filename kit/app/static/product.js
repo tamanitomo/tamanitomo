@@ -464,13 +464,18 @@ function wireCalendarComponent(root,missions,agentName,refreshFn,prefix='cal'){
 
 function renderHeroMetersContent(emotions,bars){
   const meters=emotions?.state?.meters||bars?.feelings?.meters||{};
-  const config=[
-    {key:'warmth',label:'Warmth',icon:'🔥',color:'linear-gradient(90deg,#f43f5e,#fb923c)',glow:'rgba(244,63,94,0.4)',defaultVal:0.8,desc:'Emotional closeness, comfort, and positive affection toward you.'},
-    {key:'trust',label:'Trust',icon:'🛡️',color:'linear-gradient(90deg,#0ea5e9,#10b981)',glow:'rgba(14,165,233,0.4)',defaultVal:0.75,desc:'Confidence in your bond, reliability, and emotional vulnerability.'},
-    {key:'hurt',label:'Hurt',icon:'🩹',color:'linear-gradient(90deg,#ef4444,#f87171)',glow:'rgba(239,68,68,0.4)',defaultVal:0.0,desc:'Lingering emotional distress from friction or boundary breaches.'},
-    {key:'irritation',label:'Irritation',icon:'⚡',color:'linear-gradient(90deg,#eab308,#f59e0b)',glow:'rgba(234,179,8,0.4)',defaultVal:0.05,desc:'Transient frustration, tension, or boundary friction.'},
-    {key:'longing',label:'Missing you',icon:'⏳',color:'linear-gradient(90deg,#8b5cf6,#d946ef)',glow:'rgba(139,92,246,0.4)',defaultVal:0.3,desc:'Desire to spend time with you during periods of separation.'}
-  ];
+  // Home is a glance and Together is the page, so they keep different
+  // treatments — but they must not describe the same meter in different words.
+  // The labels and the explanations come from one place; the colour, the glow
+  // and the resting value are the hero's own.
+  const look={
+    warmth:{color:'linear-gradient(90deg,#f43f5e,#fb923c)',glow:'rgba(244,63,94,0.4)',defaultVal:0.8},
+    trust:{color:'linear-gradient(90deg,#0ea5e9,#10b981)',glow:'rgba(14,165,233,0.4)',defaultVal:0.75},
+    hurt:{color:'linear-gradient(90deg,#ef4444,#f87171)',glow:'rgba(239,68,68,0.4)',defaultVal:0.0},
+    irritation:{color:'linear-gradient(90deg,#eab308,#f59e0b)',glow:'rgba(234,179,8,0.4)',defaultVal:0.0},
+    longing:{color:'linear-gradient(90deg,#8b5cf6,#d946ef)',glow:'rgba(139,92,246,0.4)',defaultVal:0.0},
+  };
+  const config=FEELING_METERS.map(([key,label,icon,desc])=>({key,label,icon,desc,...(look[key]||{defaultVal:0})}));
   return config.map(m=>{
     const raw=meters[m.key]!=null?meters[m.key]:m.defaultVal;
     const pct=Math.round(Math.max(0,Math.min(1,raw))*100);
