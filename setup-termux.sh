@@ -718,9 +718,20 @@ export HERMES_HOME=${HERMES_HOME}
 export PATH="${HERMES_HOME}/hermes-agent/venv/bin:${KIT_DIR}/.venv/bin:${PREFIX_DIR}/bin:\$PATH"
 export HERMES_ACCEPT_HOOKS=1
 cd "${HOME_DIR}" || exit 1
+
+# Network rollover guard: Allow sockets and routing to settle (e.g. during Wi-Fi to 5G handover)
+sleep 2
+
 exec hermes gateway run --replace
 EOF
   chmod +x "$SV_DIR/tamanitomo-gateway/run"
+
+  # Runit finish hook: backoff between restarts to prevent Telegram API 429 throttling on rollover
+  cat > "$SV_DIR/tamanitomo-gateway/finish" <<EOF
+#!/data/data/com.termux/files/usr/bin/sh
+sleep 3
+EOF
+  chmod +x "$SV_DIR/tamanitomo-gateway/finish"
 
   # Gateway logger
   cat > "$SV_DIR/tamanitomo-gateway/log/run" <<EOF

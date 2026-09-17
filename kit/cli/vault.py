@@ -43,3 +43,33 @@ def cmd_restore(args):
     print(f"Wrote {result['restored']}")
     print(wiz.C.dim('  '+result['note']))
     return 0
+
+def cmd_backup(args):
+    """Export the companion's complete vault to a standalone zip archive."""
+    import datetime as dt, zipfile
+    c=resolve(args,require_config=True)
+    root=pathlib.Path(c.vault)
+    if not root.is_dir():
+        raise ValueError(f'Vault directory {root} does not exist')
+    out_dir=pathlib.Path(args.output) if getattr(args,'output',None) else pathlib.Path.cwd()
+    if out_dir.is_dir():
+        stamp=dt.datetime.now().strftime('%Y%m%d_%H%M%S')
+        clean_name="".join(ch if ch.isalnum() else "_" for ch in c.agent).strip("_").lower() or "companion"
+        out_path=out_dir/f"{clean_name}_vault_backup_{stamp}.zip"
+    else:
+        out_path=out_dir
+
+    count=0
+    total_bytes=0
+    with zipfile.ZipFile(out_path,'w',compression=zipfile.ZIP_DEFLATED) as archive:
+        for p in root.rglob('*'):
+            if p.is_file() and not p.is_symlink():
+                rel=p.relative_to(root)
+                archive.write(p,arcname=str(rel))
+                count+=1
+                total_bytes+=p.stat().st_size
+
+    print(f"Backed up {count} files ({total_bytes/1e6:.2f} MB) from {root} to:")
+    print(f"  {out_path.resolve()}")
+    return 0
+

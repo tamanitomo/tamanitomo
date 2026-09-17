@@ -972,3 +972,52 @@ class SettingsScreenTests(unittest.TestCase):
             run('--home',str(home),'init','--vault',str(vault),
                 '--answers',answers(timezone='Asia/Tokyo'),expect=0)
             self.assertEqual(json.loads((home/'companion.json').read_text())['timezone'],'Asia/Tokyo')
+
+
+class PinAndBackupCliTests(unittest.TestCase):
+    def test_pin_set_get_and_clear(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home=pathlib.Path(tmp)/'hermes';vault=pathlib.Path(tmp)/'vault'
+            run('--home',str(home),'init','--vault',str(vault),'--answers',answers(),expect=0)
+
+            # Initially no PIN
+            r=run('--home',str(home),'pin',expect=0)
+            self.assertIn('No remote PIN configured',r.stdout)
+
+            # Set valid PIN
+            r=run('--home',str(home),'pin','--set','5678',expect=0)
+            self.assertIn('set to 5678',r.stdout)
+            c=cc.load(home)
+            self.assertEqual(c.remote_pin,'5678')
+
+            # Inspect configured PIN
+            r=run('--home',str(home),'pin',expect=0)
+            self.assertIn('CONFIGURED',r.stdout)
+
+            # Reject invalid PIN
+            r=run('--home',str(home),'pin','--set','abc')
+            self.assertNotEqual(r.returncode,0)
+
+            # Clear PIN
+            r=run('--home',str(home),'pin','--clear',expect=0)
+            self.assertIn('cleared',r.stdout)
+            c=cc.load(home)
+            self.assertEqual(c.remote_pin,'')
+
+    def test_vault_backup_creates_zip(self):
+        import zipfile
+        with tempfile.TemporaryDirectory() as tmp:
+            home=pathlib.Path(tmp)/'hermes';vault=pathlib.Path(tmp)/'vault'
+            run('--home',str(home),'init','--vault',str(vault),'--answers',answers(),expect=0)
+            (vault/'test_note.md').write_text('Hello from backup test')
+
+            zip_out=pathlib.Path(tmp)/'my_backup.zip'
+            r=run('--home',str(home),'backup','--output',str(zip_out),expect=0)
+            self.assertTrue(zip_out.is_file())
+            self.assertGreater(zip_out.stat().st_size,0)
+
+            with zipfile.ZipFile(zip_out,'r') as z:
+                names=z.namelist()
+                self.assertIn('test_note.md',names)
+                self.assertIn('soul/SOUL.md',names)
+

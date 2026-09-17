@@ -23,8 +23,9 @@ from .catalogs import cmd_catalog
 from .doctor import cmd_doctor, cmd_repair
 from .menu import cmd_menu
 from .models import cmd_models
+from .pin import cmd_pin
 from .status import cmd_status
-from .vault import cmd_restore
+from .vault import cmd_backup, cmd_restore
 from .identity import cmd_identity
 from .app import cmd_app
 from .ops import cmd_chat, cmd_gateway, cmd_schedule
@@ -39,13 +40,18 @@ def main():
     p.add_argument('--version',action='version',version=f'tamanitomo {__version__}')
     sub=p.add_subparsers(dest='cmd')
     for name,fn in (('init',cmd_init),('add',cmd_add),('remove',cmd_remove),
-                    ('upgrade',cmd_upgrade),('repair',cmd_repair),('doctor',cmd_doctor),('catalog',cmd_catalog),('schedule',cmd_schedule),('settings',cmd_settings),('gateway',cmd_gateway),('chat',cmd_chat),('timeline',cmd_timeline),('models',cmd_models),('status',cmd_status),('restore',cmd_restore),('identity',cmd_identity),('app',cmd_app)):
+                    ('upgrade',cmd_upgrade),('repair',cmd_repair),('doctor',cmd_doctor),('catalog',cmd_catalog),('schedule',cmd_schedule),('settings',cmd_settings),('gateway',cmd_gateway),('chat',cmd_chat),('timeline',cmd_timeline),('models',cmd_models),('status',cmd_status),('restore',cmd_restore),('backup',cmd_backup),('identity',cmd_identity),('app',cmd_app),('pin',cmd_pin)):
         s=sub.add_parser(name,help=fn.__doc__)
         s.set_defaults(fn=fn)
         # Accepted on either side of the subcommand. SUPPRESS so that omitting it
         # here leaves the global value alone instead of overwriting it with None.
         s.add_argument('--home',type=pathlib.Path,default=argparse.SUPPRESS,
                        help='Hermes home or profile dir')
+        if name=='pin':
+            s.add_argument('--set',metavar='PIN',help='Set a 4-digit PIN for remote network access')
+            s.add_argument('--clear',action='store_true',help='Clear/remove the remote PIN (unlocks network access)')
+        if name=='backup':
+            s.add_argument('--output','-o',metavar='PATH',help='Custom output path or directory for the zip backup')
         if name=='timeline':s.add_argument('state',choices=['status','on','off','prune'],nargs='?',default='status')
         if name=='gateway':
             s.add_argument('--mode',choices=['shared','dedicated','later'])

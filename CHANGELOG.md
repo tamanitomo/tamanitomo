@@ -1,3 +1,13 @@
+## 2.2.1 — Interactive Onboarding, Intimacy Recalibration & Mobile Hardening (2026-09-17)
+
+- **Interactive First-Visit Onboarding:** Zero-profile detection triggers guided birth wizard (Telegram BotFather/userinfobot guide, Relational vs Worker choice, 8 PMD-style dilemma questions, Sam companion card reveal with in-drawer customizer, and cloud device-code OAuth for xAI Grok and OpenAI Codex).
+- **Default Companion Name:** Default companion is now officially **Sam** (gender-neutral).
+- **Intimacy Recalibration & Neglect Decay:** Starts at Level 0 (Just Met), Stage 1 Friends floor (25 pts), Stage 2 Chemistry flirting (50 pts, can be lost from >24h neglect), Stage 4 Bonded taking ~2 months of daily interaction.
+- **Finish Customizing Banner:** Secondary workspace notification banner and 3-card modal for Spoken Voice (with preview), Photos/Images, and Location/Sensors.
+- **Emergency CLI PIN Reset:** `tamanitomo pin [--set PIN | --clear]` to inspect, change, or remove remote access network PIN.
+- **Vault Backup & Export:** One-click web download (`/api/vault/export`) and `tamanitomo backup` CLI command.
+- **Android & Mobile Hardening:** Battery optimization guidance for Termux, and Wi-Fi to cellular rollover delay/finish hooks for gateway stability.
+
 ## 2.2.0 — Initial Release (2026-09-17)
 
 **Name change.** The project is now published as **tamanitomo** (魂の友 — "Soul of a Friend").

@@ -116,4 +116,74 @@ class DayTests(unittest.TestCase):
         self.assertIsNone(presence.current(other))
         self.assertNotIn('Friends arriving',context.build(other,now=self.now))
 
+    def test_validation_error_names_every_reason_including_the_null_branch(self):
+        """A retry the model cannot act on fails identically for hours.
+
+        The 'next' field is anyOf[intent, null]. A wrong-shape next used to be
+        rejected with a bare 'Invalid next' that named only the null branch, so
+        the model resent the same object and the tick failed the same way. The
+        error must name the inner reason, and must not be composed only of the
+        degenerate null branch.
+        """
+        schema=day.schema_fields()['next']
+        cases=[({'activity':'read','duration_minutes':5},'missing: reason'),
+               ({'activity':'','duration_minutes':5,'reason':'x'},'next.activity'),
+               ({'activity':'read','duration_minutes':0,'reason':'x'},'duration_minutes'),
+               (42,'expected')]
+        for value,needle in cases:
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError) as caught:
+                    day._validate(value,schema,'next')
+                message=str(caught.exception)
+                self.assertIn(needle,message)
+                # The whole message cannot be only the null branch.
+                self.assertNotEqual(message.strip(),'Invalid next: Invalid next: expected [\'null\']')
+    def test_validation_error_names_missing_and_unexpected_object_keys(self):
+        schema=day.schema_fields()['visual']
+        with self.assertRaises(ValueError) as caught:
+            day._validate({'pose':'seated','framing':'wide','extra':'x'},schema,'visual')
+        message=str(caught.exception)
+        self.assertIn('visual',message)
+        for key in ('hands','gaze','props','expression','lighting'):
+            self.assertIn(key,message)
+        self.assertIn('extra',message)
+
+    def test_removing_clothes_is_not_gated_by_the_dressing_care_rules(self):
+        """Only ENTERING new items triggers teeth/shower gates.
+
+        The lifestyle guidance reads 'shower within two hours before changing
+        into pajamas', which a model can read as 'shower shortly before you
+        change'. Removing an item is not changing into it, so it must not be
+        held to a care gate it cannot satisfy.
+        """
+        import json as _json
+        import companion_lifestyle as lifestyle
+        (self.c.life/'routine.json').write_text(_json.dumps(
+            {'kind':'imagined_routine','daily':[],'lifestyle':{'enabled':True}}))
+        presence.update_wardrobe(self.c,[{'id':'jammies','description':'soft pajamas','use':'sleep','category':'sleep'}])
+        self.write(duration_minutes=60)
+        previous=presence.current(self.c)
+        closet=[{'id':'tee','description':'green tee','use':'everyday','category':'day'},
+                {'id':'jammies','description':'soft pajamas','use':'sleep','category':'sleep'}]
+        later=self.now+dt.timedelta(hours=12)
+        # Removing only: nothing enters, so no care gate applies.
+        result=lifestyle.evolve(self.c,{},[],previous,closet,later)
+        self.assertEqual(result['clothes']['tee'],'dirty')
+        # Entering the sleep item with a shower 12 hours earlier is refused.
+        # Teeth were brushed at 08:15 today, so the teeth gate passes and the
+        # shower gate is the one that fires.
+        teeth=lifestyle.evolve(self.c,{'care_actions':[{'kind':'brush_teeth','items':[]}]},[],
+                               previous,closet,self.now+dt.timedelta(hours=30))
+        state={'teeth_at':later.isoformat(),'shower_at':(later-dt.timedelta(hours=12)).isoformat()}
+        import copy as _copy
+        blank=self.write(duration_minutes=60) or None
+        previous2=presence.current(self.c)
+        previous2=_copy.deepcopy(previous2)
+        previous2['state']['lifestyle']={'clothes':{'tee':'wearing','jammies':'clean'},
+            'teeth_at':later.isoformat(),'shower_at':(later-dt.timedelta(hours=12)).isoformat(),
+            'laundry':None,'shopping_at':None,'acquired':[],
+            'wearing_since':{'tee':later.isoformat()}}
+        with self.assertRaisesRegex(ValueError,'shower before changing into pajamas'):
+            lifestyle.evolve(self.c,{'outfit':['jammies']},['jammies'],previous2,closet,later)
+
 if __name__=='__main__':unittest.main()

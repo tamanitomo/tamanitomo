@@ -395,6 +395,7 @@ const settingsPanels=[
     <button class="act" id="save-remote-pin" type="button">${s.remote_pin?'Replace PIN':'Set PIN'}</button>
     ${s.remote_pin?'<button class="quiet" id="clear-remote-pin" type="button">Remove PIN</button>':''}
   </div>
+  <p class="dim small" style="margin-top:6px">Locked out from another device? Run <code>tamanitomo pin --clear</code> in your terminal to remove it instantly.</p>
   <p class="small" id="pin-feedback" role="status"></p>`;
 
   for(const b of host.querySelectorAll('[data-copy]'))
@@ -459,9 +460,31 @@ const settingsPanels=[
     <td><strong>${Number(m.chars).toLocaleString()}</strong> <span class="dim">/ ${Number(m.cap).toLocaleString()}</span></td>
     <td>${m.over_warn?'<span class="warn">Approaching the limit</span>':'<span class="dim">Within capacity</span>'}</td></tr>`).join('')}</tbody></table>
 
-  <h3 class="section-subheading">Storage</h3>
+  <h3 class="section-subheading">Storage & Vault Backup</h3>
   <table><tbody>${health.storage.map(s=>`<tr><td>${esc(s.label)}</td><td>${s.files} files</td><td class="dim">${(s.bytes/1e6).toFixed(1)} MB</td></tr>`).join('')}
     <tr><td>Vault history</td><td colspan="2">${health.vault_repo?'<span class="dim">Recording every change</span>':'<span class="warn">Not a git repository — changes are not versioned</span>'}</td></tr></tbody></table>
+  <div style="margin-top:12px;margin-bottom:20px">
+    <a class="act" href="${mediaUrl('/api/vault/export')}" download style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;text-decoration:none">
+      <span>📦</span> Download Complete Vault Backup (.zip)
+    </a>
+  </div>
+
+  <h3 class="section-subheading">24/7 Background & Battery Resilience</h3>
+  <div class="card" style="padding:14px;border-radius:10px;background:var(--panel);border:1px solid var(--surface-3);margin-bottom:20px">
+    <div style="display:flex;align-items:flex-start;gap:10px">
+      <span style="font-size:20px">🔋</span>
+      <div>
+        <strong style="display:block;margin-bottom:4px">Mobile Host Battery Optimization</strong>
+        <p class="small dim" style="margin:0 0 8px">If hosting on an Android phone via Termux, prevent Android from suspending your companion when the screen is off:</p>
+        <ol class="small dim" style="margin:0 0 8px;padding-left:18px">
+          <li>Open Android <strong>Settings → Apps → Termux</strong></li>
+          <li>Tap <strong>App battery usage</strong> (or Battery Saver / Power Management)</li>
+          <li>Select <strong>Unrestricted</strong> (or <strong>Don't optimize</strong>)</li>
+        </ol>
+        <p class="small dim" style="margin:0">For Samsung, Xiaomi, or OnePlus phones, also disable aggressive memory freezing (<a href="https://dontkillmyapp.com" target="_blank" rel="noopener" style="color:var(--accent)">dontkillmyapp.com</a>).</p>
+      </div>
+    </div>
+  </div>
 
   <h3 class="section-subheading">Model usage · last 30 recorded days</h3>
   ${cost.available

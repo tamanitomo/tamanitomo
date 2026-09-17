@@ -86,6 +86,7 @@
   "kit/cli/menu.py",
   "kit/cli/models.py",
   "kit/cli/ops.py",
+  "kit/cli/pin.py",
   "kit/cli/questions.py",
   "kit/cli/roster.py",
   "kit/cli/scaffold.py",
