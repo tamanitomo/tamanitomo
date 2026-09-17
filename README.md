@@ -532,8 +532,7 @@ Contributions are welcome under the same terms.
 
 ## Status
 
-Version 2.2.0-beta.5 adds the redesigned desktop workspace, photo library, journal reader, and creations catalog. See [docs/DESKTOP.md](docs/DESKTOP.md) for its
-current acceptance status. The 2.1 foundation was previously installed from a clean release archive.
+Version 2.2.0 ("Initial Release") delivers the unified desktop/mobile workspace, photo library, journal reader, creations catalog, and verified multi-platform deployment across Linux, Android (Termux), Windows 11, and macOS. See [docs/DESKTOP.md](docs/DESKTOP.md) for interface details.
 
 **What is verified and what is not is recorded in [docs/REVIEW.md](docs/REVIEW.md)**, and the second
 list matters more than the first. Since then the kit has had its first field install by someone

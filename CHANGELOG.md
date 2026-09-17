@@ -1,4 +1,4 @@
-## Unreleased — tamanitomo rebrand
+## 2.2.0 — Initial Release (2026-09-17)
 
 **Name change.** The project is now published as **tamanitomo** (魂の友 — "Soul of a Friend").
 All user-facing references to `companion-kit` have been updated: CLI help, version strings,

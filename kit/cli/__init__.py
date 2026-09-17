@@ -18,7 +18,7 @@
 from __future__ import annotations
 import pathlib, sys
 
-__version__='2.2.0-beta.2'
+__version__='2.2.0'
 
 # The runtime helpers are flat modules meant to be runnable on their own
 # (`python companion_self.py ...` appears in every cron prompt), so they are
