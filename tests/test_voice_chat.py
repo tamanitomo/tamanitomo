@@ -11,7 +11,7 @@ class VoiceChatTests(MediaReviewTests):
         headers={'x-companion-token':'secret','content-type':'audio/webm'}
         seen=[]
         def fake(rt,home,mode,payload):
-            seen.append((home,mode,Path(payload['path'])));self.assertEqual(home,self.c.home)
+            seen.append((home,mode,Path(payload['path'])));self.assertEqual(home.resolve(),self.c.home.resolve())
             return {'success':True,'transcript':'Hello there'}
         with patch.object(voice_chat,'bridge',side_effect=fake):
             r=self.client.post('/api/voice-chat/transcribe',content=b'x'*20,headers=headers)
