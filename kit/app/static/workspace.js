@@ -112,6 +112,44 @@ async function action(path,payload={},onDone){
   }finally{if(activeOperation==='submitting')activeOperation=null;}
 }
 function bindAction(id,path,payload={},onDone){const button=$(id);if(button)button.onclick=async()=>{button.disabled=true;try{await action(path,typeof payload==='function'?payload():payload,onDone);}finally{button.disabled=false;}};}
+
+window.waitForRestart = function(targetVersion) {
+  let backdrop = document.getElementById('update-reconnect-backdrop');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.id = 'update-reconnect-backdrop';
+    backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(6px);z-index:99999;display:flex;align-items:center;justify-content:center;';
+    backdrop.innerHTML = `
+      <div style="background:var(--panel,#18181b);border:1px solid var(--edge-2,#3f3f46);border-radius:16px;padding:32px 28px;max-width:420px;width:90%;text-align:center;color:var(--ink,#fafafa);box-shadow:0 24px 70px rgba(0,0,0,0.85);">
+        <div class="spinner" style="margin:0 auto 18px auto;width:38px;height:38px;border:3px solid var(--edge-2,#3f3f46);border-top-color:var(--accent,#818cf8);border-radius:50%;animation:spin 1s linear infinite;"></div>
+        <h3 style="margin:0 0 8px 0;font-size:1.25rem;">Restarting Workspace</h3>
+        <p style="color:var(--dim,#a1a1aa);margin:0 0 16px 0;font-size:0.95rem;line-height:1.4;">Tamanitomo ${esc(targetVersion ? 'v' + targetVersion.replace(/^v/, '') : '')} has been installed.<br>Reconnecting to your companion...</p>
+        <p id="update-reconnect-status" style="color:var(--dim,#71717a);font-size:0.85rem;font-family:monospace;margin:0;">Waiting for service to restart...</p>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+  }
+
+  let attempts = 0;
+  const timer = setInterval(async () => {
+    attempts++;
+    try {
+      const res = await fetch(scoped('/api/updates?force=true'), { cache: 'no-store' });
+      if (res.ok) {
+        clearInterval(timer);
+        const st = document.getElementById('update-reconnect-status');
+        if (st) st.textContent = 'Service online! Reloading workspace...';
+        setTimeout(() => {
+          window.location.reload();
+        }, 800);
+      }
+    } catch (_) {
+      const st = document.getElementById('update-reconnect-status');
+      if (st) st.textContent = `Reconnecting... (attempt ${attempts})`;
+    }
+  }, 1200);
+};
+
 async function boot(){
   // Learn whether there is a face to show before anything draws one: a page
   // that renders first would otherwise show the initial and keep it.

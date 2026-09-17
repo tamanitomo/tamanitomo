@@ -226,6 +226,7 @@
   "tests/test_timeline.py",
   "tests/test_types.py",
   "tests/test_updates.py",
+  "tests/test_updates_ui.js",
   "tests/test_vault.py",
   "tests/test_wardrobe.py",
   "tests/test_vision.py",

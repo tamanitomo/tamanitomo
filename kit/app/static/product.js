@@ -741,7 +741,18 @@ workspaceHandlers.now=async()=>{
   }
 
   $('now').innerHTML=`
-  ${updateInfo?.has_update?`<div class="notice-strip" style="border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent)"><p><strong>Tamanitomo v${esc(updateInfo.latest_version)}</strong> is available. Run <code>./update.sh</code> in your host terminal to update.</p><button class="link-button" data-settings-panel="updates">View updates</button></div>`:''}
+  ${updateInfo?.has_update?`<div class="notice-strip" style="border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent)">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;width:100%">
+      <div>
+        <p style="margin:0"><strong>Tamanitomo v${esc(updateInfo.latest_version)}</strong> is available. (Installed: v${esc(updateInfo.version)})</p>
+        <p class="dim small" style="margin:2px 0 0 0">Sam's memories, journals, and vault remain completely untouched.</p>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="act small" id="banner-apply-update">⚡ Update Now</button>
+        <button class="link-button small" data-settings-panel="updates">View details</button>
+      </div>
+    </div>
+  </div>`:''}
 
   <div class="presence-sanctuary">
     <div class="presence-hero-card">
@@ -841,6 +852,22 @@ workspaceHandlers.now=async()=>{
   </div>`;
 
   wireRoutes($('now'));
+  const bannerUpdate = $('banner-apply-update');
+  if (bannerUpdate) {
+    bannerUpdate.onclick = async () => {
+      if (!confirm(`Update Tamanitomo to v${updateInfo.latest_version}?\n\nSam's memories and vault files will remain untouched.\nThe workspace will restart automatically.`)) return;
+      bannerUpdate.disabled = true;
+      bannerUpdate.textContent = 'Updating...';
+      try {
+        await action('/updates/apply', {});
+        if (window.waitForRestart) window.waitForRestart(updateInfo.latest_version);
+      } catch (err) {
+        bannerUpdate.disabled = false;
+        bannerUpdate.textContent = '⚡ Update Now';
+        notice('Update failed: ' + err.message, true);
+      }
+    };
+  }
   if($('presence-switch'))$('presence-switch').onclick=openCompanionSwitchDialog;
   wireCalendarComponent($('now'), d.missions, d.agent, () => render('now'), 'home-cal');
   if($('read-latest'))$('read-latest').onclick=()=>{if(entry?.id)selectedJournal=entry.id;showTab('journals');};

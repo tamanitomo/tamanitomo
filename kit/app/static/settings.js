@@ -431,13 +431,61 @@ const settingsPanels=[
     <div><dt>Installed</dt><dd>v${esc(d.version)}</dd></div>
     <div><dt>Latest released</dt><dd>${d.latest_version?'v'+esc(d.latest_version):'Not checked'}</dd></div>
   </dl>
-  ${d.has_update?`<div class="notice-strip">
-    <p><strong>Tamanitomo v${esc(d.latest_version)} is out.</strong> Updating happens on the host, not in the browser, so dependencies and the gateway are handled together.</p>
-    ${d.release_url?`<a class="link-button" href="${esc(d.release_url)}" target="_blank" rel="noopener">Release notes →</a>`:''}
-  </div>`:'<p class="dim">You are running the newest release.</p>'}
-  <h3 class="section-subheading">On the host</h3>
-  <pre class="command-block">./update.sh          # Tamanitomo, its dependencies, then restart
-./update.sh --hermes # the same, and update the Hermes runtime too</pre>`;
+  ${d.has_update?`<div class="notice-strip" style="border-left-color:var(--accent);margin-top:16px">
+    <p><strong>Tamanitomo v${esc(d.latest_version)} is available.</strong></p>
+    <p class="dim small" style="margin-top:4px">This will update the Tamanitomo application. Sam’s memories, emotions, journals, and vault will remain completely untouched.</p>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap">
+      <button class="act" id="btn-inapp-update">⚡ Update to v${esc(d.latest_version)} Now</button>
+      ${d.release_url?`<a class="link-button" href="${esc(d.release_url)}" target="_blank" rel="noopener">Release notes →</a>`:''}
+    </div>
+  </div>`:`<div class="notice-strip" style="margin-top:16px">
+    <p class="dim" style="margin:0">You are running the newest release (v${esc(d.version)}).</p>
+    <div style="margin-top:10px">
+      <button class="quiet" id="btn-check-updates">🔄 Check for updates</button>
+    </div>
+  </div>`}
+  <h3 class="section-subheading">Update scope</h3>
+  <p class="dim small">This updates Tamanitomo’s interface, autonomous companion routines, and application code. The upstream Hermes Agent engine and external model providers are kept isolated and stable.</p>
+  <h3 class="section-subheading">Host terminal alternative</h3>
+  <pre class="command-block">./update.sh          # Update Tamanitomo via terminal</pre>`;
+
+  const updateBtn = host.querySelector('#btn-inapp-update');
+  if (updateBtn) {
+    updateBtn.onclick = async () => {
+      if (!confirm(`Update Tamanitomo to v${d.latest_version}?\n\nSam's memories and vault files will remain untouched.\nThe workspace will restart automatically.`)) return;
+      updateBtn.disabled = true;
+      updateBtn.textContent = 'Updating...';
+      try {
+        await action('/updates/apply', {});
+        if (window.waitForRestart) window.waitForRestart(d.latest_version);
+      } catch (err) {
+        updateBtn.disabled = false;
+        updateBtn.textContent = `⚡ Update to v${d.latest_version} Now`;
+        alert('Update failed: ' + err.message);
+      }
+    };
+  }
+
+  const checkBtn = host.querySelector('#btn-check-updates');
+  if (checkBtn) {
+    checkBtn.onclick = async () => {
+      checkBtn.disabled = true;
+      checkBtn.textContent = 'Checking GitHub...';
+      try {
+        const fresh = await api('/updates/check', { method: 'POST' });
+        if (fresh.has_update) {
+          notice(`New version v${fresh.latest_version} available!`);
+        } else {
+          notice('Tamanitomo is up to date.');
+        }
+        openSettings(null, 'updates');
+      } catch (err) {
+        notice('Check failed: ' + err.message, true);
+        checkBtn.disabled = false;
+        checkBtn.textContent = '🔄 Check for updates';
+      }
+    };
+  }
  }},
 
 {group:'Tamanitomo',id:'diagnostics',title:'Diagnostics',
