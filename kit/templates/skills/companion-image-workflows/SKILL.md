@@ -2,7 +2,7 @@
 name: companion-image-workflows
 description: Use the companion's saved, structured image workflows without changing identity or confusing model architectures.
 ---
-<!-- companion-kit managed image workflow guide -->
+<!-- tamanitomo managed image workflow guide -->
 
 Use the selected companion's saved Image Studio presets. Generate with:
 

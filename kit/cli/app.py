@@ -43,12 +43,12 @@ def cmd_app(args):
     if ':' in browser_host:browser_host='['+browser_host+']'
     registry=state/'workspace-server.json'
     def reuse(candidate):
-        req=urllib.request.Request(f'http://{browser_host}:{candidate}/api/instance',headers={'x-companion-token':token})
+        req=urllib.request.Request(f'http://{browser_host}:{candidate}/api/instance',headers={'x-tamanitomo-token':token,'x-companion-token':token})
         try:
             with urllib.request.urlopen(req,timeout=2) as response:info=json.load(response)
-            if info.get('app')!='companion-kit' or info.get('root')!=str(c.hermes_root):return False
+            if info.get('app') not in ('tamanitomo','companion-kit') or info.get('root')!=str(c.hermes_root):return False
             url=f'http://{browser_host}:{candidate}/?'+urllib.parse.urlencode({'token':token,**({'profile':c.profile} if c.profile else {})})
-            print('Companion kit is already running: '+url)
+            print('Tamanitomo is already running: '+url)
             if not args.no_open:webbrowser.open(url)
             return True
         except (OSError,ValueError):return False
@@ -69,7 +69,7 @@ def cmd_app(args):
     port=sock.getsockname()[1]
     cp.atomic_write(registry,json.dumps({'host':host,'port':port,'root':str(c.hermes_root)}))
     url=f'http://{browser_host}:{port}/?'+urllib.parse.urlencode({'token':token,**({'profile':c.profile} if c.profile else {})})
-    print('Companion kit · '+str(c.hermes_root))
+    print('Tamanitomo · '+str(c.hermes_root))
     print(url)
     if host=='0.0.0.0':
         for address in lan_addresses():print('Local network: '+url.replace(browser_host,address,1))
@@ -77,7 +77,7 @@ def cmd_app(args):
     print('Close with Ctrl-C. Installed Hermes gateway jobs run independently.')
     app=build(home=c.home,token=token,state_dir=state)
     @app.get('/api/instance')
-    def instance():return {'app':'companion-kit','root':str(c.hermes_root),'protocol':1}
+    def instance():return {'app':'tamanitomo','root':str(c.hermes_root),'protocol':1}
     server=uvicorn.Server(uvicorn.Config(app,host=host,port=port,log_level='warning',access_log=False))
     def open_when_ready():
         for _ in range(200):

@@ -1,4 +1,4 @@
-"""The `companion` command, split by what each part is for.
+"""The `tamanitomo` command, split by what each part is for.
 
     common      where the kit lives, how a home is resolved
     questions   the setup questionnaire and its pickers
@@ -13,7 +13,7 @@
     menu        the interactive roster
     main        argument parsing
 
-`bin/companion` is a thin entry point onto `main.run()`.
+`bin/tamanitomo` is a thin entry point onto `main.run()`.
 """
 from __future__ import annotations
 import pathlib, sys

@@ -80,6 +80,8 @@ def register(app,select,access_token=''):
         installation=next(k for k,v in app.state.runtimes.items() if v is rt)
         prefix='/api/hermes/'+installation
         response=JSONResponse({'prefix':prefix,'profile':profile,'running':True})
+        response.set_cookie('tamanitomo_dashboard',app.state.dashboard_cookie,httponly=True,
+                            samesite='strict',secure=request.url.scheme=='https',path='/api/hermes/',max_age=86400)
         response.set_cookie('companion_dashboard',app.state.dashboard_cookie,httponly=True,
                             samesite='strict',secure=request.url.scheme=='https',path='/api/hermes/',max_age=86400)
         return response
@@ -119,8 +121,10 @@ def register(app,select,access_token=''):
 
     @app.websocket('/api/hermes/{installation}/{path:path}')
     async def websocket_proxy(websocket:WebSocket,installation:str,path:str):
-        cookie_ok=secrets.compare_digest(websocket.cookies.get('companion_dashboard',''),app.state.dashboard_cookie)
-        proxy_ok=bool(access_token) and secrets.compare_digest(websocket.headers.get('x-companion-token',''),access_token)
+        dash_cookie=websocket.cookies.get('tamanitomo_dashboard') or websocket.cookies.get('companion_dashboard','')
+        cookie_ok=secrets.compare_digest(dash_cookie,app.state.dashboard_cookie)
+        ws_token=websocket.headers.get('x-tamanitomo-token') or websocket.headers.get('x-companion-token','')
+        proxy_ok=bool(access_token) and secrets.compare_digest(ws_token,access_token)
         if not cookie_ok and not proxy_ok:
             await websocket.close(code=1008);return
         from urllib.parse import urlsplit

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A watchdog for a life, not for an install.
 
-`companion doctor` answers "was this set up correctly", once, by hand. This
+`tamanitomo doctor` answers "was this set up correctly", once, by hand. This
 answers "is she still all right", every hour, with nobody watching. The failure
 it exists for is the one that started the v2 review: a pulse job rate-limited at
 09:30, forty-seven failed runs over two days, and nothing anywhere saying so —

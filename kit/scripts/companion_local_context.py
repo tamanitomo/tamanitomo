@@ -6,20 +6,23 @@ remain available for historical retrieval. Other plugins' context is retained.
 from __future__ import annotations
 import copy,re
 
-BEGIN='<!-- companion-kit:continuity:begin -->'
-END='<!-- companion-kit:continuity:end -->'
+BEGIN='<!-- tamanitomo:continuity:begin -->'
+END='<!-- tamanitomo:continuity:end -->'
+LEGACY_BEGIN='<!-- companion-kit:continuity:begin -->'
+LEGACY_END='<!-- companion-kit:continuity:end -->'
 
 def without_snapshot(sidecar,raw,agent):
     if not isinstance(sidecar,str) or not isinstance(raw,str) or not sidecar.startswith(raw+'\n\n'):
         return None
     prefix=sidecar[:len(raw)];extra=sidecar[len(raw):]
-    if extra.count(BEGIN)==1 and extra.count(END)==1:
-        head,rest=extra.split(BEGIN,1)
-        body,tail=rest.split(END,1)
-        if f'[{agent} — continuity' not in body:return None
-        result=prefix+head.rstrip()
-        if tail.strip():result+='\n\n'+tail.lstrip()
-        return result
+    for b_marker, e_marker in ((BEGIN, END), (LEGACY_BEGIN, LEGACY_END)):
+        if extra.count(b_marker)==1 and extra.count(e_marker)==1:
+            head,rest=extra.split(b_marker,1)
+            body,tail=rest.split(e_marker,1)
+            if f'[{agent} — continuity' not in body:return None
+            result=prefix+head.rstrip()
+            if tail.strip():result+='\n\n'+tail.lstrip()
+            return result
     # Earlier Kit hooks were unfenced. Recognize the complete, exact envelope;
     # ambiguous or mixed suffixes are left alone. Never match inside raw user text.
     marker='\n\n[Current time: '

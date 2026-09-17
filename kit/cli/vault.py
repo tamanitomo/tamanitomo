@@ -1,4 +1,4 @@
-"""`companion restore` — the way back from a bad edit.
+"""`tamanitomo restore` — the way back from a bad edit.
 
 Everything a companion is made of is plain text in one folder, and a job commits
 that folder every fifteen minutes. This is the front door to that history: list

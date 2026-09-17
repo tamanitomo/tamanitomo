@@ -688,7 +688,7 @@ workspaceHandlers.voice=async()=>{
   if($('voice-inherit')?.checked){await action('/voice/inherit',{});return;}
   const file=$('studio-voice-clip')?.files[0];
   if(file){
-   const response=await fetch(scoped('/api/voice/reference?provider='+encodeURIComponent(selected)),{method:'POST',headers:{'content-type':'application/octet-stream',...(token?{'x-companion-token':token}:{})},body:file});
+    const response=await fetch(scoped('/api/voice/reference?provider='+encodeURIComponent(selected)),{method:'POST',headers:{'content-type':'application/octet-stream',...(token?{'x-tamanitomo-token':token,'x-companion-token':token}:{})},body:file});
    if(!response.ok)throw Error((await response.json()).detail);
   }
   await action('/voice',{provider:selected,...collect()});
@@ -1663,7 +1663,10 @@ workspaceHandlers['image-studio']=async()=>{
   const file=$('workflow-import-file').files[0];if(!file)return;
   runImport(async()=>{
    const headers={'content-type':'application/octet-stream','x-image-name':file.name.replace(/[^\w.\- ]/g,'')};
-   if(token)headers['x-companion-token']=token;
+    if(token){
+      headers['x-tamanitomo-token']=token;
+      headers['x-companion-token']=token;
+    }
    const response=await fetch(scoped('/api/images/import'),{method:'POST',headers,body:file});
    if(!response.ok)throw Error((await response.json().catch(()=>({}))).detail||'That image could not be read');
    return response.json();

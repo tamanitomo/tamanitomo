@@ -58,6 +58,8 @@ logs/
 *.crt
 *.pfx
 auth.json
+.leak-patterns*
+.privacy-patterns*
 
 # Editor & OS artifacts
 .DS_Store

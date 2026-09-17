@@ -77,8 +77,8 @@ def trash(c,relative,revision=None):
         if revision is not None and hashlib.sha256(path.read_bytes()).hexdigest()!=revision:
             raise FileExistsError('This file changed since you opened it. Reload before moving it to trash.')
         ident=uuid.uuid4().hex
-        folder=c.vault/'.trash'/'companion-kit'/ident
-        if (c.vault/'.trash').is_symlink() or (c.vault/'.trash'/'companion-kit').is_symlink():
+        folder=c.vault/'.trash'/'tamanitomo'/ident
+        if (c.vault/'.trash').is_symlink() or (c.vault/'.trash'/'tamanitomo').is_symlink():
             raise ValueError('Trash must not be a symbolic link')
         folder.mkdir(parents=True)
         cp.atomic_write(folder/'metadata.json',json.dumps({'id':ident,'path':relative,'deleted_at':dt.datetime.now(dt.timezone.utc).isoformat()}))
@@ -86,19 +86,23 @@ def trash(c,relative,revision=None):
     return {'trashed':relative,'id':ident}
 
 def trash_list(c):
-    root=c.vault/'.trash'/'companion-kit'
-    if root.is_symlink() or root.parent.is_symlink():raise ValueError('Trash must not be a symbolic link')
     rows=[]
-    if root.is_dir():
-        for folder in root.iterdir():
-            if folder.is_symlink() or not (folder/'file').is_file():continue
-            try:rows.append(json.loads((folder/'metadata.json').read_text()))
-            except (OSError,ValueError):continue
+    for sub in ('tamanitomo','companion-kit'):
+        root=c.vault/'.trash'/sub
+        if root.exists():
+            if root.is_symlink() or root.parent.is_symlink():raise ValueError('Trash must not be a symbolic link')
+            if root.is_dir():
+                for folder in root.iterdir():
+                    if folder.is_symlink() or not (folder/'file').is_file():continue
+                    try:rows.append(json.loads((folder/'metadata.json').read_text()))
+                    except (OSError,ValueError):continue
     return {'files':sorted(rows,key=lambda r:r['deleted_at'],reverse=True)}
 
 def restore(c,ident):
     if not isinstance(ident,str) or not __import__('re').fullmatch('[a-f0-9]{32}',ident):raise ValueError('Invalid trash entry')
-    folder=c.vault/'.trash'/'companion-kit'/ident
+    folder=c.vault/'.trash'/'tamanitomo'/ident
+    if not folder.exists():
+        folder=c.vault/'.trash'/'companion-kit'/ident
     if any(p.is_symlink() for p in (folder,folder.parent,folder.parent.parent,folder/'file',folder/'metadata.json')):raise ValueError('Invalid trash entry')
     with cp.file_lock(c.vault/'.companion-editor.lock'):
         row=json.loads((folder/'metadata.json').read_text())

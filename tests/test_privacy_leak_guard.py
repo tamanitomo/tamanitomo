@@ -1,10 +1,12 @@
-"""Privacy and sanitization regression test.
+"""Privacy and secret sanitization regression test.
 
-Guarantees that no personal identifiers, private hostnames, local paths,
-or sensitive personal names (Friend, Friend, Sam, personal companion references)
-leak into tracked repository files as development continues.
+Guarantees that no private cryptographic keys, live API credentials,
+unhashed tokens, or configured confidential developer identifiers leak into
+tracked repository files as development continues.
 """
 from __future__ import annotations
+import json
+import os
 import pathlib
 import re
 import subprocess
@@ -19,45 +21,84 @@ BINARY_EXTENSIONS = {
     '.onnx', '.pyc', '.zip', '.tar', '.gz', '.whl'
 }
 
-# Forbidden regex patterns (case-insensitive unless noted)
-FORBIDDEN_PATTERNS = [
-    (re.compile(r'\bzach\b', re.IGNORECASE), "Personal name: Friend"),
-    (re.compile(r'\bjoyner\b', re.IGNORECASE), "Personal name: Friend"),
-    (re.compile(r'\bsam\b', re.IGNORECASE), "Personal name: Sam"),
-    (re.compile(r'\b(tamanitomo-host|tamanitomo-host|tamanitomo-host|tamanitomo-host)\b', re.IGNORECASE), "Private hostname"),
-    (re.compile(r'100\.99\.72\.3'), "Private network IP"),
-    (re.compile(r'example', re.IGNORECASE), "Private domain: example"),
-    (re.compile(r'/home/user', re.IGNORECASE), "Private home path: /home/user"),
+# Standard secret & credential patterns that should never appear in git
+STANDARD_FORBIDDEN_PATTERNS = [
+    (re.compile(r'-----BEGIN\s+(?:RSA|DSA|EC|OPENSSH|PGP)?\s*PRIVATE\s+KEY-----'), "Private cryptographic key"),
+    (re.compile(r'\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}\b'), "GitHub Personal Access Token"),
+    (re.compile(r'\bsk-[a-zA-Z0-9]{20,}\b'), "OpenAI / API Secret Key"),
+    (re.compile(r'\bxai-[a-zA-Z0-9]{20,}\b'), "xAI Secret Key"),
+    (re.compile(r'https?://[a-zA-Z0-9_-]+:[^@\s/]+@[a-zA-Z0-9.-]+'), "URL with embedded password"),
 ]
 
-# Pattern for Gemma: allowed only when referencing Google Gemma AI model / family
-NOVA_PATTERN = re.compile(r'\bgemma\b', re.IGNORECASE)
-ALLOWED_NOVA_SUBSTRINGS = [
-    'google/gemma',
-    "'gemma' in nl: family = 'gemma'",
+# Local custom patterns file (gitignored, for developer-specific redactions)
+CONFIG_PATHS = [
+    ROOT / '.leak-patterns.json',
+    ROOT / '.leak-patterns',
+    pathlib.Path.home() / '.config' / 'tamanitomo' / 'leak-patterns.json',
 ]
 
-def scan_text_for_leaks(text: str, filename: str = '') -> list[str]:
+
+def load_custom_patterns() -> list[tuple[re.Pattern, str, list[str]]]:
+    """Load developer-specific leak patterns from local gitignored configuration or env."""
+    patterns: list[tuple[re.Pattern, str, list[str]]] = []
+    raw_data = None
+
+    # 1. Check environment variable
+    env_patterns = os.environ.get('TAMANITOMO_LEAK_PATTERNS')
+    if env_patterns:
+        try:
+            raw_data = json.loads(env_patterns)
+        except Exception:
+            pass
+
+    # 2. Check local files
+    if not raw_data:
+        for p in CONFIG_PATHS:
+            if p.is_file():
+                try:
+                    raw_data = json.loads(p.read_text(encoding='utf-8'))
+                    break
+                except Exception:
+                    pass
+
+    if isinstance(raw_data, list):
+        for entry in raw_data:
+            if isinstance(entry, dict) and 'pattern' in entry:
+                try:
+                    pat = re.compile(entry['pattern'], re.IGNORECASE)
+                    label = entry.get('label', 'Confidential identifier')
+                    allowed = entry.get('allowed_substrings', [])
+                    patterns.append((pat, label, allowed))
+                except Exception:
+                    pass
+    return patterns
+
+
+def scan_text_for_leaks(text: str, filename: str = '', custom_patterns: list | None = None) -> list[str]:
     """Scan text content and return any violation strings with line numbers."""
     violations = []
     lines = text.splitlines()
+    active_custom = load_custom_patterns() if custom_patterns is None else custom_patterns
+
     for lineno, line in enumerate(lines, 1):
-        # 1. Check general forbidden patterns
-        for pattern, label in FORBIDDEN_PATTERNS:
+        # 1. Check standard forbidden patterns
+        for pattern, label in STANDARD_FORBIDDEN_PATTERNS:
             if pattern.search(line):
                 violations.append(f"{filename}:{lineno} [{label}] -> {line.strip()}")
 
-        # 2. Check Gemma pattern (allowing only Google model references)
-        if NOVA_PATTERN.search(line):
-            lower_line = line.lower()
-            if not any(allowed in lower_line for allowed in ALLOWED_NOVA_SUBSTRINGS):
-                violations.append(f"{filename}:{lineno} [Personal identifier: Nova] -> {line.strip()}")
+        # 2. Check custom confidential patterns
+        for pattern, label, allowed in active_custom:
+            if pattern.search(line):
+                lower_line = line.lower()
+                if not any(a.lower() in lower_line for a in allowed):
+                    violations.append(f"{filename}:{lineno} [{label}] -> {line.strip()}")
 
     return violations
 
+
 class PrivacyLeakGuardTests(unittest.TestCase):
     def test_no_personal_identifiers_in_tracked_files(self):
-        """Ensure all git-tracked files in the repository contain zero personal identifiers."""
+        """Ensure all git-tracked files in the repository contain zero personal or secret identifiers."""
         r = subprocess.run(['git', 'ls-files'], cwd=ROOT, capture_output=True, text=True, check=True)
         tracked_files = [f.strip() for f in r.stdout.splitlines() if f.strip()]
 
@@ -76,7 +117,7 @@ class PrivacyLeakGuardTests(unittest.TestCase):
 
             try:
                 content = file_path.read_text(encoding='utf-8', errors='ignore')
-            except Exception as exc:
+            except Exception:
                 continue
 
             violations = scan_text_for_leaks(content, rel_path)
@@ -86,24 +127,29 @@ class PrivacyLeakGuardTests(unittest.TestCase):
         self.assertEqual(
             all_violations,
             [],
-            "Personal data or identifiers detected in repository:\n" + "\n".join(all_violations)
+            "Personal data or credentials detected in repository:\n" + "\n".join(all_violations)
         )
 
     def test_scanner_detects_prohibited_terms(self):
-        """Verify the leak detection scanner triggers on all prohibited identifiers."""
-        self.assertTrue(scan_text_for_leaks("Hello Friend, welcome!"))
-        self.assertTrue(scan_text_for_leaks("Author: Friend"))
-        self.assertTrue(scan_text_for_leaks("Talking with Sam today"))
-        self.assertTrue(scan_text_for_leaks("Connecting to TamanitomoHost over tailscale"))
-        self.assertTrue(scan_text_for_leaks("Host: TamanitomoHost"))
-        self.assertTrue(scan_text_for_leaks("http://127.0.0.1:38439"))
-        self.assertTrue(scan_text_for_leaks("https://her.example.com"))
-        self.assertTrue(scan_text_for_leaks("/home/user/projects"))
-        self.assertTrue(scan_text_for_leaks("My name is Nova"))
+        """Verify the leak detection scanner triggers on prohibited secrets and custom patterns."""
+        # Standard secret detectors
+        self.assertTrue(scan_text_for_leaks("-----BEGIN OPENSSH PRIVATE KEY-----"))
+        self.assertTrue(scan_text_for_leaks("ghp_1234567890abcdefghijklmnopqrstuvwxyz12"))
+        self.assertTrue(scan_text_for_leaks("sk-1234567890abcdef1234567890abcdef123456"))
+        self.assertTrue(scan_text_for_leaks("xai-1234567890abcdef1234567890abcdef123456"))
+        self.assertTrue(scan_text_for_leaks("https://service-user:supersecretpass123@example.internal/api"))
 
-        # Allowed model references should NOT trigger
+        # Custom patterns (using synthetic confidential test term)
+        synthetic_custom = [
+            (re.compile(r'\bclassified_term\b', re.IGNORECASE), "Confidential test identifier", ["allowed_classified_term"])
+        ]
+        self.assertTrue(scan_text_for_leaks("Found a classified_term in code", custom_patterns=synthetic_custom))
+        self.assertFalse(scan_text_for_leaks("Found an allowed_classified_term in code", custom_patterns=synthetic_custom))
+
+        # Benign text should NOT trigger
+        self.assertFalse(scan_text_for_leaks("Tamanitomo is a companion application."))
         self.assertFalse(scan_text_for_leaks("{'provider': 'openrouter', 'model': 'google/gemma-4-26b-a4b-it:free'}"))
-        self.assertFalse(scan_text_for_leaks("if 'gemma' in nl: family = 'Gemma'"))
+
 
 if __name__ == '__main__':
     unittest.main()

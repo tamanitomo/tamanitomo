@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Companion Kit — 1-Command Android Termux Turnkey Setup
+# Tamanitomo — 1-Command Android Termux Turnkey Setup
 #
-# Sets up Companion Kit + Hermes Agent on an Android device running Termux.
+# Sets up Tamanitomo + Hermes Agent on an Android device running Termux.
 # Configures 24/7 background gateway, Telegram bot, cloud inference (Grok,
 # OpenRouter, OpenAI), autonomous companion routines, and web workspace.
 # ==============================================================================
@@ -35,10 +35,11 @@ WHEELHOUSE_SOURCE=""
 DRY_RUN=0
 TEST_MODE=0
 NON_INTERACTIVE=0
+UPGRADE_MODE=0
 
 usage() {
   cat <<EOF
-${BOLD}Companion Kit — Android Termux Setup${RESET}
+${BOLD}Tamanitomo — Android Termux Setup${RESET}
 
 Usage:
   bash setup-termux.sh [OPTIONS]
@@ -58,6 +59,7 @@ Options:
   --port <port>             Web workspace port (default: 38439)
   --remote-pin <pin>        4-digit PIN for remote network access
   --wheelhouse <path|url>   Custom wheelhouse directory, tarball, or download URL
+  --upgrade                 Upgrade an existing installation in-place
   --non-interactive         Do not prompt for missing values (use defaults/flags)
   --test-mode               Run on non-Android Linux simulating Termux environment
   --dry-run                 Validate inputs and show generated configuration only
@@ -82,6 +84,7 @@ while [[ $# -gt 0 ]]; do
     --port) PORT="$2"; shift 2 ;;
     --remote-pin) REMOTE_PIN="$2"; shift 2 ;;
     --wheelhouse) WHEELHOUSE_SOURCE="$2"; shift 2 ;;
+    --upgrade) UPGRADE_MODE=1; shift ;;
     --non-interactive) NON_INTERACTIVE=1; shift ;;
     --test-mode) TEST_MODE=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
@@ -92,7 +95,7 @@ done
 
 echo -e "${BOLD}${CYAN}"
 echo "  ╔═══════════════════════════════════════════════════════════════╗"
-echo "  ║        Companion Kit — Android Termux Turnkey Setup          ║"
+echo "  ║          Tamanitomo — Android Termux Turnkey Setup            ║"
 echo "  ╚═══════════════════════════════════════════════════════════════╝"
 echo -e "${RESET}"
 
@@ -119,11 +122,11 @@ if [[ "$IS_TERMUX" -eq 1 ]]; then
   PREFIX_DIR="${PREFIX:-/data/data/com.termux/files/usr}"
 else
   HOME_DIR="${HOME}"
-  PREFIX_DIR="/tmp/companion-termux-test/usr"
+  PREFIX_DIR="/tmp/tamanitomo-termux-test/usr"
   mkdir -p "$PREFIX_DIR"
 fi
 
-# Auto-detect if running directly from an existing companion-kit checkout
+# Auto-detect if running directly from an existing checkout
 DETECTED_KIT_DIR=""
 CURRENT_DIR="$(pwd)"
 if [[ -f "$CURRENT_DIR/kit/cli/main.py" ]]; then
@@ -138,13 +141,52 @@ elif [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
 fi
 
 HERMES_HOME="${HERMES_HOME:-$HOME_DIR/.hermes}"
-KIT_DIR="${KIT_DIR:-${DETECTED_KIT_DIR:-$HOME_DIR/companion-kit}}"
+if [[ -z "${KIT_DIR:-}" ]]; then
+  if [[ -n "${DETECTED_KIT_DIR:-}" ]]; then
+    KIT_DIR="$DETECTED_KIT_DIR"
+  elif [[ -d "$HOME_DIR/tamanitomo" ]]; then
+    KIT_DIR="$HOME_DIR/tamanitomo"
+  elif [[ -d "$HOME_DIR/companion-kit" ]]; then
+    KIT_DIR="$HOME_DIR/companion-kit"
+  else
+    KIT_DIR="$HOME_DIR/tamanitomo"
+  fi
+fi
 VAULT_DIR="${HOME_DIR}/vault"
 
 echo -e "${DIM}Destination home: ${HOME_DIR}${RESET}"
 echo -e "${DIM}Hermes directory: ${HERMES_HOME}${RESET}"
-echo -e "${DIM}Companion Kit:    ${KIT_DIR}${RESET}"
+echo -e "${DIM}Tamanitomo:       ${KIT_DIR}${RESET}"
 echo ""
+
+if [[ "$UPGRADE_MODE" -eq 1 ]]; then
+  echo -e "${CYAN}→ Upgrading existing installation in $KIT_DIR...${RESET}"
+  if [[ ! -d "$KIT_DIR" ]]; then
+    echo -e "${RED}Error: Cannot find existing installation at $KIT_DIR${RESET}" >&2
+    exit 1
+  fi
+  if [[ -d "$KIT_DIR/.git" ]]; then
+    echo -e "  Pulling latest commits from git..."
+    git -C "$KIT_DIR" fetch origin main 2>/dev/null || true
+    git -C "$KIT_DIR" pull --ff-only origin main 2>/dev/null || true
+  fi
+  VENV_DIR="$KIT_DIR/.venv"
+  if [[ -f "$KIT_DIR/requirements.txt" && -x "$VENV_DIR/bin/pip" ]]; then
+    echo -e "  Updating Python dependencies..."
+    "$VENV_DIR/bin/pip" install -r "$KIT_DIR/requirements.txt" >/dev/null 2>&1 || true
+  fi
+  echo -e "  Refreshing companion templates and cron shims..."
+  "$VENV_DIR/bin/python" "$KIT_DIR/bin/tamanitomo" --home "$HERMES_HOME" upgrade --answers "$HOME_DIR/.companion-init-answers.json" >/dev/null 2>&1 || \
+  "$VENV_DIR/bin/python" "$KIT_DIR/bin/tamanitomo" --home "$HERMES_HOME" upgrade >/dev/null 2>&1 || true
+  if command -v sv >/dev/null 2>&1; then
+    echo -e "  Restarting services..."
+    for s in tamanitomo-workspace companion-workspace tamanitomo-gateway companion-gateway; do
+      sv restart "$s" 2>/dev/null || true
+    done
+  fi
+  echo -e "${BOLD}${GREEN}  ✓ Tamanitomo upgrade complete!${RESET}"
+  exit 0
+fi
 
 # Request wake-lock on Termux so Android CPU doesn't sleep
 if [[ "$IS_TERMUX" -eq 1 ]]; then
@@ -388,9 +430,9 @@ if [[ "$SYS_ARCH" == "aarch64" || "$SYS_ARCH" == "arm64" ]]; then
     fi
   fi
 
-  # 2. Local check: repository wheels or companion-wheels-aarch64.tar.gz
+  # 2. Local check: repository wheels or wheelhouse tarballs
   if [[ $(find "$WHEELS_DIR" -maxdepth 1 -name "*.whl" 2>/dev/null | wc -l) -lt 10 ]]; then
-    for candidate_dir in "$CURRENT_DIR/wheels" "$KIT_DIR/wheels" "$HOME_DIR/companion-kit/wheels"; do
+    for candidate_dir in "$CURRENT_DIR/wheels" "$KIT_DIR/wheels" "$HOME_DIR/tamanitomo/wheels" "$HOME_DIR/companion-kit/wheels"; do
       if [[ -d "$candidate_dir" && $(find "$candidate_dir" -maxdepth 1 -name "*.whl" 2>/dev/null | wc -l) -ge 10 ]]; then
         cp "$candidate_dir"/*.whl "$WHEELS_DIR/" 2>/dev/null || true
         break
@@ -399,7 +441,7 @@ if [[ "$SYS_ARCH" == "aarch64" || "$SYS_ARCH" == "arm64" ]]; then
   fi
 
   if [[ $(find "$WHEELS_DIR" -maxdepth 1 -name "*.whl" 2>/dev/null | wc -l) -lt 10 ]]; then
-    for candidate_tar in "$CURRENT_DIR/companion-wheels-aarch64.tar.gz" "$KIT_DIR/companion-wheels-aarch64.tar.gz" "$HOME_DIR/companion-kit/companion-wheels-aarch64.tar.gz"; do
+    for candidate_tar in "$CURRENT_DIR/tamanitomo-wheels-aarch64.tar.gz" "$KIT_DIR/tamanitomo-wheels-aarch64.tar.gz" "$CURRENT_DIR/companion-wheels-aarch64.tar.gz" "$KIT_DIR/companion-wheels-aarch64.tar.gz" "$HOME_DIR/companion-kit/companion-wheels-aarch64.tar.gz"; do
       if [[ -f "$candidate_tar" ]]; then
         tar -xzf "$candidate_tar" -C "$WHEELS_DIR" 2>/dev/null || true
         break
@@ -680,10 +722,10 @@ fi
 if [[ "$IS_TERMUX" -eq 1 ]]; then
   echo -e "${CYAN}→ Setting up 24/7 background services in Termux...${RESET}"
   SV_DIR="$PREFIX_DIR/var/service"
-  mkdir -p "$SV_DIR/companion-gateway/log" "$SV_DIR/companion-workspace/log"
+  mkdir -p "$SV_DIR/tamanitomo-gateway/log" "$SV_DIR/tamanitomo-workspace/log"
 
-  # 1. Hermes Gateway run script
-  cat > "$SV_DIR/companion-gateway/run" <<EOF
+  # 1. Tamanitomo Gateway run script (Hermes Gateway)
+  cat > "$SV_DIR/tamanitomo-gateway/run" <<EOF
 #!/data/data/com.termux/files/usr/bin/sh
 export HOME=${HOME_DIR}
 export PREFIX=${PREFIX_DIR}
@@ -693,22 +735,24 @@ export HERMES_ACCEPT_HOOKS=1
 cd "${HOME_DIR}" || exit 1
 exec hermes gateway run --replace
 EOF
-  chmod +x "$SV_DIR/companion-gateway/run"
+  chmod +x "$SV_DIR/tamanitomo-gateway/run"
 
   # Gateway logger
-  cat > "$SV_DIR/companion-gateway/log/run" <<EOF
+  cat > "$SV_DIR/tamanitomo-gateway/log/run" <<EOF
 #!/data/data/com.termux/files/usr/bin/sh
 export LOGDIR=${PREFIX_DIR}/var/log
 exec ${PREFIX_DIR}/share/termux-services/svlogger
 EOF
-  chmod +x "$SV_DIR/companion-gateway/log/run"
+  chmod +x "$SV_DIR/tamanitomo-gateway/log/run"
 
-  # 2. Companion Workspace run script
-  cat > "$SV_DIR/companion-workspace/run" <<EOF
+  # 2. Tamanitomo Workspace run script
+  cat > "$SV_DIR/tamanitomo-workspace/run" <<EOF
 #!/data/data/com.termux/files/usr/bin/sh
 export HOME=${HOME_DIR}
 export PREFIX=${PREFIX_DIR}
 export HERMES_HOME=${HERMES_HOME}
+export TAMANITOMO_BIND=0.0.0.0
+export TAMANITOMO_PORT=${PORT}
 export COMPANION_BIND=0.0.0.0
 export COMPANION_PORT=${PORT}
 export PATH="${KIT_DIR}/.venv/bin:${PREFIX_DIR}/bin:\$PATH"
@@ -716,20 +760,24 @@ export PYTHONPATH="${KIT_DIR}:${KIT_DIR}/kit/scripts"
 cd "${KIT_DIR}" || exit 1
 exec ${KIT_DIR}/.venv/bin/python -m kit.app.hosted
 EOF
-  chmod +x "$SV_DIR/companion-workspace/run"
+  chmod +x "$SV_DIR/tamanitomo-workspace/run"
 
   # Workspace logger
-  cat > "$SV_DIR/companion-workspace/log/run" <<EOF
+  cat > "$SV_DIR/tamanitomo-workspace/log/run" <<EOF
 #!/data/data/com.termux/files/usr/bin/sh
 export LOGDIR=${PREFIX_DIR}/var/log
 exec ${PREFIX_DIR}/share/termux-services/svlogger
 EOF
-  chmod +x "$SV_DIR/companion-workspace/log/run"
+  chmod +x "$SV_DIR/tamanitomo-workspace/log/run"
+
+  # Backward compatibility symlinks for legacy service names
+  ln -sfn "$SV_DIR/tamanitomo-gateway" "$SV_DIR/companion-gateway"
+  ln -sfn "$SV_DIR/tamanitomo-workspace" "$SV_DIR/companion-workspace"
 
   # Setup Termux:Boot autostart script
   BOOT_DIR="$HOME_DIR/.termux/boot"
   mkdir -p "$BOOT_DIR"
-  cat > "$BOOT_DIR/start-companion-services" <<EOF
+  cat > "$BOOT_DIR/start-tamanitomo-services" <<EOF
 #!/data/data/com.termux/files/usr/bin/sh
 /data/data/com.termux/files/usr/bin/termux-wake-lock >/dev/null 2>&1 || true
 export PREFIX=${PREFIX_DIR}
@@ -740,7 +788,8 @@ export PATH="${PREFIX_DIR}/bin:${KIT_DIR}/.venv/bin:\$PATH"
 
 /data/data/com.termux/files/usr/bin/service-daemon start >/dev/null 2>&1 &
 EOF
-  chmod +x "$BOOT_DIR/start-companion-services"
+  chmod +x "$BOOT_DIR/start-tamanitomo-services"
+  ln -sfn "$BOOT_DIR/start-tamanitomo-services" "$BOOT_DIR/start-companion-services"
 
   # Enable and start services via termux-services
   export SVDIR="$SV_DIR"
@@ -750,15 +799,15 @@ EOF
     fi
   done
   if command -v sv-enable >/dev/null 2>&1; then
-    sv-enable companion-gateway || true
-    sv-enable companion-workspace || true
+    sv-enable tamanitomo-gateway || true
+    sv-enable tamanitomo-workspace || true
   fi
   if command -v service-daemon >/dev/null 2>&1; then
     service-daemon start || true
   fi
   if command -v sv >/dev/null 2>&1; then
-    sv up companion-gateway || true
-    sv up companion-workspace || true
+    sv up tamanitomo-gateway || true
+    sv up tamanitomo-workspace || true
   fi
 fi
 
@@ -783,7 +832,7 @@ fi
 # ------------------------------------------------------------------------------
 echo ""
 echo -e "${BOLD}${GREEN}================================================================${RESET}"
-echo -e "${BOLD}${GREEN}  ✓ Companion Kit Setup Complete! ${RESET}"
+echo -e "${BOLD}${GREEN}  ✓ Tamanitomo Setup Complete! ${RESET}"
 echo -e "${BOLD}${GREEN}================================================================${RESET}"
 echo ""
 echo -e "  ${BOLD}Companion Name:${RESET}    ${COMPANION_NAME}"
@@ -805,8 +854,8 @@ echo -e "     and set to ${YELLOW}Unrestricted / Don't optimize${RESET} so Andro
 echo -e "  2. ${BOLD}Autostart on Reboot:${RESET} Install ${CYAN}Termux:Boot${RESET} from F-Droid to automatically"
 echo -e "     start your companion whenever the phone restarts."
 echo -e "  3. ${BOLD}Service Controls:${RESET}"
-echo -e "     • Check gateway:   ${DIM}sv status companion-gateway${RESET}"
-echo -e "     • Check workspace: ${DIM}sv status companion-workspace${RESET}"
-echo -e "     • Restart:         ${DIM}sv restart companion-gateway${RESET}"
+echo -e "     • Check gateway:   ${DIM}sv status tamanitomo-gateway${RESET}"
+echo -e "     • Check workspace: ${DIM}sv status tamanitomo-workspace${RESET}"
+echo -e "     • Restart:         ${DIM}sv restart tamanitomo-gateway${RESET}"
 echo ""
 echo -e "${BOLD}Enjoy chatting with ${COMPANION_NAME}!${RESET}"

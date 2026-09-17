@@ -60,7 +60,7 @@ fi
 STASHED=0
 if ! git diff-index --quiet HEAD -- 2>/dev/null; then
   echo -e "${YELLOW}! Local modifications detected. Stashing changes before update...${RESET}"
-  git stash push -m "Auto-stash before Companion Kit update $(date +%s)"
+  git stash push -m "Auto-stash before Tamanitomo update $(date +%s)"
   STASHED=1
 fi
 
@@ -136,16 +136,20 @@ if [[ "$RESTART_SERVICE" -eq 1 ]]; then
 
   # Termux Services
   if command -v sv >/dev/null 2>&1; then
-    if sv status companion-workspace >/dev/null 2>&1; then
-      echo -e "  Restarting Termux service: ${BOLD}companion-workspace${RESET}..."
-      sv restart companion-workspace 2>/dev/null || true
-      RESTARTED=1
-    fi
-    if sv status companion-gateway >/dev/null 2>&1; then
-      echo -e "  Restarting Termux service: ${BOLD}companion-gateway${RESET}..."
-      sv restart companion-gateway 2>/dev/null || true
-      RESTARTED=1
-    fi
+    for svc in tamanitomo-workspace companion-workspace; do
+      if sv status "$svc" >/dev/null 2>&1; then
+        echo -e "  Restarting Termux service: ${BOLD}${svc}${RESET}..."
+        sv restart "$svc" 2>/dev/null || true
+        RESTARTED=1
+      fi
+    done
+    for svc in tamanitomo-gateway companion-gateway; do
+      if sv status "$svc" >/dev/null 2>&1; then
+        echo -e "  Restarting Termux service: ${BOLD}${svc}${RESET}..."
+        sv restart "$svc" 2>/dev/null || true
+        RESTARTED=1
+      fi
+    done
   fi
 
   if [[ "$RESTARTED" -eq 1 ]]; then
@@ -160,6 +164,6 @@ VERSION="2.1.0"
 
 echo ""
 echo -e "${BOLD}${GREEN}================================================================${RESET}"
-echo -e "${BOLD}${GREEN}  ✓ Companion Kit is updated! (v${VERSION} · ${TARGET_COMMIT})${RESET}"
+echo -e "${BOLD}${GREEN}  ✓ Tamanitomo is updated! (v${VERSION} · ${TARGET_COMMIT})${RESET}"
 echo -e "${BOLD}${GREEN}================================================================${RESET}"
 echo ""

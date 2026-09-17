@@ -132,8 +132,6 @@ class RealQuestionTests(unittest.TestCase):
             self.assertTrue(cap==-1 or 0<=cap<=3,key)
             if cap:self.assertLess(cap,len(catalog.options(key,catalog.genders(key)[0])),key)
 
-if __name__=='__main__':unittest.main()
-
 
 class ConsolePresentationTests(unittest.TestCase):
     def test_off_page_selection_is_named_until_it_is_unticked(self):
@@ -219,10 +217,18 @@ class InteractiveControlsTests(unittest.TestCase):
         self.assertEqual(result,'Text 1. Text 2. Collects maps. Plays piano.')
 
     def test_all_traits_can_be_selected_and_flaws_can_be_skipped(self):
-        for key in ('core','flaws','likes'):
-            rows=catalog.options(key)
-            result=wiz.interview('Nova','Alex','warm',{'boundary':'best-friend',key:list(range(1,len(rows)+1))},quick=True)
+        base = {k: 1 for k in catalog.categories()}
+        base.update({'boundary': 'best-friend', 'visual': 'set', 'age': 30, 'birthdate': '', 'pronoun_set': 'she',
+                     'texting_style': 1, 'pet_names': 3, 'wont_do': 1, 'human_boundary': 1})
+        for key in ('core', 'flaws', 'likes'):
+            rows = catalog.options(key)
+            ans = dict(base, **{key: list(range(1, len(rows) + 1))})
+            result = wiz.interview('Nova', 'Alex', 'warm', ans, quick=True)
             self.assertTrue(result[key])
-        for skip in (wiz.SKIP_NONE,wiz.SKIP_EDIT):
-            result=wiz.interview('Nova','Alex','warm',{'boundary':'best-friend','flaws':skip},quick=True)
-            self.assertIn('fallible',result['flaws'])
+        for skip in (wiz.SKIP_NONE, wiz.SKIP_EDIT):
+            ans = dict(base, flaws=skip)
+            result = wiz.interview('Nova', 'Alex', 'warm', ans, quick=True)
+            self.assertIn('fallible', result['flaws'])
+
+if __name__ == '__main__':
+    unittest.main()

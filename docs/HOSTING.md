@@ -2,10 +2,10 @@
 
 ## Example deployment architecture
 
-- Public URL: https://companion.example.com
-- ProxyHost: Traefik → Authelia admin policy → `companion-web` Nginx container on private network.
-- BackendHost: `companion-workspace.service` (systemd user service), one backend listening on localhost and private network (e.g. `10.0.0.2:8770` or Tailscale).
-- Nginx serves static UI files from `/opt/companion-kit/static` and proxies API/media to the backend over the private network.
+- Public URL: https://tamanitomo.example.com
+- ProxyHost: Traefik → Authelia admin policy → `tamanitomo-web` Nginx container on private network.
+- BackendHost: `tamanitomo.service` (systemd user service, with legacy alias `companion-workspace.service`), one backend listening on localhost and private network (e.g. `10.0.0.2:8770` or Tailscale).
+- Nginx serves static UI files from `/opt/tamanitomo/static` and proxies API/media to the backend over the private network.
 - Hermes profiles, vault, model credentials, and jobs remain on the backend host.
 
 The backend token is injected server-side from the root-only Nginx configuration. It is not embedded in public frontend files. Nginx independently checks Authelia on every request, including assets and media. Traefik clears client-supplied identity/token headers before authentication. A host-specific Authelia deny rule prevents non-admins falling through to an API bypass.
@@ -17,19 +17,19 @@ This is a single-owner administration workspace. An allowed admin can manage eve
 On the backend host:
 
 ```sh
-systemctl --user status companion-workspace
-systemctl --user restart companion-workspace
-journalctl --user -u companion-workspace --since today
+systemctl --user status tamanitomo
+systemctl --user restart tamanitomo
+journalctl --user -u tamanitomo --since today
 ```
 
-The user already has linger enabled, so the service starts without a desktop login. The service file is in `~/.config/systemd/user/companion-workspace.service`; the repository copy in `deploy/` records example paths and addresses. Do not start a second backend against the same profiles. The ordinary launcher reuses this backend.
+The user already has linger enabled, so the service starts without a desktop login. The service file is in `~/.config/systemd/user/tamanitomo.service` (or `companion-workspace.service`); the repository copy in `deploy/` records example paths and addresses. Do not start a second backend against the same profiles. The ordinary launcher reuses this backend.
 
 On the proxy host:
 
 ```sh
-docker ps --filter name=companion-web
-docker logs --tail 50 companion-web
-docker restart companion-web
+docker ps --filter name=tamanitomo-web
+docker logs --tail 50 tamanitomo-web
+docker restart tamanitomo-web
 ```
 
 The container has `unless-stopped` restart policy, no published host port, a read-only root, and writable temporary mounts. Both machines and private networking must remain available for remote access. Hermes's gateway continues independently when the web backend stops. Browser closure has no effect on either service.
@@ -38,7 +38,7 @@ The container has `unless-stopped` restart policy, no published host port, a rea
 
 Update the kit source/dependencies on the backend host, run its tests, and restart the backend after in-flight app actions complete. Copy matching `kit/app/static/` assets to the proxy host's static directory. Nginx uses no-store responses. The API location also forwards HTTP/1.1 Upgrade/Connection headers for the embedded Hermes dashboard’s WebSockets. Its server-injected backend token authenticates that connection; browser cookies remain stripped at this boundary. Do not copy the access token into that directory or into a shared source ZIP.
 
-Changing/rotating the backend token also requires rendering `deploy/nginx.conf.template` into the proxy host's private Nginx config and reloading Nginx. `COMPANION_PUBLIC_ORIGIN` permits same-origin browser writes through HTTPS termination; it does not replace token authentication. `COMPANION_BIND` is an explicit comma-separated IPv4 listen list. Keep the backend off public interfaces.
+Changing/rotating the backend token also requires rendering `deploy/nginx.conf.template` into the proxy host's private Nginx config and reloading Nginx. `TAMANITOMO_PUBLIC_ORIGIN` (or legacy `COMPANION_PUBLIC_ORIGIN`) permits same-origin browser writes through HTTPS termination; it does not replace token authentication. `TAMANITOMO_BIND` (or `COMPANION_BIND`) is an explicit comma-separated IPv4 listen list. Keep the backend off public interfaces.
 
 Nginx resolves Authelia through Docker DNS (`127.0.0.11`) with a 10-second cache. Keep the variable-based authentication upstream in the template: a literal hostname in `proxy_pass` retains the startup address and can cause HTTP 500 errors after Authelia is recreated.
 

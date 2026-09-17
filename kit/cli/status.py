@@ -1,4 +1,4 @@
-"""`companion status` — how she is, right now, in one screen.
+"""`tamanitomo status` — how she is, right now, in one screen.
 
 doctor answers "is this installed correctly". This answers "what is she doing,
 when did anything last work, and is anything wrong" — the question you actually

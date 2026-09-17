@@ -25,7 +25,7 @@ def _enable_vt():
 _VT_OK=_enable_vt()
 
 def ascii_mode():
-    explicit=os.environ.get('COMPANION_ASCII','').lower()
+    explicit=(os.environ.get('TAMANITOMO_ASCII') or os.environ.get('COMPANION_ASCII','')).lower()
     if explicit:return explicit not in ('0','false','no')
     return _tty() and os.name=='nt' and not os.environ.get('WT_SESSION')
 
@@ -205,7 +205,8 @@ def uses_selector():
     fallback. Same conditions choose() itself tests, kept together so the two
     cannot drift apart."""
     if not _tty():return False
-    if os.environ.get('COMPANION_PLAIN','').lower() in ('1','true','yes'):return False
+    plain=(os.environ.get('TAMANITOMO_PLAIN') or os.environ.get('COMPANION_PLAIN','')).lower()
+    if plain in ('1','true','yes'):return False
     if os.environ.get('TERM')=='dumb':return False
     try:
         import prompt_toolkit

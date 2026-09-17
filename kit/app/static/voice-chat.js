@@ -26,7 +26,7 @@ function mountBrowserVoice(){
     $('voice-record').disabled=true;$('voice-record').classList.remove('is-recording');$('voice-cancel').hidden=true;status.textContent='Microphone off · transcribing…';
     try{
      const blob=new Blob(state.chunks,{type:state.recorder.mimeType});if(blob.size>12*1024*1024)throw Error('Recording too large. Please use a shorter turn.');
-     const response=await fetch(scoped('/api/voice-chat/transcribe'),{method:'POST',headers:{'content-type':blob.type,...(token?{'x-companion-token':token}:{})},body:blob});
+     const response=await fetch(scoped('/api/voice-chat/transcribe'),{method:'POST',headers:{'content-type':blob.type,...(token?{'x-tamanitomo-token':token,'x-companion-token':token}:{})},body:blob});
      if(!response.ok)throw Error((await response.json()).detail||'Transcription failed');
      const operation=await followOperation(await response.json(),async r=>{if(state.cancelled||current!=='chat'){if(current==='chat')voiceControlsBusy(false);return;}voiceControlsBusy(false);$('chat-message').value=r.transcript;sessionStorage.setItem(chatKey('draft'),r.transcript);voiceReplyRequested=true;$('chat-form').requestSubmit();});
      if(operation.status!=='complete')throw Error(operation.error||'Transcription could not finish. You can type instead.');

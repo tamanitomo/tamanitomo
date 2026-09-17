@@ -8,33 +8,11 @@ import re
 import sys
 import secrets
 
-def is_blacklisted_undergarment(it) -> bool:
-    """Strict undergarment blacklist (panties, thong, lingerie, underpants, boxers, briefs). Only visible at Stage 4 (Bonded)."""
-    desc = it.get('description', '') if isinstance(it, dict) else str(it or '')
-    wid = it.get('id', '') if isinstance(it, dict) else ''
-    text = f"{wid} {desc}".lower()
-    return bool(re.search(r'\b(panties|panty|thong|thongs|lingerie|underpants|undies|boxers|boxer|briefs|brief)\b', text))
-
-def is_intimate_garment(it) -> bool:
-    """General undergarment detection. Sports bras are excluded (allowed as athletic tops)."""
-    desc = it.get('description', '') if isinstance(it, dict) else str(it or '')
-    wid = it.get('id', '') if isinstance(it, dict) else ''
-    text = f"{wid} {desc}".lower()
-    if 'sports bra' in text or 'sports-bra' in text or 'sports_bra' in text:
-        return False
-    return bool(re.search(r'\b(panties|panty|bra|bras|bralette|underwear|undergarment|undergarments|boxers|boxer|briefs|brief|thong|thongs|lingerie|underpants|undies)\b', text))
-
-def filter_wardrobe_items(items, stage: int):
-    """Tiered wardrobe visibility:
-    - Stage < 2 (Just Met / Flirting): hides all undergarments; sports bras allowed as athletic tops.
-    - Stage 2-3 (Chemistry / Intimacy): shows all wardrobe items EXCEPT blacklisted undergarments.
-    - Stage >= 4 (Bonded): shows all wardrobe items without restriction.
-    """
-    if stage >= 4:
-        return items or []
-    if stage >= 2:
-        return [it for it in (items or []) if not is_blacklisted_undergarment(it)]
-    return [it for it in (items or []) if not is_intimate_garment(it)]
+from .wardrobe import (
+    filter_wardrobe_items,
+    is_blacklisted_undergarment,
+    is_intimate_garment,
+)
 
 
 from contextvars import ContextVar
@@ -82,13 +60,14 @@ def build(home=None,token='',state_dir=None):
     from fastapi.staticfiles import StaticFiles
 
     from .runtime import Runtime, Operations, app_directory
-    public_origin=os.environ.get('COMPANION_PUBLIC_ORIGIN','').rstrip('/')
+    public_origin=(os.environ.get('TAMANITOMO_PUBLIC_ORIGIN') or os.environ.get('COMPANION_PUBLIC_ORIGIN','')).rstrip('/')
     if public_origin:
         from urllib.parse import urlsplit
         parsed=urlsplit(public_origin)
         if parsed.scheme!='https' or not parsed.netloc or parsed.path or parsed.query or parsed.fragment or parsed.username:raise ValueError('Public origin must be an HTTPS origin without a path')
     initial=cc.load(home)
-    state=pathlib.Path(state_dir) if state_dir else (initial.hermes_root/'.companion-app' if home else app_directory())
+    default_home_state = initial.hermes_root/'.companion-app' if (initial.hermes_root/'.companion-app').exists() and not (initial.hermes_root/'.tamanitomo-app').exists() else initial.hermes_root/'.tamanitomo-app'
+    state=pathlib.Path(state_dir) if state_dir else (default_home_state if home else app_directory())
     runtimes={'existing':Runtime(initial.hermes_root), 'managed':Runtime(state/'managed-hermes',managed=True)}
     selection=ContextVar('companion_selection',default=('existing',initial.profile or 'default'))
 
@@ -137,8 +116,8 @@ def build(home=None,token='',state_dir=None):
                 if c.remote_pin:
                     import hashlib
                     expected=hashlib.sha256(f"{c.remote_pin}:{app.state.pin_salt}".encode()).hexdigest()
-                    cookie_token=request.cookies.get('companion_pin_session','')
-                    header_pin=request.headers.get('x-companion-pin','')
+                    cookie_token=request.cookies.get('tamanitomo_pin_session') or request.cookies.get('companion_pin_session','')
+                    header_pin=request.headers.get('x-tamanitomo-pin') or request.headers.get('x-companion-pin','')
                     pin_ok=(bool(cookie_token) and secrets.compare_digest(cookie_token,expected)) or \
                            (bool(header_pin) and secrets.compare_digest(header_pin,c.remote_pin))
                     if not pin_ok:
@@ -148,9 +127,10 @@ def build(home=None,token='',state_dir=None):
         # tunnel. Absent, the only protection is the localhost bind, and the
         # page says so rather than implying otherwise.
         if token and request.url.path.startswith(('/api','/media')):
-            supplied=request.headers.get('x-companion-token') or request.query_params.get('token','')
+            supplied=request.headers.get('x-tamanitomo-token') or request.headers.get('x-companion-token') or request.query_params.get('token','')
+            dash_cookie=request.cookies.get('tamanitomo_dashboard') or request.cookies.get('companion_dashboard','')
             dashboard_cookie=(request.url.path.startswith('/api/hermes/') and secrets.compare_digest(
-                request.cookies.get('companion_dashboard',''),app.state.dashboard_cookie))
+                dash_cookie,app.state.dashboard_cookie))
             if not dashboard_cookie and not secrets.compare_digest(supplied.encode(),token.encode()):
                 return JSONResponse({'error':'bad or missing token'},status_code=401)
         origin=request.headers.get('origin')
@@ -395,8 +375,10 @@ def build(home=None,token='',state_dir=None):
         if c.remote_pin:
             import hashlib
             token=hashlib.sha256(f"{c.remote_pin}:{app.state.pin_salt}".encode()).hexdigest()
+            resp.set_cookie('tamanitomo_pin_session',token,max_age=86400*30,httponly=True,samesite='lax')
             resp.set_cookie('companion_pin_session',token,max_age=86400*30,httponly=True,samesite='lax')
         elif old.remote_pin and not c.remote_pin:
+            resp.delete_cookie('tamanitomo_pin_session')
             resp.delete_cookie('companion_pin_session')
         return resp
 
@@ -410,6 +392,7 @@ def build(home=None,token='',state_dir=None):
             import hashlib
             token=hashlib.sha256(f"{c.remote_pin}:{app.state.pin_salt}".encode()).hexdigest()
             resp=JSONResponse({'ok':True})
+            resp.set_cookie('tamanitomo_pin_session',token,max_age=86400*30,httponly=True,samesite='lax')
             resp.set_cookie('companion_pin_session',token,max_age=86400*30,httponly=True,samesite='lax')
             return resp
         return JSONResponse({'ok':False,'detail':'Incorrect 4-digit PIN'},status_code=403)
@@ -424,7 +407,7 @@ def build(home=None,token='',state_dir=None):
         urls=[f"http://{ip}:{port}" for ip in network_ips]
         import hashlib
         expected=hashlib.sha256(f"{c.remote_pin}:{app.state.pin_salt}".encode()).hexdigest() if c.remote_pin else ''
-        cookie_token=request.cookies.get('companion_pin_session','')
+        cookie_token=request.cookies.get('tamanitomo_pin_session') or request.cookies.get('companion_pin_session','')
         authenticated=is_local or (not c.remote_pin) or (bool(expected) and secrets.compare_digest(cookie_token,expected))
         return {
             'port':port,

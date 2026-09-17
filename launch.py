@@ -48,12 +48,16 @@ def bootstrap(args):
             print('Preparing the tamanitomo environment…',flush=True)
             venv.EnvBuilder(with_pip=True).create(directory)
         fingerprint=hashlib.sha256((ROOT/'requirements.txt').read_bytes()).hexdigest()
-        stamp=directory/'.companion-requirements'
+        stamp=directory/'.tamanitomo-requirements'
+        old_stamp=directory/'.companion-requirements'
+        if not stamp.exists() and old_stamp.exists():
+            try:old_stamp.replace(stamp)
+            except OSError:stamp=old_stamp
         if not stamp.exists() or stamp.read_text().strip()!=fingerprint:
             print('Installing tamanitomo dependencies…',flush=True)
             subprocess.run([str(python),'-m','pip','install','-r',str(ROOT/'requirements.txt')],check=True)
             stamp.write_text(fingerprint+'\n')
-    command=[str(python),str(ROOT/'bin/companion'),*(args or ['app'])]
+    command=[str(python),str(ROOT/'bin/tamanitomo'),*(args or ['app'])]
     # subprocess preserves Windows Ctrl-C handling; POSIX exec avoids an extra process.
     if os.name=='nt':return subprocess.call(command)
     os.execv(str(python),command)

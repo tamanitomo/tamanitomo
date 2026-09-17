@@ -175,7 +175,7 @@ class Companion:
     peer_interaction:bool=True
     # Which sensors this profile has switched on, by name.
     sensors:list=dataclasses.field(default_factory=list)
-    # Per-job model choices, written by `companion models`. Empty means "whatever
+    # Per-job model choices, written by `tamanitomo models`. Empty means "whatever
     # the profile is configured with"; the kit never picks a model for anyone.
     #   {"loops":{"model":..,"provider":..,"reasoning_effort":".."}, "reflection":{...},
     #    "fallbacks":[{"provider":..,"model":..}, ...]}
@@ -514,9 +514,10 @@ def migrate(kwargs:dict)->dict:
     return out
 
 def load(home:Optional[pathlib.Path]=None)->Companion:
-    """Resolve the active companion: explicit home, else $COMPANION_HOME, else
-    $HERMES_HOME, else ~/.hermes. Missing config yields safe defaults."""
-    home=pathlib.Path(home or os.environ.get('COMPANION_HOME')
+    """Resolve the active companion: explicit home, else $TAMANITOMO_HOME, else
+    $COMPANION_HOME, else $HERMES_HOME, else ~/.hermes. Missing config yields safe defaults."""
+    home=pathlib.Path(home or os.environ.get('TAMANITOMO_HOME')
+                      or os.environ.get('COMPANION_HOME')
                       or os.environ.get('HERMES_HOME') or default_home()).expanduser().absolute()
     path=home/CONFIG_NAME
     data={}

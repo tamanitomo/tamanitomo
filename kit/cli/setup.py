@@ -20,7 +20,7 @@ from .scaffold import finish, scaffold
 def cmd_init(args):
     c=resolve(args)
     if (c.home/cc.CONFIG_NAME).exists() and not args.force:
-        sys.exit(f'{c.home} is already a companion — use `companion doctor`, or --force to re-scaffold')
+        sys.exit(f'{c.home} is already a companion — use `tamanitomo doctor`, or --force to re-scaffold')
     raw=read_answers(args)
     ans=questionnaire(c,raw)
     c=apply_answers(c,ans)

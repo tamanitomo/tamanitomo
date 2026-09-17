@@ -1,4 +1,4 @@
-# Companion workspace (2.2 beta)
+# Tamanitomo workspace (2.2 beta)
 
 The app runs alongside Hermes. Its Python environment, UI, and release files are
 separate from Hermes's runtime. Hermes continues to own profiles, model calls,
@@ -11,26 +11,26 @@ For a first-time recipient, start with [the handoff checklist](FIRST_RUN.md).
 Extract the release into a permanent, writable folder. On Linux:
 
 ```sh
-chmod +x companion
-./companion
+chmod +x tamanitomo
+./tamanitomo
 ```
 
-On Windows, double-click `companion.cmd`, or run it from a terminal:
+On Windows, double-click `tamanitomo.cmd`, or run it from a terminal:
 
 ```powershell
-.\companion.cmd
+.\tamanitomo.cmd
 ```
 
 The launcher creates `.venv`, installs the app dependencies, and opens the local
 workspace. If Python 3.11+ is absent, it provisions Python using the official uv
 installer. Internet access is required on first setup. Later launches reuse the
 installed environment. Existing CLI commands still work, for example
-`./companion --home /path/to/profile doctor`.
+`./tamanitomo --home /path/to/profile doctor`.
 
 The app binds to `0.0.0.0:8770` for host and LAN browser access by default. A second launch opens the existing authenticated
 workspace when it belongs to the same Hermes root; if that port belongs to a
 different service, a free port is chosen. `app --no-open` suppresses browser launch.
-The existing terminal menu remains available through `bin/companion` with no arguments.
+The existing terminal menu remains available through `bin/tamanitomo` (or `bin/companion`) with no arguments.
 
 ## Choose an installation
 
@@ -44,9 +44,9 @@ directory. The staged official installer omits the global Hermes command/PATH st
 so it does not replace an existing `hermes` command. Host prerequisites and package
 caches may still be shared; this is data/runtime isolation, not an OS sandbox.
 
-The app's data directory is `%LOCALAPPDATA%\companion-kit` on Windows or
-`$XDG_DATA_HOME/companion-kit` (normally `~/.local/share/companion-kit`) on Linux.
-`COMPANION_APP_STATE` overrides it. Installation progress is resumable by rerunning
+The app's data directory is `%LOCALAPPDATA%\tamanitomo` on Windows or
+`$XDG_DATA_HOME/tamanitomo` (normally `~/.local/share/tamanitomo`) on Linux (with legacy
+fallback to `companion-kit`). `TAMANITOMO_APP_STATE` (or `COMPANION_APP_STATE`) overrides it. Installation progress is resumable by rerunning
 Install after an error; completed profiles and vault records are not rolled back.
 
 Installer references: [Hermes installation](https://hermes-agent.nousresearch.com/docs/getting-started/installation)

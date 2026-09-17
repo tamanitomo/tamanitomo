@@ -34,7 +34,7 @@ MEMORY CHECK: Before adding compact memory, run `{{MEMORY_CMD}} archive --apply`
    `{{ACTIVE_CMD}}`, and anything written there by hand is overwritten.
 
 7. Verify the continuity hook still answers:
-   `{{HOOK_TERMINAL_CMD}}` with `{}` supplied on standard input (or run `companion doctor`)
+   `{{HOOK_TERMINAL_CMD}}` with `{}` supplied on standard input (or run `tamanitomo doctor`)
    It must print one JSON object. If it does not, report that as a blocker — the agent is running without continuity until it is fixed.
 
 Do not change infrastructure, services, providers or packages from this job. Keep the output local and compact.

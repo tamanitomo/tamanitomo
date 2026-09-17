@@ -33,7 +33,7 @@ def apply_settings(c,changes):
     if 'image_style' in values:
         styles=cr.load_styles()
         if values['image_style'] not in styles:
-            raise ValueError('unknown image style; run `companion catalog --category images` to see them')
+            raise ValueError('unknown image style; run `tamanitomo catalog --category images` to see them')
     updated=cc.dataclasses.replace(c,**values)
     # Replies-only and a daily allowance contradict each other; the gate reads
     # policy first, so leaving a stale cap behind would only mislead the reader.

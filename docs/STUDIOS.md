@@ -42,7 +42,7 @@ This integration requires a Hermes dashboard build supporting `X-Forwarded-Prefi
 
 ## Vault
 
-Back, Parent, Vault root, and clickable breadcrumbs remain available while reading notes or search results. Move to trash stores the original file and metadata in `.trash/companion-kit/<id>/`; Restore refuses to overwrite a newer file at the original location. There is no permanent-delete control.
+Back, Parent, Vault root, and clickable breadcrumbs remain available while reading notes or search results. Move to trash stores the original file and metadata in `.trash/tamanitomo/<id>/` (with fallback to legacy `.trash/companion-kit/<id>/`); Restore refuses to overwrite a newer file at the original location. There is no permanent-delete control.
 
 Installation code, identity documents, companion runtime state, and databases are marked read-only and omit trash/edit controls. The server enforces the same restrictions. Identity documents remain editable through the dedicated companion/Identity editors. Credentials and hidden paths remain excluded entirely.
 

@@ -132,8 +132,8 @@ const TABS=[['now','Home'],['chat','Conversation'],['timeline','Timeline'],['pho
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const params=new URLSearchParams(location.search);
-const token=params.get('token')||sessionStorage.getItem('companion-token')||'';
-if(token)sessionStorage.setItem('companion-token',token);
+const token=params.get('token')||sessionStorage.getItem('tamanitomo-token')||sessionStorage.getItem('companion-token')||'';
+if(token){sessionStorage.setItem('tamanitomo-token',token);sessionStorage.setItem('companion-token',token);}
 if(params.has('token')){params.delete('token');history.replaceState(null,'',location.pathname+'?'+params+location.hash);}
 const INSTALLATION=params.get('installation')||'existing';
 let PROFILE=params.get('profile');
@@ -182,7 +182,10 @@ document.addEventListener('error',event=>{
 const workspaceHandlers={};
 async function api(path,options){
   const opts=Object.assign({headers:{'content-type':'application/json'}},options||{});
-  if(token)opts.headers['x-companion-token']=token;
+  if(token){
+    opts.headers['x-tamanitomo-token']=token;
+    opts.headers['x-companion-token']=token;
+  }
   const r=await fetch(scoped('/api'+path),opts);
   if(!r.ok){
     const d=await r.json().catch(()=>({}));
@@ -429,7 +432,10 @@ async function uploadPortrait(file){
   // Raw bytes, not multipart: the server reads the body and Pillow decides
   // whether it is a photograph.
   const headers={'content-type':'application/octet-stream'};
-  if(token)headers['x-companion-token']=token;
+  if(token){
+    headers['x-tamanitomo-token']=token;
+    headers['x-companion-token']=token;
+  }
   const r=await fetch(scoped('/api/portrait'),{method:'POST',headers,body:file});
   if(!r.ok){const error=new Error((await r.json().catch(()=>({}))).detail||('Request failed: '+r.status));error.status=r.status;throw error;}
   return r.json();

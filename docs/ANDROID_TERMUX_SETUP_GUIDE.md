@@ -133,13 +133,13 @@ You do not need to keep the Termux app open on your screen; it runs silently in 
 
 | Task | Command in Termux |
 |---|---|
-| **Check background service status** | `sv status companion-gateway` |
-| **Check web UI status** | `sv status companion-workspace` |
-| **Restart Telegram bot** | `sv restart companion-gateway` |
+| **Check background service status** | `sv status tamanitomo-gateway` |
+| **Check web UI status** | `sv status tamanitomo-workspace` |
+| **Restart Telegram bot** | `sv restart tamanitomo-gateway` |
 | **View live conversation logs** | `hermes logs -f` |
-| **Chat in terminal** | `companion chat` |
-| **Check scheduled cron jobs** | `companion schedule status` |
-| **Run system doctor** | `companion doctor` |
+| **Chat in terminal** | `tamanitomo chat` |
+| **Check scheduled cron jobs** | `tamanitomo schedule status` |
+| **Run system doctor** | `tamanitomo doctor` |
 
 ---
 

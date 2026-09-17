@@ -31,10 +31,16 @@ KIT = Path(__file__).resolve().parents[2]
 ANSI = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
 
 def app_directory():
+    if os.environ.get('TAMANITOMO_APP_STATE'):
+        return Path(os.environ['TAMANITOMO_APP_STATE']).expanduser().absolute()
     if os.environ.get('COMPANION_APP_STATE'):
         return Path(os.environ['COMPANION_APP_STATE']).expanduser().absolute()
     base = Path(os.environ.get('LOCALAPPDATA', str(Path.home()/'AppData/Local'))) if os.name == 'nt' else Path(os.environ.get('XDG_DATA_HOME', str(Path.home()/'.local/share')))
-    return base/'companion-kit'
+    new_path = base/'tamanitomo'
+    old_path = base/'companion-kit'
+    if not new_path.exists() and old_path.exists():
+        return old_path
+    return new_path
 
 
 def read_json(path, default):
@@ -429,7 +435,11 @@ def workspace_sessions_path(c):
     from one typed at a real terminal. The difference matters to the person
     reading the feed, so the workspace notes its own as it makes them.
     """
-    return Path(c.home)/'.companion-kit-sessions.json'
+    new_path = Path(c.home)/'.tamanitomo-sessions.json'
+    old_path = Path(c.home)/'.companion-kit-sessions.json'
+    if not new_path.exists() and old_path.exists():
+        return old_path
+    return new_path
 
 
 def read_workspace_sessions(c):

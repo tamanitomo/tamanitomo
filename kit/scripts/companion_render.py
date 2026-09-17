@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Template rendering for companion-kit.
+"""Template rendering for tamanitomo.
 
 Deliberately not Jinja: the kit must install with nothing but the standard
 library. Placeholders are {{KEY}}. A key given in Titlecase ({{Subj}}) renders

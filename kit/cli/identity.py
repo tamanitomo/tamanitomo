@@ -1,4 +1,4 @@
-"""`companion identity` — look at one part of the SOUL, or rebuild it.
+"""`tamanitomo identity` — look at one part of the SOUL, or rebuild it.
 
 A SOUL that has been lived in for six months cannot be regenerated wholesale.
 This lets one section be re-rendered from the current answers while every other

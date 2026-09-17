@@ -13,7 +13,7 @@ def runtime_lock(root):
             else:
                 import fcntl
                 fcntl.flock(f.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
-        except OSError:raise ValueError('Close the running Companion Kit host (Ctrl-C in its launcher window), then launch again to update.')
+        except OSError:raise ValueError('Close the running Tamanitomo host (Ctrl-C in its launcher window), then launch again to update.')
         try:yield
         finally:
             if os.name=='nt':f.seek(0);msvcrt.locking(f.fileno(),msvcrt.LK_UNLCK,1)
@@ -50,4 +50,4 @@ def _apply_pending(root):
             elif name in written:dest.unlink(missing_ok=True)
         raise
     shutil.rmtree(folder)
-    print('Companion Kit updated. Previous code is in '+str(backup))
+    print('Tamanitomo updated. Previous code is in '+str(backup))

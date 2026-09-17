@@ -33,7 +33,15 @@ def request(path, payload=None, timeout=5):
         raise ValueError(str(value['error']))
     return value
 
-def directory(rt): return rt.root / 'companion-engines' / 'ollama'
+def directory(rt):
+    p = rt.root / 'tamanitomo-engines' / 'ollama'
+    old = rt.root / 'companion-engines' / 'ollama'
+    if not p.exists() and old.exists():
+        return old
+    return p
+
+def default_llama_service():
+    return os.environ.get('TAMANITOMO_LLAMA_SERVICE') or os.environ.get('COMPANION_LLAMA_SERVICE', 'companion-llama')
 
 def binary(rt):
     root = directory(rt) / 'runtime'
@@ -44,7 +52,7 @@ def binary(rt):
 
 def _service_status(unit_name=None):
     if not unit_name:
-        unit_name = os.environ.get('COMPANION_LLAMA_SERVICE', 'companion-llama')
+        unit_name = default_llama_service()
     try:
         res = subprocess.run(
             ["systemctl", "--user", "show", unit_name,
@@ -168,7 +176,7 @@ def status(rt):
         error = 'Local model server is offline. Use Start to launch the background engine.'
 
     # Systemd service status
-    service_name = os.environ.get('COMPANION_LLAMA_SERVICE', 'companion-llama')
+    service_name = default_llama_service()
     srv = _service_status(service_name)
     if not srv.get('found'):
         srv = _service_status('llama-server')
@@ -261,7 +269,7 @@ def install(rt, report):
     return {'note': 'Ollama installed on the Hermes host. Start it, then download a recommended model.'}
 
 def start(rt, report):
-    service_name = os.environ.get('COMPANION_LLAMA_SERVICE', 'companion-llama')
+    service_name = default_llama_service()
     srv = _service_status(service_name)
     if not srv.get('found'):
         srv = _service_status('llama-server')
@@ -286,7 +294,7 @@ def start(rt, report):
 def server_control(rt, action: str, report=None):
     if action not in ('start', 'stop', 'restart'):
         raise ValueError(f"Invalid server action {action!r}")
-    service_name = os.environ.get('COMPANION_LLAMA_SERVICE', 'companion-llama')
+    service_name = default_llama_service()
     srv = _service_status(service_name)
     if not srv.get('found'):
         srv = _service_status('llama-server')
@@ -324,7 +332,7 @@ def switch_model(rt, model_path: str, alias: str = '', ctx_size: int = 131072, r
     mmprojs = [m for m in src.parent.glob('*.gguf') if 'mmproj' in m.name.lower()]
     mmproj_arg = f" --mmproj {mmprojs[0]}" if mmprojs else ""
 
-    service_name = os.environ.get('COMPANION_LLAMA_SERVICE', 'companion-llama')
+    service_name = default_llama_service()
     dropin_dir = Path.home() / f'.config/systemd/user/{service_name}.service.d'
     dropin_dir.mkdir(parents=True, exist_ok=True)
     dropin_file = dropin_dir / '98-companion-model.conf'

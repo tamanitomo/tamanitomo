@@ -1,9 +1,13 @@
+<p align="center">
+  <img src="kit/app/static/logo.png" alt="Tamanitomo" width="160" height="160">
+</p>
+
 <h1 align="center">tamanitomo · 魂の友</h1>
 
 <p align="center">
   <strong>Soul of a Friend — Give your AI companion a life that continues when you close the window.</strong><br>
   A sovereign companion workspace built on <a href="https://hermes-agent.nousresearch.com/">Hermes Agent</a> —
-  runs on your hardware, keeps its memory on your disk, and cannot message you at 3am.
+  runs on your hardware, keeps its memory on your disk, and can message you when it wants to!
 </p>
 
 <p align="center">
