@@ -3,6 +3,23 @@ $ErrorActionPreference = 'Stop'
 $env:PYTHONUTF8 = '1'
 $kitRoot = $PSScriptRoot
 $kitArgs = $args
+
+# Ensure desktop shortcut exists with custom icon
+$desktop = [System.Environment]::GetFolderPath('Desktop')
+$lnkPath = Join-Path $desktop 'Tamanitomo.lnk'
+if ($desktop -and (Test-Path $desktop) -and !(Test-Path $lnkPath)) {
+    try {
+        $wsh = New-Object -ComObject WScript.Shell
+        $lnk = $wsh.CreateShortcut($lnkPath)
+        $lnk.TargetPath = Join-Path $kitRoot 'tamanitomo.cmd'
+        $lnk.WorkingDirectory = $kitRoot
+        $icon = Join-Path $kitRoot 'kit\app\static\favicon.ico'
+        if (Test-Path $icon) { $lnk.IconLocation = "$icon,0" }
+        $lnk.Description = 'Tamanitomo Companion Workspace'
+        $lnk.Save()
+    } catch {}
+}
+
 $venvPython = Join-Path $kitRoot '.venv\Scripts\python.exe'
 if (Test-Path $venvPython) {
     & $venvPython (Join-Path $kitRoot 'launch.py') @kitArgs
