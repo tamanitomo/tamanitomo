@@ -181,7 +181,23 @@ Optional, and each one degrades to simply not existing: a messaging platform con
 
 ## Install
 
-### Linux / macOS / WSL
+### Turnkey 1-Click Installers
+
+- **Linux (Turnkey Systemd Setup)**:
+  ```sh
+  git clone https://github.com/tamanitomo/tamanitomo && cd tamanitomo
+  bash setup-linux.sh
+  ```
+- **Android / Termux (24/7 Dedicated Phone Server)**:
+  ```sh
+  curl -fsSL https://raw.githubusercontent.com/tamanitomo/tamanitomo/main/setup-termux.sh | bash
+  ```
+  *(See [docs/ANDROID_TERMUX_SETUP_GUIDE.md](docs/ANDROID_TERMUX_SETUP_GUIDE.md) for full guide and Telegram integration)*
+
+- **Native Windows**:
+  Double-click `tamanitomo.cmd` (or run `.\tamanitomo.cmd` in PowerShell / Command Prompt).
+
+### Manual Setup (Linux / macOS / WSL)
 
 ```sh
 git clone https://github.com/tamanitomo/tamanitomo && cd tamanitomo
@@ -190,7 +206,7 @@ python3 -m venv .venv
 ./tamanitomo
 ```
 
-### Native Windows
+### Manual Setup (Native Windows)
 
 ```powershell
 py -3 -m venv .venv
@@ -203,7 +219,7 @@ If `py` is unavailable, use your Python executable directly — Hermes ships one
 execution-policy change.
 
 Both launchers use `.venv` when it exists and fall back to the system interpreter otherwise, so
-`./companion` is the same command everywhere.
+`./tamanitomo` (or legacy `./companion`) is the same command everywhere.
 
 Hermes home discovery follows `HERMES_HOME`, then `%LOCALAPPDATA%\hermes` on native Windows and
 `~/.hermes` elsewhere. `--home` overrides it. Native Windows and WSL are separate installations;
@@ -218,11 +234,11 @@ Give the companion its own Hermes profile first, so its jobs, memory, bot and id
 
 ```sh
 hermes profile create nova
-./companion --home ~/.hermes/profiles/nova init
+./tamanitomo --home ~/.hermes/profiles/nova init
 ```
 
-Running `./companion` with no arguments opens the workspace, including a roster and graphical setup.
-The terminal menu is still available through `.venv/bin/python bin/companion`.
+Running `./tamanitomo` with no arguments opens the workspace, including a roster and graphical setup.
+The terminal menu is still available through `.venv/bin/python bin/tamanitomo` (or `bin/companion`).
 
 ### What the interview asks
 
@@ -252,18 +268,18 @@ Anything you skip is marked `✎ EDIT` in `SOUL.md` and listed in `COMPANION-TOD
 shows the whole configuration — including what you deliberately left out — before a single file is
 written.
 
-Browse the catalog first if you like: `./companion catalog --gender female`.
+Browse the catalog first if you like: `./tamanitomo catalog --gender female`.
 
 ### Then
 
 ```sh
-./companion --home ~/.hermes/profiles/nova chat      # say hello, and approve the hook when asked
-./companion --home ~/.hermes/profiles/nova doctor    # resolve any ! lines
-./companion --home ~/.hermes/profiles/nova schedule active
-./companion --home ~/.hermes/profiles/nova app       # the local page
+./tamanitomo --home ~/.hermes/profiles/nova chat      # say hello, and approve the hook when asked
+./tamanitomo --home ~/.hermes/profiles/nova doctor    # resolve any ! lines
+./tamanitomo --home ~/.hermes/profiles/nova schedule active
+./tamanitomo --home ~/.hermes/profiles/nova app       # the local page
 ```
 
-`--home` works on either side of the subcommand, so `./companion doctor --home ...` is fine too.
+`--home` works on either side of the subcommand, so `./tamanitomo doctor --home ...` is fine too.
 
 Installing without a person at the keyboard? The hook still needs consent, and Hermes has a
 non-interactive way to give it:
@@ -274,7 +290,7 @@ hermes -p nova chat -q 'hello' --oneshot --accept-hooks
 
 Pick the model chain by probing it, not by reading a catalog. Free models list well and behave
 badly: on a real install several advertised ones returned 403 or 404, and one answered cleanly and
-then returned 429 minutes later. `companion models` saves choices; use the app’s response probe to test the saved chain. Expect a paid last
+then returned 429 minutes later. `tamanitomo models` saves choices; use the app’s response probe to test the saved chain. Expect a paid last
 resort in the chain to be reached more often than the price list suggests.
 
 Setup creates the scheduled jobs **paused** by default. `doctor` will show two `!` lines until you
@@ -290,7 +306,7 @@ will tell you exactly what state you are in.
 ## Adopt an agent you already have
 
 ```sh
-./companion --home ~/.hermes upgrade --soul keep
+./tamanitomo --home ~/.hermes upgrade --soul keep
 ```
 
 **`keep` means keep.** Your `SOUL.md` is left byte-for-byte as it is, and the only thing added is
@@ -308,11 +324,11 @@ next year.
 
 ## Commands
 
-Put `--home` **before** the subcommand. On Windows, substitute `.\companion.cmd`.
+Put `--home` **before** the subcommand. On Windows, substitute `.\tamanitomo.cmd` (or legacy `.\companion.cmd`).
 
 | Command | What it does |
 | --- | --- |
-| `./companion` | Bootstrap dependencies and open the companion workspace |
+| `./tamanitomo` | Bootstrap dependencies and open the companion workspace |
 | `init` | First-time setup on this Hermes home |
 | `upgrade` | Adopt an existing Hermes agent — see [above](#adopt-an-agent-you-already-have) |
 | `add <name>` | Create another named profile alongside an existing one |
@@ -340,7 +356,7 @@ one machine — is in [docs/REFERENCE.md](docs/REFERENCE.md).
 ## The local page
 
 ```sh
-./companion --home ~/.hermes/profiles/nova app
+./tamanitomo --home ~/.hermes/profiles/nova app
 ```
 
 A profile-scoped browser workspace, available on the host and local network (port `8770` by default). The original companion views include:
@@ -532,7 +548,7 @@ trusting any single sentence here as a guarantee.
 - **A prompt does not guarantee model behavior.** Contact limits, quiet hours, content permissions
   and message expiry *are* enforced outside the model. Nothing else in `SOUL.md` is.
 - **Scheduled jobs make real model calls and cost real money.** Frequent loops can easily cost more
-  than any prompt trimming saves. `companion models` is where you make that cheaper.
+  than any prompt trimming saves. `tamanitomo models` is where you make that cheaper.
 - **This is not a backup product or a machine clone.** Accounts, credentials, MCP services and
   messaging stay Hermes's.
 - **Setup is recoverable step by step, not a rollback transaction.** Keep / append / replace are

@@ -124,4 +124,4 @@ into this repository or into a release archive.
 **If you ever ship a bundle that includes `site-packages`** — a frozen executable, an installer, a
 ZIP with the virtualenv inside — you would then be distributing `pyte`, and LGPL-3.0 obligations
 attach: include its license text and keep the user able to substitute their own build of it.
-Today's `./companion` launcher installs dependencies at runtime, so this does not apply.
+Today's `./tamanitomo` launcher installs dependencies at runtime, so this does not apply.

@@ -15,12 +15,12 @@ read [CONCEPTS.md](CONCEPTS.md) instead.
 
 ## Commands
 
-`--home` comes **before** the subcommand. On Windows substitute `.\companion.cmd`.
+`--home` comes **before** the subcommand. On Windows substitute `.\tamanitomo.cmd` (or `.\companion.cmd`).
 
 ```sh
-./companion --home ~/.hermes init
-./companion --home ~/.hermes/profiles/rowan doctor
-./companion --home ~/.hermes remove rowan --force
+./tamanitomo --home ~/.hermes init
+./tamanitomo --home ~/.hermes/profiles/rowan doctor
+./tamanitomo --home ~/.hermes remove rowan --force
 ```
 
 ### `init`, `add`, `upgrade`, `remove`
@@ -105,9 +105,9 @@ Existing jobs keep their current pin — Hermes stores it on the job — so re-p
 ### `identity`
 
 ```sh
-./companion --home <home> identity                      # list the sections
-./companion --home <home> identity appearance           # show one
-./companion --home <home> identity humor --rerender     # rebuild exactly one
+./tamanitomo --home <home> identity                      # list the sections
+./tamanitomo --home <home> identity appearance           # show one
+./tamanitomo --home <home> identity humor --rerender     # rebuild exactly one
 ```
 
 `SOUL.md` carries marker comments around each section, so one can be replaced while every other byte
@@ -122,8 +122,8 @@ a text editor.
 ### `restore`
 
 ```sh
-./companion --home <home> restore soul/SOUL.md                 # what versions exist
-./companion --home <home> restore soul/SOUL.md --commit <id>   # recover one
+./tamanitomo --home <home> restore soul/SOUL.md                 # what versions exist
+./tamanitomo --home <home> restore soul/SOUL.md --commit <id>   # recover one
 ```
 
 The vault is a local git repo — no remote is ever configured and nothing is pushed anywhere — with a
@@ -134,8 +134,8 @@ thing it was trying to save.
 ### `catalog`
 
 ```sh
-./companion catalog --gender male --category style
-./companion catalog --gender female            # every category, with counts
+./tamanitomo catalog --gender male --category style
+./tamanitomo catalog --gender female            # every category, with counts
 ```
 
 Read-only. Touches nothing.
@@ -149,9 +149,9 @@ how often the companion may message first, timezone, image style, the image time
 scheduled jobs run:
 
 ```sh
-./companion --home <home> settings                       # menu, or JSON when piped
-./companion --home <home> settings --set quiet_start=22:30 --set quiet_end=07:15
-./companion --home <home> settings --set outreach=updates_only --set outreach_per_day=1
+./tamanitomo --home <home> settings                       # menu, or JSON when piped
+./tamanitomo --home <home> settings --set quiet_start=22:30 --set quiet_end=07:15
+./tamanitomo --home <home> settings --set outreach=updates_only --set outreach_per_day=1
 ```
 
 Settable keys: `quiet_start`, `quiet_end`, `outreach`, `outreach_per_day`, `timezone`, `image_style`.
@@ -186,7 +186,7 @@ relationship frame, names, prose) is deliberately in neither: it lives in `SOUL.
 `--answers` takes JSON; `--vault` sets the vault root. **Never put credentials in answers.**
 
 ```sh
-./companion --home /path/to/hermes init --vault /path/to/vault \
+./tamanitomo --home /path/to/hermes init --vault /path/to/vault \
   --answers '{"agent_type":"companion","agent":"Nova","human":"Alex","pronoun_set":"she",
               "human_pronoun_set":"he","boundary":"best-friend","persona":"warm",
               "timezone":"Europe/London","context_tokens":32768,"cron_active":false,
@@ -494,7 +494,7 @@ The image timeline is **off by default**. Switch it on at setup, in the app, or 
 **96 images a day**. The kit does not install or switch providers.
 
 ```sh
-./companion --home <home> timeline on|off|status|prune
+./tamanitomo --home <home> timeline on|off|status|prune
 ```
 
 Opt-in adds two jobs: capture at :02, :17, :32, :47 (after each pulse), and model-free cleanup at
@@ -613,12 +613,12 @@ is backed up first. Switching an unrestricted multiplexer to dedicated converts 
 into an explicit allowlist, so future profiles must be enrolled deliberately.
 
 ```sh
-./companion --home <profile> gateway                       # interactive
-./companion --home <profile> gateway --mode dedicated
-./companion --home <profile> gateway --action preflight    # read-only checks
-./companion --home <profile> gateway --action status
-./companion --home <profile> gateway --action restart
-./companion --home <profile> gateway --action install --root-restarted
+./tamanitomo --home <profile> gateway                       # interactive
+./tamanitomo --home <profile> gateway --mode dedicated
+./tamanitomo --home <profile> gateway --action preflight    # read-only checks
+./tamanitomo --home <profile> gateway --action status
+./tamanitomo --home <profile> gateway --action restart
+./tamanitomo --home <profile> gateway --action install --root-restarted
 ```
 
 `gateway --action setup` opens Hermes's own platform/bot setup against that exact profile home —
