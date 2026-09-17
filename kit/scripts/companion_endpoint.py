@@ -9,21 +9,40 @@ Loopback remains the default, because these workers carry a companion's inner
 life and sending that off the machine should be a decision rather than a
 default. `--allow-remote` is that decision, made per job.
 """
+import json
 import os
 import pathlib
 import urllib.parse
 
 # llama.cpp accepts these; a strict OpenAI-shaped API rejects the whole request
-# for any one of them. The first four are optimisations, so dropping them costs
-# nothing but the prompt cache that only a local server was keeping anyway.
+# for any one of them. They are optimisations, so dropping them costs nothing
+# but the prompt cache that only a local server was keeping anyway.
 #
-# reasoning_effort is standard, but the value these workers ask for is tuned to
-# llama.cpp and hosted models accept different sets — mistral-medium-3.5 takes
-# only 'high' or 'none', and rejects the request outright for 'low'. Letting the
-# provider pick its own default is the portable choice for a worker that is
-# filling in a presence record, not reasoning hard about one.
-LOCAL_ONLY_FIELDS = ('id_slot', 'cache_prompt', 'chat_template_kwargs',
-                     'reasoning_budget_tokens', 'reasoning_effort')
+# reasoning_effort is deliberately NOT here. These workers are asked to hold a
+# routine, a wardrobe and a continuity rule in mind at once and answer in one
+# shot; stripping their thinking is how they started inventing anchors and
+# garments. A provider that will not take the value we ask for gets one it will.
+LOCAL_ONLY_FIELDS = ('id_slot', 'cache_prompt', 'chat_template_kwargs', 'reasoning_budget_tokens')
+
+# What each hosted API actually accepts, learned by asking it rather than
+# assuming. DeepSeek reasons natively and takes only these two efforts;
+# mistral-medium-3.5 rejects the request outright for 'low'.
+EFFORTS = {
+    'api.deepseek.com': ('none', 'high'),
+    'api.mistral.ai': ('none', 'high'),
+}
+
+# Providers that refuse response_format json_schema. They still honour
+# json_object, so the schema moves into the prompt instead of being enforced.
+NO_JSON_SCHEMA = ('api.deepseek.com',)
+
+# Reasoning tokens are billed against max_tokens, so a budget sized for a
+# non-thinking model gets spent thinking and the answer arrives truncated —
+# which surfaces as "response was incomplete", not as anything about thinking.
+# A presence record with a routine, a wardrobe and a continuity rule to reason
+# over spends thousands before it writes anything, and these models carry a
+# context measured in hundreds of thousands, so the headroom is cheap.
+THINKING_HEADROOM = 12000
 
 LOOPBACK = ('127.0.0.1', 'localhost', '::1')
 
@@ -92,11 +111,76 @@ def headers(api_key_env=''):
     return out
 
 
-def shape(payload, base_url):
-    """Drop the llama.cpp-only fields when the endpoint is not llama.cpp."""
+def _host(base_url):
+    return (urllib.parse.urlsplit(base_url).hostname or '').lower()
+
+
+def thinking_effort(base_url, requested='high'):
+    """The strongest thinking this endpoint will actually accept.
+
+    Asking a provider for an effort it does not publish is a 400, not a
+    downgrade, so the request never runs at all.
+    """
+    allowed = EFFORTS.get(_host(base_url))
+    if allowed is None:
+        return requested
+    return requested if requested in allowed else allowed[-1]
+
+
+def shape(payload, base_url, require_thinking=True):
+    """Make one payload acceptable to this endpoint without losing its meaning.
+
+    Three things differ between a llama.cpp server and a hosted API: the
+    optimisation fields it tolerates, whether it enforces a JSON schema, and
+    what it calls thinking. None of them should change what the worker is
+    asking for.
+    """
     if is_loopback(base_url):
         return payload
-    return {k: v for k, v in payload.items() if k not in LOCAL_ONLY_FIELDS}
+    out = {k: v for k, v in payload.items() if k not in LOCAL_ONLY_FIELDS}
+
+    if require_thinking:
+        out['reasoning_effort'] = thinking_effort(base_url, payload.get('reasoning_effort') or 'high')
+        # Thinking is spent from the same budget as the answer. Without room for
+        # both, the JSON arrives cut off mid-object and reads as a model that
+        # cannot follow instructions.
+        out['max_tokens'] = max(int(out.get('max_tokens') or 0), 0) + THINKING_HEADROOM
+    elif 'reasoning_effort' in out:
+        out.pop('reasoning_effort')
+
+    fmt = out.get('response_format') or {}
+    if fmt.get('type') == 'json_schema' and _host(base_url) in NO_JSON_SCHEMA:
+        # The schema stops being enforced, so it has to be stated. Dropping it
+        # silently is how a worker starts returning a shape nothing validates.
+        schema = (fmt.get('json_schema') or {}).get('schema')
+        out['response_format'] = {'type': 'json_object'}
+        if schema and out.get('messages'):
+            messages = [dict(m) for m in out['messages']]
+            messages[-1]['content'] = (
+                str(messages[-1].get('content', '')) +
+                '\n\nReturn one JSON object and nothing else. It must satisfy exactly this JSON Schema, '
+                'including every required field and no additional properties:\n' +
+                json.dumps(schema, ensure_ascii=False))
+            out['messages'] = messages
+    return out
+
+
+def confirm_thinking(reply, base_url):
+    """Whether the model actually thought, rather than being asked to.
+
+    A provider can accept reasoning_effort and return nothing reasoned. These
+    jobs are the reason the setting exists, so a silent downgrade is worth
+    seeing in the cron log rather than discovering through bad output.
+    """
+    if is_loopback(base_url):
+        return True
+    try:
+        details = (reply.get('usage') or {}).get('completion_tokens_details') or {}
+        if int(details.get('reasoning_tokens') or 0) > 0:
+            return True
+        return bool((reply.get('choices') or [{}])[0].get('message', {}).get('reasoning_content'))
+    except Exception:
+        return False
 
 
 def add_arguments(parser):

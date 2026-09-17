@@ -103,6 +103,9 @@ def pulse(c,base_url,model,slot=1,now=None,apply=True,phase="pulse",
                   data=json.dumps(companion_endpoint.shape(payload,base_url)).encode(),
                   headers=companion_endpoint.headers(api_key_env))
         with urllib.request.urlopen(request,timeout=300) as response:reply=json.load(response)
+        if not companion_endpoint.confirm_thinking(reply,base_url):
+            print('warning: model returned no reasoning; routine and wardrobe rules are easy to miss without it',
+                  file=sys.stderr)
         choice=reply['choices'][0]
         if choice.get('finish_reason')!='stop':raise ValueError('Local pulse response was incomplete')
         data=json.loads(choice['message']['content'])

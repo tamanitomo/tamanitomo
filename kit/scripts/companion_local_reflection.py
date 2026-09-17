@@ -151,6 +151,8 @@ def request_plan(c,kind,data,sources,base_url,model,slot,allow_remote=False,api_
         data=json.dumps(companion_endpoint.shape(payload,base_url)).encode(),
         headers=companion_endpoint.headers(api_key_env))
     with urllib.request.urlopen(req,timeout=300) as r:reply=json.load(r)
+    if not companion_endpoint.confirm_thinking(reply,base_url):
+        print('warning: model returned no reasoning',file=sys.stderr)
     choice=reply['choices'][0]
     if choice.get('finish_reason')!='stop':raise ValueError('reflection was truncated; nothing recorded')
     return json.loads(choice['message']['content']),reply.get('usage')
