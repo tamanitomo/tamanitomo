@@ -26,7 +26,9 @@ def stage(raw,root=ROOT):
         for name,data in files.items():
             if hashes[name]!=hashlib.sha256(data).hexdigest():raise ValueError('Update integrity check failed: '+name)
             dest=root/name
-            if any(p.is_symlink() for p in [dest,*dest.parents] if p!=root.parent):raise ValueError('Update destination contains a link')
+            for p in [dest,*dest.parents]:
+                if p==root:break
+                if p.is_symlink():raise ValueError('Update destination contains a link')
         version=files.get('VERSION',b'Unversioned').decode().strip()
         # Never overwrite a modified installed release. Development trees need manual updates.
         current=root/'SHA256SUMS.json'

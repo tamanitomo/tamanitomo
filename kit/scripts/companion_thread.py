@@ -57,7 +57,7 @@ def read(c,now=None,tail=4):
     con=None
     try:
         resolved=db.resolve()
-        if c.is_root and resolved.is_relative_to(c.hermes_root/'profiles'):
+        if c.is_root and resolved.is_relative_to((c.hermes_root/'profiles').resolve()):
             return {**out,'reason':'the root store redirects into a named profile'}
         if c.is_root:
             scope="lower(coalesce(s.profile_name,'')) IN ('','default')";params=()

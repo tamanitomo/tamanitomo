@@ -18,8 +18,9 @@ class VoiceChatTests(MediaReviewTests):
             self.assertEqual(r.status_code,200,r.text)
             for _ in range(100):
                 result=self.client.get('/api/operations/'+r.json()['id'],headers={'x-companion-token':'secret'}).json()
-                if result['status']!='running':break
-                time.sleep(.01)
+                if result.get('status')!='running':break
+                time.sleep(.05)
+            self.assertEqual(result.get('status'),'complete',result)
             self.assertEqual(result['result']['transcript'],'Hello there')
         self.assertFalse(seen[0][2].exists())
         self.assertEqual(self.client.post('/api/voice-chat/transcribe',content=b'x'*(voice_chat.MAX_AUDIO+1),headers=headers).status_code,413)

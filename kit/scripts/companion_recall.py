@@ -45,7 +45,7 @@ def _shares_store(c,db):
         if directory.exists():
             candidates.extend(p/'state.db' for p in directory.iterdir() if p.is_dir() and not p.name.startswith('.'))
         for other in candidates:
-            if other.absolute()==(c.home/'state.db').absolute():continue
+            if other.resolve()==(c.home/'state.db').resolve():continue
             if other.exists() and db.samefile(other):return True
         return False
     except OSError:
@@ -90,7 +90,7 @@ def search(c,query,limit=6,seconds=1.0):
     if db.exists() and time.monotonic()<deadline:
         try:
             resolved_db=db.resolve()
-            if c.is_root and resolved_db.is_relative_to(c.hermes_root/'profiles'):
+            if c.is_root and resolved_db.is_relative_to((c.hermes_root/'profiles').resolve()):
                 raise sqlite3.OperationalError('Root store redirects into a named profile')
             con=sqlite3.connect(resolved_db.as_uri()+'?mode=ro',uri=True,timeout=.1)
             con.execute('PRAGMA query_only=ON')

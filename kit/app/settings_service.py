@@ -29,8 +29,11 @@ def preserve_human_records(old, updated):
                 if not source.is_file():
                     continue
                 dest = updated.human_dir / source.relative_to(old.human_dir)
-                if any(parent.is_symlink() for parent in (dest, *dest.parents)):
-                    raise ValueError('Human record destination contains a link')
+                for parent in (dest, *dest.parents):
+                    if parent == updated.human_dir:
+                        break
+                    if parent.is_symlink():
+                        raise ValueError('Human record destination contains a link')
                 if dest.exists() and dest.read_bytes() != source.read_bytes():
                     raise ValueError('The new human-record location contains different records. Resolve them before changing sharing or the human name.')
                 if not dest.exists():

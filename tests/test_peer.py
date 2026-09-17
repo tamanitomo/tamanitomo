@@ -22,7 +22,7 @@ class Args:
 
 class PeerTests(unittest.TestCase):
     def setUp(self):
-        self.tmp=pathlib.Path(tempfile.mkdtemp());self.root,self.kit=build(self.tmp)
+        self.tmp=pathlib.Path(tempfile.mkdtemp()).resolve();self.root,self.kit=build(self.tmp)
 
     def test_list_sees_the_other_agent_only(self):
         names=[p['name'] for p in peer.cmd_list(self.root,None)['peers']]
@@ -41,7 +41,7 @@ class PeerTests(unittest.TestCase):
                                          dest='skills/tidy/SKILL.md',overwrite=False))
         dest=pathlib.Path(out['to'])
         self.assertTrue(dest.exists())
-        self.assertTrue(str(dest).startswith(str(self.root.home/'skills')))
+        self.assertTrue(str(dest).startswith(str((self.root.home/'skills').resolve())))
         self.assertIn('Borrowed from Kit',out['note'])
 
     def test_secrets_are_refused(self):

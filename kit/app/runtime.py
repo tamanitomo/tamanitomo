@@ -288,7 +288,7 @@ def session_db(c):
     if not path.exists(): yield None; return
     resolved=path.resolve()
     shared=bool(c.profile and resolved==(c.hermes_root/'state.db').resolve())
-    if c.is_root and resolved.is_relative_to(c.hermes_root/'profiles'):
+    if c.is_root and resolved.is_relative_to((c.hermes_root/'profiles').resolve()):
         raise ValueError('The root session store redirects into a named profile')
     con=sqlite3.connect(resolved.as_uri()+'?mode=ro',uri=True,timeout=3)
     con.row_factory=sqlite3.Row

@@ -54,7 +54,7 @@ def human_messages(c,now,days=LOOKBACK_DAYS):
     con=None
     try:
         resolved=db.resolve()
-        if c.is_root and resolved.is_relative_to(c.hermes_root/'profiles'):return []
+        if c.is_root and resolved.is_relative_to((c.hermes_root/'profiles').resolve()):return []
         if c.is_root:scope="lower(coalesce(s.profile_name,'')) IN ('','default')";params=()
         else:scope="lower(coalesce(s.profile_name,'')) IN ('','default',?)";params=(c.profile.lower(),)
         since=(now-dt.timedelta(days=days)).timestamp()
