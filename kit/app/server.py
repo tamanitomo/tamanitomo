@@ -180,6 +180,24 @@ def build(home=None,token='',state_dir=None):
             if isinstance(raw_outfit, list):
                 filtered_outfit = filter_wardrobe_items(raw_outfit, stage)
                 display_scene = {**scene, 'state': {**scene['state'], 'outfit': filtered_outfit}}
+        setup_pending = []
+        if not getattr(c, 'location', '') and not getattr(c, 'sensors', []):
+            setup_pending.append('sensors')
+        if getattr(c, 'image_style', 'none') == 'none' and getattr(c, 'image_mode', 'none') == 'none':
+            setup_pending.append('images')
+        import yaml
+        cfg_path = c.home / 'config.yaml'
+        has_voice = False
+        if cfg_path.is_file():
+            try:
+                cfg = yaml.safe_load(cfg_path.read_text(encoding='utf-8')) or {}
+                if (cfg.get('tts') or {}).get('provider'):
+                    has_voice = True
+            except Exception:
+                pass
+        if not has_voice:
+            setup_pending.append('voice')
+
         return {'agent':c.agent,'human':c.human,'type':c.agent_type,'home':str(c.home),
                 'timezone':c.timezone,'age':c.current_age(),'birthday_in':c.birthday_in(),
                 'state':display_scene,'confirmed_at':anchor['recorded_at'] if anchor else None,
@@ -191,7 +209,8 @@ def build(home=None,token='',state_dir=None):
                 'intimacy':intimacy,
                 'integrity_lockout':False,
                 'integrity_warning':None,
-                'problems':watch.problems(c,now)}
+                'problems':watch.problems(c,now),
+                'setup_pending':setup_pending}
 
     @app.get('/api/timeline')
     def timeline():

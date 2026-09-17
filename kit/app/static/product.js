@@ -40,23 +40,32 @@ for(const button of $('tabs').querySelectorAll('button'))button.onclick=()=>show
 /* The review count and the update notice. Both belong to the workspace rather
    than to any one page, so they are drawn wherever the layout has room and are
    refreshed as you move around rather than only when Home happens to render. */
-let reviewState={problems:0,update:null},reviewCheckedAt=0,reviewChecking=false;
-function setReviewBanner(problems,updateInfo){
-  reviewState={problems:problems|0,update:updateInfo||reviewState.update};
+let reviewState={problems:0,update:null,setupPending:[],agentName:''},reviewCheckedAt=0,reviewChecking=false;
+function setReviewBanner(problems,updateInfo,setupPending=[],agentName=''){
+  reviewState={
+    problems:problems|0,
+    update:updateInfo||reviewState.update,
+    setupPending:setupPending||reviewState.setupPending||[],
+    agentName:agentName||reviewState.agentName||''
+  };
   reviewCheckedAt=Date.now();
   paintReviewBanner();
 }
 function paintReviewBanner(){
-  const {problems,update}=reviewState;
+  const {problems,update,setupPending,agentName}=reviewState;
+  const isDismissed=localStorage.getItem('dismiss_setup_'+(agentName||'default'))==='true';
   const html=problems
     ? `<button class="link-button small" id="header-health" style="color:var(--bad)"><span aria-hidden="true">⚠️</span> ${problems} item${problems===1?'':'s'} to review</button>`
     : (update?.has_update
-      ? `<button class="link-button small" id="header-update" style="color:var(--warn)">✨ Update v${esc(update.latest_version)} available</button>`:'');
+      ? `<button class="link-button small" id="header-update" style="color:var(--warn)">✨ Update v${esc(update.latest_version)} available</button>`
+      : (!isDismissed && setupPending && setupPending.length>0
+        ? `<button class="link-button small" id="header-finish-setup" style="color:var(--accent);font-weight:600"><span aria-hidden="true">✨</span> Finish setting up ${esc(agentName||'Sam')} (${setupPending.length} remaining) →</button>`:''));
   for(const host of document.querySelectorAll('#banner,#home-banner')){
     host.innerHTML=html;
-    const health=host.querySelector('#header-health'),upd=host.querySelector('#header-update');
+    const health=host.querySelector('#header-health'),upd=host.querySelector('#header-update'),fin=host.querySelector('#header-finish-setup');
     if(health)health.onclick=()=>openSettings(null,'diagnostics');
     if(upd)upd.onclick=()=>openSettings(null,'updates');
+    if(fin)fin.onclick=()=>openFinishCustomizingDialog();
   }
 }
 async function refreshReviewBanner(){
@@ -64,11 +73,208 @@ async function refreshReviewBanner(){
   reviewChecking=true;
   try{
     const d=await api('/overview');
-    reviewState.problems=(d.problems||[]).length;reviewCheckedAt=Date.now();
+    reviewState.problems=(d.problems||[]).length;
+    reviewState.setupPending=d.setup_pending||[];
+    reviewState.agentName=d.agent||'';
+    reviewCheckedAt=Date.now();
     paintReviewBanner();
   }catch(error){/* leave the last known count in place */}
   finally{reviewChecking=false;}
 }
+
+async function openFinishCustomizingDialog(){
+  if(!await confirmEditorLeave('dialog'))return;
+  const agentName=reviewState.agentName||$('who')?.textContent||'Sam';
+  dialog('Finish Setting Up '+agentName, '<p class="dim" style="text-align:center;padding:24px 0">Loading preferences…</p>');
+  try{
+    const [s,v]=await Promise.all([
+      api('/settings').catch(()=>({})),
+      api('/voice').catch(()=>({}))
+    ]);
+    const tts=v.tts||{};
+    const currentProvider=tts.provider||'edge';
+    const currentVoice=tts[currentProvider]?.voice||tts[currentProvider]?.voice_id||'';
+    const currentStyle=s.image_style||'none';
+    const hasTimeline=Boolean(s.image_timeline);
+    const loc=s.location||'';
+    const activeSensors=s.sensors||[];
+    const availSensors=s.available_sensors||{
+      battery_level:'Battery level & charging status',
+      ambient_light:'Daylight & ambient lux',
+      step_motion:'Steps & device motion',
+      device_time:'Local circadian time'
+    };
+
+    const html=`
+      <div class="finish-customizing-container" style="display:flex;flex-direction:column;gap:18px;padding:4px 0">
+        <p class="dim" style="margin:0">Give <strong>${esc(agentName)}</strong> a voice, visual style, and ambient senses. You can configure them now or adjust anytime in Settings.</p>
+
+        <!-- 1. Voice -->
+        <div class="card" style="padding:16px;border-radius:12px;background:var(--panel);border:1px solid var(--surface-3)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <h3 style="margin:0;display:flex;align-items:center;gap:8px;font-size:15px"><span>🎙️</span> Spoken Voice</h3>
+            <button type="button" class="link-button small" id="fin-deep-voice">Open Voice Studio →</button>
+          </div>
+          <p class="small dim" style="margin:0 0 10px">Choose the speech engine for voice replies and spoken previews.</p>
+          <div class="form-grid">
+            <label>Speech Engine
+              <select id="fin-voice-engine">
+                ${options([
+                  ['edge','Edge (Online · Free, instant)'],
+                  ['openai','OpenAI Audio'],
+                  ['xai','xAI / Grok Voice'],
+                  ['elevenlabs','ElevenLabs'],
+                  ['piper','Piper (Local offline)'],
+                  ['kittentts','KittenTTS (Local offline)']
+                ], currentProvider)}
+              </select>
+            </label>
+            <label>Voice / Pitch
+              <input id="fin-voice-name" value="${esc(currentVoice)}" placeholder="Default voice (or custom voice ID)">
+            </label>
+          </div>
+          <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
+            <button type="button" class="quiet small" id="fin-voice-test">🔊 Test Voice Preview</button>
+            <span class="dim small" id="fin-voice-status"></span>
+          </div>
+        </div>
+
+        <!-- 2. Images & Camera -->
+        <div class="card" style="padding:16px;border-radius:12px;background:var(--panel);border:1px solid var(--surface-3)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <h3 style="margin:0;display:flex;align-items:center;gap:8px;font-size:15px"><span>📸</span> Visual Style & Camera</h3>
+            <button type="button" class="link-button small" id="fin-deep-photos">Photo Settings →</button>
+          </div>
+          <p class="small dim" style="margin:0 0 10px">Aesthetic portrait style for photo sessions and visual messages.</p>
+          <div class="form-grid">
+            <label>Portrait Art Style
+              <select id="fin-image-style">
+                ${options(Object.entries(s.image_styles||{
+                  none:'None (Text only)',
+                  realistic:'Photorealistic portrait',
+                  anime:'Anime & Manga style',
+                  cinematic:'Cinematic 3D render',
+                  painting:'Digital illustration / Painting'
+                }), currentStyle)}
+              </select>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;margin-top:24px;cursor:pointer">
+              <input type="checkbox" id="fin-image-timeline" ${hasTimeline?'checked':''}>
+              <span>Enable 15-minute background photo timeline</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 3. Sensors & Awareness -->
+        <div class="card" style="padding:16px;border-radius:12px;background:var(--panel);border:1px solid var(--surface-3)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <h3 style="margin:0;display:flex;align-items:center;gap:8px;font-size:15px"><span>🌐</span> Location & Passive Senses</h3>
+            <button type="button" class="link-button small" id="fin-deep-awareness">Awareness Settings →</button>
+          </div>
+          <p class="small dim" style="margin:0 0 10px">Grounds ${esc(agentName)} in your real-world timezone, weather, and activity.</p>
+          <div class="form-grid">
+            <label style="grid-column:1/-1">Your City / Location
+              <input id="fin-location" value="${esc(loc)}" placeholder="e.g. Raleigh, NC or Tokyo, Japan">
+              <small class="dim">Used for local weather, sunlight times, and seasonal shifts.</small>
+            </label>
+          </div>
+          <div style="margin-top:10px">
+            <strong class="small" style="display:block;margin-bottom:6px">Active Hardware Sensors:</strong>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">
+              ${Object.entries(availSensors).map(([k,label])=>`
+                <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer">
+                  <input type="checkbox" data-fin-sensor="${esc(k)}" ${activeSensors.includes(k)?'checked':''}>
+                  <span>${esc(k.replaceAll('_',' '))}</span>
+                </label>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;padding-top:14px;border-top:1px solid var(--edge)">
+          <button type="button" class="link-button small dim" id="fin-dismiss-never">Don’t show this again</button>
+          <div style="display:flex;gap:10px">
+            <button type="button" class="quiet" id="fin-dismiss-later">Later</button>
+            <button type="button" class="act" id="fin-save" style="padding:10px 24px">Save & Apply</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    dialog('Finish Setting Up '+agentName, html);
+
+    // Deep links
+    $('fin-deep-voice').onclick=()=>{ $('product-dialog').close(); openSettings(null, 'connect-voice'); };
+    $('fin-deep-photos').onclick=()=>{ $('product-dialog').close(); openSettings(null, 'photos'); };
+    $('fin-deep-awareness').onclick=()=>{ $('product-dialog').close(); openSettings(null, 'awareness'); };
+
+    // Voice test preview
+    $('fin-voice-test').onclick=async()=>{
+      const status=$('fin-voice-status');
+      status.textContent='Generating sample…';
+      try{
+        const r=await api('/voice/preview',{
+          method:'POST',
+          headers:{'content-type':'application/json'},
+          body:JSON.stringify({text:`Hello! I am happy to be chatting with you.`})
+        });
+        status.textContent='Playing…';
+        const audio=new Audio((r.audio||'/api/voice/preview-audio')+'?t='+Date.now());
+        audio.play().catch(()=>{});
+        audio.onended=()=>{ status.textContent='Done.'; };
+      }catch(e){
+        status.textContent='Preview unavailable: '+(e.message||'error');
+      }
+    };
+
+    // Save and dismiss handlers
+    $('fin-dismiss-later').onclick=()=>{ $('product-dialog').close(); };
+    $('fin-dismiss-never').onclick=()=>{
+      localStorage.setItem('dismiss_setup_'+(agentName||'default'), 'true');
+      $('product-dialog').close();
+      paintReviewBanner();
+      notice('Banner dismissed.');
+    };
+
+    $('fin-save').onclick=async()=>{
+      const btn=$('fin-save');
+      btn.disabled=true;
+      btn.textContent='Saving…';
+      try{
+        const selectedSensors=[...document.querySelectorAll('[data-fin-sensor]:checked')].map(el=>el.dataset.finSensor);
+        await saveSettings({
+          location:$('fin-location').value.trim(),
+          sensors:selectedSensors,
+          image_style:$('fin-image-style').value,
+          image_timeline:$('fin-image-timeline').checked
+        });
+
+        const provider=$('fin-voice-engine').value;
+        const voiceName=$('fin-voice-name').value.trim();
+        await api('/voice',{
+          method:'POST',
+          headers:{'content-type':'application/json'},
+          body:JSON.stringify({provider,voice:voiceName})
+        }).catch(()=>{});
+
+        localStorage.setItem('dismiss_setup_'+(agentName||'default'), 'true');
+        reviewState.setupPending=[];
+        paintReviewBanner();
+        $('product-dialog').close();
+        notice(`Customizations applied! ${agentName} is fully tuned.`);
+      }catch(err){
+        alert('Could not save customizations: '+(err.message||err));
+        btn.disabled=false;
+        btn.textContent='Save & Apply';
+      }
+    };
+
+  }catch(err){
+    dialog('Finish Setting Up '+agentName, `<p class="bad">Error loading settings: ${esc(err.message)}</p>`);
+  }
+}
+window.openFinishCustomizingDialog=openFinishCustomizingDialog;
 
 /* Mobile bottom bar. Home holds the left corner and More the right; between
    them are up to four slots the person chooses, so nothing they rely on is ever
