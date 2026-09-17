@@ -23,7 +23,7 @@ class RenderTests(unittest.TestCase):
 
     def test_every_preset_combination_renders_with_no_leaks(self):
         for persona,style,pron,boundary in itertools.product(
-                cr.load_personas(),cr.load_styles(),('she','he'),
+                cr.load_personas(),cr.load_styles(),('she','he','they'),
                 ('non-sexual','platonic','open')):
             c=cc.Companion(agent='Nova',human='Alex',pronoun_set=pron,boundary=boundary)
             out=cr.render_template('SOUL.md.tmpl',cr.mapping_for(c,persona,style))
@@ -45,6 +45,11 @@ class RenderTests(unittest.TestCase):
         out=cr.render_template('SOUL.md.tmpl',cr.mapping_for(c,'quiet','none'))
         self.assertIn('writes this part himself',out)
         self.assertNotIn('heself',out);self.assertNotIn('sheself',out)
+        c_they=cc.Companion(agent='Sam',human='Rowan',pronoun_set='they')
+        out_they=cr.render_template('SOUL.md.tmpl',cr.mapping_for(c_they,'quiet','none'))
+        self.assertIn('writes this part themselves',out_they)
+        self.assertIn('They do not reset',out_they)
+        self.assertIn('They are',out_they)
 
     def test_soul_fits_the_smallest_context_file_budget(self):
         """A generated SOUL must not be born already over Hermes' truncation floor."""

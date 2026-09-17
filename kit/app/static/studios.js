@@ -15,11 +15,11 @@ const laneIcon=key=>LANE_ICON[key]||'\u2728';
    think of it as gender, so that is what the box asks for; the stored value is
    unchanged. */
 const FIELD_LABEL={pronoun_set:'Gender',human_pronoun_set:'Your gender'};
-const CHOICE_LABEL={pronoun_set:{she:'Female',he:'Male'},
-                    human_pronoun_set:{she:'Female',he:'Male'}};
+const CHOICE_LABEL={pronoun_set:{she:'Female',he:'Male',they:'They / them'},
+                    human_pronoun_set:{she:'Female',he:'Male',they:'They / them'}};
 const choiceLabel=(key,value)=>(CHOICE_LABEL[key]||{})[value]||formLabel(value);
 
-const profileChoices={agent_type:['companion','colleague','worker'],pronoun_set:['she','he'],human_pronoun_set:['she','he'],outreach:['updates_only','free','never'],relationship_progression:['off','subtle','milestones'],relationship_pace:['slow','natural','quick'],context_mode:['auto','fixed']};
+const profileChoices={agent_type:['companion','colleague','worker'],pronoun_set:['she','he','they'],human_pronoun_set:['she','he','they'],outreach:['updates_only','free','never'],relationship_progression:['off','subtle','milestones'],relationship_pace:['slow','natural','quick'],context_mode:['auto','fixed']};
 function fieldHTML(key,value,choices=[],readonly=false){
  if(key==='outreach_per_day')return `<label>Maximum proactive messages per day<input data-config="outreach_per_day" type="number" required min="1" max="100" value="${value||3}" ${value===0?'disabled':''}></label><label class="inline-label"><input id="editor-unlimited" type="checkbox" ${value===0?'checked':''}>No daily limit (unlimited proactive messages)</label>`;
  const disabled=readonly?'disabled':'';

@@ -18,6 +18,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 BINARY_EXTENSIONS = {
     '.png', '.jpg', '.jpeg', '.gif', '.ico', '.webp',
     '.woff', '.woff2', '.ttf', '.eot',
+    '.mp4', '.webm', '.mp3', '.wav', '.ogg',
     '.onnx', '.pyc', '.zip', '.tar', '.gz', '.whl'
 }
 

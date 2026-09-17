@@ -46,7 +46,10 @@ def genders(category):
     companions only; everything else is asked of both."""
     return tuple(meta(category).get('genders',('male','female')))
 
-def applies_to(category,gender):return gender in genders(category)
+def applies_to(category,gender):
+    if gender == 'they':
+        return category not in ('facial_hair', 'bust')
+    return gender in genders(category)
 
 def multi(category):
     """How many choices a category accepts at once; 0 means pick exactly one."""
@@ -58,10 +61,11 @@ def sorts_by_persona(category):
     return any('personas' in row for row in rows)
 
 def rows_for(category,gender='female',persona=None):
-    if gender not in ('male','female'):raise ValueError('Choose male or female for this setup catalog')
+    if gender not in ('male','female','they'):raise ValueError('Choose male, female, or they for this setup catalog')
     if not applies_to(category,gender):
         raise ValueError(f'{category} does not apply to a {gender} companion')
-    rows=meta(category)[gender]
+    cat_gender = 'female' if gender == 'they' else gender
+    rows=meta(category)[cat_gender]
     if persona and sorts_by_persona(category):
         # Stable, so the ones that fit this personality float up in catalog order
         # and everything else keeps its relative order underneath.
@@ -75,7 +79,8 @@ def extra(category,gender,text,field,render=None):
     """A field carried by whichever row produced `text` — used for the details
     that ride along with a choice instead of being asked about separately. Pass
     `render` when `text` has already had names and pronouns substituted in."""
-    for row in meta(category)[gender]:
+    cat_gender = 'female' if gender == 'they' else gender
+    for row in meta(category)[cat_gender]:
         if (render(row['text']) if render else row['text'])==text:return row.get(field)
     return None
 
@@ -108,6 +113,12 @@ def fill(text,agent,human,agent_pronouns='she',human_pronouns='he'):
             'AP':ap[2],'AO':ap[1],'AR':ap[4],'HS':hp[0],'HP':hp[2],'HO':hp[1]}
     import re
     result=re.sub(r'\{([A-Z_]+)\}',lambda m:values.get(m[1],m[0]),text or '')
+    if agent_pronouns == 'they':
+        result = re.sub(r'\b(girlfriend/boyfriend|boyfriend/girlfriend)\b', 'partner', result, flags=re.IGNORECASE)
+        result = re.sub(r'\b(girl/boy|boy/girl)\b', 'companion', result, flags=re.IGNORECASE)
+        result = re.sub(r'\b(girlfriend|boyfriend)\b', 'partner', result, flags=re.IGNORECASE)
+        result = re.sub(r'\b(girl|boy)\b', 'companion', result, flags=re.IGNORECASE)
+        result = re.sub(r'\b(woman|man)\b', 'person', result, flags=re.IGNORECASE)
     return result[:1].upper()+result[1:]
 
 # One boundary registry for the interview, generated SOUL and scheduled prompts.
@@ -124,9 +135,9 @@ BOUNDARIES={
  # romance with the romance removed; each is its own thing.
  'penpal':('Pen Pal — long letters, days apart, no small talk',False,'A pen pal: writes at length rather than often, picks up threads from weeks ago, and treats a gap between letters as normal rather than as distance. Nothing is urgent and nothing is owed.'),
  'mentor':('Mentor — older, invested, honest about what you are avoiding',False,'A mentor: genuinely invested in what the user is trying to become, willing to say the unwelcome thing plainly, and uninterested in flattery. Warmth here looks like taking someone seriously, not like agreeing with them.'),
- 'sibling':('Sibling — affectionate, unimpressed, entirely on your side',False,'A sibling: affectionate without ceremony, unimpressed by posturing, and completely on the user\u2019s side when it counts. Teasing is a form of closeness here, never a way to score a point.'),
+ 'sibling':('Sibling — affectionate, unimpressed, entirely on your side',False,'A sibling: affectionate without ceremony, unimpressed by posturing, and completely on the user’s side when it counts. Teasing is a form of closeness here, never a way to score a point.'),
  'housemate':('Housemate — parallel lives, shared ordinary days',False,'A housemate: two people living alongside each other with their own days, comparing notes over something ordinary. Company rather than attention, and no obligation to be interesting.'),
- 'creative-partner':('Creative Partner — someone to make things with',False,'A creative partner: interested in the work for its own sake, argues about it seriously, and has taste of their own that does not always agree with the user\u2019s.')}
+ 'creative-partner':('Creative Partner — someone to make things with',False,'A creative partner: interested in the work for its own sake, argues about it seriously, and has taste of their own that does not always agree with the user’s.')}
 
 # Older answer files remain readable; new setup shows only the six frames above.
 LEGACY_BOUNDARIES={'non-sexual':'flirty-assistant','platonic':'best-friend',
@@ -136,7 +147,12 @@ LEGACY_BOUNDARIES={'non-sexual':'flirty-assistant','platonic':'best-friend',
  'queerplatonic':'best-friend','found-family':'best-friend',
  'colleague':'partner-in-crime','open':'best-friend'}
 
-def boundary_text(key):
+def boundary_text(key, pronoun_set=None):
     key=LEGACY_BOUNDARIES.get(key,key)
     if key not in BOUNDARIES:raise ValueError(f'Unknown relationship boundary: {key}')
-    return BOUNDARIES[key][2]
+    text = BOUNDARIES[key][2]
+    if pronoun_set == 'they':
+        import re
+        text = re.sub(r'\b(girlfriend or boyfriend|boyfriend or girlfriend)\b', 'partner', text, flags=re.IGNORECASE)
+        text = re.sub(r'\b(girl or boy|boy or girl)\b', 'companion', text, flags=re.IGNORECASE)
+    return text

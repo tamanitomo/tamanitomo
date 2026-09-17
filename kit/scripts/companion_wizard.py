@@ -526,7 +526,7 @@ def interview(agent,human,persona,answers=None,*,quick=False):
                              'terminal: choose a relationship style for reproducible setup. '
                              'Choose from: '+', '.join(BOUNDARIES))
     agent_pronouns=a.get('pronoun_set','she');human_pronouns=a.get('human_pronoun_set','he')
-    gender='male' if agent_pronouns=='he' else 'female'
+    gender='they' if agent_pronouns=='they' else ('male' if agent_pronouns=='he' else 'female')
     F=lambda text:catalog_fill(text,agent,human,agent_pronouns,human_pronouns)
     out={'skipped':[],'opted_out':[]}
     def pick(key,prompt=None,*,opt_out=True):

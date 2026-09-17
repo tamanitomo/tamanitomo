@@ -107,10 +107,13 @@ class ProfileTests(unittest.TestCase):
     def test_pronouns(self):
         self.assertEqual(cc.Companion(pronoun_set='he').subj(),'he')
         self.assertEqual(cc.Companion(pronoun_set='she').poss(),'her')
+        self.assertEqual(cc.Companion(pronoun_set='they').subj(),'they')
+        self.assertEqual(cc.Companion(pronoun_set='they').obj(),'them')
+        self.assertEqual(cc.Companion(pronoun_set='they').poss(),'their')
+        self.assertEqual(cc.Companion(pronoun_set='they').refl(),'themselves')
         with self.assertRaisesRegex(ValueError,'Invalid pronouns'):cc.Companion(pronoun_set='nonsense')
-        # Plural pronouns are not offered: the prose is written for singular verbs.
-        with self.assertRaisesRegex(ValueError,'Invalid pronouns'):cc.Companion(pronoun_set='they')
-        self.assertEqual(set(cc.PRONOUNS),{'he','she'})
+        with self.assertRaisesRegex(ValueError,'Invalid pronouns'):cc.Companion(pronoun_set='it')
+        self.assertEqual(set(cc.PRONOUNS),{'he','she','they'})
         self.assertEqual(cc.Companion().pronoun_set,'she')
 
 if __name__=='__main__':unittest.main()

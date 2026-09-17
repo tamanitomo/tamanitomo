@@ -271,3 +271,20 @@ class CatalogTests(unittest.TestCase):
             run('--home',str(home),'schedule','paused',expect=0)
             self.assertTrue(all(not j['enabled'] for j in json.loads((home/'cron/jobs.json').read_text())['jobs']
                                 if j['name'] not in scripted))
+
+    def test_they_them_persona_replaces_gendered_words(self):
+        out_they = wiz.interview('Unit-7', 'Alex', 'warm', {'boundary': 'girlfriend', 'pronoun_set': 'they', 'human_pronoun_set': 'he'}, quick=True)
+        self.assertNotIn('girlfriend', out_they['boundary'].lower())
+        self.assertIn('partner', out_they['boundary'].lower())
+
+        # Verify that for she and he, girlfriend / boyfriend remains as is
+        out_she = wiz.interview('Nova', 'Alex', 'warm', {'boundary': 'girlfriend', 'pronoun_set': 'she', 'human_pronoun_set': 'he'}, quick=True)
+        self.assertIn('girlfriend', out_she['boundary'].lower())
+
+        # Verify SOUL rendering for they/them robot companion
+        c = cc.Companion(agent='Unit-7', human='Alex', pronoun_set='they')
+        out_they['physical'] = wiz.physical_paragraph(out_they, 'Unit-7', c.pronouns)
+        soul = cr.render_template('SOUL.md.tmpl', cr.mapping_for(c, 'warm', 'none', interview=out_they))
+        self.assertIn('They are', soul)
+        self.assertIn('They do not reset', soul)
+        self.assertIn('writes this part themselves', soul)

@@ -85,15 +85,15 @@ def questionnaire(c,answers=None,vault_default=None):
         metadata=cg.read_config(c.home/'profile.yaml')
         suggested_name=str(metadata.get('display_name') or c.profile.replace('_',' ').replace('-',' ').title())
     out['agent']=ask("What is your companion's name?",suggested_name,None,a,'agent')
-    out['pronoun_set']=ask(f"Is {out['agent']} male or female?",2,
-        [('he','Male'),('she','Female')],a,'pronoun_set')
+    out['pronoun_set']=ask(f"What pronouns does {out['agent']} use?",2,
+        [('he','Male'),('she','Female'),('they','They / them')],a,'pronoun_set')
     raw_names=ask('What should they call you?','',None,a,'human_names') or a.get('human','you')
     names=wiz.parse_names(str(raw_names))
     out['human']=names[0];out['names']=names
     if len(names)>1 and wiz._tty():
         print(wiz.C.dim(f'  -> {out["agent"]} will use: '+', '.join(names)))
-    out['human_pronoun_set']=ask('And are you male or female?',1,
-        [('he','Male'),('she','Female')],a,'human_pronoun_set')
+    out['human_pronoun_set']=ask('And what pronouns do you use?',1,
+        [('he','Male'),('she','Female'),('they','They / them')],a,'human_pronoun_set')
     out['persona']=pick_key('What kind of personality?',
         [(k,f"{v['label']} — {v['blurb']}") for k,v in personas.items()],a,'persona',
         note='The manner underneath everything else. The next questions add the specifics.')

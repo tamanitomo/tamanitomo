@@ -457,7 +457,8 @@ async function uploadPortrait(file){
    is why one singular rewrite serves both and only the pronouns substitute. */
 const PRONOUN_WORDS={
   she:{subj:'she',obj:'her',poss:'her',poss2:'hers'},
-  he:{subj:'he',obj:'him',poss:'his',poss2:'his'}};
+  he:{subj:'he',obj:'him',poss:'his',poss2:'his'},
+  they:{subj:'they',obj:'them',poss:'their',poss2:'theirs'}};
 let soulPronouns=PRONOUN_WORDS.she;
 const gendered=text=>String(text||'').replace(/\{(\w+)\}/g,(whole,key)=>{
   const word=soulPronouns[key.toLowerCase()];
@@ -574,7 +575,7 @@ async function renderIdentity(){
   const d=await api('/identity');
   const who=d.profile||{},sections=d.sections||[];
   soulPronouns=PRONOUN_WORDS[who.pronoun_set]||PRONOUN_WORDS.she;
-  const gender=who.pronoun_set==='he'?'Male':'Female';
+  const gender=who.pronoun_set==='he'?'Male':(who.pronoun_set==='they'?'They / them':'Female');
   const facts=[
     who.persona_label&&['Personality',who.persona_label,who.persona_blurb],
     who.boundary_label&&['Between you',who.boundary_label,''],

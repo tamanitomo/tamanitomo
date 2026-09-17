@@ -436,10 +436,10 @@ window.onboarding=async function(adopt){
           </label>
           <div class="creator-pair">
             <label>They are
-              <select id="cust-pronoun">${options([['she','She / her'],['he','He / him']],draft.pronoun_set)}</select>
+              <select id="cust-pronoun">${options([['she','She / her'],['he','He / him'],['they','They / them']],draft.pronoun_set)}</select>
             </label>
             <label>You are
-              <select id="cust-human-pronoun">${options([['he','He / him'],['she','She / her']],draft.human_pronoun_set)}</select>
+              <select id="cust-human-pronoun">${options([['he','He / him'],['she','She / her'],['they','They / them']],draft.human_pronoun_set)}</select>
             </label>
           </div>
           <label>Personality Archetype

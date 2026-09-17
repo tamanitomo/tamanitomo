@@ -661,13 +661,26 @@ class LegacyConfigTests(unittest.TestCase):
             home=pathlib.Path(tmp)/'hermes';vault=pathlib.Path(tmp)/'vault'
             run('--home',str(home),'init','--vault',str(vault),'--answers',answers(),expect=0)
             cfg=home/'companion.json';data=json.loads(cfg.read_text())
-            data['pronoun_set']='they';data['human_pronoun_set']='they'
+            data['pronoun_set']='it';data['human_pronoun_set']='it'
             cfg.write_text(json.dumps(data),encoding='utf-8')
             c=cc.load(home)
             self.assertEqual((c.pronoun_set,c.human_pronoun_set),('she','he'))
             out=run('--home',str(home),'doctor')
             self.assertIn("no longer supports",out.stdout)
             self.assertNotEqual(out.returncode,0)
+
+    def test_they_them_pronoun_set_is_supported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home=pathlib.Path(tmp)/'hermes';vault=pathlib.Path(tmp)/'vault'
+            run('--home',str(home),'init','--vault',str(vault),'--answers',answers(pronoun_set='they',human_pronoun_set='they'),expect=0)
+            c=cc.load(home)
+            self.assertEqual((c.pronoun_set,c.human_pronoun_set),('they','they'))
+            self.assertEqual(c.subj(),'they')
+            self.assertEqual(c.obj(),'them')
+            self.assertEqual(c.poss(),'their')
+            self.assertEqual(c.refl(),'themselves')
+            out=run('--home',str(home),'doctor')
+            self.assertNotIn("no longer supports",out.stdout)
 
 
 class SettingsTests(unittest.TestCase):

@@ -67,7 +67,8 @@ CONTENT_KINDS=('text','image','voice')
 PERMISSIONS=('yes','ask','no')
 
 PRONOUNS={'she':('she','her','her','hers','herself'),
-          'he':('he','him','his','his','himself')}
+          'he':('he','him','his','his','himself'),
+          'they':('they','them','their','theirs','themselves')}
 
 def _clamp(v,lo,hi):return max(lo,min(int(v),hi))
 
@@ -501,7 +502,7 @@ def _slug(name:str)->str:
 # accepts. The constructor stays strict — someone passing nonsense should hear
 # about it — but a stored config is our own past output, and refusing to read it
 # would take the agent's identity, hook and jobs down with it.
-LEGACY_PRONOUNS=('they','them','it')
+LEGACY_PRONOUNS=('it',)
 
 def migrate(kwargs:dict)->dict:
     """Corrections applied when reading a config an older kit wrote. An
