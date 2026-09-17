@@ -290,7 +290,7 @@ class WorkspaceTests(unittest.TestCase):
         """The browser wizard submits every answer it collected, not a minimal
         subset. An answer key the CLI does not know is rejected outright, so a
         creation path that works only for a trimmed payload works for nobody."""
-        answers={'agent':'Wren','human_names':'Alex','pronoun_set':'she','human_pronoun_set':'he',
+        answers={'agent':'Ash','human_names':'Alex','pronoun_set':'she','human_pronoun_set':'he',
                  'timezone':'UTC','age':29,'persona':'steady','agent_type':'companion',
                  'boundary':'best-friend','relationship_pace':'natural',
                  'outreach':'updates_only','outreach_per_day':3,
@@ -299,9 +299,9 @@ class WorkspaceTests(unittest.TestCase):
                  'share_people':'no','visual':'none','image_style':'none',
                  'human_boundary':'Give me space when I am busy.',
                  'vault':str(self.vault)}
-        created=self.wait(self.post('/api/profiles',{'profile':'wren','answers':answers}))
+        created=self.wait(self.post('/api/profiles',{'profile':'ash','answers':answers}))
         self.assertEqual(created['status'],'complete',created)
-        saved=json.loads((self.root/'profiles/wren/companion.json').read_text())
+        saved=json.loads((self.root/'profiles/ash/companion.json').read_text())
         self.assertEqual(saved['persona'],'steady')
         self.assertEqual(saved['boundary'],'best-friend')
         self.assertEqual(saved['relationship_pace'],'natural')

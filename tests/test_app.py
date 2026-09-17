@@ -182,7 +182,7 @@ class AppTests(unittest.TestCase):
         self.assertIn('companion_pin_session',good_auth.cookies)
 
         # Remote client (from LAN non-localhost) is blocked without PIN
-        remote_client=TestClient(self.client.app,client=('192.168.1.50',50000))
+        remote_client=TestClient(self.client.app,client=('203.0.113.9',50000))
         r_remote_locked=remote_client.get('/api/overview')
         self.assertEqual(r_remote_locked.status_code,401)
         self.assertTrue(r_remote_locked.json().get('pin_required'))

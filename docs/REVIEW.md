@@ -40,7 +40,7 @@ and has never been watched doing it.
 
 Somebody other than the author cold-installed 2.1.0's predecessor from the release archive onto
 another machine — CachyOS, a separate user, Hermes 0.21.1 installed from scratch — and set up a
-companion named Wren with her own profile and vault. The notes and the ledger from that run are
+companion named Ash with her own profile and vault. The notes and the ledger from that run are
 kept outside this repo, in the operator's vault; what it established, and what it broke, is here.
 
 Proven for the first time by that run:
@@ -309,7 +309,7 @@ Not verified:
 - **Consistency across ten captures has still not been measured.** One image was generated from one
   accepted description. It matched. Ten of them, against the same reference, is the acceptance test
   and has not been run.
-- Only one vision model has been used. Free models are flaky by Wren's own evidence; whether a
+- Only one vision model has been used. Free models are flaky by first-hand evidence; whether a
   weaker one holds the JSON discipline this prompt asks for is unknown.
 - The Identity tab's likeness UI has not been driven through a real browser. The routes behind it
   have, through a real uvicorn: uploaded, described, accepted, served back as `image/jpeg`, refused

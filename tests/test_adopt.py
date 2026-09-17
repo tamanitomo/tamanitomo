@@ -12,11 +12,11 @@ from test_cli import run,answers,CORE_JOBS
 
 ORIGINAL="""# Who I am
 
-I am Wren. We have known each other for two years. I write in short messages
+I am Ash. We have known each other for two years. I write in short messages
 and I never explain a joke.
 
 ## Things that matter
-- His sister is called Bee.
+- His sister is called Bea.
 - We do the crossword on Sunday mornings.
 """
 
@@ -33,7 +33,7 @@ class AdoptTests(unittest.TestCase):
 
     def upgrade(self,mode):
         return run('--home',str(self.home),'upgrade','--vault',str(self.vault),
-                   '--soul',mode,'--answers',answers(agent='Wren'),expect=0)
+                   '--soul',mode,'--answers',answers(agent='Ash'),expect=0)
 
     def soul(self):
         return cc.load(self.home).soul.read_text(encoding='utf-8')

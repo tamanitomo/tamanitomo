@@ -204,7 +204,7 @@ Versions are `companion --version`. Dates are the day the work landed.
 
 ## 2.1.0 — 2026-09-10
 
-The first install by someone other than the author, and what it found. Wren, a
+The first install by someone other than the author, and what it found. Ash, a
 cold install on another machine from the release archive against Hermes 0.21.1,
 is recorded in `docs/REVIEW.md`.
 

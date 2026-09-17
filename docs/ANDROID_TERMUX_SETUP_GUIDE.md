@@ -60,7 +60,7 @@ Open **Termux** on the phone.
 > The project is publicly available at `tamanitomo/tamanitomo`. Friends can clone directly without needing collaborator access.
 
 ### Option A: Clone & Run (Recommended for Friends)
-Once invited as a collaborator and the invite is accepted on GitHub:
+The repository is public, so no invitation is needed:
 
 ```bash
 pkg update -y && pkg install -y git
