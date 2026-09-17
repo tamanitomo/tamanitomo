@@ -11,6 +11,7 @@
   "tamanitomo",
   "setup-linux.sh",
   "setup-termux.sh",
+  "uninstall-termux.sh",
   "update.sh",
   "companion",
   "companion.cmd",

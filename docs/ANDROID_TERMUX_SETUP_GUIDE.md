@@ -165,3 +165,32 @@ If you subscribe to ChatGPT Plus or Pro:
    ```
 2. Open the URL in your browser, log in to ChatGPT, and authorize the session.
 3. Hermes will automatically store the refresh token in `~/.hermes/auth.json` and use your ChatGPT subscription quota.
+
+---
+
+## Resetting to State 0 / Clean Uninstaller
+
+If you need to completely remove Tamanitomo from your Android phone and return Termux to **State 0** (for testing, transferring the phone to a friend, or starting over completely from scratch), run the turnkey uninstaller:
+
+### 1-Liner Unattended Reset (Fastest)
+```bash
+curl -fsSL https://raw.githubusercontent.com/tamanitomo/tamanitomo/main/uninstall-termux.sh | bash -s -- -y
+```
+
+### Interactive Uninstaller (Prompts for options)
+```bash
+curl -fsSL https://raw.githubusercontent.com/tamanitomo/tamanitomo/main/uninstall-termux.sh | bash
+```
+
+Or if you already have the repository cloned:
+```bash
+bash ~/tamanitomo/uninstall-termux.sh -y
+```
+
+### What the Uninstaller Does:
+1. **Terminates Services:** Safely shuts down `tamanitomo-gateway` and `tamanitomo-workspace` via `sv down` and releases the Android wake-lock.
+2. **Cleans Runit & Boot:** Deletes all service descriptors from `$PREFIX/var/service/` and autostart scripts in `~/.termux/boot/`.
+3. **Restores Shell:** Cleans up `export SVDIR` lines from `~/.bashrc` and `~/.profile`.
+4. **Purges Application State:** Wipes `~/tamanitomo`, `~/.hermes`, `~/vault`, `~/.companion`, `~/.local/share/tamanitomo`, and caches (`~/.cache`, `~/.cargo`).
+5. **(Optional) Preserves Memories:** Pass `--keep-vault` if you want to keep `~/vault` while wiping runtime state.
+6. **(Optional) Purges Compiler Toolchain:** Pass `--purge-packages` if you also want to remove `python3.11`, `rust`, `clang`, and run `apt autoremove --purge`.
