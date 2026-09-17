@@ -699,7 +699,7 @@ rm -f "$ANSWERS_JSON"
 # Configure companion.json to use the selected cloud provider
 COMPANION_JSON="$HERMES_HOME/companion.json"
 if [[ -f "$COMPANION_JSON" ]]; then
-  python3 -c "
+  "$VENV_DIR/bin/python" -c "
 import json
 path = '$COMPANION_JSON'
 try:
