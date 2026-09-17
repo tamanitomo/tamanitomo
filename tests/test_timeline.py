@@ -19,7 +19,7 @@ class TimelineTests(unittest.TestCase):
     def test_opt_out_and_stale_state_prevent_claiming(self):
         self.c.image_timeline=False;self.assertFalse(timeline.prepare(self.c,self.now)['ready'])
         self.c.image_timeline=True
-        self.assertFalse(timeline.prepare(self.c,self.now+dt.timedelta(minutes=15))['ready'])
+        self.assertFalse(timeline.prepare(self.c,self.now+dt.timedelta(minutes=16))['ready'])
         self.assertEqual(list(timeline.records(self.c)),[])
     def test_once_per_interval_and_saved_image_keeps_its_original_scene(self):
         capture=timeline.prepare(self.c,self.now);ident=capture['capture_id']
@@ -51,6 +51,21 @@ class TimelineTests(unittest.TestCase):
         self.assertEqual(next(timeline.records(self.c))[1]['status'],'pending')
         timeline.prune(self.c,self.now+dt.timedelta(minutes=16))
         self.assertEqual(next(timeline.records(self.c))[1]['status'],'failed')
+    def test_a_state_confirmed_earlier_in_the_same_interval_still_counts(self):
+        """The presence loop never lands on the quarter-hour, so a capture must
+        not be refused merely because the confirming record predates the slot
+        boundary by a few minutes."""
+        self.assertIs(self.now.minute,2)
+        capture=timeline.prepare(self.c,self.now)
+        self.assertTrue(capture['ready'])
+        self.assertEqual(capture['scene']['state']['activity'],'lunch')
+    def test_a_state_from_a_previous_interval_is_still_stale(self):
+        self.assertFalse(timeline.prepare(self.c,self.now+dt.timedelta(minutes=16))['ready'])
+    def test_bounds_admit_a_recent_record(self):
+        now=self.now.astimezone(dt.timezone.utc)
+        start,end=timeline.bounds(now)
+        record=presence.current(self.c)
+        self.assertTrue(start<=timeline.timestamp(record['recorded_at'])<=end)
     def test_cleanup_rejects_a_traversal_in_corrupted_metadata(self):
         capture=timeline.prepare(self.c,self.now);path=timeline.capture_path(self.c,capture['capture_id'])
         data=json.loads(path.read_text());data['filename']='../../favorite.png';path.write_text(json.dumps(data))

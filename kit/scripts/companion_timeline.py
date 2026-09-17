@@ -21,6 +21,9 @@ from companion_presence import current
 # Only used when no budget is set at all; a calendar is a poor way to bound a
 # folder whose file sizes nobody controls.
 DAYS=30
+# A state confirmed this long ago is still "what I am doing now" when the loop
+# records on its own clock between quarter-hour boundaries.
+RECENT=10
 MAX_BYTES=32*1024*1024
 ALBUM_NAME=re.compile(r'^[A-Za-z0-9][A-Za-z0-9 _-]{0,60}$')
 ID=re.compile(r'^[a-f0-9]{24}$')
@@ -182,14 +185,28 @@ def prune(c,now=None):
     with file_lock(root(c)/'.lock'):return _prune(c,now or now_utc())
 
 
+def bounds(now):
+    """The window in which a state has to have been confirmed to count as current.
+
+    The presence loop records on its own clock and never lands on the quarter
+    hour, so the slot boundary alone is the wrong anchor: it can refuse a record
+    that arrived two minutes earlier in the same interval. A capture is fair if
+    the confirming record is recent, whether it landed before or after the
+    boundary.
+    """
+    slot=now.replace(minute=now.minute//15*15,second=0,microsecond=0)
+    return min(slot,now-dt.timedelta(minutes=RECENT))-dt.timedelta(seconds=1),now
+
+
 def prepare(c,now=None):
     now=now or now_utc();prune(c,now)
     if not c.image_timeline:return {'ready':False,'reason':'Image timeline is off'}
     scene=current(c)
     now=now.astimezone(dt.timezone.utc)
     slot=now.replace(minute=now.minute//15*15,second=0,microsecond=0)
-    if not scene or not scene['state'].get('confirmed',True) or not slot<=timestamp(scene['recorded_at'])<=now:
-        return {'ready':False,'reason':'No confirmed state in this 15-minute interval; skip rather than invent a scene'}
+    start,end=bounds(now)
+    if not scene or not scene['state'].get('confirmed',True) or not start<=timestamp(scene['recorded_at'])<=end:
+        return {'ready':False,'reason':'No state confirmed recently enough to make an honest scene; skip rather than invent one'}
     from companion_render import load_styles
     style=load_styles().get(c.image_style)
     if not style or c.image_style in ('none','unset'):return {'ready':False,'reason':'Choose a timeline image style first'}
