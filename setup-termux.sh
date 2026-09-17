@@ -451,14 +451,16 @@ if [[ "$SYS_ARCH" == "aarch64" || "$SYS_ARCH" == "arm64" ]]; then
 
   # 3. Remote download from GitHub wheelhouse branch
   if [[ $(find "$WHEELS_DIR" -maxdepth 1 -name "*.whl" 2>/dev/null | wc -l) -lt 10 ]]; then
-    WHEEL_URL="https://raw.githubusercontent.com/tamanitomo/tamanitomo/wheelhouse-aarch64/companion-wheels-aarch64.tar.gz"
+    WHEEL_URL="https://raw.githubusercontent.com/tamanitomo/tamanitomo/refs/heads/wheelhouse-aarch64/companion-wheels-aarch64.tar.gz"
+    WHEEL_URL_ALT="https://github.com/tamanitomo/tamanitomo/raw/refs/heads/wheelhouse-aarch64/companion-wheels-aarch64.tar.gz"
     CURL_AUTH=()
     if [[ -n "$GITHUB_TOKEN" ]]; then
       CURL_AUTH=(-H "Authorization: token $GITHUB_TOKEN")
     fi
     TAR_TMP="$HERMES_HOME/.wheels-download.tar.gz"
     echo -e "  Attempting to fetch binary wheels from GitHub (~21 MB)..."
-    if curl -fsSL "${CURL_AUTH[@]}" "$WHEEL_URL" -o "$TAR_TMP" 2>/dev/null; then
+    if curl -fsSL "${CURL_AUTH[@]}" "$WHEEL_URL" -o "$TAR_TMP" 2>/dev/null || \
+       curl -fsSL "${CURL_AUTH[@]}" "$WHEEL_URL_ALT" -o "$TAR_TMP" 2>/dev/null; then
       tar -xzf "$TAR_TMP" -C "$WHEELS_DIR" 2>/dev/null || true
       rm -f "$TAR_TMP"
     fi
