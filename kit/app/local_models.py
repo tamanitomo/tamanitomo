@@ -28,6 +28,59 @@ MOBILE_MODELS = [
     {'id': 'llama3.2:3b-instruct-q4_K_M', 'name': 'Llama 3.2 3B · high-capability mobile', 'gb': 2.0, 'memory': '6–8 GB RAM; balance of capability and memory', 'context': 4096},
 ]
 
+RECOMMENDED_GGUF_MODELS = [
+    {
+        'id': 'qwen2.5-1.5b-instruct-q4_k_m',
+        'name': 'Qwen 2.5 1.5B Instruct',
+        'family': 'Qwen',
+        'gb': 1.1,
+        'filename': 'qwen2.5-1.5b-instruct-q4_k_m.gguf',
+        'url': 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf',
+        'mobile_recommended': True,
+        'description': 'Balanced reasoning and speed for mobile phones (~17 tokens/s on Tensor G3).',
+    },
+    {
+        'id': 'smollm2-1.7b-instruct-q4_k_m',
+        'name': 'SmolLM2 1.7B Instruct',
+        'family': 'SmolLM',
+        'gb': 1.0,
+        'filename': 'smollm2-1.7b-instruct-q4_k_m.gguf',
+        'url': 'https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct-GGUF/resolve/main/smollm2-1.7b-instruct-q4_k_m.gguf',
+        'mobile_recommended': True,
+        'description': 'Ultra-compact mobile model, highly battery and RAM efficient.',
+    },
+    {
+        'id': 'llama-3.2-1b-instruct-q4_k_m',
+        'name': 'Llama 3.2 1B Instruct',
+        'family': 'Llama',
+        'gb': 0.8,
+        'filename': 'llama-3.2-1b-instruct-q4_k_m.gguf',
+        'url': 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
+        'mobile_recommended': True,
+        'description': 'Smallest memory footprint, fast lightweight responses with minimal battery impact.',
+    },
+    {
+        'id': 'llama-3.2-3b-instruct-q4_k_m',
+        'name': 'Llama 3.2 3B Instruct',
+        'family': 'Llama',
+        'gb': 2.0,
+        'filename': 'llama-3.2-3b-instruct-q4_k_m.gguf',
+        'url': 'https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf',
+        'mobile_recommended': True,
+        'description': 'High capability mobile model (requires ~6-8 GB total RAM).',
+    },
+    {
+        'id': 'qwen2.5-3b-instruct-q4_k_m',
+        'name': 'Qwen 2.5 3B Instruct',
+        'family': 'Qwen',
+        'gb': 2.2,
+        'filename': 'qwen2.5-3b-instruct-q4_k_m.gguf',
+        'url': 'https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf',
+        'mobile_recommended': False,
+        'description': 'High capability desktop model for Linux, macOS, or Windows.',
+    }
+]
+
 MOBILE_MAX_MODEL_GB = 2.8
 
 def is_mobile() -> bool:
@@ -370,9 +423,10 @@ def status(rt):
         'service': srv,
         'available_models': disk_models,
         'models': models,
-        'installed': bool(srv.get('found') or binary(rt)),
+        'installed': bool(srv.get('found') or binary(rt) or shutil.which('llama-server')),
         'directory': str(directory(rt)),
         'recommendations': recommendations,
+        'recommended_gguf': RECOMMENDED_GGUF_MODELS,
         'platform': platform.system(),
         'is_mobile': is_mob,
         'host_memory': mem,
@@ -449,6 +503,37 @@ def start(rt, report):
         return server_control(rt, 'start', report)
     if status(rt)['online']: return {'note': 'Using the local model server already running on this host.'}
     executable = binary(rt)
+    llama_server_bin = shutil.which('llama-server')
+
+    if not executable and llama_server_bin:
+        disk_models = _scan_available_models()
+        if not disk_models:
+            raise ValueError('Install Ollama or download a .gguf model first.')
+        m = disk_models[0]
+        mem = get_host_memory()
+        ctx = 4096 if mem['is_mobile'] else 8192
+        threads = min(os.cpu_count() or 4, 4) if mem['is_mobile'] else 8
+        root = directory(rt); root.mkdir(parents=True, exist_ok=True)
+        cmd = [
+            llama_server_bin,
+            '--model', m['path'],
+            '--alias', m['alias'],
+            '--host', '127.0.0.1',
+            '--port', '11434',
+            '--ctx-size', str(ctx),
+            '-t', str(threads),
+            '--no-warmup'
+        ]
+        with (root / 'llama-server.log').open('ab') as log:
+            proc = subprocess.Popen(cmd, stdout=log, stderr=log, stdin=subprocess.DEVNULL,
+                                    start_new_session=os.name != 'nt')
+        report(f"Starting local llama-server serving {m['alias']}...")
+        for _ in range(35):
+            if status(rt)['online']: return {'note': f"Local llama-server is ready and serving {m['alias']}."}
+            if proc.poll() is not None: raise ValueError('Local server could not start. Check ' + str(root / 'llama-server.log'))
+            time.sleep(1)
+        raise ValueError('Local llama-server startup timed out.')
+
     if not executable: raise ValueError('Install Ollama or configure a local model service first')
     root = directory(rt); root.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, OLLAMA_HOST='127.0.0.1:11434', OLLAMA_NO_CLOUD='1', OLLAMA_CONTEXT_LENGTH='8192')
@@ -604,6 +689,88 @@ def pull(rt, ident, report):
     if not success: raise ValueError('Model download was interrupted; retry to resume it')
     return {'note': ident + ' downloaded. Select Use for this companion to change its model.'}
 
+def download_gguf(rt, model_id: str, report):
+    model = next((m for m in RECOMMENDED_GGUF_MODELS if m['id'] == model_id), None)
+    if not model:
+        raise ValueError(f"Unknown GGUF model '{model_id}'. Choose a recommended model variant.")
+
+    mem = get_host_memory()
+    safe, msg = validate_model_safety(model['gb'], mem)
+    if not safe:
+        raise ValueError(msg)
+
+    target_dir = Path.home() / 'models'
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_file = target_dir / model['filename']
+
+    # If already downloaded and valid
+    if target_file.is_file() and target_file.stat().st_size > int(model['gb'] * 1024 * 1024 * 1024 * 0.8):
+        report(f"Model {model['name']} is already present in ~/models.")
+        return {
+            'ok': True,
+            'model': model['id'],
+            'path': str(target_file),
+            'filename': model['filename'],
+            'note': f"Model {model['name']} is ready in ~/models/"
+        }
+
+    required_bytes = int(model['gb'] * 1024 * 1024 * 1024 * 1.15)
+    free_bytes = shutil.disk_usage(target_dir).free
+    if free_bytes < required_bytes:
+        raise ValueError(f"Not enough free disk space. Required: {model['gb'] * 1.15:.1f} GB, available: {free_bytes / (1024**3):.1f} GB.")
+
+    temp_file = target_dir / f".{model['filename']}.part"
+    existing_bytes = temp_file.stat().st_size if temp_file.exists() else 0
+
+    headers = {'User-Agent': 'Tamanitomo-Local-Inference/2.2'}
+    if existing_bytes > 0:
+        headers['Range'] = f'bytes={existing_bytes}-'
+        report(f"Resuming download of {model['name']} from {existing_bytes // (1024 * 1024)} MB...")
+    else:
+        report(f"Starting download of {model['name']} ({model['gb']} GB)...")
+
+    req = urllib.request.Request(model['url'], headers=headers)
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+    try:
+        with opener.open(req, timeout=60) as resp:
+            status_code = getattr(resp, 'status', 200)
+            content_length = resp.headers.get('Content-Length')
+            total_size = int(content_length) + existing_bytes if content_length else int(model['gb'] * 1024 * 1024 * 1024)
+
+            mode = 'ab' if (existing_bytes > 0 and status_code == 206) else 'wb'
+            if mode == 'wb':
+                existing_bytes = 0
+
+            downloaded = existing_bytes
+            last_pct = -1
+
+            with open(temp_file, mode) as f:
+                while True:
+                    chunk = resp.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    pct = int(downloaded * 100 / total_size) if total_size > 0 else 0
+                    if pct // 5 != last_pct // 5:
+                        report(f"Downloading {model['name']}: {pct}% ({downloaded // (1024 * 1024)} MB / {total_size // (1024 * 1024)} MB)")
+                        last_pct = pct
+
+        temp_file.replace(target_file)
+        report(f"Successfully downloaded {model['name']}.")
+        return {
+            'ok': True,
+            'model': model['id'],
+            'path': str(target_file),
+            'filename': model['filename'],
+            'note': f"Downloaded {model['name']} to ~/models/"
+        }
+    except Exception as e:
+        if temp_file.exists() and temp_file.stat().st_size == 0:
+            temp_file.unlink(missing_ok=True)
+        raise ValueError(f"Download failed: {e}")
+
 def assign(rt, home, ident):
     import companion_config as cc
     import companion_platform as cp
@@ -696,6 +863,11 @@ def register(app, select):
 
     @app.post('/api/local-models/pull')
     def pull_route(payload: dict): return op('Download local model', lambda rt, h, r: pull(rt, payload.get('model'), r))
+
+    @app.post('/api/local-models/download-gguf')
+    def download_gguf_route(payload: dict):
+        model_id = payload.get('model_id', '')
+        return op('Download GGUF model', lambda rt, h, r: download_gguf(rt, model_id, r))
 
     @app.post('/api/local-models/assign')
     def assign_route(payload: dict): return op('Use local model', lambda rt, h, r: assign(rt, h, payload.get('model')))

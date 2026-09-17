@@ -405,6 +405,26 @@ def register(app, select, load, operations):
             except Exception:
                 pass
 
+        loc = {}
+        try:
+            from kit.app import local_models as lm
+            mem = lm.get_host_memory()
+            lm_stat = lm.status(rt)
+            loc = {
+                'is_mobile': mem['is_mobile'],
+                'host_memory': mem,
+                'safety_limit_gb': lm.MOBILE_MAX_MODEL_GB if mem['is_mobile'] else None,
+                'online': lm_stat.get('online', False),
+                'engine': lm_stat.get('engine', 'None'),
+                'installed': lm_stat.get('installed', False),
+                'loaded_model': lm_stat.get('loaded_model'),
+                'recommendations': lm_stat.get('recommendations', []),
+                'recommended_gguf': lm_stat.get('recommended_gguf', getattr(lm, 'RECOMMENDED_GGUF_MODELS', [])),
+                'available_models': lm_stat.get('available_models', []),
+            }
+        except Exception:
+            pass
+
         return {
             'profiles_count': len(installed),
             'has_installed_profiles': len(installed) > 0,
@@ -421,8 +441,84 @@ def register(app, select, load, operations):
                 'model': model_name,
                 'provider': provider_name,
                 'has_credential': has_cred,
-            }
+            },
+            'local_models': loc
         }
+
+    @app.post('/api/onboarding/local-setup')
+    def onboarding_local_setup(payload: dict):
+        rt, p, h = context()
+        c = load()
+        from kit.app import local_models as lm
+
+        model_id = text(payload.get('model_id', ''), 'Model ID', 200, empty=True)
+        setup_type = payload.get('type', 'gguf')
+        model_path = payload.get('path', '')
+
+        def perform_setup(report):
+            mem = lm.get_host_memory()
+            target_alias = model_id
+            target_path = model_path
+
+            if setup_type == 'gguf':
+                res = lm.download_gguf(rt, model_id, report)
+                target_path = res.get('path', '')
+                target_alias = model_id.replace('-instruct-q4_k_m', '').replace('-q4_k_m', '')[:24]
+            elif setup_type == 'ollama':
+                lm.pull(rt, model_id, report)
+                target_alias = model_id
+            elif setup_type == 'disk':
+                p_file = Path(target_path)
+                if not target_path or not p_file.is_file():
+                    raise ValueError(f"Model file not found at {target_path}")
+                size_gb = round(p_file.stat().st_size / (1024**3), 2)
+                safe, msg = lm.validate_model_safety(size_gb, mem)
+                if not safe:
+                    raise ValueError(msg)
+                target_alias = p_file.stem.lower().replace('-it', '').replace('-abliterated', '')[:24]
+
+            if not lm.status(rt)['online']:
+                try:
+                    lm.start(rt, report)
+                except Exception:
+                    pass
+
+            ctx_len = 4096 if mem['is_mobile'] else 8192
+            provider_type = 'ollama' if setup_type == 'ollama' else 'custom:local_llama'
+
+            for target_home in dict.fromkeys([c.home, c.hermes_root]):
+                def mutate(cfg):
+                    cfg.setdefault('model', {})
+                    if isinstance(cfg['model'], str):
+                        cfg['model'] = {'default': cfg['model']}
+                    cfg['model']['default'] = target_alias
+                    cfg['model']['provider'] = provider_type
+                    cfg['model']['base_url'] = 'http://127.0.0.1:11434/v1'
+                    cfg['model']['context_length'] = ctx_len
+                    cfg['fallback_providers'] = []
+                save_config(target_home, mutate)
+
+            with cp.file_lock(h / '.companion-profile-editor.lock'):
+                companion_path = h / cc.CONFIG_NAME
+                if companion_path.exists():
+                    cfg = json.loads(companion_path.read_text(encoding='utf-8'))
+                    cfg.setdefault('models', {})
+                    cfg['models']['chat'] = {'provider': provider_type, 'model': target_alias, 'reasoning_effort': 'none'}
+                    cfg['models']['loops'] = {'provider': provider_type, 'model': target_alias, 'reasoning_effort': 'none'}
+                    cfg['models']['reflection'] = {'provider': provider_type, 'model': target_alias, 'reasoning_effort': 'none'}
+                    cp.atomic_write(companion_path, json.dumps(cfg, indent=2, ensure_ascii=False) + '\n')
+
+            report(f"Configured {target_alias} as local brain for your companion.")
+            return {
+                'ok': True,
+                'configured': True,
+                'model': target_alias,
+                'path': target_path,
+                'provider': provider_type,
+                'note': f"Local model {target_alias} is active and ready."
+            }
+
+        return app.state.operations.submit(str(rt.root), 'Set up local companion model', perform_setup, profile=p)
 
     @app.post('/api/onboarding/telegram')
     def onboarding_telegram(payload: dict):

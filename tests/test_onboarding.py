@@ -91,5 +91,39 @@ class OnboardingApiTests(unittest.TestCase):
         poll = self.client.get('/api/onboarding/oauth/poll/nonexistent123', headers=self.headers)
         self.assertEqual(poll.status_code, 404)
 
+    def test_onboarding_environment_local_models(self):
+        r = self.client.get('/api/onboarding/environment', headers=self.headers)
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertIn('local_models', data)
+        loc = data['local_models']
+        self.assertIn('is_mobile', loc)
+        self.assertIn('host_memory', loc)
+        self.assertIn('recommendations', loc)
+        self.assertIn('recommended_gguf', loc)
+        self.assertTrue(len(loc['recommended_gguf']) > 0)
+
+    def test_onboarding_local_setup(self):
+        from unittest.mock import patch
+        import time
+        from kit.app import local_models as lm
+        mock_res = {'ok': True, 'path': '/fake/path/model.gguf', 'model': 'qwen2.5-1.5b-instruct-q4_k_m'}
+        with patch.object(lm, 'download_gguf', return_value=mock_res), patch.object(lm, 'status', return_value={'online': True}):
+            r = self.client.post('/api/onboarding/local-setup', headers=self.headers, json={
+                'model_id': 'qwen2.5-1.5b-instruct-q4_k_m',
+                'type': 'gguf'
+            })
+            self.assertEqual(r.status_code, 200)
+            data = r.json()
+            self.assertIn('id', data)
+            op_id = data['id']
+            for _ in range(20):
+                poll = self.client.get(f'/api/operations/{op_id}', headers=self.headers).json()
+                if poll['status'] in ('complete', 'failed'):
+                    break
+                time.sleep(0.05)
+            self.assertEqual(poll['status'], 'complete', poll)
+            self.assertEqual(poll['result']['model'], 'qwen2.5-1.5b')
+
 if __name__ == '__main__':
     unittest.main()

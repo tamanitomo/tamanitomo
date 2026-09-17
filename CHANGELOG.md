@@ -8,6 +8,7 @@
 - **Vault Backup & Export:** One-click web download (`/api/vault/export`) and `tamanitomo backup` CLI command.
 - **Android & Mobile Hardening:** Battery optimization guidance for Termux, and Wi-Fi to cellular rollover delay/finish hooks for gateway stability.
 - **Local LLM Memory Guardrails & On-Device Verification:** Automatic host RAM probing (`get_host_memory`), mobile platform detection (`is_mobile`), 2.8 GB model weight safety limit to prevent Android Low Memory Killer (LMK) crashes, 4,096-token context cap, 4-thread concurrency limits for mobile SoC thermal stability, mobile model recommendations (SmolLM2 1.7B, Qwen 2.5 1.5B, Llama 3.2 1B/3B), and live verified 17.3 t/s on-device inference on Google Pixel 8 Pro (Tensor G3).
+- **"Keep It Local" Guided Onboarding:** 100% private on-device brain setup in the first-visit wizard, featuring hardware detection, mobile limitations guidance (RAM limits, battery drain, thermal pacing), 1-click downloading/configuration for mobile and desktop models, and automated companion activation.
 
 ## 2.2.0 — Initial Release (2026-09-17)
 

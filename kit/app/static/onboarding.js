@@ -478,11 +478,56 @@ window.onboarding=async function(adopt){
   /* ---------------------------------------------------------- 6. Inference Brain */
   function inferenceStep(){
     const infConfigured=envInfo?.inference?.configured;
+    const loc=envInfo?.local_models||{};
+    const isMobile=Boolean(loc.is_mobile);
+    const hostMem=loc.host_memory||{};
+    const availRam=hostMem.available_mb ? (hostMem.available_mb/1024).toFixed(1) : (isMobile?'5.0':'8.0');
+    const totalRam=hostMem.total_mb ? (hostMem.total_mb/1024).toFixed(1) : (isMobile?'12.0':'16.0');
+
+    const recGguf=loc.recommended_gguf||[
+      {id:'qwen2.5-1.5b-instruct-q4_k_m',name:'Qwen 2.5 1.5B Instruct',family:'Qwen',gb:1.1,mobile_recommended:true,description:'Balanced conversational intelligence and speed (~17 tokens/s on Tensor G3).'},
+      {id:'smollm2-1.7b-instruct-q4_k_m',name:'SmolLM2 1.7B Instruct',family:'SmolLM',gb:1.0,mobile_recommended:true,description:'Ultra-compact mobile model, highly battery and RAM efficient.'},
+      {id:'llama-3.2-1b-instruct-q4_k_m',name:'Llama 3.2 1B Instruct',family:'Llama',gb:0.8,mobile_recommended:true,description:'Smallest memory footprint, fast lightweight responses.'},
+      {id:'llama-3.2-3b-instruct-q4_k_m',name:'Llama 3.2 3B Instruct',family:'Llama',gb:2.0,mobile_recommended:true,description:'High capability mobile model (requires ~6-8 GB RAM).'},
+      {id:'qwen2.5-3b-instruct-q4_k_m',name:'Qwen 2.5 3B Instruct',family:'Qwen',gb:2.2,mobile_recommended:false,description:'High capability desktop model for Linux, macOS, or Windows.'}
+    ];
+
+    const diskModels=loc.available_models||[];
+
+    const mobileAdvisoryHTML=isMobile ? `
+      <div class="card" style="border-left:4px solid var(--warn,#f59e0b);background:color-mix(in srgb,var(--warn,#f59e0b) 6%,var(--surface));margin:14px 0;padding:14px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:18px">📱</span>
+          <strong style="color:var(--warn,#f59e0b)">Mobile Limitations & Hardware Advisory (Android / Termux)</strong>
+        </div>
+        <p class="small" style="margin:0 0 8px;line-height:1.5">
+          Running local inference directly on a phone provides complete privacy, but physical smartphones have important hardware boundaries:
+        </p>
+        <ul class="small dim" style="margin:0 0 10px;padding-left:18px;line-height:1.6">
+          <li><strong>Strict RAM Ceiling:</strong> Models must stay under <strong>2.8 GB</strong> (1.5B–3B parameters). Attempting to load desktop 7B/8B/14B models will exceed available RAM and cause Android's <em>Low Memory Killer (LMK)</em> to terminate Termux immediately.</li>
+          <li><strong>Battery Drain & Heat:</strong> On-device text generation uses the phone's CPU/GPU (~15–20 tokens/s on Tensor G3). Continuous background loops and long chats will draw battery faster. Keep your phone connected to power for 24/7 background operation.</li>
+          <li><strong>Best Model for Phones:</strong> <strong>Qwen 2.5 1.5B</strong> (~1.1 GB) or <strong>SmolLM2 1.7B</strong> (~1.0 GB) are specifically recommended for phone thermal limits and battery efficiency.</li>
+        </ul>
+        <div class="small" style="display:inline-block;padding:4px 10px;background:color-mix(in srgb,var(--ink) 6%,transparent);border-radius:6px">
+          Device Memory: <strong>${availRam} GB available</strong> of <strong>${totalRam} GB RAM</strong> · Guardrail Active: <strong>max 2.8 GB</strong>
+        </div>
+      </div>` : `
+      <div class="card" style="border-left:4px solid var(--good,#10b981);background:color-mix(in srgb,var(--good,#10b981) 6%,var(--surface));margin:14px 0;padding:14px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:18px">💻</span>
+          <strong style="color:var(--good,#10b981)">Desktop / Host Hardware Detected</strong>
+        </div>
+        <p class="small dim" style="margin:0">
+          Device Memory: <strong>${availRam} GB available</strong> of <strong>${totalRam} GB RAM</strong>.
+          Vulkan GPU offload supported. You can run 4B to 14B models comfortably.
+        </p>
+      </div>`;
+
     shell(`
       <div class="creator-head">
         <span class="eyebrow">Step 5 of 5 · AI Engine</span>
         <h2>Connect an AI Brain for ${esc(draft.agent||'Sam')}</h2>
-        <p class="dim">Hermes powers your companion. Connect via Cloud OAuth (one-click device login) or enter an API key.</p>
+        <p class="dim">Choose how to power ${esc(draft.agent||'Sam')}. Keep it 100% local on your own device for complete privacy, or connect a cloud provider.</p>
       </div>
 
       ${infConfigured?`
@@ -493,13 +538,77 @@ window.onboarding=async function(adopt){
 
       <div class="creator-form">
         <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-          <button type="button" class="quiet tab-pill is-active" id="tab-oauth" style="font-weight:600">Cloud OAuth (Grok / OpenAI)</button>
+          <button type="button" class="quiet tab-pill is-active" id="tab-local" style="font-weight:600">🏠 Keep It Local (100% Private)</button>
+          <button type="button" class="quiet tab-pill" id="tab-oauth" style="font-weight:600">Cloud OAuth (Grok / OpenAI)</button>
           <button type="button" class="quiet tab-pill" id="tab-apikey" style="font-weight:600">API Key (OpenRouter / DeepSeek)</button>
-          <button type="button" class="quiet tab-pill" id="tab-skip" style="font-weight:600">Local / Skip for now</button>
+          <button type="button" class="quiet tab-pill" id="tab-skip" style="font-weight:600">Configure Later</button>
         </div>
 
-        <!-- Panel 1: Cloud OAuth -->
-        <div id="panel-oauth" style="display:block;padding:16px;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
+        <!-- Panel 1: Keep It Local -->
+        <div id="panel-local" style="display:block;padding:16px;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
+          <h4 style="margin:0 0 6px">100% On-Device Local Inference</h4>
+          <p class="small dim" style="margin:0 0 12px">Run your companion entirely on your device's hardware. Your conversations, memories, and personal secrets never touch external cloud servers. Zero subscriptions and complete offline privacy.</p>
+
+          ${mobileAdvisoryHTML}
+
+          <!-- Engine Status Bar -->
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px">
+            <div>
+              <span class="pill ${loc.online?'status-good':'status-bad'}">● ${loc.online ? 'Local Engine Online ('+esc(loc.engine||'llama.cpp')+')' : 'Local Engine Offline'}</span>
+              <span class="small dim" style="margin-left:8px">${loc.loaded_model ? 'Active: '+esc(loc.loaded_model.id) : (loc.installed ? 'Engine runtime ready' : 'Ready to configure')}</span>
+            </div>
+            ${!loc.online ? `<button type="button" class="act small" id="ob-start-engine-btn">▶ Start Engine</button>` : ''}
+          </div>
+
+          <!-- Model Download & Installation Section -->
+          <h5 style="margin:16px 0 8px;font-size:14px">Recommended Local Models for this Device:</h5>
+          <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-bottom:14px">
+            ${recGguf.filter(m=>!isMobile || m.mobile_recommended).map(m=>{
+              const isPresent=diskModels.some(dm=>dm.name.toLowerCase().includes(m.id.toLowerCase()) || dm.path.toLowerCase().includes(m.filename));
+              return `
+                <div class="card" style="margin-bottom:0;display:flex;flex-direction:column;justify-content:space-between;padding:14px;border:1px solid var(--border)">
+                  <div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                      <span class="pill">${esc(m.family)}</span>
+                      <span class="small dim">${m.gb} GB</span>
+                    </div>
+                    <strong style="display:block;font-size:14px;margin-bottom:4px">${esc(m.name)}</strong>
+                    <p class="small dim" style="margin:0 0 10px">${esc(m.description)}</p>
+                  </div>
+                  <div>
+                    ${isPresent ? `
+                      <span class="small status-good" style="display:block;margin-bottom:6px">● File present in ~/models</span>
+                      <button type="button" class="act small" style="width:100%" data-local-setup="${esc(m.id)}" data-setup-type="gguf">⚡ Use for ${esc(draft.agent||'Sam')}</button>
+                    ` : `
+                      <button type="button" class="act small" style="width:100%" data-local-setup="${esc(m.id)}" data-setup-type="gguf">📥 Download & Use for ${esc(draft.agent||'Sam')}</button>
+                    `}
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>
+
+          ${diskModels.length ? `
+            <details style="margin-top:10px;padding:10px;background:var(--surface);border-radius:6px;border:1px solid var(--border)">
+              <summary class="small" style="cursor:pointer;font-weight:600">📁 Or choose an existing model found on storage (${diskModels.length} discovered)</summary>
+              <div style="display:grid;gap:6px;margin-top:10px">
+                ${diskModels.map(dm=>`
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--bg-soft);border-radius:4px">
+                    <div>
+                      <strong class="small">${esc(dm.name)}</strong>
+                      <span class="small dim" style="margin-left:6px">${dm.size_gb} GB</span>
+                    </div>
+                    <button type="button" class="quiet small" data-local-setup="${esc(dm.alias||dm.name)}" data-setup-type="disk" data-model-path="${esc(dm.path)}">Select</button>
+                  </div>
+                `).join('')}
+              </div>
+            </details>
+          ` : ''}
+
+          <div id="ob-local-status" style="margin-top:12px"></div>
+        </div>
+
+        <!-- Panel 2: Cloud OAuth -->
+        <div id="panel-oauth" style="display:none;padding:16px;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
           <h4 style="margin:0 0 6px">1-Click Browser Device Authorization</h4>
           <p class="small dim" style="margin:0 0 12px">Sign in directly via your provider account. No API key creation required.</p>
           <label style="margin-bottom:12px">Select OAuth Provider
@@ -521,7 +630,7 @@ window.onboarding=async function(adopt){
           </div>
         </div>
 
-        <!-- Panel 2: API Key -->
+        <!-- Panel 3: API Key -->
         <div id="panel-apikey" style="display:none;padding:16px;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
           <h4 style="margin:0 0 6px">Direct API Key</h4>
           <p class="small dim" style="margin:0 0 12px">Enter an API key for your favorite inference provider.</p>
@@ -548,9 +657,9 @@ window.onboarding=async function(adopt){
           </div>
         </div>
 
-        <!-- Panel 3: Skip -->
+        <!-- Panel 4: Skip / Later -->
         <div id="panel-skip" style="display:none;padding:16px;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
-          <h4 style="margin:0 0 6px">Local Inference / Configure Later</h4>
+          <h4 style="margin:0 0 6px">Configure Inference Later</h4>
           <p class="small dim" style="margin:0">You can bring your companion to life now and configure your models in Settings anytime.</p>
         </div>
 
@@ -562,14 +671,66 @@ window.onboarding=async function(adopt){
 
     // Tab switching
     const showTab=(panelId,btnId)=>{
-      for(const id of ['panel-oauth','panel-apikey','panel-skip'])
-        $(id).style.display=id===panelId?'block':'none';
-      for(const id of ['tab-oauth','tab-apikey','tab-skip'])
-        $(id).classList.toggle('is-active',id===btnId);
+      for(const id of ['panel-local','panel-oauth','panel-apikey','panel-skip']){
+        const el=$(id);if(el)el.style.display=id===panelId?'block':'none';
+      }
+      for(const id of ['tab-local','tab-oauth','tab-apikey','tab-skip']){
+        const el=$(id);if(el)el.classList.toggle('is-active',id===btnId);
+      }
     };
-    $('tab-oauth').onclick=()=>showTab('panel-oauth','tab-oauth');
-    $('tab-apikey').onclick=()=>showTab('panel-apikey','tab-apikey');
-    $('tab-skip').onclick=()=>showTab('panel-skip','tab-skip');
+    if($('tab-local'))$('tab-local').onclick=()=>showTab('panel-local','tab-local');
+    if($('tab-oauth'))$('tab-oauth').onclick=()=>showTab('panel-oauth','tab-oauth');
+    if($('tab-apikey'))$('tab-apikey').onclick=()=>showTab('panel-apikey','tab-apikey');
+    if($('tab-skip'))$('tab-skip').onclick=()=>showTab('panel-skip','tab-skip');
+
+    // Local model setup actions
+    for(const b of target.querySelectorAll('[data-local-setup]')){
+      b.onclick=async()=>{
+        const modelId=b.dataset.localSetup;
+        const setupType=b.dataset.setupType||'gguf';
+        const modelPath=b.dataset.modelPath||'';
+        b.disabled=true;
+        const statusDiv=$('ob-local-status');
+        if(statusDiv)statusDiv.innerHTML='<span class="dim">Downloading & configuring local model...</span>';
+        try{
+          await action('/onboarding/local-setup',{model_id:modelId,type:setupType,path:modelPath},r=>{
+            draft.inference_mode='local';
+            draft.provider=r.provider||'custom:local_llama';
+            draft.model=r.model||modelId;
+            if(statusDiv){
+              statusDiv.innerHTML=`
+                <div class="notice-strip status-good" style="margin:10px 0">
+                  <p><strong>✅ Local Brain Configured!</strong></p>
+                  <p class="small">Sam will run 100% on-device with <code>${esc(r.model||modelId)}</code>. No external APIs used. Click Launch below to begin!</p>
+                </div>`;
+            }
+            const finishBtn=$('btn-inf-finish');
+            if(finishBtn)finishBtn.focus();
+          });
+        }catch(e){
+          if(statusDiv)statusDiv.innerHTML=`<span style="color:var(--warn)">Setup failed: ${esc(e.message||'Unknown error')}</span>`;
+        }finally{
+          b.disabled=false;
+        }
+      };
+    }
+
+    const startBtn=$('ob-start-engine-btn');
+    if(startBtn){
+      startBtn.onclick=async()=>{
+        startBtn.disabled=true;
+        try{
+          await action('/local-models/start',{},async()=>{
+            envInfo=await api('/onboarding/environment');
+            inferenceStep();
+          });
+        }catch(e){
+          notice(e.message,true);
+        }finally{
+          startBtn.disabled=false;
+        }
+      };
+    }
 
     // Provider change auto-updates default model
     $('ob-api-provider').onchange=()=>{
