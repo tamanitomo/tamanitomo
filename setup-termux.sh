@@ -501,20 +501,30 @@ mkdir -p "$HERMES_HOME" "$HERMES_HOME/scripts" "$HERMES_HOME/cron" "$HERMES_HOME
 if ! command -v hermes >/dev/null 2>&1; then
   echo -e "${CYAN}→ Installing Hermes Agent runtime...${RESET}"
   if [[ "$IS_TERMUX" -eq 1 ]]; then
-    HERMES_VENV="$HERMES_HOME/hermes-agent/venv"
-    if [[ -d "$WHEELS_DIR" && $(find "$WHEELS_DIR" -maxdepth 1 -name "*.whl" 2>/dev/null | wc -l) -ge 10 ]]; then
-      if [[ ! -d "$HERMES_VENV" ]]; then
-        echo -e "  Pre-seeding Hermes virtual environment with binary wheels..."
-        mkdir -p "$HERMES_HOME/hermes-agent"
-        if command -v python3.11 >/dev/null 2>&1; then
-          python3.11 -m venv "$HERMES_VENV" 2>/dev/null || python3 -m venv "$HERMES_VENV"
-        else
-          python3 -m venv "$HERMES_VENV"
-        fi
-        "$HERMES_VENV/bin/pip" install --upgrade pip setuptools wheel >/dev/null 2>&1 || true
+    HERMES_REPO="$HERMES_HOME/hermes-agent"
+    HERMES_VENV="$HERMES_REPO/venv"
+    if [[ ! -d "$HERMES_REPO/.git" ]]; then
+      echo -e "  Cloning Hermes Agent repository..."
+      rm -rf "$HERMES_REPO"
+      git clone --depth 1 https://github.com/NousResearch/hermes-agent.git "$HERMES_REPO" || true
+    fi
+    if [[ ! -d "$HERMES_VENV" ]]; then
+      echo -e "  Setting up Hermes virtual environment..."
+      if command -v python3.11 >/dev/null 2>&1; then
+        python3.11 -m venv "$HERMES_VENV" 2>/dev/null || python3 -m venv "$HERMES_VENV"
+      else
+        python3 -m venv "$HERMES_VENV"
+      fi
+      if [[ -d "$WHEELS_DIR" && $(find "$WHEELS_DIR" -maxdepth 1 -name "*.whl" 2>/dev/null | wc -l) -ge 10 ]]; then
+        echo -e "  Installing pre-compiled wheels into Hermes venv..."
         "$HERMES_VENV/bin/pip" install "$WHEELS_DIR"/*.whl >/dev/null 2>&1 || true
       fi
+      if [[ -f "$HERMES_REPO/pyproject.toml" ]]; then
+        echo -e "  Installing Hermes Agent..."
+        "$HERMES_VENV/bin/pip" install -e "$HERMES_REPO" >/dev/null 2>&1 || true
+      fi
     fi
+  else
     curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup || curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup || true
   fi
 fi
@@ -718,6 +728,9 @@ except Exception as e:
 " || true
 fi
 
+# Sync and register cron routines with Hermes Agent
+"$VENV_DIR/bin/python" -m kit.cli.main repair --home "$HERMES_HOME" >/dev/null 2>&1 || true
+
 # ------------------------------------------------------------------------------
 # Step 7: Configure 24/7 Background Supervision (termux-services / runit)
 # ------------------------------------------------------------------------------
@@ -808,8 +821,9 @@ EOF
     service-daemon start || true
   fi
   if command -v sv >/dev/null 2>&1; then
-    sv up tamanitomo-gateway || true
-    sv up tamanitomo-workspace || true
+    sleep 2
+    sv up tamanitomo-gateway >/dev/null 2>&1 || true
+    sv up tamanitomo-workspace >/dev/null 2>&1 || true
   fi
 fi
 
