@@ -22,7 +22,7 @@ import companion_config as cc
 from companion_platform import atomic_write
 
 TIMEOUT=8
-USER_AGENT='companion-kit'
+USER_AGENT='tamanitomo'
 
 def _tz(c):
     try:return ZoneInfo(c.timezone)

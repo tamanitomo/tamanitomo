@@ -12,6 +12,7 @@
   "update.sh",
   "companion",
   "companion.cmd",
+  "tamanitomo.cmd",
   "deploy/companion-workspace.service",
   "deploy/nginx.conf.template",
   "deploy/publish-static.sh",

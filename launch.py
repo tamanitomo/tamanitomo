@@ -38,19 +38,19 @@ def setup_lock():
 
 def bootstrap(args):
     if sys.version_info<(3,11):
-        raise SystemExit('Companion kit needs Python 3.11+. Use the companion launcher to provision Python automatically.')
+        raise SystemExit('Tamanitomo needs Python 3.11+. Use the tamanitomo launcher to provision Python automatically.')
     from update_release import apply_pending
     with setup_lock():apply_pending(ROOT)
     directory=ROOT/'.venv'
     python=directory/('Scripts/python.exe' if os.name=='nt' else 'bin/python')
     with setup_lock():
         if not python.exists():
-            print('Preparing the companion app environment…',flush=True)
+            print('Preparing the tamanitomo environment…',flush=True)
             venv.EnvBuilder(with_pip=True).create(directory)
         fingerprint=hashlib.sha256((ROOT/'requirements.txt').read_bytes()).hexdigest()
         stamp=directory/'.companion-requirements'
         if not stamp.exists() or stamp.read_text().strip()!=fingerprint:
-            print('Installing companion app dependencies…',flush=True)
+            print('Installing tamanitomo dependencies…',flush=True)
             subprocess.run([str(python),'-m','pip','install','-r',str(ROOT/'requirements.txt')],check=True)
             stamp.write_text(fingerprint+'\n')
     command=[str(python),str(ROOT/'bin/companion'),*(args or ['app'])]

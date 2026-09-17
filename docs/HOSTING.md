@@ -1,4 +1,4 @@
-# Hosted Companion Kit
+# Hosted Tamanitomo
 
 ## Example deployment architecture
 
@@ -46,7 +46,7 @@ The Nginx template and user-service example are templates; change addresses, dom
 
 ## Rollback
 
-Keep pre-change configuration backups before modifying production proxy policies. Stopping the Companion Kit user service or web container does not stop Hermes's gateway.
+Keep pre-change configuration backups before modifying production proxy policies. Stopping the Tamanitomo user service or web container does not stop Hermes's gateway.
 
 ## Verification and remaining limits
 

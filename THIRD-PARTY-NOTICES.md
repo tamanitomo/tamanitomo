@@ -1,6 +1,6 @@
 # Third-party notices
 
-companion-kit itself is licensed under [PolyForm Noncommercial 1.0.0](LICENSE). This file covers
+tamanitomo itself is licensed under [PolyForm Noncommercial 1.0.0](LICENSE). This file covers
 everything third-party that is **included in this repository**, and — separately — the things the
 kit talks to or installs for you but does not redistribute.
 

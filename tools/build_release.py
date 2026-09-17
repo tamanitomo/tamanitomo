@@ -30,14 +30,14 @@ def build(output):
     output=Path(output);output.parent.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(output,'w',compression=zipfile.ZIP_DEFLATED) as archive:
         for name,data in sorted(files.items()):
-            info=zipfile.ZipInfo('companion-kit/'+name,date_time=(2026,1,1,0,0,0))
+            info=zipfile.ZipInfo('tamanitomo/'+name,date_time=(2026,1,1,0,0,0))
             info.create_system=3
-            mode=0o755 if name in ('companion','bin/companion') else 0o644
+            mode=0o755 if name in ('companion','tamanitomo','bin/companion','bin/tamanitomo') else 0o644
             info.external_attr=(0o100000|mode)<<16
             archive.writestr(info,data,compress_type=zipfile.ZIP_DEFLATED)
     print(f'Built {output.name}: {len(hashes)} source files + integrity manifest')
     return output
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=Path,default=ROOT/'build/companion-kit.zip')
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=Path,default=ROOT/'build/tamanitomo.zip')
     build(p.parse_args().output)

@@ -234,7 +234,7 @@ def install(rt, report):
     if binary(rt): return {'note': 'Ollama is already installed. Use Start / refresh, then choose model weights.'}
     name = asset_name(); root = directory(rt); root.mkdir(parents=True, exist_ok=True)
     report('Finding the official Ollama release for this host')
-    req = urllib.request.Request('https://api.github.com/repos/ollama/ollama/releases/latest', headers={'User-Agent': 'companion-kit'})
+    req = urllib.request.Request('https://api.github.com/repos/ollama/ollama/releases/latest', headers={'User-Agent': 'tamanitomo'})
     with urllib.request.urlopen(req, timeout=30) as response: release = json.load(response)
     asset = next((a for a in release['assets'] if a['name'] == name), None)
     if not asset: raise ValueError('No official Ollama archive for this host. See ollama.com/download.')

@@ -1,6 +1,6 @@
 # A local companion stack
 
-Open Companion Kit, install Hermes if needed, and create or adopt a companion. In **Hermes settings → Local models**, install Ollama on that Hermes host, start it, and download one model. **Use for this companion** tests the weights, selects the local endpoint, removes cloud fallbacks, and resets companion background-model overrides. Apply job model changes in Hermes settings and restart persistent gateway workers afterwards.
+Open Tamanitomo, install Hermes if needed, and create or adopt a companion. In **Hermes settings → Local models**, install Ollama on that Hermes host, start it, and download one model. **Use for this companion** tests the weights, selects the local endpoint, removes cloud fallbacks, and resets companion background-model overrides. Apply job model changes in Hermes settings and restart persistent gateway workers afterwards.
 
 The installer selects the official Ollama archive for Linux x64/ARM64, Windows x64/ARM64, or macOS. It verifies the published SHA-256 before extracting beside Hermes, without sudo or a global installation. Existing Ollama installations are reused. New managed servers listen at `127.0.0.1:11434`, disable Ollama Cloud, and use an 8,192-token starting context. Model files live in `companion-engines/ollama/models` for a managed runtime; existing servers retain their own storage and settings. These are host resources shared by profiles. After a reboot, use **Start / refresh**, or configure the [Ollama operating-system service](https://docs.ollama.com/linux).
 
@@ -18,7 +18,7 @@ These are starting suggestions, not automatic hardware sizing or a guarantee of 
 
 Sources: official [4B weights](https://ollama.com/library/qwen3:4b-q4_K_M), [8B weights](https://ollama.com/library/qwen3:8b-q4_K_M), and [14B weights](https://ollama.com/library/qwen3:14b-q4_K_M). Memory suggestions above are estimates rather than publisher requirements. The library tags select explicit quantization variants; publishers may update their contents.
 
-An existing llama.cpp server also works: use Hermes's `custom` provider with its model name and local `/v1` endpoint. See the [official server documentation](https://github.com/ggml-org/llama.cpp/tree/master/tools/server). Ollama is the guided installer; Companion Kit does not install llama.cpp in this release.
+An existing llama.cpp server also works: use Hermes's `custom` provider with its model name and local `/v1` endpoint. See the [official server documentation](https://github.com/ggml-org/llama.cpp/tree/master/tools/server). Ollama is the guided installer; Tamanitomo does not install llama.cpp in this release.
 
 ## Scheduled work alongside local chat
 
@@ -63,7 +63,7 @@ watchdog; retain a finite timeout.
 `companion_local_context.py` supplies an optional Hermes context-engine factory.
 Register `make_engine(config, companion_name)` through the documented plugin
 `register_context_engine` API and select `context.engine: companion-local`.
-It delegates compression to Hermes and removes obsolete Companion Kit snapshots
+It delegates compression to Hermes and removes obsolete Tamanitomo snapshots
 only from outgoing request copies. Stored dialogue and API sidecars remain intact.
 Use an explicit compression token cap when a percentage alone exceeds your tested
 prompt budget. The plugin must be installed in the chosen profile; merely copying
@@ -94,7 +94,7 @@ Prefer it to asking an agent to rewrite an entire accumulated journal.
 
 In **Image studio**, install and start ComfyUI, add a workflow, and download its compatible checkpoints and LoRAs. The studio links to [Civitai](https://civitai.com/models), [Hugging Face](https://huggingface.co/models?pipeline_tag=text-to-image), and Civitai's [API instructions](https://github.com/civitai/civitai/wiki/REST-API-Reference). Create a Civitai API key in account settings for authenticated downloads on the host. Keep it out of exported presets. Follow model licenses and any account acceptance requirements.
 
-Place checkpoints under `companion-engines/comfyui/models/checkpoints`, LoRAs under `models/loras`, and VAEs under `models/vae` in that ComfyUI installation. Some workflows need additional text encoders or custom nodes. The model card gives matching base family, trigger words, sampler, and LoRA strengths. Use **Test connection & list models** to select the files. Companion Kit currently provides guidance and selection, not an authenticated Civitai model downloader.
+Place checkpoints under `companion-engines/comfyui/models/checkpoints`, LoRAs under `models/loras`, and VAEs under `models/vae` in that ComfyUI installation. Some workflows need additional text encoders or custom nodes. The model card gives matching base family, trigger words, sampler, and LoRA strengths. Use **Test connection & list models** to select the files. Tamanitomo currently provides guidance and selection, not an authenticated Civitai model downloader.
 
 Connected Hermes image providers, including OAuth providers, are offered as named preset drafts. Save image settings to persist them. Each saved provider preset pins its Hermes provider, so changing the general Hermes image default will not silently redirect that preset. You can map ChatGPT to Realistic and ComfyUI to Landscapes. Turn off **Include the companion's identity** for scenery. A ChatGPT preset uses an online service; select local ComfyUI routes for offline images.
 
@@ -106,4 +106,4 @@ For offline use, finish downloads and previews first; review every image route, 
 
 The normal `companion` launcher opens the browser and listens on `0.0.0.0:8770` by default. A generated access token is required for private API and media requests. Open the printed LAN link on another device on the same network. If no LAN IP is detected, replace `127.0.0.1` in the launch link with the host's LAN address, preserving its port and token. Host firewalls must allow the selected port. A busy default port may cause the launcher to choose another port.
 
-Use `companion app --host 127.0.0.1` for host-only access. The dedicated reverse-proxy service retains its explicit `COMPANION_BIND` settings. For access over the internet, use an HTTPS reverse proxy or private VPN; direct HTTP access is intended for a trusted local network. Ollama and ComfyUI stay on loopback: browsers talk to Companion Kit, which calls the engines on the Hermes host.
+Use `companion app --host 127.0.0.1` for host-only access. The dedicated reverse-proxy service retains its explicit `COMPANION_BIND` settings. For access over the internet, use an HTTPS reverse proxy or private VPN; direct HTTP access is intended for a trusted local network. Ollama and ComfyUI stay on loopback: browsers talk to Tamanitomo, which calls the engines on the Hermes host.

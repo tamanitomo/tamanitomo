@@ -24,7 +24,7 @@ def resolve(args,require_config=False):
     if home and pathlib.Path(home).resolve()!=c.home.resolve():
         sys.exit(f'refusing to act: asked for {home}, resolved to {c.home}')
     if require_config and not (c.home/cc.CONFIG_NAME).exists():
-        sys.exit(f'no companion.json in {c.home} — run `companion init` or `companion upgrade` first')
+        sys.exit(f'no companion.json in {c.home} — run `tamanitomo init` or `tamanitomo upgrade` first')
     return c
 # ---------------------------------------------------------------- scaffolding
 def write(path,text,overwrite=False):

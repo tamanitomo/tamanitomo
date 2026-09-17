@@ -1,6 +1,6 @@
 # Turn an Old Android Phone into a 24/7 Dedicated Companion Server
 
-This guide explains how to use an old Android phone to run your companion AI 24/7 using **Termux**, **Hermes Agent**, and **Companion Kit**.
+This guide explains how to use an old Android phone to run your companion AI 24/7 using **Termux**, **Hermes Agent**, and **Tamanitomo**.
 
 By using cloud inference (such as **xAI Grok**, **OpenRouter**, or **OpenAI OAuth**), the phone requires minimal CPU and RAM (~200MB RAM, <3W power), stays completely cool, and reliably serves your companion around the clock.
 
@@ -11,7 +11,7 @@ By using cloud inference (such as **xAI Grok**, **OpenRouter**, or **OpenAI OAut
 1. **Always On & Dedicated**: The phone sits plugged into a charger on your desk or bookshelf, connected to Wi-Fi.
 2. **Built-in Battery Backup**: If power goes out or flickers, the phone's battery keeps your companion running without interruption.
 3. **Chat on Your Everyday Device**: You chat with your companion directly on **Telegram** (voice notes, text, autonomous check-ins) from your daily iPhone, Android, or laptop.
-4. **Access the Web Workspace from Your Laptop**: The Companion Kit web UI is served over local Wi-Fi at `http://<phone-ip>:38439`, allowing you to inspect memories, journal, timeline, and identity from any browser on your network.
+4. **Access the Web Workspace from Your Laptop**: The Tamanitomo web UI is served over local Wi-Fi at `http://<phone-ip>:38439`, allowing you to inspect memories, journal, timeline, and identity from any browser on your network.
 
 ---
 
@@ -56,25 +56,25 @@ Before running the command, gather the keys you want to pre-fill:
 Open **Termux** on the phone.
 
 > [!NOTE]
-> **Private Repository Access**:
-> Because `nightspades/companion-kit` is private, invited friends must either clone using their GitHub credentials/token or pass their GitHub Personal Access Token (PAT) with read access to the installer.
+> **Repository Access**:
+> The project is publicly available at `tamanitomo/tamanitomo`. Friends can clone directly without needing collaborator access.
 
 ### Option A: Clone & Run (Recommended for Friends)
 Once invited as a collaborator and the invite is accepted on GitHub:
 
 ```bash
 pkg update -y && pkg install -y git
-git clone https://github.com/nightspades/companion-kit.git
-cd companion-kit
+git clone https://github.com/tamanitomo/tamanitomo.git
+cd tamanitomo
 bash setup-termux.sh
 ```
-*(Git will prompt for their GitHub username and PAT / password once during clone. After cloning, the script runs the turnkey interactive wizard with zero hassle.)*
+*(After cloning, the script runs the turnkey interactive wizard with zero hassle.)*
 
 ### Option B: Fully Pre-filled 1-Liner (Zero Typing on Phone)
 If your friend generates a GitHub Personal Access Token (or you share a read-only repository token with them), they can paste this single command:
 
 ```bash
-curl -fsSL -H "Authorization: token YOUR_GITHUB_PAT" https://raw.githubusercontent.com/nightspades/companion-kit/main/setup-termux.sh | bash -s -- \
+curl -fsSL https://raw.githubusercontent.com/tamanitomo/tamanitomo/main/setup-termux.sh | bash -s -- \
   --github-token "YOUR_GITHUB_PAT" \
   --name "Aura" \
   --human "YourName" \
@@ -86,14 +86,14 @@ curl -fsSL -H "Authorization: token YOUR_GITHUB_PAT" https://raw.githubuserconte
 
 ### Option C: Interactive Wizard via Curl
 ```bash
-curl -fsSL -H "Authorization: token YOUR_GITHUB_PAT" https://raw.githubusercontent.com/nightspades/companion-kit/main/setup-termux.sh | bash -s -- --github-token "YOUR_GITHUB_PAT"
+curl -fsSL https://raw.githubusercontent.com/tamanitomo/tamanitomo/main/setup-termux.sh | bash -s --
 ```
 
 The script will automatically:
 1. Acquire a Termux wake-lock (`termux-wake-lock`) so Android doesn't suspend the CPU.
 2. Install Python, Git, Curl, Clang, OpenSSH, and `termux-services`.
 3. Fetch the pre-compiled `aarch64` wheelhouse to install heavy dependencies (`pydantic-core`, `firecrawl-anydoc`, `maturin`, `cryptography`, `uvloop`, etc.) in ~10 seconds, cutting install time from 35+ minutes down to ~2.5 minutes!
-4. Clone Companion Kit (if not already local) and install Hermes Agent in a dedicated virtualenv.
+4. Clone Tamanitomo (if not already local) and install Hermes Agent in a dedicated virtualenv.
 5. Validate your Telegram bot token live with the Telegram API.
 6. Send a confirmation message directly to your Telegram chat.
 7. Configure Grok (`grok-2`) as primary inference, with OpenRouter/OpenAI fallbacks.

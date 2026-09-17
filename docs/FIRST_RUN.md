@@ -19,7 +19,7 @@ A fallback needs its own usable allowance. Hosting on a low-power device does no
 
 Hermes documents Termux as a best-effort platform. Its tested core includes CLI, cron, Telegram, and memory integrations. Android can suspend background work. Docker isolation and local faster-whisper are unavailable, and browser setup is experimental. See the official [Termux guide](https://hermes-agent.nousresearch.com/docs/getting-started/termux).
 
-Companion Kit's dependency bootstrap and gateway service controls have not been validated on Termux. This ZIP is not yet a verified one-click Android host installer. Do not assume the Linux service buttons work on Android.
+Tamanitomo's dependency bootstrap and gateway service controls have not been validated on Termux. This ZIP is not yet a verified one-click Android host installer. Do not assume the Linux service buttons work on Android.
 
 Before using a phone as the permanent host, validate its Android version, Python/dependency installation, app startup, Hermes gateway supervision, screen-off job execution overnight, reboot recovery, and vault backups. Keep paid photo schedules off until those checks pass. A spare plugged-in phone is a candidate for a core-feature pilot; a full desktop-equivalent environment is not established by successful Hermes installation alone.
 

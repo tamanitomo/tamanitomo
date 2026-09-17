@@ -46,8 +46,8 @@ def init(c):
     if r.returncode:return {'ready':False,'reason':(r.stderr or 'git init failed').strip()[:200]}
     # A vault is one person's private life. Identity comes from the repo, not
     # from whatever global git config happens to be on the machine.
-    _git(root,'config','user.name','companion-kit')
-    _git(root,'config','user.email','companion-kit@localhost')
+    _git(root,'config','user.name','tamanitomo')
+    _git(root,'config','user.email','tamanitomo@localhost')
     _git(root,'config','commit.gpgsign','false')
     return {'ready':True,'created':True,'root':str(root)}
 

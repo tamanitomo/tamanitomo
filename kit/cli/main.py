@@ -1,17 +1,17 @@
 """Argument parsing and the top-level error handling.
 
-The help text below is what `companion --help` prints, so it lives here rather
+The help text below is what `tamanitomo --help` prints, so it lives here rather
 than in the entry point script."""
 
 from __future__ import annotations
 
-USAGE="""companion — set up, adopt, inspect and remove Hermes companion agents.
+USAGE="""tamanitomo — set up, adopt, inspect and remove Hermes companion agents.
 
-    companion init                first-time setup on this Hermes home
-    companion add <name>          another agent alongside an existing one
-    companion remove <name>       archive an agent (never the root without --force)
-    companion upgrade             adopt an EXISTING Hermes agent into the kit
-    companion doctor              check an install and report context budgets
+    tamanitomo init                first-time setup on this Hermes home
+    tamanitomo add <name>          another agent alongside an existing one
+    tamanitomo remove <name>       archive an agent (never the root without --force)
+    tamanitomo upgrade             adopt an EXISTING Hermes agent into the kit
+    tamanitomo doctor              check an install and report context budgets
 """
 
 from . import __version__
@@ -33,10 +33,10 @@ from .setup import cmd_add, cmd_init, cmd_remove, cmd_upgrade
 from .timeline import cmd_timeline
 
 def main():
-    p=argparse.ArgumentParser(prog='companion',description=USAGE,
+    p=argparse.ArgumentParser(prog='tamanitomo',description=USAGE,
                               formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--home',type=pathlib.Path,help='Hermes home or profile dir')
-    p.add_argument('--version',action='version',version=f'companion-kit {__version__}')
+    p.add_argument('--version',action='version',version=f'tamanitomo {__version__}')
     sub=p.add_subparsers(dest='cmd')
     for name,fn in (('init',cmd_init),('add',cmd_add),('remove',cmd_remove),
                     ('upgrade',cmd_upgrade),('repair',cmd_repair),('doctor',cmd_doctor),('catalog',cmd_catalog),('schedule',cmd_schedule),('settings',cmd_settings),('gateway',cmd_gateway),('chat',cmd_chat),('timeline',cmd_timeline),('models',cmd_models),('status',cmd_status),('restore',cmd_restore),('identity',cmd_identity),('app',cmd_app)):

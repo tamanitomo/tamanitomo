@@ -14,9 +14,9 @@ def stage(raw,root=ROOT):
         files={}
         for i in entries:
             p=PurePosixPath(i.filename)
-            if len(p.parts)<2 or p.parts[0]!='companion-kit' or '..' in p.parts or '\\' in i.filename or i.is_dir() or stat.S_ISLNK(i.external_attr>>16):raise ValueError('Unsafe release path')
+            if len(p.parts)<2 or p.parts[0] not in ('tamanitomo','companion-kit') or '..' in p.parts or '\\' in i.filename or i.is_dir() or stat.S_ISLNK(i.external_attr>>16):raise ValueError('Unsafe release path')
             name='/'.join(p.parts[1:])
-            if i.filename!='companion-kit/'+name or ':' in name or any(ord(c)<32 for c in name) or any(x.endswith(('.', ' ')) for x in p.parts) or name.casefold() in {n.casefold() for n in files}:raise ValueError('Ambiguous release path')
+            if i.filename!=p.parts[0]+'/'+name or ':' in name or any(ord(c)<32 for c in name) or any(x.endswith(('.', ' ')) for x in p.parts) or name.casefold() in {n.casefold() for n in files}:raise ValueError('Ambiguous release path')
             if name.startswith('.') and name not in ('.gitignore','.github/workflows/test.yml'):raise ValueError('Private state cannot be included in an update')
             if any(x in p.parts for x in ('.env','.venv','__pycache__')) or name.endswith('companion.json'):raise ValueError('Release contains user state')
             files[name]=z.read(i)
@@ -42,7 +42,7 @@ def stage(raw,root=ROOT):
         for name,data in files.items():
             dest=folder/name;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(data)
         (folder/'SHA256SUMS.json').write_text(json.dumps(hashes))
-        return {'staged':True,'version':version,'files':len(files),'note':'Update verified and staged. Close Companion Kit, then launch it again to install. Your Hermes profiles and vault are untouched.'}
+        return {'staged':True,'version':version,'files':len(files),'note':'Update verified and staged. Close Tamanitomo, then launch it again to install. Your Hermes profiles and vault are untouched.'}
 
 _UPDATE_CACHE = {'checked_at': 0, 'data': None}
 
@@ -102,4 +102,4 @@ def register(app):
             if size>MAX_ZIP:raise HTTPException(413,'Update package exceeds 25 MB')
             chunks.append(chunk)
         try:return stage(b''.join(chunks))
-        except (zipfile.BadZipFile,KeyError,UnicodeError,json.JSONDecodeError):raise ValueError('Not a Companion Kit release package')
+        except (zipfile.BadZipFile,KeyError,UnicodeError,json.JSONDecodeError):raise ValueError('Not a Tamanitomo release package')

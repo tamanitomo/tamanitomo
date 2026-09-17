@@ -1,4 +1,4 @@
-name: Companion kit checks
+name: Tamanitomo checks
 on: [push, pull_request, workflow_dispatch]
 jobs:
   test:
@@ -18,4 +18,4 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
-      - run: python tools/build_release.py --output build/companion-kit.zip
+      - run: python tools/build_release.py --output build/tamanitomo.zip

@@ -1,3 +1,13 @@
+## Unreleased — tamanitomo rebrand
+
+**Name change.** The project is now published as **tamanitomo** (魂の友 — "Soul of a Friend").
+All user-facing references to `companion-kit` have been updated: CLI help, version strings,
+User-Agent headers, Windows launcher (`tamanitomo.cmd`), git vault identity, setup wizard banner,
+CI artifacts, and documentation. Internal script filenames (`companion_*.py`), config files
+(`companion.json`), and environment variables (`COMPANION_HOME`) are unchanged in this release to
+avoid breaking existing installations. A future compatibility pass will rename them with a
+migration script.
+
 ## Unreleased — interface overhaul
 
 **Licence.** Relicensed from AGPL-3.0 to PolyForm Noncommercial 1.0.0. Any noncommercial

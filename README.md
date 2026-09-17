@@ -48,7 +48,7 @@ The workspace opens in your browser. Choose **Tamanitomo-managed Hermes**, let i
 **Create a companion**. The interview asks seven questions about how you want things to feel and
 proposes the rest — and shows you every setting it chose before anything is written.
 
-On Windows, double-click `companion.cmd` instead.
+On Windows, double-click `tamanitomo.cmd` instead.
 
 </td>
 <td width="50%" valign="top">
@@ -58,15 +58,15 @@ On Windows, double-click `companion.cmd` instead.
 Adopt the agent you have. Your `SOUL.md` is left byte-for-byte alone.
 
 ```sh
-git clone https://github.com/YOUR-ACCOUNT/companion-kit
-cd companion-kit
-./companion
+git clone https://github.com/tamanitomo/tamanitomo
+cd tamanitomo
+./tamanitomo
 ```
 
 Choose **Existing Hermes**, pick the profile, and **Adopt**. Your memories, session history and
 vault stay exactly where they are; the continuity machinery is installed around them.
 
-Prefer the terminal? `./companion --home ~/.hermes upgrade --soul keep`
+Prefer the terminal? `./tamanitomo --home ~/.hermes upgrade --soul keep`
 
 </td>
 </tr>
@@ -180,10 +180,10 @@ Optional, and each one degrades to simply not existing: a messaging platform con
 ### Linux / macOS / WSL
 
 ```sh
-git clone https://github.com/YOUR-ACCOUNT/companion-kit && cd companion-kit
+git clone https://github.com/tamanitomo/tamanitomo && cd tamanitomo
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
-./companion
+./tamanitomo
 ```
 
 ### Native Windows
@@ -191,7 +191,7 @@ python3 -m venv .venv
 ```powershell
 py -3 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\companion.cmd
+.\tamanitomo.cmd
 ```
 
 If `py` is unavailable, use your Python executable directly — Hermes ships one at
@@ -445,7 +445,7 @@ that is the whole idea. Bring your own weights.
 
 ```sh
 .venv/bin/python -m unittest discover -s tests -v
-.venv/bin/python tools/build_release.py --output build/companion-kit.zip
+.venv/bin/python tools/build_release.py --output build/tamanitomo.zip
 ```
 
 The automated suite covers both the original companion machinery and the new workspace. They run against a local Hermes contract double and

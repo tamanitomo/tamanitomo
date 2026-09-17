@@ -635,7 +635,7 @@ def width():
     import shutil
     return max(28,min(88,shutil.get_terminal_size((80,24)).columns-4))
 
-def banner(title='companion-kit',subtitle='A home for a personality. Room for a life.'):
+def banner(title='tamanitomo',subtitle='A home for a personality. Room for a life.'):
     import textwrap
     w=width()
     print('\n'+C.cyan('╭'+'─'*(w-2)+'╮'))

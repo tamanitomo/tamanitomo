@@ -1,1 +1,1 @@
-"""companion-kit. The package exists so `kit.cli` can be imported by path."""
+"""tamanitomo. The package exists so `kit.cli` can be imported by path."""

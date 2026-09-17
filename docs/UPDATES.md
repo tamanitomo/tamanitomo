@@ -1,8 +1,8 @@
 # Private distribution and updates
 
-Use a private GitHub repository with individually authorized access and tagged releases. An organization-owned repository can give friends read-only repository access; personal-repository collaborator permissions are less granular. Share the **built Companion Kit release ZIP**, not GitHub's automatically generated source archive and not a copy of your live working directory. Keep companions, model weights, voices, vaults, environment files, credentials and private workflows out of the repository/release.
+Use a private GitHub repository with individually authorized access and tagged releases. An organization-owned repository can give friends read-only repository access; personal-repository collaborator permissions are less granular. Share the **built Tamanitomo release ZIP**, not GitHub's automatically generated source archive and not a copy of your live working directory. Keep companions, model weights, voices, vaults, environment files, credentials and private workflows out of the repository/release.
 
-For this beta, a recipient downloads your trusted release asset while signed into GitHub, then opens **Hermes settings → Companion Kit updates → Install update package**. Select the ZIP. Kit verifies its complete SHA-256 file manifest and stages it. Stop the Kit host using Ctrl-C in the launcher/terminal (closing a browser tab does not stop the host), then double-click `companion.cmd` again. The launcher applies the staged code update before checking dependencies. Hermes gateway and companion data are separate.
+For this beta, a recipient downloads your trusted release asset while signed into GitHub, then opens **Hermes settings → Tamanitomo updates → Install update package**. Select the ZIP. Kit verifies its complete SHA-256 file manifest and stages it. Stop the Kit host using Ctrl-C in the launcher/terminal (closing a browser tab does not stop the host), then double-click `companion.cmd` again. The launcher applies the staged code update before checking dependencies. Hermes gateway and companion data are separate.
 
 The updater refuses development checkouts and locally modified release files. It preserves unmanaged files, backs up previous release code under `.update-backups`, and restores that code if file installation fails. It does not migrate or overwrite the Hermes home or vault. Keep those directories outside the Kit code folder. Backups of your data are still recommended before any major application upgrade.
 
@@ -13,7 +13,7 @@ No repository or automatic update feed is configured by this package. The manual
 ## Publisher procedure
 
 1. Set a new `VERSION`; update CHANGELOG and user documentation.
-2. Run the test suite and browser checks. Build with `python tools/build_release.py --output build/companion-kit-VERSION.zip`.
+2. Run the test suite and browser checks. Build with `python tools/build_release.py --output build/tamanitomo-VERSION.zip`.
 3. Test extraction, first launch, one conversation, and an upgrade from the previous release in a disposable installation.
 4. Create a private tagged release; upload the built ZIP and a SHA-256 of the complete ZIP. Explain changes and any manual migration steps.
 5. Give the recipient repository access. They download the asset and use Install update package.

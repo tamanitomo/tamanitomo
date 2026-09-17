@@ -1,6 +1,6 @@
 # Android wrapper plan (no APK built)
 
-Use **shiaho777/web-to-app**, Website/URL mode, to open the HTTPS address of the running Companion Kit host. Do not package a static export: profiles, voice, chat and files depend on the Python/Hermes backend. The Android app is a client; the Windows/Linux host must remain on and reachable. Web updates appear without rebuilding the APK; native permission/icon/package changes require a new APK signed with the same key.
+Use **shiaho777/web-to-app**, Website/URL mode, to open the HTTPS address of the running Tamanitomo host. Do not package a static export: profiles, voice, chat and files depend on the Python/Hermes backend. The Android app is a client; the Windows/Linux host must remain on and reachable. Web updates appear without rebuilding the APK; native permission/icon/package changes require a new APK signed with the same key.
 
 This configuration was checked against upstream source commit `373f032` on 2026-09-11. It is a proposed device-test profile, not a tested APK or an importable upstream configuration file.
 
