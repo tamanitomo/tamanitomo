@@ -1,6 +1,7 @@
 """The setup questionnaire and the small validated pickers it is built from."""
 from __future__ import annotations
 import companion_config as cc
+import companion_platform as cp
 import companion_render as cr
 import json
 import os
@@ -16,7 +17,7 @@ def ask(prompt,default='',choices=None,answers=None,key=None):
         value=str(answers[key])
         if choices and value not in [v for v,_ in choices]:raise ValueError(f'Invalid choice for {key}: {value}')
         return value
-    if not sys.stdin.isatty():
+    if not cp.is_terminal(sys.stdin):
         if choices:return choices[int(default or 1)-1][0]
         return default
     if choices and wiz._tty():
@@ -45,7 +46,7 @@ def pick_key(prompt,pairs,answers=None,key=None,default=1,note=''):
 def confirm(prompt,answers=None,key=None,default=True):
     """Ask before changing something outside the agent's own directory."""
     if answers and key in answers:return wiz.as_bool(answers[key])
-    if not sys.stdin.isatty():return default
+    if not cp.is_terminal(sys.stdin):return default
     raw=input(f'{prompt} [{"Y/n" if default else "y/N"}]: ').strip().lower()
     if not raw:return default
     return raw.startswith('y')
@@ -281,7 +282,7 @@ def ask_outreach_cap(answers=None):
     """Answers give the number itself, never a menu position — "10" here means ten
     messages, not the tenth option."""
     if answers and 'outreach_per_day' in answers:return parse_cap(answers['outreach_per_day'])
-    if not sys.stdin.isatty():return 3
+    if not cp.is_terminal(sys.stdin):return 3
     while True:
         got=wiz.choose('How many times a day may they message you first?',OUTREACH_CAPS,
             allow_write=True,allow_skip=False,default=2,

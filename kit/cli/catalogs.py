@@ -1,5 +1,6 @@
 """The catalog browser."""
 from __future__ import annotations
+import companion_platform as cp
 import companion_render as cr
 import sys
 import companion_wizard as wiz
@@ -11,7 +12,7 @@ def cmd_catalog(args):
     from companion_catalog import load as load_catalog, options, BOUNDARIES
     cat=load_catalog()['categories'];gender=args.gender
     key=args.category
-    if key is None and sys.stdin.isatty():
+    if key is None and cp.is_terminal(sys.stdin):
         key=ask('Explore a category',1,[(k,v['label']) for k,v in cat.items() if gender in v]+[('personas','Personas'),('images','Image styles'),('boundaries','Relationship boundaries')])
     if key=='personas':rows=[(v['label'],v['blurb']) for v in cr.load_personas().values()]
     elif key=='images':rows=[(v['label'],v['blurb']) for v in cr.load_styles().values()]

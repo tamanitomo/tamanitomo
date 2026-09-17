@@ -42,11 +42,14 @@ def print(*args,**kwargs):
     # Presentation only: catalog values and files retain their original Unicode.
     return builtins.print(*(display_text(a) for a in args),**kwargs)
 
+import companion_platform as cp
+
 def input(prompt=''):
     return builtins.input(display_text(prompt))
 
 # ---------------------------------------------------------------- presentation
-def _tty():return sys.stdin.isatty() and sys.stdout.isatty()
+def _tty():return cp.is_terminal(sys.stdin) and cp.is_terminal(sys.stdout)
+
 def _color_ok():
     return _tty() and _VT_OK and 'NO_COLOR' not in os.environ and os.environ.get('TERM','')!='dumb'
 

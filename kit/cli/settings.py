@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse
 import companion_config as cc
+import companion_platform as cp
 import companion_render as cr
 import json
 import sys
@@ -156,7 +157,7 @@ def cmd_settings(args):
         commit_settings(c,apply_settings(c,changes),report)
         for line in report[1:]:print(line)
         return 0
-    if not sys.stdin.isatty():
+    if not cp.is_terminal(sys.stdin):
         print(json.dumps({'agent':c.agent,'home':str(c.home),
             'quiet_hours':f'{c.quiet_start}-{c.quiet_end}','timezone':c.timezone,
             'outreach':c.outreach,'outreach_per_day':c.outreach_per_day or None,

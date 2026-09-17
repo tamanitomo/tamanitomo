@@ -50,7 +50,7 @@ def cmd_gateway(args):
         print(json.dumps(cg.configure(c,args.mode),indent=2))
     if args.action:
         return cg.native(c,args.action,args.root_restarted)
-    if not args.mode and sys.stdin.isatty():
+    if not args.mode and cp.is_terminal(sys.stdin):
         report=[];offer_multiplex(c,report);print('\n'.join(report))
     print(json.dumps(cg.status(c),indent=2))
     return 0

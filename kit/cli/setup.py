@@ -121,7 +121,7 @@ def cmd_remove(args):
                  f'  Removing the profile would take the ledgers, episodes and people files with\n'
                  f'  it. Move the vault outside {home} first, or copy it somewhere safe.')
     removal_screen(name,agent,home,data,inside,args.purge)
-    if args.purge and sys.stdin.isatty():
+    if args.purge and cp.is_terminal(sys.stdin):
         typed=input('  '+wiz.C.bold(f'Type {name} to purge it permanently, or anything else to cancel: ')).strip()
         if typed!=name:
             print('\n  '+wiz.C.dim('cancelled. Nothing was removed.'));return 1

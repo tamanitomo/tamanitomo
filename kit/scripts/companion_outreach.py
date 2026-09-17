@@ -16,7 +16,8 @@ import argparse, datetime as dt, json, pathlib, sys, os, subprocess
 from zoneinfo import ZoneInfo
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
 import companion_config as cc
-from companion_platform import file_lock, hermes_command
+from companion_platform import file_lock, hermes_command, is_terminal
+
 
 LEDGER='outreach.jsonl'
 UNLIMITED=0
@@ -142,7 +143,7 @@ def main():
     c=cc.load(a.home)
     if a.action=='send':
         try:
-            message=a.message if a.message is not None else (a.message_file.read_text(encoding='utf-8') if a.message_file else (sys.stdin.read() if not sys.stdin.isatty() else ''))
+            message=a.message if a.message is not None else (a.message_file.read_text(encoding='utf-8') if a.message_file else (sys.stdin.read() if not is_terminal(sys.stdin) else ''))
         except (OSError,UnicodeError):
             print(json.dumps({'allowed':False,'delivered':False,'reason':'Message input file could not be read'}));return 1
         result=send(c,message,a.reason,a.to)

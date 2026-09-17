@@ -67,7 +67,7 @@ def menu(hermes_root):
 def cmd_menu(args):
     root=pathlib.Path(args.home or cp.default_home())
     if root.parent.name=='profiles':root=root.parent.parent
-    if not sys.stdin.isatty():
+    if not cp.is_terminal(sys.stdin):
         for r in agent_rows(root):
             print(f"{r['name']}\t{r['agent']}\t{'set-up' if r['set_up'] else 'not-set-up'}")
         return 0

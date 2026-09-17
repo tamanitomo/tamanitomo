@@ -101,9 +101,25 @@ def terminal_command(argv):
 def terminal_python_command(script,*args):
     return terminal_command([sys.executable,script,*args])
 
+def is_terminal(stream=None):
+    """True only when stream is attached to an interactive terminal, never for NUL or pipes."""
+    s=sys.stdin if stream is None else stream
+    if not (s and hasattr(s,'isatty') and s.isatty()):return False
+    if os.name=='nt':
+        try:
+            import msvcrt, ctypes
+            handle=msvcrt.get_osfhandle(s.fileno())
+            mode=ctypes.c_ulong()
+            if not ctypes.windll.kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+                return False
+        except Exception:
+            return False
+    return True
+
 if os.name=='nt':
     # Also works when scripts are invoked directly rather than via the launcher.
     for stream in (sys.stdin,sys.stdout,sys.stderr):
         if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8',errors='replace')
     os.environ.setdefault('PYTHONUTF8','1')
     os.environ.setdefault('PYTHONIOENCODING','utf-8')
+
