@@ -55,27 +55,18 @@ Before running the command, gather the keys you want to pre-fill:
 
 Open **Termux** on the phone.
 
-> [!NOTE]
-> **Repository Access**:
-> The project is publicly available at `tamanitomo/tamanitomo`. Friends can clone directly without needing collaborator access.
-
-### Option A: Clone & Run (Recommended for Friends)
-The repository is public, so no invitation is needed:
+### Option A: Turnkey 1-Liner (Recommended)
+Pasting this single command automatically provisions packages, creates the virtual environment, configures the services, and walks you through an interactive setup:
 
 ```bash
-pkg update -y && pkg install -y git
-git clone https://github.com/tamanitomo/tamanitomo.git
-cd tamanitomo
-bash setup-termux.sh
+curl -fsSL https://raw.githubusercontent.com/tamanitomo/tamanitomo/main/setup-termux.sh | bash
 ```
-*(After cloning, the script runs the turnkey interactive wizard with zero hassle.)*
 
 ### Option B: Fully Pre-filled 1-Liner (Zero Typing on Phone)
-If your friend generates a GitHub Personal Access Token (or you share a read-only repository token with them), they can paste this single command:
+If you prefer to pre-fill your API keys and companion details in one paste:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tamanitomo/tamanitomo/main/setup-termux.sh | bash -s -- \
-  --github-token "YOUR_GITHUB_PAT" \
   --name "Sam" \
   --human "YourName" \
   --telegram-token "YOUR_TELEGRAM_BOT_TOKEN" \
@@ -84,9 +75,12 @@ curl -fsSL https://raw.githubusercontent.com/tamanitomo/tamanitomo/main/setup-te
   --openrouter-key "sk-or-v1-YOUR_OPENROUTER_KEY"
 ```
 
-### Option C: Interactive Wizard via Curl
+### Option C: Clone & Run Manually
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tamanitomo/tamanitomo/main/setup-termux.sh | bash -s --
+pkg update -y && pkg install -y git
+git clone https://github.com/tamanitomo/tamanitomo.git
+cd tamanitomo
+bash setup-termux.sh
 ```
 
 The script will automatically:

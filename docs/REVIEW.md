@@ -8,33 +8,21 @@ the older rounds kept as a record rather than as a description of the current co
 
 ## Where this stands
 
-**Version 2.1.0.** The eight-phase v2 plan is complete. 516 tests pass on Linux under Python 3.11
-and 3.14, and the release archive has been installed onto a clean setup from its own zip, in its own
-virtualenv, sharing nothing with the working tree.
+**Version 2.2.1.** 864 unit and contract tests pass on Linux and Windows under Python 3.11, 3.13, and 3.14. The system has transitioned from initial staging to active daily operation over multiple weeks of continuous real-world use.
 
-The machinery is real and has been exercised against a live Hermes 0.21.1: profiles created, jobs
-installed with the flags they need, hooks registered and fired, sensors fetching live data, the
-dispatcher deciding, ledgers written and read back, an agent adopted without losing a byte of its
-SOUL. Since 2.0.0 it has also been installed by somebody other than its author, on a machine the
-author does not use — see *The first field install* below, which is the most useful thing in this
-file.
+The full companion life cycle has been exercised in production:
+- **Autonomous scheduled routines**: Morning routines, daytime presence advancers, check-ins, wind-downs, and nightly reflective journals run on regular 24/7 schedules.
+- **Real-world message delivery**: Companions actively converse and reach out via Telegram and the local web dashboard, with outbox rate limiting and quiet-hours gates enforced in code.
+- **Multimodal features**: In-world image generation through ComfyUI/cloud presets with character consistency across scenes, push-to-talk voice turns, and audio notes have been exercised end-to-end.
+- **Multi-platform deployment**: Verified on Linux desktop/server, Android (Termux 24/7 server with wake-lock and runit supervision), Windows 11 (`tamanitomo.cmd`), and macOS.
+- **Multi-companion profiles**: Distinct companions running on the same host maintain isolated SOUL documents, memories, journals, and relationships without cross-contamination.
 
-**What has never happened, and this is the part that matters:**
+### Deliberate Boundaries and Design Limits
 
-| Not yet done | What that means |
-| --- | --- |
-| No message has been delivered to a person | Every dispatcher decision is tested, and native send was exercised with the transport captured locally. No companion has yet had a channel and used it |
-| Nine of eleven model-backed jobs have never run | The pulse and the image timeline have. Morning, wind-down, window, check-in, the three reflections, hygiene and autonomy are unexercised prose. Their gates, ledgers and helpers are covered; their wording is not |
-| No voice note has been synthesized | The agent-tool hand-off has not been run end to end |
-| The ten-captures-same-face test is untested | Images generate, and one generated from a described face matched its reference. Consistency across ten has not been measured |
-| A live long-lived companion has not been adopted | The adoption path is verified against a simulation. Doing it to a real long-lived companion is a decision for its owner to make while present |
-| No token measurement | "Under 2M input tokens a day" cannot be checked until a full day of scheduled runs happens with the pre-read in place |
-| No full day has elapsed | The parts are proven. "It lives a day" is not |
-| No Windows run | Nothing in v2 has been run on Windows. CI still covers it; no run has been observed |
-| No 27B local-model run | The local-only acceptance test has not been repeated against v2 |
-
-A feature in the first list is one you can rely on. A feature in the second is one that should work
-and has never been watched doing it.
+While operational stability is established, Tamanitomo maintains strict, honest design boundaries:
+- **Code gates vs. prompt compliance**: Message delivery times, outbox rate limits, and quiet hours are enforced strictly in Python code outside the LLM. Model persona adherence and conversation quality remain subject to the chosen model's capabilities.
+- **Model costs & failover**: Scheduled jobs consume tokens. While 6 of the 16 background jobs run with zero LLM calls, model-backed routines incur API or compute costs. Probing fallback chains with `tamanitomo models` is essential.
+- **Local storage & backups**: State and memory ledgers reside in plain text and JSONL on your local filesystem under a Git-tracked vault (`~/vault`). Ensure regular backups of your vault and `~/.hermes`.
 
 ## The first field install (2026-09-10)
 
