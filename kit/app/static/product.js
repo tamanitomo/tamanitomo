@@ -859,8 +859,8 @@ workspaceHandlers.now=async()=>{
       bannerUpdate.disabled = true;
       bannerUpdate.textContent = 'Updating...';
       try {
-        await action('/updates/apply', {});
-        if (window.waitForRestart) window.waitForRestart(updateInfo.latest_version);
+        const result = await action('/updates/apply', {});
+        if (result.result?.restarting && window.waitForRestart) window.waitForRestart(result.result.version, updateInfo.instance_id);
       } catch (err) {
         bannerUpdate.disabled = false;
         bannerUpdate.textContent = '⚡ Update Now';

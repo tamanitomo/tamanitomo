@@ -1,0 +1,54 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  updater-checks:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install -r requirements.txt
+      - run: python -m pytest -q tests/test_updates.py
+      - run: node tests/test_updates_ui.js
+  release:
+    needs: updater-checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install -r requirements.txt
+      - name: Validate release version
+        run: test "$GITHUB_REF_NAME" = "v$(cat VERSION)"
+      - run: python -m pytest -q
+      - name: Check browser scripts
+        run: node tests/test_updates_ui.js
+      - name: Build official asset
+        run: |
+          python tools/build_release.py --output build/tamanitomo-release.zip
+          cd build
+          sha256sum tamanitomo-release.zip > tamanitomo-release.zip.sha256
+      - name: Publish stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" build/tamanitomo-release.zip build/tamanitomo-release.zip.sha256 \
+            --verify-tag --title "Tamanitomo $GITHUB_REF_NAME" --notes-file docs/RELEASE_NOTES.md --latest

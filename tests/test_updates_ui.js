@@ -1,48 +1,23 @@
-// Exercise in-app update UI components and reconnection helper.
+// Reconnection waits for the new version AND a new server process.
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const path=require('node:path');
-const root=path.join(__dirname,'../kit/app/static');
-const read=name=>fs.readFileSync(path.join(root,name),'utf8');
-
-const index=read('index.html'),workspace=read('workspace.js');
-let reloaded=false,appendedElement=null;
-
-const loc = {origin:'http://localhost',reload:()=>{reloaded=true;}};
-const sandbox={
-  URL,console,
-  setTimeout:(fn,delay)=>fn(),
-  setInterval:(fn,delay)=>{fn();return 123;},
-  clearInterval:id=>{},
-  location:loc,
-  window:{location:loc},
-  document:{
-    getElementById:id=>null,
-    body:{
-      appendChild:el=>{appendedElement=el;return el;}
-    },
-    createElement:tag=>{
-      return {tagName:tag,style:{},innerHTML:'',id:''};
-    }
-  },
-  esc:s=>String(s),
-  scoped:p=>p,
-  fetch:async(url)=>{
-    return {ok:true};
-  }
-};
-
+const workspace=fs.readFileSync(require('node:path').join(__dirname,'../kit/app/static/workspace.js'),'utf8');
+let reloaded=false,element=null,tick,status={version:'2.2.1',instance_id:'old'};
+const loc={reload:()=>{reloaded=true;}};
+const sandbox={console,
+  setTimeout:fn=>fn(),setInterval:fn=>{tick=fn;return 123;},clearInterval:()=>{},
+  window:{location:loc},document:{getElementById:()=>null,
+    body:{appendChild:el=>{element=el;}},createElement:()=>({style:{}})},
+  esc:String,scoped:p=>p,fetch:async()=>({ok:true,json:async()=>status})};
 vm.createContext(sandbox);
-vm.runInContext("const INSTALLATION='existing',PROFILE='sam';",sandbox);
 vm.runInContext(workspace.slice(workspace.indexOf('window.waitForRestart'),workspace.indexOf('async function boot')),sandbox);
-
 (async()=>{
-  assert.equal(typeof sandbox.window.waitForRestart,'function','waitForRestart must be exposed on window');
-  sandbox.window.waitForRestart('2.3.0');
-  assert.ok(appendedElement,'waitForRestart must attach overlay backdrop');
-  assert.equal(appendedElement.id,'update-reconnect-backdrop');
-  assert.match(appendedElement.innerHTML,/Restarting Workspace/);
-  assert.match(appendedElement.innerHTML,/v2\.3\.0/);
-  await new Promise(resolve => setTimeout(resolve, 50));
-  assert.equal(reloaded,true,'successful ping must reload workspace');
+  sandbox.window.waitForRestart('2.3.0','old');
+  assert.equal(element.id,'update-reconnect-backdrop');
+  assert.match(element.innerHTML,/v2\.3\.0/);
+  await tick();assert.equal(reloaded,false,'old version cannot finish reconnect');
+  status={version:'2.3.0',instance_id:'old'};
+  await tick();assert.equal(reloaded,false,'old process with newly written VERSION cannot finish reconnect');
+  status={version:'2.3.0',instance_id:'new'};
+  await tick();assert.equal(reloaded,true,'updated process completes reconnect');
   console.log('In-app update UI reconnection tests passed.');
 })();

@@ -1,3 +1,11 @@
+## 2.2.2 — Official release updates (2026-09-19)
+
+- Publish a source-only `tamanitomo-release.zip` with an explicit file manifest and SHA-256 checksums for every stable release.
+- The in-app update feature uses the latest published stable release for both ZIP and Git installations. It reports unavailable checks, rejects downgrades and missing assets, and verifies the downloaded asset digest when GitHub provides one.
+- Dependency failures stop code installation. ZIP installs retain rollback backups and preserve executable permissions; locally edited installations are refused.
+- Restart only the current workspace, retain Hermes profiles and private data, and wait for the new server instance before reconnecting.
+- Include the onboarding and Termux lifecycle fixes already present on main.
+
 ## 2.2.1 — Interactive Onboarding, Intimacy Recalibration & Mobile Hardening (2026-09-17)
 
 - **Interactive First-Visit Onboarding:** Zero-profile detection triggers guided birth wizard (Telegram BotFather/userinfobot guide, Relational vs Worker choice, 8 PMD-style dilemma questions, Sam companion card reveal with in-drawer customizer, and cloud device-code OAuth for xAI Grok and OpenAI Codex).

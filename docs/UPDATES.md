@@ -1,27 +1,28 @@
-# Private distribution and updates
+# Official releases and updates
 
-Use a private GitHub repository with individually authorized access and tagged releases. An organization-owned repository can give friends read-only repository access; personal-repository collaborator permissions are less granular. Share the **built Tamanitomo release ZIP**, not GitHub's automatically generated source archive and not a copy of your live working directory. Keep companions, model weights, voices, vaults, environment files, credentials and private workflows out of the repository/release.
+All installations use the stable releases at https://github.com/tamanitomo/tamanitomo/releases/latest. For a new installation, download the attached **tamanitomo-release.zip**, extract it into a dedicated application folder and run `tamanitomo` (or `tamanitomo.cmd` on Windows). GitHub's automatically generated source archives do not contain the installed release checksum manifest and cannot use the ZIP updater.
 
-For this beta, a recipient downloads your trusted release asset while signed into GitHub, then opens **Hermes settings → Tamanitomo updates → Install update package**. Select the ZIP. Kit verifies its complete SHA-256 file manifest and stages it. Stop the Kit host using Ctrl-C in the launcher/terminal (closing a browser tab does not stop the host), then double-click `companion.cmd` again. The launcher applies the staged code update before checking dependencies. Hermes gateway and companion data are separate.
+Keep Hermes profiles, credentials, memories, models and vaults outside the application folder. The update archive contains application files from `release-files.json`; it never contains your running instance or Python environment.
 
-The updater refuses development checkouts and locally modified release files. It preserves unmanaged files, backs up previous release code under `.update-backups`, and restores that code if file installation fails. It does not migrate or overwrite the Hermes home or vault. Keep those directories outside the Kit code folder. Backups of your data are still recommended before any major application upgrade.
+## Update from a phone or desktop browser
 
-A package's internal checksum proves consistency, not publisher identity: install ZIPs only from the trusted private release page. For a later automatic **Check for updates** feature, use GitHub Releases metadata and a separate read-only credential belonging to each recipient (fine-grained token scoped to that repository with Contents: read where GitHub supports that access relationship; otherwise use a GitHub App or retain signed-in manual downloads). GitHub currently documents limitations for fine-grained tokens used by outside/repository collaborators, so test access before promising token-based updates. Keep credentials on the Hermes host, never in browser JavaScript or an APK. Download assets through GitHub's authenticated release-asset API and strip authorization when following redirects to a different host. Verify the published asset digest, then use the same staging/apply mechanism. Do not share your publisher token or run arbitrary `git pull` over a modified installation.
+Open **Settings → App & access → Updates**, select **Check for updates**, then **Update to v… Now**. The host downloads the official asset, verifies its file manifest and available GitHub asset digest, installs changed Python requirements, backs up the old application files, applies the update and restarts the workspace. Leave the browser open while it reconnects. Hermes itself is not updated or restarted.
 
-No repository or automatic update feed is configured by this package. The manual package button works without a repository integration. If you host everybody on one server instead, updating that server updates the UI for everyone, but you then own their availability, account isolation and backups. Separate friend-owned installations are the simpler privacy boundary for this beta.
+Git installations fetch the published release tag and require a clean checkout that can fast-forward. They do not stash changes or reset local work. ZIP installations refuse modified managed files or collisions with unmanaged files. Network errors are shown as errors rather than “up to date.” A failed dependency installation leaves the application code unchanged, although pip may already have changed some packages; rerun the update after resolving the error.
 
-## Publisher procedure
+## Source copies and existing installations
 
-1. Set a new `VERSION`; update CHANGELOG and user documentation.
-2. Run the test suite and browser checks. Build with `python tools/build_release.py --output build/tamanitomo-VERSION.zip`.
-3. Test extraction, first launch, one conversation, and an upgrade from the previous release in a disposable installation.
-4. Create a private tagged release; upload the built ZIP and a SHA-256 of the complete ZIP. Explain changes and any manual migration steps.
-5. Give the recipient repository access. They download the asset and use Install update package.
+An extracted official release includes `SHA256SUMS.json`. A manually copied source folder does not. Do not fabricate a manifest for unverified code: extract an official ZIP into a new application folder and point the existing launcher/service at it, retaining the same external Hermes home and workspace state. Development checkouts can use the release-tag update path when clean.
 
 ## Recovery
 
-If staging fails, no installed code is changed. If launch says installed code changed, preserve those edits and install into a fresh folder rather than forcing replacement. If a completed update has a runtime regression, close the host, copy the contents of the desired `.update-backups/<id>` over the code folder (including SHA256SUMS.json), remove files introduced by the newer release if applicable, and relaunch. Alternatively extract the previous full release into a new code folder and select the same existing Hermes installation and vault. Never restore an old vault over newer companion memories merely to roll back code.
+Previous application files are stored under `.update-backups/<id>`. Stop the workspace before restoring a backup, including its `SHA256SUMS.json`, and remove application files introduced by the failed update. Alternatively, extract the previous official ZIP into a fresh application folder and configure the same external Hermes home and workspace state. A rollback of code is not a restore of companion data. Python dependencies may require reinstalling from the previous requirements file.
 
-Sources: [GitHub Releases API](https://docs.github.com/en/rest/releases/releases), [fine-grained token permissions](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens).
+## Publish a release
 
-Additional authentication reference: [GitHub token limitations](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
+1. Update `VERSION`, `CHANGELOG.md` and `docs/RELEASE_NOTES.md`.
+2. Run the Python suite and JavaScript UI checks. Build with `python tools/build_release.py --output build/tamanitomo-release.zip` and verify an upgrade in a disposable installation.
+3. Commit the source, push it, then push the matching `vX.Y.Z` tag.
+4. The Release workflow reruns tests, builds the allowlisted ZIP plus its checksum, and publishes them together. The app checks only published stable releases with the expected asset.
+
+A package's internal checksums prove consistency, not publisher identity. Download from the official release page.

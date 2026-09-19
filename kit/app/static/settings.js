@@ -479,11 +479,11 @@ const settingsPanels=[
  blurb:'What version you are on, and how to move',
  keywords:'update version release upgrade changelog github',
  async render(host){
-  const d=await api('/updates').catch(()=>({version:'unknown',has_update:false}));
+  const d=await api('/updates').catch(error=>({version:'unknown',has_update:false,error:error.message}));
   host.innerHTML=`
   <div class="section-heading" style="margin-top:0">
     <h2 style="margin:0">Updates</h2>
-    <span class="pill ${d.has_update?'status-warn':'status-good'}">${d.has_update?`v${esc(d.latest_version)} available`:'Up to date'}</span>
+    <span class="pill ${d.has_update?'status-warn':'status-good'}">${d.has_update?`v${esc(d.latest_version)} available`:d.error?'Check unavailable':'Up to date'}</span>
   </div>
   <dl class="fact-list">
     <div><dt>Installed</dt><dd>v${esc(d.version)}</dd></div>
@@ -497,15 +497,14 @@ const settingsPanels=[
       ${d.release_url?`<a class="link-button" href="${esc(d.release_url)}" target="_blank" rel="noopener">Release notes →</a>`:''}
     </div>
   </div>`:`<div class="notice-strip" style="margin-top:16px">
-    <p class="dim" style="margin:0">${d.latest_version?'You are up to date.':'No update check is available yet.'} Installed: v${esc(d.version)}.</p>
+    <p class="dim" style="margin:0">${d.error?esc(d.error):d.latest_version?'You have the latest stable release.':'No update check is available yet.'} Installed: v${esc(d.version)}.</p>
     <div style="margin-top:10px">
       <button class="quiet" id="btn-check-updates">🔄 Check for updates</button>
     </div>
   </div>`}
   <h3 class="section-subheading">Update scope</h3>
   <p class="dim small">This updates Tamanitomo’s interface, autonomous companion routines, and application code. The upstream Hermes Agent engine and external model providers are kept isolated and stable.</p>
-  <h3 class="section-subheading">Host terminal alternative</h3>
-  <pre class="command-block">./update.sh          # Update Tamanitomo via terminal</pre>`;
+  <p class="dim small">Updates come from the latest stable <a href="https://github.com/tamanitomo/tamanitomo/releases/latest" target="_blank" rel="noopener">official GitHub release</a>.</p>`;
 
   const updateBtn = host.querySelector('#btn-inapp-update');
   if (updateBtn) {
@@ -514,8 +513,9 @@ const settingsPanels=[
       updateBtn.disabled = true;
       updateBtn.textContent = 'Updating...';
       try {
-        await action('/updates/apply', {});
-        if (window.waitForRestart) window.waitForRestart(d.latest_version);
+        const result = await action('/updates/apply', {});
+        if (result.result?.restarting && window.waitForRestart) window.waitForRestart(result.result.version, d.instance_id);
+        else openSettings(null, 'updates');
       } catch (err) {
         updateBtn.disabled = false;
         updateBtn.textContent = `⚡ Update to v${d.latest_version} Now`;
@@ -531,7 +531,9 @@ const settingsPanels=[
       checkBtn.textContent = 'Checking GitHub...';
       try {
         const fresh = await api('/updates/check', { method: 'POST' });
-        if (fresh.has_update) {
+        if (fresh.error) {
+          notice(fresh.error, true);
+        } else if (fresh.has_update) {
           notice(`New version v${fresh.latest_version} available!`);
         } else {
           notice('Tamanitomo is up to date.');

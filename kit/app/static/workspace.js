@@ -115,7 +115,7 @@ async function action(path,payload={},onDone){
 }
 function bindAction(id,path,payload={},onDone){const button=$(id);if(button)button.onclick=async()=>{button.disabled=true;try{await action(path,typeof payload==='function'?payload():payload,onDone);}finally{button.disabled=false;}};}
 
-window.waitForRestart = function(targetVersion) {
+window.waitForRestart = function(targetVersion, previousInstance) {
   let backdrop = document.getElementById('update-reconnect-backdrop');
   if (!backdrop) {
     backdrop = document.createElement('div');
@@ -135,9 +135,18 @@ window.waitForRestart = function(targetVersion) {
   let attempts = 0;
   const timer = setInterval(async () => {
     attempts++;
+    if (attempts > 90) {
+      clearInterval(timer);
+      const st = document.getElementById('update-reconnect-status');
+      if (st) st.textContent = 'Reconnection timed out. Refresh this page or check the host service.';
+      return;
+    }
     try {
-      const res = await fetch(scoped('/api/updates?force=true'), { cache: 'no-store' });
+      const res = await fetch(scoped('/api/updates'), { cache: 'no-store' });
       if (res.ok) {
+        const status = await res.json();
+        if ((targetVersion && status.version !== targetVersion.replace(/^v/, '')) ||
+            (previousInstance && status.instance_id === previousInstance)) return;
         clearInterval(timer);
         const st = document.getElementById('update-reconnect-status');
         if (st) st.textContent = 'Service online! Reloading workspace...';
