@@ -59,7 +59,7 @@ function paintReviewBanner(){
     : (update?.has_update
       ? `<button class="link-button small" id="header-update" style="color:var(--warn)">✨ Update v${esc(update.latest_version)} available</button>`
       : (!isDismissed && setupPending && setupPending.length>0
-        ? `<button class="link-button small" id="header-finish-setup" style="color:var(--accent);font-weight:600"><span aria-hidden="true">✨</span> Finish setting up ${esc(agentName||'Sam')} (${setupPending.length} remaining) →</button>`:''));
+        ? `<button class="link-button small" id="header-finish-setup" style="color:var(--accent);font-weight:600"><span aria-hidden="true">✨</span> Finish setting up ${esc(agentName||'your companion')} (${setupPending.length} remaining) →</button>`:''));
   for(const host of document.querySelectorAll('#banner,#home-banner')){
     host.innerHTML=html;
     const health=host.querySelector('#header-health'),upd=host.querySelector('#header-update'),fin=host.querySelector('#header-finish-setup');
@@ -84,7 +84,7 @@ async function refreshReviewBanner(){
 
 async function openFinishCustomizingDialog(){
   if(!await confirmEditorLeave('dialog'))return;
-  const agentName=reviewState.agentName||$('who')?.textContent||'Sam';
+  const agentName=reviewState.agentName||$('who')?.textContent||'your companion';
   dialog('Finish Setting Up '+agentName, '<p class="dim" style="text-align:center;padding:24px 0">Loading preferences…</p>');
   try{
     const [s,v]=await Promise.all([
@@ -726,7 +726,7 @@ workspaceHandlers.now=async()=>{
   const rawOutfit=Array.isArray(s?.outfit)?filterWardrobeItems(s.outfit,stage):[];
   const currentOutfit=wearingPieces.map(x=>x.description||x.id).join(', ')||rawOutfit.map(x=>x.description||x.id).join(', ')||(typeof s?.outfit==='string'&&filterWardrobeItems([s.outfit],stage).length?s.outfit:'');
   const chemistry=emotions?.intimacy||d.intimacy||null;
-  const feelingBadge=chemistry?`<span class="chem-icon" aria-hidden="true">✨</span><span class="chem-stage">${esc(chemistry.stage_badge)}</span><span class="chem-score">${chemistry.score}%</span>`:'';
+  const feelingBadge=chemistry?.romantic_progression===false?`<span class="chem-stage">${esc(chemistry.connection_label||'Familiarity')}</span>`:chemistry?`<span class="chem-icon" aria-hidden="true">✨</span><span class="chem-stage">${esc(chemistry.stage_badge)}</span><span class="chem-score">${chemistry.score}%</span>`:'';
 
   let latestThought='';
   let thoughtSource='';
@@ -745,7 +745,7 @@ workspaceHandlers.now=async()=>{
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;width:100%">
       <div>
         <p style="margin:0"><strong>Tamanitomo v${esc(updateInfo.latest_version)}</strong> is available. (Installed: v${esc(updateInfo.version)})</p>
-        <p class="dim small" style="margin:2px 0 0 0">Sam's memories, journals, and vault remain completely untouched.</p>
+        <p class="dim small" style="margin:2px 0 0 0">Your companions’ memories, journals, and vault remain completely untouched.</p>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
         <button class="act small" id="banner-apply-update">⚡ Update Now</button>
@@ -793,7 +793,7 @@ workspaceHandlers.now=async()=>{
             ${feelingBadge?`
             <div class="hero-chemistry-row">
               <span class="pill status-good hero-chemistry-pill" style="--chem-score:${Number(chemistry.score)||0}%"
-                title="Relationship & chemistry stage: ${esc(chemistry.stage_badge)} ${chemistry.score}%">
+                title="${esc(chemistry.romantic_progression===false?chemistry.connection_label:chemistry.stage_badge)}">
                 ${feelingBadge}
               </span>
             </div>`:''}
@@ -855,7 +855,7 @@ workspaceHandlers.now=async()=>{
   const bannerUpdate = $('banner-apply-update');
   if (bannerUpdate) {
     bannerUpdate.onclick = async () => {
-      if (!confirm(`Update Tamanitomo to v${updateInfo.latest_version}?\n\nSam's memories and vault files will remain untouched.\nThe workspace will restart automatically.`)) return;
+      if (!confirm(`Update Tamanitomo to v${updateInfo.latest_version}?\n\nYour companions’ memories and vault files will remain untouched.\nThe workspace will restart automatically.`)) return;
       bannerUpdate.disabled = true;
       bannerUpdate.textContent = 'Updating...';
       try {
@@ -1534,10 +1534,10 @@ workspaceHandlers.knows=async()=>{
 
   $('knows').innerHTML=heading('Memory ledger','Verified personal knowledge, standing rules, and conversational context maintained by Hermes.')+
   `<div class="stat-strip memory-kpi-strip">
-    <div class="stat-item"><span>Verified facts</span><strong>${factsTotal}</strong><span class="dim small">Personal ledger</span></div>
-    <div class="stat-item"><span>Standing rules</span><strong>${standingTotal}</strong><span class="dim small">Behavioral guidelines</span></div>
-    <div class="stat-item"><span>Shared moments</span><strong>${momentsTotal}</strong><span class="dim small">Milestone memories</span></div>
-    <div class="stat-item"><span>Open inquiries</span><strong>${questionsTotal}</strong><span class="dim small">Active context</span></div>
+    <div class="stat-item"><span>Verified facts</span><strong>${factsTotal}</strong></div>
+    <div class="stat-item"><span>Standing rules</span><strong>${standingTotal}</strong></div>
+    <div class="stat-item"><span>Shared moments</span><strong>${momentsTotal}</strong></div>
+    <div class="stat-item"><span>Open inquiries</span><strong>${questionsTotal}</strong></div>
   </div>
   <div class="filters">
     <label>Search memory<input type="search" id="memory-search" placeholder="Search statements, evidence, guidelines…"></label>
@@ -1614,9 +1614,9 @@ workspaceHandlers.loops=async()=>{
 
   $('loops').innerHTML=heading('Plans & calendar','Shared schedule, commitments, autonomous investigations, and open threads.')+
   `<div class="stat-strip">
-    <div class="stat-item"><span>Active tasks</span><strong>${openCount}</strong><span class="dim small">Autonomy & calendar queue</span></div>
-    <div class="stat-item"><span>Total scheduled</span><strong>${missions.length}</strong><span class="dim small">Missions & reminders</span></div>
-    <div class="stat-item"><span>Open threads</span><strong>${loops.length}</strong><span class="dim small">Conversational continuity</span></div>
+    <div class="stat-item"><span>Active tasks</span><strong>${openCount}</strong></div>
+    <div class="stat-item"><span>Total scheduled</span><strong>${missions.length}</strong></div>
+    <div class="stat-item"><span>Open threads</span><strong>${loops.length}</strong></div>
   </div>
 
   ${buildCalendarHtml(d.agent, missions, 'cal')}
@@ -1811,10 +1811,24 @@ async function imagesPanelHTML(){
   try{portrait=await api('/portrait');}catch(error){}
   const settings=identity.settings||{};
   const following=settings.identity_override===null||settings.identity_override===undefined;
-  return `
+  const presets=settings.presets||[];
+  const selected=presets.find(p=>p.id===settings.default_preset);
+  const provider=selected?.provider==='comfyui'?'__comfy__':settings.default_preset||'';
+  return `<script type="application/json" data-image-presets>${JSON.stringify({presets,comfy_routes:settings.comfy_routes||{},comfy_default:settings.comfy_default||''}).replaceAll("<","\\u003c")}</script>
   <h2>Image generation</h2>
 
-  <h3 class="section-subheading">Set up</h3>
+  <div id="settings-image-providers" data-revision="${esc(identity.revision||'')}"></div>
+  ${PROFILE!=='default'?`<label class="inline-label"><input id="set-image-inherit" type="checkbox" ${settings.inherit?'checked':''}>Use installation image defaults</label>`:''}
+  <label>Provider<select id="set-image-provider">${options([['','Choose a provider'],...presets.filter(p=>p.provider!=='comfyui').map(p=>[p.id,p.name]),['__comfy__','ComfyUI']],provider)}</select></label>
+  <div class="actions"><button class="quiet" id="set-image-accounts">Connect an account</button></div>
+  <div id="set-image-lanes">
+    <h3>Workflows by image type</h3>
+    <p class="dim small">The companion chooses the image type. Its lane chooses the workflow.</p>
+    <div class="lane-cards-grid">${(identity.categories||[]).map(category=>`<label class="lane-row"><span>${esc(formLabel(category))}</span><select data-image-route="${esc(category)}">${options([['','Use fallback'],...presets.map(p=>[p.id,p.name])],settings.routes?.[category]||'')}</select></label>`).join('')}</div>
+    <label>Fallback workflow<select id="set-image-default">${options([['','Choose a workflow'],...presets.map(p=>[p.id,p.name])],settings.default_preset||'')}</select></label>
+    <button class="quiet" id="set-image-routing">Manage workflows</button>
+  </div>
+  <details class="settings-advanced" id="set-comfy-section"><summary>ComfyUI connection</summary>
   <ol class="setup-checklist">
     <li class="setup-step" id="setup-step-comfy">
       <div class="setup-step-head">
@@ -1853,19 +1867,17 @@ async function imagesPanelHTML(){
         <span class="switch-slider"></span>
         <span class="switch-label">Look up unrecognised models on Civitai by file hash</span>
       </label>
-      <small class="dim">A model file says which architecture it is, but not which flavour \u2014 Illustrious and
-        Pony both call themselves SDXL. Matching the file against Civitai fills that in, so the LoRA lists
-        can be filtered to what actually fits. It reads every byte of the files it could not already place,
-        so it is slow the first time and then remembered.</small>
+      <small class="dim">Match local model files to Civitai metadata. The first scan can take a while.</small>
     </li>
   </ol>
+  </details>
 
   <h3 class="section-subheading">Reference photograph</h3>
   <div class="portrait-row">
     ${portrait.stored?`<img class="portrait-thumb" src="${mediaUrl('/media/portrait?t='+Date.now())}" alt="Reference portrait">`
       :'<div class="portrait-thumb portrait-empty">No photo</div>'}
     <div>
-      <p class="dim">One photograph, kept in the vault, passed to providers that accept a reference.</p>
+      <p class="dim">Used by providers that support a reference image.</p>
       <div class="actions">
         <label class="quiet" style="cursor:pointer">${portrait.stored?'Replace it':'Choose a photo'}<input id="set-pfile" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
         ${portrait.stored?'<button class="quiet" id="set-pdrop">Forget it</button>':''}
@@ -1874,12 +1886,11 @@ async function imagesPanelHTML(){
     </div>
   </div>
 
-  <h3 class="section-subheading">How they are described to a provider</h3>
+  <h3 class="section-subheading">Appearance</h3>
   <p class="dim small" style="margin:0 0 12px">${following
-    ? 'The whole appearance section of their SOUL is being sent as written.'
-    : 'A shorter block derived from their SOUL is being sent.'}
-    It is written and edited on the <button type="button" class="link-button" id="set-goto-identity">Identity page</button>,
-    inside the appearance section it comes from.</p>
+    ? 'Uses their saved appearance.'
+    : 'Uses their saved image description.'}
+    Edit on the <button type="button" class="link-button" id="set-goto-identity">Identity page</button>.</p>
   <div class="studio-actions">
     <button class="act" id="set-images-save">Save image settings</button>
     <span class="dim small" id="set-images-saved" role="status"></span>
@@ -1887,6 +1898,35 @@ async function imagesPanelHTML(){
 }
 
 function wireImagesPanel(panel){
+  panel.querySelector('#set-image-accounts').onclick=()=>openSettings(null,'hermes-accounts');
+  panel.querySelector('#set-image-routing').onclick=()=>showTab('image-studio');
+  const provider=panel.querySelector('#set-image-provider'),fallback=panel.querySelector('#set-image-default');
+  const savedRouting=JSON.parse(panel.querySelector('[data-image-presets]').textContent),presets=savedRouting.presets;
+  let comfyRoutes={...savedRouting.comfy_routes},comfyDefault=savedRouting.comfy_default;
+  const rememberComfy=()=>{if(presets.some(p=>p.id===fallback.value&&p.provider==='comfyui')){comfyDefault=fallback.value;comfyRoutes=Object.fromEntries([...panel.querySelectorAll('[data-image-route]')].filter(x=>x.value).map(x=>[x.dataset.imageRoute,x.value]));}};
+  const paintProvider=()=>{
+    const isComfy=provider.value==='__comfy__';
+    panel.querySelector('#set-image-lanes').hidden=!isComfy;
+    panel.querySelector('#set-comfy-section').hidden=!isComfy;
+  };
+  provider.onchange=()=>{
+    if(provider.value==='__comfy__'){
+      const available=presets.filter(p=>p.provider==='comfyui');
+      if(!available.some(p=>p.id===fallback.value))fallback.value=available.find(p=>p.id===comfyDefault)?.id||available[0]?.id||'';
+      for(const route of panel.querySelectorAll('[data-image-route]')){
+        if(!available.some(p=>p.id===route.value))route.value=available.find(p=>p.id===comfyRoutes[route.dataset.imageRoute])?.id||available.find(p=>p.category===route.dataset.imageRoute)?.id||'';
+      }
+      panel.querySelector('#set-comfy-section').open=true;
+    }else{
+      rememberComfy();
+      fallback.value=provider.value;
+      for(const route of panel.querySelectorAll('[data-image-route]'))route.value='';
+    }
+    paintProvider();
+  };
+  paintProvider();
+  const inherit=panel.querySelector('#set-image-inherit');
+  if(inherit){const paint=()=>{for(const field of panel.querySelectorAll('#set-image-provider,#set-image-default,[data-image-route]'))field.disabled=inherit.checked;};inherit.onchange=paint;paint();}
   const status=panel.querySelector('#set-comfy-status');
   const goto=panel.querySelector('#set-goto-identity');
   if(goto)goto.onclick=()=>render('identity');
@@ -1912,7 +1952,9 @@ function wireImagesPanel(panel){
       status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;
     }
   };
-  checkComfy(false);
+  const comfySection=panel.querySelector('#set-comfy-section');
+  if(comfySection.open)checkComfy(false);else setState(state,'Optional','is-skipped');
+  comfySection.ontoggle=()=>{if(comfySection.open&&state.textContent==='Optional')checkComfy(false);};
   panel.querySelector('#set-comfy-check').onclick=()=>checkComfy(true);
 
   const hash=panel.querySelector('#set-hash-lookup');
@@ -1946,6 +1988,9 @@ function wireImagesPanel(panel){
     const saved=panel.querySelector('#set-images-saved');
     saved.textContent='Saving…';
     try{
+      const images=await api('/images');
+      if(images.revision!==panel.querySelector('#settings-image-providers').dataset.revision)throw Error('Image settings changed elsewhere. Reload this page before saving.');
+      if(provider.value==='__comfy__'&&!fallback.value&&!([...panel.querySelectorAll('[data-image-route]')].every(x=>x.value)))throw Error('Choose a fallback workflow or assign every image type.');
       const endpoint=panel.querySelector('#set-comfy-endpoint').value;
       const key=panel.querySelector('#set-civitai-key').value;
       const current=(await api('/workflows')).settings||{};
@@ -1953,7 +1998,14 @@ function wireImagesPanel(panel){
         hash_lookup:Boolean(hash&&hash.checked),
         ...(key?{api_key:key}:{})});
       if(key)setState(panel.querySelector('#setup-key-state'),'Saved','is-done');
-      saved.textContent='Saved';
+      if(provider.value==='__comfy__')rememberComfy();
+      images.settings.comfy_routes=comfyRoutes;images.settings.comfy_default=comfyDefault;
+      images.settings.inherit=Boolean(inherit?.checked);
+      images.settings.default_preset=panel.querySelector('#set-image-default').value;
+      images.settings.routes=Object.fromEntries([...panel.querySelectorAll('[data-image-route]')].filter(x=>x.value).map(x=>[x.dataset.imageRoute,x.value]));
+      const imageSave=await post('/images',{settings:images.settings,revision:images.revision});
+      panel.querySelector('#settings-image-providers').dataset.revision=imageSave.revision;
+      saved.textContent='Saved';clearEditorDirty(editorScope(panel));
     }catch(error){saved.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
   };
 }

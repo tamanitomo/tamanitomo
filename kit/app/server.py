@@ -69,6 +69,11 @@ def build(home=None,token='',state_dir=None):
     default_home_state = initial.hermes_root/'.companion-app' if (initial.hermes_root/'.companion-app').exists() and not (initial.hermes_root/'.tamanitomo-app').exists() else initial.hermes_root/'.tamanitomo-app'
     state=pathlib.Path(state_dir) if state_dir else (default_home_state if home else app_directory())
     runtimes={'existing':Runtime(initial.hermes_root), 'managed':Runtime(state/'managed-hermes',managed=True)}
+    linked_file=state/'linked-installations.json'
+    if linked_file.exists():
+        linked=json.loads(linked_file.read_text(encoding='utf-8'))
+        for ident,root in linked.items():
+            if re.fullmatch(r'linked-[a-f0-9]{12}',ident) and isinstance(root,str):runtimes[ident]=Runtime(root)
     selection=ContextVar('companion_selection',default=('existing',initial.profile or 'default'))
 
     def select():
@@ -76,15 +81,20 @@ def build(home=None,token='',state_dir=None):
         if installation not in runtimes:raise ValueError('Unknown Hermes installation')
         return runtimes[installation],profile
 
+    from companion_config import access_pin, save_access_pin
+
     def load():
         # Re-read on every request. The CLI, the cron jobs and this page all
         # write the same files, and a cached config is how a page ends up
         # showing settings that were changed twenty minutes ago.
         runtime,profile=select()
-        return cc.load(runtime.home(profile))
+        c=cc.load(runtime.home(profile))
+        c.remote_pin=access_pin(initial.hermes_root,c.remote_pin)
+        return c
 
     app=FastAPI(title='tamanitomo',docs_url=None,redoc_url=None,openapi_url=None)
     app.state.runtimes=runtimes
+    app.state.linked_installations_file=linked_file
     import threading
     app.state.write_locks={key:threading.Lock() for key in runtimes}
     from .manage import register
@@ -106,6 +116,23 @@ def build(home=None,token='',state_dir=None):
 
     app.state.pin_salt=secrets.token_hex(16)
 
+    pin_attempts={}
+    pin_attempt_lock=threading.Lock()
+
+    def check_pin(pin,expected,client):
+        import time
+        now=time.monotonic()
+        with pin_attempt_lock:
+            for host,(_,expiry) in list(pin_attempts.items()):
+                if expiry<=now:pin_attempts.pop(host,None)
+            count,expiry=pin_attempts.get(client,(0,now+60))
+            if count>=5 or (client not in pin_attempts and len(pin_attempts)>=1024):return None
+            if secrets.compare_digest(pin,expected):
+                pin_attempts.pop(client,None)
+                return True
+            pin_attempts[client]=(count+1,expiry)
+            return False
+
     @app.middleware('http')
     async def guard(request:Request,call_next):
         client_host=request.client.host if request.client else '127.0.0.1'
@@ -119,10 +146,11 @@ def build(home=None,token='',state_dir=None):
                     cookie_token=request.cookies.get('tamanitomo_pin_session') or request.cookies.get('companion_pin_session','')
                     header_pin=request.headers.get('x-tamanitomo-pin') or request.headers.get('x-companion-pin','')
                     pin_ok=(bool(cookie_token) and secrets.compare_digest(cookie_token,expected)) or \
-                           (bool(header_pin) and secrets.compare_digest(header_pin,c.remote_pin))
+                           (bool(header_pin) and check_pin(header_pin,c.remote_pin,client_host) is True)
                     if not pin_ok:
                         return JSONResponse({'pin_required':True,'error':'Remote access locked. Enter 4-digit PIN.'},status_code=401)
-            except Exception:pass
+            except Exception:
+                return JSONResponse({'error':'Workspace access configuration could not be read'},status_code=503)
         # An optional shared token, for the person who does put this behind a
         # tunnel. Absent, the only protection is the localhost bind, and the
         # page says so rather than implying otherwise.
@@ -347,6 +375,7 @@ def build(home=None,token='',state_dir=None):
                 'location':c.location,'sensors':c.sensors,
                 'available_sensors':{k:v['blurb'] for k,v in sensors.REGISTRY.items()},
                 'autonomy_windows':c.autonomy_windows,'share_people':c.share_people,
+                'image_interval_minutes':c.image_interval_minutes,'schedule_offset_minutes':c.schedule_offset_minutes,
                 'timeline_budget_gb':c.timeline_budget_gb,'image_timeline':c.image_timeline,'bars':c.bars,
                 'agent_type':c.agent_type,'relationship_progression':c.relationship_progression,
                 'relationship_pace':c.relationship_pace,'peer_interaction':c.peer_interaction,
@@ -357,7 +386,7 @@ def build(home=None,token='',state_dir=None):
 
     ALLOWED={'quiet_start','quiet_end','outreach','outreach_per_day','adaptive_quiet',
              'location','sensors','autonomy_windows','share_people','timeline_budget_gb',
-             'content_permissions','image_timeline','bars','relationship_progression',
+             'content_permissions','image_timeline','image_interval_minutes','bars','relationship_progression',
              'relationship_pace','peer_interaction','image_style','explicit','remote_pin'}
 
     @app.post('/api/settings')
@@ -386,6 +415,7 @@ def build(home=None,token='',state_dir=None):
         with preserve_human_records(old, c):
             c.save()
             companion_integrity.sign_creation(c)
+        if 'remote_pin' in payload:save_access_pin(initial.hermes_root,c.remote_pin)
         result={'saved':sorted(payload)}
         runtime,_=select()
         operation=synchronize(app,runtime,old,c)
@@ -402,12 +432,15 @@ def build(home=None,token='',state_dir=None):
         return resp
 
     @app.post('/api/auth/pin')
-    def verify_pin(payload:dict=Body(...)):
+    def verify_pin(request:Request,payload:dict=Body(...)):
         c=load()
         pin=str(payload.get('pin','')).strip()
         if not c.remote_pin:
             return {'ok':True,'pin_required':False}
-        if secrets.compare_digest(pin,c.remote_pin):
+        matched=check_pin(pin,c.remote_pin,request.client.host if request.client else 'unknown')
+        if matched is None:
+            return JSONResponse({'ok':False,'detail':'Too many attempts. Try again in a minute.'},status_code=429,headers={'Retry-After':'60'})
+        if matched:
             import hashlib
             token=hashlib.sha256(f"{c.remote_pin}:{app.state.pin_salt}".encode()).hexdigest()
             resp=JSONResponse({'ok':True})
@@ -419,7 +452,7 @@ def build(home=None,token='',state_dir=None):
     @app.get('/api/network')
     def network_info(request:Request):
         c=load()
-        port=int(os.environ.get('PORT','38439'))
+        port=request.url.port or int(os.environ.get('TAMANITOMO_PORT') or os.environ.get('COMPANION_PORT') or os.environ.get('PORT','38439'))
         client_host=request.client.host if request.client else '127.0.0.1'
         is_local=client_host in ('127.0.0.1','::1','localhost','testclient')
         network_ips=get_network_ips()

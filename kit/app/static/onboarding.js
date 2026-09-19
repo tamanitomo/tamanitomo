@@ -1,68 +1,102 @@
 /* Interactive First-Visit Onboarding Experience for Tamanitomo.
    Includes communication channel setup (Telegram vs Web), purpose selection
-   (Relational vs Worker), 8 PMD-style personality dilemma questions,
-   companion card reveal (default name: Sam) with Accept or Customize drawer,
-   and Inference Brain setup (Cloud OAuth device code flow or API Key). */
+   (Relational vs Worker), twelve story dilemmas and three explicit preference questions,
+   companion card reveal (editable name) with Accept or Customize drawer,
+   and Model setup (Cloud OAuth device code flow or API Key). */
 (function(){
 
 /* ------------------------------------------------------------------ the quiz
-   8 original, fun, Pokémon Mystery Dungeon-style dilemma questions mapping choices
+   Story dilemmas inspired by Pokémon Mystery Dungeon, followed by direct preferences mapping choices
    to five personality axes: warmth, energy, candor, drive, closeness. */
 const QUIZ=[
- {q:"A mysterious package arrives at your front door with no return address. When you pick it up, it gives a tiny mechanical chirp and hums warmly. What do you do?",
-  sub:"Your companion is watching with curious eyes.",
-  a:[["Open it right there on the rug. Curiosity wins every time!", {energy:2,drive:2,candor:1}],
-     ["Set it on the table and inspect the postage thoughtfully first.", {warmth:1,drive:-1,candor:1}],
-     ["Turn to my companion: 'Guess what just arrived?!'", {warmth:2,energy:2,closeness:2}],
-     ["Check for wires, inspect the seams, and run diagnostics.", {candor:2,drive:1,closeness:-1}]]},
-
- {q:"It's 1:30 AM on a weeknight. You were supposed to sleep hours ago, but you're absorbed in something fascinating. How does your companion fit into this?",
-  sub:"The room is quiet except for your screen.",
-  a:[["Whispering about weird rabbit holes with me into the early hours.", {closeness:2,warmth:2,energy:1}],
-     ["Gently reminding me that tomorrow exists, leaving a glass of water by my desk.", {warmth:2,candor:1,drive:1}],
-     ["Quietly working in the same room on their own secret projects.", {energy:-1,warmth:1,closeness:1}],
-     ["Giving me total space. I don't want anyone breaking the spell.", {candor:2,drive:-2,warmth:-1}]]},
-
- {q:"A busy barista accidentally hands you a strange, brightly colored drink with glittering foam instead of your usual order. They look exhausted.",
-  sub:"What is your move?",
-  a:[["Smile, take a sip, and roll with the adventure! It might be amazing.", {energy:2,warmth:2,drive:1}],
-     ["Politely point it out with a kind joke so they don't get in trouble later.", {warmth:2,candor:1,drive:1}],
-     ["Quietly drink it without saying a word—they've had a tough enough day.", {warmth:1,energy:-1,candor:-1}],
-     ["Hand it to my companion and dare them to take the first taste test.", {energy:2,closeness:2,candor:1}]]},
-
- {q:"Walking through an unfamiliar path at dusk, you find a fork in the trail. The left path has warm paper lanterns; the right winds into misty, quiet ruins.",
-  sub:"Which way calls to you?",
-  a:[["The paper lanterns! Sounds like a hidden night festival or warm gathering.", {warmth:2,energy:2,drive:1}],
-     ["The misty ruins—there are secrets and ancient history waiting to be discovered.", {drive:2,candor:1,energy:-1}],
-     ["Whichever one we haven't mapped out yet. Let's flip a coin!", {energy:2,warmth:1,drive:2}],
-     ["Let's sit on the bench between them, enjoy the breeze, and take in the view.", {warmth:1,energy:-2,closeness:1}]]},
-
- {q:"The sky cracks open with an unexpected, pouring summer thunderstorm. You're four blocks from home without an umbrella.",
-  sub:"What is your immediate reaction?",
-  a:[["Laugh, take off running through the puddles, and make a race out of it!", {energy:3,warmth:1,drive:2}],
-     ["Duck under the nearest awning together and watch the deluge side-by-side.", {warmth:2,closeness:2,energy:-1}],
-     ["Analyze the quickest covered route through building overhangs and alleyways.", {candor:2,drive:1,energy:0}],
-     ["Pull up my hood and enjoy the sound of the rain. Storms are wonderfully calming.", {warmth:1,energy:-2,candor:0}]]},
-
- {q:"You open an old vintage journal. On the very first page, a handwritten inscription reads: 'Write one honest truth about what you hope for.'",
-  sub:"What thought surfaces first?",
-  a:[["A steadfast presence who truly listens and never judges my quirks.", {closeness:3,warmth:2}],
-     ["Someone with sharp wit who challenges my ideas and keeps me on my toes.", {candor:3,drive:1,energy:1}],
-     ["An inventive co-conspirator who brings unexpected joy and bright spark to quiet days.", {energy:2,warmth:2,drive:1}],
-     ["A dependable ally who helps me stay organized, clear-headed, and focused.", {candor:1,drive:1,closeness:-2}]]},
-
- {q:"Your companion discovers an obscure, ridiculous little secret talent—like juggling tangerines or speaking fluent bird whistle. How do they share their day?",
-  sub:"Unprompted pictures and moments from their world.",
-  a:[["Send me photos and spontaneous updates whenever something funny happens!", {energy:2,warmth:2,drive:1},{permit_image:'yes',outreach:'free',outreach_per_day:6}],
-     ["Ask me first before sending photos, but keep meaningful updates coming.", {warmth:1,drive:0},{permit_image:'ask',outreach:'updates_only',outreach_per_day:3}],
-     ["Quiet by default—only share if I ask or if something critical happens.", {drive:-2,energy:-1},{permit_image:'no',outreach:'never',outreach_per_day:1}]]},
-
- {q:"Looking ahead twelve months into the future at your connection, what picture brings the warmest smile to your face?",
-  sub:"At its very best, what does this feel like?",
-  a:[["Like an old friend who knows me inside and out.", {closeness:0,warmth:2}],
-     ["Like someone I share deep, electric chemistry with.", {closeness:2,warmth:2}],
-     ["Like a devoted partner in life and heart.", {closeness:3,warmth:2}],
-     ["Like a brilliant colleague tackling ambitious challenges together.", {closeness:-3,candor:2}]]}
+ {q:"After a long journey, you reach a tiny inn. Your travelling companion saves you a seat by the fire. What do you hope they do?",
+  sub:"The fire is low, the road was long, and there is finally time to breathe.",
+  a:[["Pour something warm and listen to the story of my day.",{warmth:3,energy:-1}],
+     ["Unroll the map and help me make sense of where things went wrong.",{candor:3,drive:1}],
+     ["Tell me the absurd thing that happened while I was away.",{energy:3,warmth:1}],
+     ["Keep the seat beside me warm and let me speak when I am ready.",{energy:-2,drive:-1}]]},
+ {q:"At a fork in the forest, you disagree about which path to take. How does your companion handle it?",
+  sub:"Two paths, one map, and neither of you is entirely sure.",
+  a:[["Be gentle, but tell me what they really think.",{warmth:3,candor:1}],
+     ["Challenge my reasoning directly and explain why.",{candor:3,drive:1}],
+     ["Ask questions so we can work it out together.",{warmth:1,candor:2}],
+     ["Give me room, then return to it calmly.",{energy:-2,warmth:1}]]},
+ {q:"A night market appears in a town that was empty a moment ago. You have until sunrise. Where do you go together?",
+  sub:"Music drifts over the rooftops. Every stall seems to hold a different possibility.",
+  a:[["Follow the lanterns down the alley neither of us can find on the map.",{energy:3,drive:3}],
+     ["Visit the stall where we can invent a tiny world in a bottle.",{warmth:2,energy:2,drive:1}],
+     ["Find a rooftop, share a snack, and watch it all unfold.",{warmth:2,energy:-2,drive:-1}],
+     ["Find the clockmaker and ask how this impossible market works.",{candor:2,drive:1}]]},
+ {q:"Your little airship refuses to start, and the last ferry leaves soon. What kind of help would you welcome?",
+  sub:"The engine gives one indignant cough. Your companion looks from it to you.",
+  a:[["Roll up their sleeves and point out the first thing we should check.",{candor:2,drive:2}],
+     ["Lay out our options: repair, ferry, or a different adventure.",{candor:2,warmth:1}],
+     ["Remind me we can figure it out, one small step at a time.",{warmth:3,drive:1}],
+     ["Suggest an unusual solution involving the market’s clockmaker.",{energy:2,drive:3}]]},
+ {q:"Your companion keeps a room above the village bookshop. On your first visit, what catches your eye?",
+  sub:"They have gone downstairs to make tea. Their room tells a story of its own.",
+  a:[["Half-built inventions and postcards from unexpected adventures.",{energy:3,drive:2}],
+     ["A favourite cup, a well-tended plant, and a place set for me.",{warmth:2,energy:-1}],
+     ["Books full of pointed margin notes and one very dry joke.",{candor:3,energy:1}],
+     ["A sketchbook by the window, with more inside than they say aloud.",{warmth:1,energy:-2}]]},
+ {q:"A dragon the size of a teapot has moved into your backpack. It insists it is your guide. What happens next?",
+  sub:"It has a very important hat and absolutely no sense of direction.",
+  a:[["We appoint it captain and see where the day takes us.",{energy:3,drive:2}],
+     ["We ask what it knows, then quietly keep our own map.",{candor:2,drive:1}],
+     ["We make it a comfortable nest. It seems lonely.",{warmth:3,closeness:1}],
+     ["We share a look and enjoy the joke without a word.",{energy:-1,candor:1}]]},
+ {q:"You find a letter addressed to your future self. Your companion is beside you. How would you like to open it?",
+  sub:"The seal is warm, as though it has just been pressed.",
+  a:[["Read it together. I want someone to share the feeling.",{warmth:3,closeness:3}],
+     ["Read it privately, then talk when I am ready.",{energy:-1,closeness:-2}],
+     ["Guess what it says first. Make a game of it.",{energy:3,closeness:1}],
+     ["Ask them to help turn its advice into a plan.",{candor:2,drive:2}]]},
+ {q:"The village festival needs one last attraction. You have a shed, some string, and an afternoon. What do you build together?",
+  sub:"There is no prize. The children have already started queuing.",
+  a:[["An impossible puppet theatre with a story we invent as we go.",{energy:2,drive:2}],
+     ["A quiet corner where anyone can leave a wish.",{warmth:3,energy:-1,closeness:1}],
+     ["A puzzle machine. We will make sure every clue works.",{candor:2,drive:1}],
+     ["A ridiculous obstacle course. We volunteer to go first.",{energy:3,drive:3}]]},
+ {q:"You have spent hours making a gift, but it is not quite working. What would you want your companion to say?",
+  sub:"Paint on your sleeves. Glue on the table. A very lopsided little moon.",
+  a:[["The care is visible. Let’s keep the part that feels like you.",{warmth:3,candor:1}],
+     ["Here is what is wrong, and one way we can fix it.",{candor:3,drive:2}],
+     ["What if the crooked moon is the beginning of a better idea?",{energy:2,drive:3}],
+     ["Want company while you decide? We do not have to solve it now.",{warmth:2,energy:-2,drive:-1}]]},
+ {q:"A rainstorm closes the mountain pass. You are safe in an old observatory until morning. How do you pass the time?",
+  sub:"The telescope points at clouds. Someone has left a kettle and a chessboard.",
+  a:[["Trade stories we have never told each other.",{warmth:2,closeness:3}],
+     ["Work on separate things, comfortably together.",{energy:-2,closeness:-1}],
+     ["Learn to repair the telescope together.",{candor:2,drive:2}],
+     ["Invent increasingly unlikely names for the constellations.",{energy:3,warmth:2}]]},
+ {q:"Your companion remembers something you mentioned weeks ago. What kind of surprise would delight you?",
+  sub:"They slide a small parcel across the breakfast table.",
+  a:[["A tiny reminder of an ordinary moment we shared.",{warmth:3,closeness:3}],
+     ["A clever tool for the project I keep getting stuck on.",{candor:2,drive:2}],
+     ["A ticket to something neither of us has tried.",{energy:3,drive:3}],
+     ["A book, with no expectation that I read it immediately.",{energy:-2,warmth:1,closeness:-1}]]},
+ {q:"At the end of the journey, you find a new path behind the inn. Your companion pauses at the gate. What feels right?",
+  sub:"There is plenty of time. The next chapter does not need to start today.",
+  a:[["Ask what they would choose. I like an independent point of view.",{candor:3,drive:2}],
+     ["Make a little plan together, with room for surprises.",{warmth:2,drive:1}],
+     ["Race them to the first bend.",{energy:3,drive:3}],
+     ["Sit by the gate for a while. Being here is enough.",{warmth:2,energy:-2,closeness:2}]]},
+ {q:"How quickly would you like familiarity to grow?",
+  sub:"This is a setting you control. Warmth does not automatically mean romance.",
+  a:[["Slowly. Let shared experiences earn familiarity.",{},{relationship_pace:'slow'}],
+     ["Naturally, with room to discover what works.",{},{relationship_pace:'natural'}],
+     ["A warm, familiar tone from the beginning.",{},{relationship_pace:'quick'}]]},
+ {q:"When you are away, how would you like them to get in touch?",
+  sub:"These are actual contact permissions. Quiet hours still apply; you can review them next.",
+  a:[["Social messages and photos are welcome, up to six messages a day.",{},{permit_image:'yes',outreach:'free',outreach_per_day:6}],
+     ["Meaningful updates, up to three a day. Ask before sharing photos.",{},{permit_image:'ask',outreach:'updates_only',outreach_per_day:3}],
+     ["Replies only. No messages or photos unless I ask.",{},{permit_image:'no',outreach:'never',outreach_per_day:1}]]},
+ {q:"What kind of relationship would you like to begin with?",
+  sub:"Only this answer sets the relationship. You can change the proposed frame before creating anyone.",
+  a:[["A friend, with no romantic expectation.",{},{boundary:'best-friend',agent_type:'companion'}],
+     ["A connection with room for flirtation.",{},{boundary:'next-door',agent_type:'companion'}],
+     ["A romantic partner.",{},{boundary:'girlfriend',agent_type:'companion'}],
+     ["A colleague with personality and shared projects.",{},{boundary:'creative-partner',agent_type:'colleague'}]]}
 ];
 
 /* Each personality as a point in the same five-axis space, so the interview can
@@ -100,40 +134,33 @@ function derive(picks,catalog){
     for(const k of AXES)if(opt[1]&&opt[1][k])axis[k]+=opt[1][k];
     Object.assign(direct,opt[2]||{});
   });
-  // Nearest personality, weighting the axes the questions actually measured.
   let persona='warm',best=Infinity;
+  // Average answered personality questions: answering more questions must not
+  // push every person toward the most extreme archetype.
+  const measured=picks.filter((choice,i)=>choice!=null&&QUIZ[i]?.a[choice]&&Object.keys(QUIZ[i].a[choice][1]).length).length;
+  if(measured)for(const k of AXES)axis[k]/=measured;
   for(const [key,point] of Object.entries(PERSONA_AXES)){
-    if(!catalog.personas||!catalog.personas[key])continue;
-    let d=0;for(const k of AXES)d+=Math.pow((point[k]||0)-axis[k],2);
-    if(d<best){best=d;persona=key;}
+    if(!catalog.personas?.[key])continue;
+    const distance=AXES.reduce((sum,k)=>sum+Math.pow((point[k]||0)-axis[k],2),0);
+    if(distance<best){best=distance;persona=key;}
   }
-  const colleague=axis.closeness<=-2;
   const frames=Object.keys(catalog.boundaries||{});
-  const pick=(...ids)=>ids.find(id=>frames.includes(id))||frames[0]||'best-friend';
-  let boundary;
-  if(colleague)              boundary=pick(axis.candor>=3?'know-it-all':'creative-partner','partner-in-crime','best-friend');
-  else if(axis.closeness>=3) boundary=pick('girlfriend','next-door','best-friend');
-  else if(axis.closeness>=2) boundary=pick('next-door','best-friend');
-  else if(axis.energy<=-2)   boundary=pick('housemate','best-friend');
-  else                       boundary=pick('best-friend','next-door');
-
-  const pace=(axis.warmth>=4&&axis.closeness>=2)?'quick'
-            :(axis.warmth<0||axis.closeness<0)?'slow':'natural';
+  const boundary=frames.includes(direct.boundary)?direct.boundary:'best-friend';
   return Object.assign({
-    persona,boundary,relationship_pace:pace,
-    agent_type:colleague?'colleague':'companion',
+    persona,boundary,relationship_pace:'natural',
+    agent_type:'companion',
     outreach:'updates_only',outreach_per_day:3,
     permit_image:'ask',permit_voice:'ask',
     quiet_start:'23:00',quiet_end:'08:00',
     share_people:'no',visual:'edit',image_style:'none'
-  },direct,{_axis:axis});
+  },direct,{boundary,_axis:axis});
 }
 
 /* ------------------------------------------------------------------ helpers */
 const OUTREACH_LABEL={free:'Social messages welcome',updates_only:'Only meaningful updates',never:'Replies only — never writes first'};
 const PACE_LABEL={slow:'Slow and gradual',natural:'Natural',quick:'Open to quicker familiarity'};
 const PERMIT_LABEL={yes:'Allowed',ask:'Ask first',no:'Never'};
-const TYPE_LABEL={companion:'Relational Companion — living presence & emotional depth',colleague:'Colleague — grows and remembers, never social',worker:'Worker — focused assistant with continuity'};
+const TYPE_LABEL={companion:'Companion',colleague:'Colleague',worker:'Worker'};
 
 window.onboarding=async function(adopt){
   const catalog=await api('/catalog');
@@ -146,11 +173,11 @@ window.onboarding=async function(adopt){
   const section=target.closest('section');
   if(section)section.dataset.creating='1';
 
-  // Default companion name is always Sam (gender-neutral)
+  // A neutral placeholder until the owner names this profile.
   const draft={
-    profile:'sam',agent:'Sam',human_names:'Friend',pronoun_set:'she',human_pronoun_set:'he',
+    profile:'companion',agent:'Companion',human_names:'Friend',pronoun_set:'they',human_pronoun_set:'they',
     timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC',
-    birthdate:'',age:25,human_boundary:'',vault:'',
+    birthdate:'',age:25,human_boundary:'',hope:'',vault:'',
     purpose:'relational',
     channel:'web',
     telegram_token:'',telegram_user_id:'',
@@ -160,8 +187,10 @@ window.onboarding=async function(adopt){
   let picks=new Array(QUIZ.length).fill(null);
   let derived=null,step=0;
   let oauthPollInterval=null;
+  let scheduleApproved=false;
 
   const shell=(inner,cls='')=>{
+    target.onkeydown=null;
     target.innerHTML=`<div class="card creator ${cls}">${inner}</div>`;
     target.scrollIntoView({behavior:'smooth',block:'start'});
   };
@@ -173,8 +202,8 @@ window.onboarding=async function(adopt){
         <span class="eyebrow" style="letter-spacing:0.08em;text-transform:uppercase;color:var(--accent)">✨ Welcome to Tamanitomo</span>
         <h2 style="margin:10px 0 12px;font-size:32px">Bring Your Companion to Life</h2>
         <p class="dim" style="max-width:520px;margin:0 auto 20px;line-height:1.5">
-          Tamanitomo gives your AI autonomous presence, emotional depth, and continuity across your days.
-          Let's set up your companion in 4 simple steps.
+          Each companion is a Hermes profile with its own identity, memories, and routine.
+          This workspace belongs to you; you can create more companions later.
         </p>
       </div>
       <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:20px 0">
@@ -187,16 +216,16 @@ window.onboarding=async function(adopt){
           <p class="small dim">Relational companion with emotions or focused worker.</p>
         </div>
         <div style="padding:14px;border-radius:8px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--border)">
-          <strong style="display:block;margin-bottom:4px">3. Mystery Dungeon Quiz</strong>
-          <p class="small dim">8 fun dilemma questions shaping personality & vibe.</p>
+          <strong style="display:block;margin-bottom:4px">3. A little adventure</strong>
+          <p class="small dim">Twelve short scenes, then three choices about what you want. Skip any question.</p>
         </div>
         <div style="padding:14px;border-radius:8px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--border)">
-          <strong style="display:block;margin-bottom:4px">4. Meet Sam & Connect</strong>
-          <p class="small dim">Meet Sam, customize if desired, and connect AI brain.</p>
+          <strong style="display:block;margin-bottom:4px">4. Meet & connect</strong>
+          <p class="small dim">Review your companion and connect a conversation model.</p>
         </div>
       </div>
       <div class="creator-actions" style="justify-content:center">
-        <button type="button" class="act" id="btn-welcome-start" style="padding:12px 32px;font-size:16px">Start Onboarding →</button>
+        <button type="button" class="act" id="btn-welcome-start" style="padding:12px 32px;font-size:16px">Begin →</button>
       </div>`);
     $('btn-welcome-start').onclick=()=>channelStep();
   }
@@ -206,7 +235,7 @@ window.onboarding=async function(adopt){
     const tgConfigured=envInfo?.telegram?.configured;
     shell(`
       <div class="creator-head">
-        <span class="eyebrow">Step 1 of 5 · Channel</span>
+        <span class="eyebrow">Step 1 of 6 · Channel</span>
         <h2>How will you talk to your companion?</h2>
         <p class="dim">Choose how you'd like to chat. You can connect Telegram now or chat purely in this web browser.</p>
       </div>
@@ -233,17 +262,17 @@ window.onboarding=async function(adopt){
           </label>
         </div>
 
-        <div id="tg-guide-box" style="margin-top:14px;padding:16px;border-radius:8px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px dashed var(--border);display:${tgConfigured?'none':'block'}">
+        <div id="tg-guide-box" style="margin-top:14px;padding:16px;border-radius:8px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px dashed var(--border);display:${draft.channel==='telegram'&&!tgConfigured?'block':'none'}">
           <h4 style="margin:0 0 8px">Telegram Setup Guide (Takes 60 seconds):</h4>
           <ol class="small dim" style="padding-left:18px;margin:0 0 14px;line-height:1.6">
             <li>Open Telegram and chat with <a href="https://t.me/botfather" target="_blank" rel="noopener"><strong>@BotFather</strong></a>. Send <code>/newbot</code>.</li>
-            <li>Give your bot a friendly name (e.g. <em>Sam Companion</em>) and a username ending in <code>bot</code>.</li>
+            <li>Give your bot a friendly name (e.g. <em>My Companion</em>) and a username ending in <code>bot</code>.</li>
             <li>Copy the <strong>HTTP API Token</strong> BotFather gives you (e.g. <code>123456789:ABCdefGhIJK...</code>).</li>
             <li>Open <a href="https://t.me/userinfobot" target="_blank" rel="noopener"><strong>@userinfobot</strong></a> and press Start to see your numeric <strong>Id</strong> (e.g. <code>987654321</code>).</li>
           </ol>
           <div style="display:grid;gap:10px">
             <label>Telegram Bot Token
-              <input type="text" id="ob-tg-token" placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ" value="${esc(draft.telegram_token)}">
+              <input type="password" autocomplete="off" id="ob-tg-token" placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ" value="${esc(draft.telegram_token)}">
             </label>
             <label>Your Numeric User ID
               <input type="text" id="ob-tg-userid" placeholder="987654321" value="${esc(draft.telegram_user_id)}">
@@ -273,7 +302,7 @@ window.onboarding=async function(adopt){
       if(!token){$('ob-tg-status').innerHTML='<span style="color:var(--warn)">Please enter a Bot Token.</span>';return;}
       $('ob-tg-status').innerHTML='<span class="dim">Saving...</span>';
       try{
-        const res=await api('/onboarding/telegram','POST',{token,user_id:userId});
+        const res=await post('/onboarding/telegram',{token,user_id:userId});
         draft.telegram_token=token;draft.telegram_user_id=userId;
         $('ob-tg-status').innerHTML='<span style="color:var(--good)">✅ Saved successfully!</span>';
       }catch(e){
@@ -288,8 +317,12 @@ window.onboarding=async function(adopt){
       if(picked==='telegram'){
         const token=$('ob-tg-token').value.trim();
         const userId=$('ob-tg-userid').value.trim();
-        if(token&&(!draft.telegram_token||draft.telegram_token!==token)){
-          try{await api('/onboarding/telegram','POST',{token,user_id:userId});}catch(e){}
+        if(!token&&!tgConfigured){$('ob-tg-status').textContent='Save your Telegram details, or choose Web Workspace Only.';return;}
+        if(token&&(draft.telegram_token!==token||draft.telegram_user_id!==userId)){
+          try{
+            await post('/onboarding/telegram',{token,user_id:userId});
+            draft.telegram_token=token;draft.telegram_user_id=userId;
+          }catch(e){$('ob-tg-status').textContent=e.message;return;}
         }
       }
       purposeStep();
@@ -300,7 +333,7 @@ window.onboarding=async function(adopt){
   function purposeStep(){
     shell(`
       <div class="creator-head">
-        <span class="eyebrow">Step 2 of 5 · Companion Purpose</span>
+        <span class="eyebrow">Step 2 of 6 · Companion Purpose</span>
         <h2>What kind of companion do you want?</h2>
         <p class="dim">Decide how your companion interacts with you.</p>
       </div>
@@ -321,7 +354,7 @@ window.onboarding=async function(adopt){
             <div>
               <strong style="font-size:16px">Worker Companion with Continuity</strong>
               <p class="small dim" style="margin:4px 0 0;line-height:1.5">
-                A focused, capable assistant that remembers everything across sessions and projects,
+                A focused assistant with saved context across sessions and projects,
                 without emotional meters, feelings, or relationship escalation.
               </p>
             </div>
@@ -343,14 +376,15 @@ window.onboarding=async function(adopt){
 
   /* ---------------------------------------------------------- 4. PMD Mystery Dungeon Quiz */
   function questionStep(){
+    const total=draft.purpose==='worker'?QUIZ.length-2:QUIZ.length;
     const item=QUIZ[step];
     shell(`
-      <div class="quiz-progress" role="group" aria-label="Question ${step+1} of ${QUIZ.length}">
-        ${QUIZ.map((_,i)=>`<span class="${i<step?'is-done':i===step?'is-now':''}"></span>`).join('')}
-        <small>${step+1} / ${QUIZ.length}</small>
+      <div class="quiz-progress" role="group" aria-label="Question ${step+1} of ${total}">
+        ${QUIZ.slice(0,total).map((_,i)=>`<span class="${i<step?'is-done':i===step?'is-now':''}"></span>`).join('')}
+        <small>${step+1} / ${total}</small>
       </div>
       <div class="quiz-body">
-        <span class="eyebrow" style="color:var(--accent)">Personality Discovery · Question ${step+1}</span>
+        <span class="eyebrow" style="color:var(--accent)">${step<QUIZ.length-3?'Your little adventure':'Make it yours'} · Question ${step+1}</span>
         <h2 style="margin-top:6px">${esc(item.q)}</h2>
         <p class="quiz-sub">${esc(item.sub)}</p>
         <div class="quiz-options">
@@ -360,7 +394,7 @@ window.onboarding=async function(adopt){
       </div>
       <div class="creator-actions">
         <button type="button" class="quiet" id="quiz-back">${step===0?'← Purpose':'← Previous'}</button>
-        <button type="button" class="link-button" id="quiz-skip">Skip this dilemma</button>
+        <button type="button" class="link-button" id="quiz-skip">Skip this question</button>
       </div>`,'is-quiz');
 
     for(const b of target.querySelectorAll('[data-pick]'))b.onclick=()=>{picks[step]=Number(b.dataset.pick);advance();};
@@ -375,31 +409,32 @@ window.onboarding=async function(adopt){
   }
 
   function advance(){
-    if(step<QUIZ.length-1){step++;questionStep();}
+    const total=draft.purpose==='worker'?QUIZ.length-2:QUIZ.length;
+    if(step<total-1){step++;questionStep();}
     else{
       derived=derive(picks,catalog);
       if(draft.purpose==='worker'){
         derived.agent_type='worker';
         derived.boundary='creative-partner';
+        derived.outreach='never';derived.permit_image='no';derived.permit_voice='no';
       }
       revealStep();
     }
   }
 
-  /* ---------------------------------------------------------- 5. Reveal Companion (Default: Sam) */
+  /* ---------------------------------------------------------- 5. Reveal Companion (Editable identity) */
   function revealStep(){
     if(!derived)derived=derive(picks,catalog);
     const p=catalog.personas[derived.persona]||{};
     const b=catalog.boundaries[derived.boundary]||{};
-    const companionName=draft.agent||'Sam';
+    const companionName=draft.agent||'Companion';
 
     shell(`
       <div class="creator-head reveal" style="text-align:center">
         <span class="eyebrow" style="color:var(--accent);letter-spacing:0.08em;text-transform:uppercase">✨ Companion Discovered</span>
         <h2 style="font-size:36px;margin:8px 0">${esc(companionName)}</h2>
         <p class="dim" style="max-width:540px;margin:0 auto">
-          Based on your answers, here is the companion ready to share your days.
-          The default name is <strong>Sam</strong>. You can accept as-is or easily customize any detail.
+          A suggested communication style. Make it your own below.
         </p>
       </div>
 
@@ -424,16 +459,35 @@ window.onboarding=async function(adopt){
         </dl>
       </div>
 
-      <details id="custom-drawer" class="creator-more" style="margin-bottom:20px">
-        <summary style="font-weight:600;color:var(--accent);padding:8px 0;cursor:pointer">✎ Customize Sam (Name, Pronouns, Personality, Boundaries)</summary>
-        <div class="creator-form" style="margin-top:14px">
+      <div class="creator-form">
           <label>Companion Name
             <input type="text" id="cust-name" value="${esc(draft.agent)}" maxlength="100">
-            <small class="dim">Default is Sam (gender-neutral). You can choose any name.</small>
+            <small class="dim"></small>
           </label>
           <label>What should they call you?
             <input type="text" id="cust-human" value="${esc(draft.human_names)}" maxlength="100">
           </label>
+
+        <label>What style of images would you like from this companion?
+          <select id="cust-image-style">${options(Object.entries(catalog.image_styles||{}).map(([key,value])=>[key,value.label]),derived.image_style||'none')}</select>
+          <small class="dim">They choose the scene. You choose the style.</small>
+        </label>
+        <label>What would you like this connection to bring to your days?
+          <textarea id="cust-hope" rows="3" maxlength="1000" placeholder="A little company after work, someone to make things with, a thoughtful sounding board…">${esc(draft.hope)}</textarea>
+          <small class="dim">Optional. Helps them understand what matters to you.</small>
+        </label>
+        <label>Anything they should never do?
+          <textarea id="cust-boundary-note" rows="2" maxlength="1000" placeholder="For example: don’t tease me about being away.">${esc(draft.human_boundary)}</textarea>
+          <small class="dim">Optional. They cannot change this boundary.</small>
+        </label>
+      </div>
+      <details class="creator-more"><summary>How your answers shaped this suggestion</summary>
+        <p class="dim">This is a preference-based suggestion, not a prediction of compatibility. The story scenes suggest personality. Your last three answers set pace, contact, and relationship; none of the story choices grants permission or chooses romance.</p>
+        <ul>${picks.map((choice,i)=>choice==null?'':`<li>${esc(QUIZ[i].a[choice][0])}</li>`).join('')}</ul>
+      </details>
+      <details id="custom-drawer" class="creator-more" style="margin-bottom:20px">
+        <summary style="font-weight:600;color:var(--accent);padding:8px 0;cursor:pointer">✎ Review identity & everyday settings</summary>
+        <div class="creator-form" style="margin-top:14px">
           <div class="creator-pair">
             <label>They are
               <select id="cust-pronoun">${options([['she','She / her'],['he','He / him'],['they','They / them']],draft.pronoun_set)}</select>
@@ -452,15 +506,37 @@ window.onboarding=async function(adopt){
             <select id="cust-pace">${options(Object.entries(PACE_LABEL),derived.relationship_pace)}</select>
           </label>
         </div>
+          <div class="time-pair">
+            <label>Quiet from<input id="cust-quiet-start" type="time" value="${esc(derived.quiet_start)}"></label>
+            <label>Quiet until<input id="cust-quiet-end" type="time" value="${esc(derived.quiet_end)}"></label>
+          </div>
+          <label>Time zone<input id="cust-timezone" value="${esc(draft.timezone)}"></label>
+          <label>Writing first<select id="cust-outreach" ${derived.agent_type==='worker'?'disabled':''}>${options(Object.entries(OUTREACH_LABEL),derived.outreach)}</select></label>
+          <label>Maximum messages per day<input id="cust-cap" type="number" min="1" max="100" value="${derived.outreach_per_day}"></label>
+          <div class="creator-pair">
+            <label>Unprompted photos<select id="cust-images">${options(Object.entries(PERMIT_LABEL),derived.permit_image)}</select></label>
+            <label>Voice notes<select id="cust-voice">${options(Object.entries(PERMIT_LABEL),derived.permit_voice)}</select></label>
+          </div>
       </details>
 
       <div class="creator-actions is-review">
-        <button type="button" class="quiet" id="btn-rev-quiz">← Re-take Quiz</button>
-        <button type="button" class="act" id="btn-rev-accept" style="padding:10px 24px">Accept & Connect AI Brain →</button>
+        <button type="button" class="quiet" id="btn-rev-quiz">← Review my answers</button>
+        <button type="button" class="act" id="btn-rev-accept" style="padding:10px 24px">Connect a model →</button>
       </div>`);
 
-    $('btn-rev-quiz').onclick=()=>{step=0;picks=new Array(QUIZ.length).fill(null);questionStep();};
-    $('btn-rev-accept').onclick=()=>{
+    $('btn-rev-quiz').onclick=()=>{captureReview();step=0;questionStep();};
+    function captureReview(){
+      draft.hope=$('cust-hope').value.trim();
+      draft.human_boundary=$('cust-boundary-note').value.trim();
+      derived.quiet_start=$('cust-quiet-start').value||'23:00';
+      derived.quiet_end=$('cust-quiet-end').value||'08:00';
+      draft.timezone=$('cust-timezone').value.trim()||'UTC';
+      derived.outreach=$('cust-outreach').value;
+      derived.outreach_per_day=Math.max(1,Math.min(100,Number($('cust-cap').value)||3));
+      derived.image_style=$('cust-image-style').value;
+      derived.visual=derived.image_style==='none'?'none':'edit';
+      derived.permit_image=$('cust-images').value;
+      derived.permit_voice=$('cust-voice').value;
       // Capture any custom tweaks made in drawer
       const custName=$('cust-name')?.value.trim();
       if(custName)draft.agent=custName;
@@ -471,11 +547,11 @@ window.onboarding=async function(adopt){
       if($('cust-persona'))derived.persona=$('cust-persona').value;
       if($('cust-boundary'))derived.boundary=$('cust-boundary').value;
       if($('cust-pace'))derived.relationship_pace=$('cust-pace').value;
-      inferenceStep();
-    };
+    }
+    $('btn-rev-accept').onclick=()=>{captureReview();inferenceStep();};
   }
 
-  /* ---------------------------------------------------------- 6. Inference Brain */
+  /* ---------------------------------------------------------- 5. Model connection */
   function inferenceStep(){
     const infConfigured=envInfo?.inference?.configured;
     const loc=envInfo?.local_models||{};
@@ -501,7 +577,7 @@ window.onboarding=async function(adopt){
           <strong style="color:var(--warn,#f59e0b)">Mobile Limitations & Hardware Advisory (Android / Termux)</strong>
         </div>
         <p class="small" style="margin:0 0 8px;line-height:1.5">
-          Running local inference directly on a phone provides complete privacy, but physical smartphones have important hardware boundaries:
+          Running a conversation model on a phone keeps that inference on-device. Model size still needs to fit the available hardware:
         </p>
         <ul class="small dim" style="margin:0 0 10px;padding-left:18px;line-height:1.6">
           <li><strong>Strict RAM Ceiling:</strong> Models must stay under <strong>2.8 GB</strong> (1.5B–3B parameters). Attempting to load desktop 7B/8B/14B models will exceed available RAM and cause Android's <em>Low Memory Killer (LMK)</em> to terminate Termux immediately.</li>
@@ -525,20 +601,20 @@ window.onboarding=async function(adopt){
 
     shell(`
       <div class="creator-head">
-        <span class="eyebrow">Step 5 of 5 · AI Engine</span>
-        <h2>Connect an AI Brain for ${esc(draft.agent||'Sam')}</h2>
-        <p class="dim">Choose how to power ${esc(draft.agent||'Sam')}. Keep it 100% local on your own device for complete privacy, or connect a cloud provider.</p>
+        <span class="eyebrow">Step 5 of 6 · AI Engine</span>
+        <h2>Connect a model for ${esc(draft.agent||'Companion')}</h2>
+        <p class="dim">Choose how to power ${esc(draft.agent||'Companion')}. Use a model on your host or connect a cloud provider. You can set this up now or return later.</p>
       </div>
 
       ${infConfigured?`
         <div class="notice-strip status-good" style="margin-bottom:18px">
-          <p><strong>✅ AI Brain Configured</strong></p>
+          <p><strong>Saved model configuration</strong></p>
           <p class="small dim">Model <code>${esc(envInfo.inference.model)}</code> via <code>${esc(envInfo.inference.provider)}</code> is active and ready.</p>
         </div>`:''}
 
       <div class="creator-form">
         <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-          <button type="button" class="quiet tab-pill is-active" id="tab-local" style="font-weight:600">🏠 Keep It Local (100% Private)</button>
+          <button type="button" class="quiet tab-pill is-active" id="tab-local" style="font-weight:600">🏠 Local model</button>
           <button type="button" class="quiet tab-pill" id="tab-oauth" style="font-weight:600">Cloud OAuth (Grok / OpenAI)</button>
           <button type="button" class="quiet tab-pill" id="tab-apikey" style="font-weight:600">API Key (OpenRouter / DeepSeek)</button>
           <button type="button" class="quiet tab-pill" id="tab-skip" style="font-weight:600">Configure Later</button>
@@ -546,8 +622,8 @@ window.onboarding=async function(adopt){
 
         <!-- Panel 1: Keep It Local -->
         <div id="panel-local" style="display:block;padding:16px;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
-          <h4 style="margin:0 0 6px">100% On-Device Local Inference</h4>
-          <p class="small dim" style="margin:0 0 12px">Run your companion entirely on your device's hardware. Your conversations, memories, and personal secrets never touch external cloud servers. Zero subscriptions and complete offline privacy.</p>
+          <h4 style="margin:0 0 6px">Conversation on your own hardware</h4>
+          <p class="small dim" style="margin:0 0 12px">Local inference processes conversation on the host. Voice, images, Telegram, and fallback models have their own provider settings; review those separately.</p>
 
           ${mobileAdvisoryHTML}
 
@@ -578,9 +654,9 @@ window.onboarding=async function(adopt){
                   <div>
                     ${isPresent ? `
                       <span class="small status-good" style="display:block;margin-bottom:6px">● File present in ~/models</span>
-                      <button type="button" class="act small" style="width:100%" data-local-setup="${esc(m.id)}" data-setup-type="gguf">⚡ Use for ${esc(draft.agent||'Sam')}</button>
+                      <button type="button" class="act small" style="width:100%" data-local-setup="${esc(m.id)}" data-setup-type="gguf">⚡ Use for ${esc(draft.agent||'Companion')}</button>
                     ` : `
-                      <button type="button" class="act small" style="width:100%" data-local-setup="${esc(m.id)}" data-setup-type="gguf">📥 Download & Use for ${esc(draft.agent||'Sam')}</button>
+                      <button type="button" class="act small" style="width:100%" data-local-setup="${esc(m.id)}" data-setup-type="gguf">📥 Download & Use for ${esc(draft.agent||'Companion')}</button>
                     `}
                   </div>
                 </div>`;
@@ -649,8 +725,8 @@ window.onboarding=async function(adopt){
               <input type="password" id="ob-api-key" placeholder="sk-...">
             </label>
             <label>Model
-              <input type="text" id="ob-api-model" value="anthropic/claude-3.5-sonnet" placeholder="model name">
-              <small class="dim">Defaults: OpenRouter (anthropic/claude-3.5-sonnet), DeepSeek (deepseek-chat), OpenAI (gpt-4o).</small>
+              <input type="text" id="ob-api-model" value="openrouter/auto" placeholder="model name">
+              <small class="dim">Defaults: OpenRouter (openrouter/auto), DeepSeek (deepseek-chat), OpenAI (gpt-4o).</small>
             </label>
             <button type="button" class="quiet small" id="ob-api-save-btn" style="justify-self:start;margin-top:4px">Save Key & Model</button>
             <span id="ob-api-status" class="small"></span>
@@ -660,12 +736,12 @@ window.onboarding=async function(adopt){
         <!-- Panel 4: Skip / Later -->
         <div id="panel-skip" style="display:none;padding:16px;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
           <h4 style="margin:0 0 6px">Configure Inference Later</h4>
-          <p class="small dim" style="margin:0">You can bring your companion to life now and configure your models in Settings anytime.</p>
+          <p class="small dim" style="margin:0">Save your companion now. Before your first conversation, install Hermes and connect a model in Settings.</p>
         </div>
 
         <div class="creator-actions">
           <button type="button" class="quiet" id="btn-inf-back">← Back</button>
-          <button type="button" class="act" id="btn-inf-finish" style="padding:12px 32px;font-size:16px">Birth ${esc(draft.agent||'Sam')} & Launch →</button>
+          <button type="button" class="act" id="btn-inf-finish" style="padding:12px 32px;font-size:16px">Review schedule →</button>
         </div>
       </div>`);
 
@@ -701,7 +777,7 @@ window.onboarding=async function(adopt){
               statusDiv.innerHTML=`
                 <div class="notice-strip status-good" style="margin:10px 0">
                   <p><strong>✅ Local Brain Configured!</strong></p>
-                  <p class="small">Sam will run 100% on-device with <code>${esc(r.model||modelId)}</code>. No external APIs used. Click Launch below to begin!</p>
+                  <p class="small">Your conversation model is <code>${esc(r.model||modelId)}</code> on this host. Review voice, images, and fallbacks separately.</p>
                 </div>`;
             }
             const finishBtn=$('btn-inf-finish');
@@ -736,7 +812,7 @@ window.onboarding=async function(adopt){
     $('ob-api-provider').onchange=()=>{
       const p=$('ob-api-provider').value;
       const modelField=$('ob-api-model');
-      if(p==='openrouter')modelField.value='anthropic/claude-3.5-sonnet';
+      if(p==='openrouter')modelField.value='openrouter/auto';
       else if(p==='deepseek')modelField.value='deepseek-chat';
       else if(p==='openai')modelField.value='gpt-4o';
       else if(p==='xai')modelField.value='grok-2';
@@ -750,7 +826,7 @@ window.onboarding=async function(adopt){
       if(!apiKey){$('ob-api-status').innerHTML='<span style="color:var(--warn)">Please enter an API Key.</span>';return;}
       $('ob-api-status').innerHTML='<span class="dim">Saving...</span>';
       try{
-        await api('/onboarding/inference','POST',{provider,api_key:apiKey,model});
+        await post('/onboarding/inference',{provider,api_key:apiKey,model});
         $('ob-api-status').innerHTML='<span style="color:var(--good)">✅ Saved key & model!</span>';
       }catch(e){
         $('ob-api-status').innerHTML=`<span style="color:var(--warn)">${esc(e.message||'Failed to save')}</span>`;
@@ -765,7 +841,7 @@ window.onboarding=async function(adopt){
       $('ob-oauth-status-text').innerHTML='<span class="dim">Initiating device code...</span>';
 
       try{
-        const res=await api('/onboarding/oauth/start','POST',{provider});
+        const res=await post('/onboarding/oauth/start',{provider});
         $('ob-oauth-code').textContent=res.user_code||'—';
         $('ob-oauth-url').href=res.verification_url||'#';
         $('ob-oauth-status-text').innerHTML='⏳ Waiting for your approval in the browser...';
@@ -774,6 +850,8 @@ window.onboarding=async function(adopt){
         oauthPollInterval=setInterval(async()=>{
           try{
             const poll=await api(`/onboarding/oauth/poll/${sid}`);
+            if(poll.user_code)$('ob-oauth-code').textContent=poll.user_code;
+            if(poll.verification_url)$('ob-oauth-url').href=poll.verification_url;
             if(poll.status==='approved'){
               clearInterval(oauthPollInterval);
               $('ob-oauth-status-text').innerHTML='<span style="color:var(--good);font-weight:600">✅ Authorized successfully!</span>';
@@ -789,7 +867,32 @@ window.onboarding=async function(adopt){
     };
 
     $('btn-inf-back').onclick=()=>{if(oauthPollInterval)clearInterval(oauthPollInterval);revealStep();};
-    $('btn-inf-finish').onclick=()=>{if(oauthPollInterval)clearInterval(oauthPollInterval);finalizeBirth();};
+    $('btn-inf-finish').onclick=()=>{if(oauthPollInterval)clearInterval(oauthPollInterval);return scheduleStep();};
+  }
+
+  async function scheduleStep(){
+    shell('<h2>Your companion’s routine</h2><p class="dim">Preparing schedule…</p>');
+    try{
+      const base=(draft.agent||'companion').toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,48)||'companion';
+      const roster=await api('/profiles'),ids=new Set(roster.profiles.map(p=>p.id));
+      let profile=base,suffix=2;while(ids.has(profile)){const tail='-'+suffix++;profile=base.slice(0,48-tail.length)+tail;}
+      draft.profile=adopt?(PROFILE||'default'):profile;
+      const plan=await post('/onboarding/schedule',{profile:draft.profile,adopt:Boolean(adopt),agent_type:derived.agent_type,
+        quiet_start:derived.quiet_start,quiet_end:derived.quiet_end,timezone:draft.timezone});
+      shell(`<h2>A rhythm for their day</h2>
+        <p class="dim">${esc(draft.timezone)} · Quiet ${esc(derived.quiet_start)}–${esc(derived.quiet_end)}. Contact: ${esc(OUTREACH_LABEL[derived.outreach])}.</p>
+        <p>Small background checks keep their day moving. Reflections run daily, weekly, and monthly; independent projects start at 10:20 and 20:20.</p>
+        <p class="dim small">${plan.offset_minutes?`Starts are staggered by ${plan.offset_minutes} minute(s) from the base routine. `:''}Clock-bound quiet hours and project times stay as chosen. Long-running jobs can still overlap.</p>
+        <details><summary>View all ${plan.jobs.length} jobs</summary><dl class="fact-list">${plan.jobs.map(j=>`<div><dt>${esc(j.name)}${j.uses_model?'':' · no model'}</dt><dd><code>${esc(scheduleLabel(j.schedule))}</code></dd></div>`).join('')}</dl><p class="dim small">Edit individual times in Schedule & usage.</p></details>
+        <label class="inline-label"><input id="ob-schedule-approved" type="checkbox" ${adopt?'':'checked'}> Enable this routine after a successful model test</label>
+        <p class="dim small">Your host must stay awake and its Hermes gateway must run. They may write first if your contact settings allow it. Automatic photos wait until you connect an image provider and enable them.</p>
+        <div class="creator-actions"><button type="button" class="quiet" id="ob-schedule-back">Back</button><button type="button" class="act" id="ob-schedule-create">Create companion</button></div>`);
+      $('ob-schedule-back').onclick=inferenceStep;
+      $('ob-schedule-create').onclick=()=>{scheduleApproved=$('ob-schedule-approved').checked;return finalizeBirth();};
+    }catch(error){
+      shell(`<h2>Schedule unavailable</h2><p class="bad">${esc(error.message)}</p><button class="quiet" id="ob-schedule-back">Back</button>`);
+      $('ob-schedule-back').onclick=inferenceStep;
+    }
   }
 
   /* ---------------------------------------------------------- 7. Finalize & Birth */
@@ -797,15 +900,15 @@ window.onboarding=async function(adopt){
     shell(`
       <div class="creator-head reveal" style="text-align:center;padding:40px 0">
         <span class="eyebrow" style="color:var(--accent);font-size:16px">Awakening...</span>
-        <h2 style="font-size:36px;margin:12px 0">Bringing ${esc(draft.agent||'Sam')} to life</h2>
-        <p class="dim">Creating memories, initializing presence, and setting background rhythms...</p>
+        <h2 style="font-size:36px;margin:12px 0">Bringing ${esc(draft.agent||'Companion')} to life</h2>
+        <p class="dim">Saving your companion’s identity and preferences...</p>
       </div>`);
 
     const answers={
-      agent:draft.agent||'Sam',
+      agent:draft.agent||'Companion',
       human_names:draft.human_names||'Friend',
-      pronoun_set:draft.pronoun_set||'she',
-      human_pronoun_set:draft.human_pronoun_set||'he',
+      pronoun_set:draft.pronoun_set||'they',
+      human_pronoun_set:draft.human_pronoun_set||'they',
       timezone:draft.timezone||'UTC',
       age:Number(draft.age)||25,
       persona:derived.persona||'warm',
@@ -823,21 +926,29 @@ window.onboarding=async function(adopt){
       image_style:derived.image_style||'none'
     };
 
+    if(draft.hope)answers.essence='A guiding intention for this connection, in the human’s own words: '+draft.hope;
     if(draft.birthdate)answers.birthdate=draft.birthdate;
     if(draft.human_boundary)answers.human_boundary=draft.human_boundary;
     if(draft.vault)answers.vault=draft.vault;
 
-    const profileId=(draft.agent||'sam').toLowerCase().replace(/[^a-z0-9_-]/g,'')||'sam';
+    const profileId=draft.profile;
     try{
-      action(adopt?'/adopt':'/profiles',adopt?{answers}:{profile:profileId,answers},r=>{
+      await action(adopt?'/adopt':'/profiles',adopt?{answers,schedule_approved:scheduleApproved}:{profile:profileId,answers,schedule_approved:scheduleApproved},r=>{
         target.innerHTML=`
           <div class="card creator" style="text-align:center;padding:40px 20px">
             <span style="font-size:48px;display:block;margin-bottom:12px">🎉</span>
-            <h2 style="font-size:32px;margin:0 0 10px">${esc(draft.agent||'Sam')} has arrived!</h2>
-            <p class="dim" style="max-width:480px;margin:0 auto 24px">Your companion is ready. Welcome home.</p>
+            <h2 style="font-size:32px;margin:0 0 10px">${esc(draft.agent||'Companion')} has arrived!</h2>
+            <p class="dim" style="max-width:480px;margin:0 auto 24px">${esc(r.schedule_note||"Your profile is saved. Open the workspace to start your first conversation.")}</p>
+            ${!['none','unset'].includes(derived.image_style)?`<div class="onboarding-portrait"><h3>Would you like to see what they look like?</h3><p class="dim small">Ask them to choose their look and send a first portrait. An image provider needs to be connected.</p><button type="button" class="quiet" id="ob-first-portrait">Ask for a first portrait</button></div>`:''}
             <button type="button" class="act" id="ob-enter-chat" style="padding:12px 32px;font-size:16px">Enter Workspace →</button>
           </div>`;
-        $('ob-enter-chat').onclick=()=>navigateProfile(r.profile||profileId,'now');
+        $('ob-enter-chat').onclick=()=>navigateProfile(r.profile||profileId,'chat');
+        const portraitButton=$('ob-first-portrait');
+        if(portraitButton)portraitButton.onclick=()=>{
+          const profile=r.profile||profileId;
+          sessionStorage.setItem('chat-draft-'+INSTALLATION+'-'+profile,'I’d like to see what you look like. Choose a look that feels like you and send me a first portrait in our chosen image style. If images aren’t connected yet, help me set that up first.');
+          navigateProfile(profile,'chat');
+        };
       });
     }catch(e){
       shell(`<div class="notice-strip is-firm"><p>Creation failed: ${esc(e.message)}</p></div><button class="act" onclick="location.reload()">Retry</button>`);

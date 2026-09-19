@@ -53,7 +53,7 @@ def preserve_human_records(old, updated):
 def synchronize(app, runtime, old, updated):
     """Queue the same job update regardless of which editor saved the settings."""
     cadence = {'quiet_start', 'quiet_end', 'autonomy_windows', 'image_timeline',
-               'image_style', 'outreach', 'outreach_per_day', 'timezone'}
+               'image_style', 'image_interval_minutes', 'outreach', 'outreach_per_day', 'timezone'}
     if not any(getattr(old, key) != getattr(updated, key) for key in cadence):
         return None
     if not (updated.home / 'cron/jobs.json').exists():
@@ -65,12 +65,15 @@ def synchronize(app, runtime, old, updated):
         from .runtime import redact
         before, after = mapping(old, {}), mapping(updated, {})
         specs = {render.render(spec['name'], before): spec
-                 for spec in load_manifest(updated)['jobs']}
+                 for spec in load_manifest(old)['jobs']}
+        next_specs = {render.render(spec['name'], after): spec
+                      for spec in load_manifest(updated)['jobs']}
         report('Preferences saved; updating background jobs')
         for job in _read_jobs(updated.home / 'cron/jobs.json')['jobs']:
             spec = specs.get(job.get('name'))
-            if spec:
-                was, now = render.render(spec['expr'], before), render.render(spec['expr'], after)
+            next_spec = next_specs.get(job.get('name'))
+            if spec and next_spec:
+                was, now = render.render(spec['expr'], before), render.render(next_spec['expr'], after)
                 if was != now and job.get('schedule', {}).get('expr') == was:
                     runtime.run(['cron', 'edit', job['id'], '--schedule', now], home=updated.home)
         result = runtime.run(['--home', str(updated.home), 'repair'], home=updated.home,

@@ -125,6 +125,8 @@ class Companion:
     vault:pathlib.Path=pathlib.Path.home()/'vault'
     context_tokens:int=DEFAULT_CONTEXT_TOKENS
     context_mode:str="auto"  # auto follows Hermes on each load; fixed is an intentional kit override
+    image_interval_minutes:int=15
+    schedule_offset_minutes:int=0
     image_timeline:bool=False
     image_mode:str='none'          # codex | local | none
     image_style:str='none'
@@ -210,6 +212,10 @@ class Companion:
             except (ValueError,TypeError):raise ValueError('birthdate must be YYYY-MM-DD')
             years=_dt.date.today().year-born.year
             if not 18<=years<=120:raise ValueError('birthdate must make the companion an adult under 120')
+        if type(self.image_interval_minutes) is not int or self.image_interval_minutes not in (5,10,15,20,30,60,120,240,360,720,1440):
+            raise ValueError('Choose a supported image interval between 5 minutes and 24 hours')
+        if type(self.schedule_offset_minutes) is not int or not 0<=self.schedule_offset_minutes<15:
+            raise ValueError('Schedule offset must be between 0 and 14 minutes')
         if not isinstance(self.bars,bool):raise ValueError('bars must be true or false')
         if isinstance(self.timeline_budget_gb,bool) or not isinstance(self.timeline_budget_gb,(int,float)) \
            or not 0<=self.timeline_budget_gb<=1000:
@@ -234,9 +240,14 @@ class Companion:
                 continue
             if key not in JOB_TIERS:raise ValueError(f'unknown model tier {key!r}; expected {sorted(JOB_TIERS)}')
             if not isinstance(value,dict):raise ValueError(f'models.{key} must be an object')
-            if set(value)-{'model','provider','reasoning_effort'}:raise ValueError('Unknown model tier field')
+            if set(value)-{'model','provider','reasoning_effort','base_url'}:raise ValueError('Unknown model tier field')
             if any(not isinstance(v,str) or len(v)>500 or any(ord(ch)<32 for ch in v) for v in value.values()):
                 raise ValueError('Model tier values must be plain text')
+            if value.get('base_url'):
+                from urllib.parse import urlsplit
+                endpoint=urlsplit(value['base_url'])
+                if endpoint.scheme not in ('http','https') or not endpoint.hostname or endpoint.username or endpoint.password:
+                    raise ValueError('Use an HTTP(S) model tier URL without credentials')
             effort=value.get('reasoning_effort')
             if effort not in (None,'') and effort not in REASONING_EFFORTS:
                 raise ValueError(f'reasoning_effort must be one of {REASONING_EFFORTS}')
@@ -556,3 +567,36 @@ if __name__=='__main__':
                       'data':str(c.data),'tier':c.tier,'context_tokens':c.context_tokens,
                       'soul_cap':c.soul_cap,'soul_warn':c.soul_warn,
                       'budgets':c.budgets()},indent=2))
+
+
+def access_pin(root, fallback=''):
+    """One host access policy, shared by all selectable profiles and the CLI.
+
+    Older installs stored PINs in companion.json. Conflicting legacy PINs need
+    a local reset rather than arbitrarily trusting an unprotected profile.
+    """
+    root = pathlib.Path(root)
+    path = root / '.tamanitomo-access.json'
+    if path.exists():
+        value = json.loads(path.read_text(encoding='utf-8')).get('remote_pin', '')
+    else:
+        pins = {fallback} if fallback else set()
+        for legacy in [root / CONFIG_NAME, *sorted((root / 'profiles').glob('*/' + CONFIG_NAME))]:
+            if legacy.exists():
+                pin = json.loads(legacy.read_text(encoding='utf-8')).get('remote_pin', '')
+                if pin:pins.add(pin)
+        if len(pins) > 1:
+            raise ValueError('Conflicting legacy PINs. Set one workspace PIN locally.')
+        value = next(iter(pins), '')
+    if not isinstance(value, str) or (value and (len(value) != 4 or not value.isascii() or not value.isdigit())):
+        raise ValueError('Invalid workspace access PIN')
+    return value
+
+
+def save_access_pin(root, pin):
+    if not isinstance(pin, str) or (pin and (len(pin) != 4 or not pin.isascii() or not pin.isdigit())):
+        raise ValueError('PIN must contain exactly four digits, or be empty')
+    path = pathlib.Path(root) / '.tamanitomo-access.json'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(path, json.dumps({'remote_pin': pin}) + '\n')
+    path.chmod(0o600)

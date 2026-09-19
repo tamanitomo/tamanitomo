@@ -8,14 +8,14 @@ For the project overview and the two-minute install, see [README.md](README.md).
 
 Any machine with internet access, a modern browser and room for Hermes plus optional model downloads. Keep it awake when you expect schedules, Telegram or remote access to work. Cloud model usage can cost money; local image and conversation models can need substantial RAM, VRAM and disk. Start with one working conversation model, then add images and voice.
 
-**What is actually verified.** Development and testing happen on Linux. Windows and Android hosting are exercised but not certified on every configuration — see [docs/REVIEW.md](docs/REVIEW.md) for what has been demonstrated and what has not.
+**What is actually verified.** The maintainer has deployed on Android, Windows, Linux, and macOS. Automated checks and individual device runs cover different things; see [docs/REVIEW.md](docs/REVIEW.md) for what has been demonstrated and what has not.
 
 ## Install
 
 1. Put the kit somewhere permanent and writable — `git clone` it, or extract the release ZIP into a folder such as `C:\Tamanitomo`. Do not run it from inside the ZIP, and do not put your vault inside the application code folder.
 2. Run **`./tamanitomo`** (or **`./companion`**) (Linux, macOS, WSL) or double-click **tamanitomo.cmd** (Windows). The launcher provisions Python when needed, installs dependencies into its own `.venv` and opens your browser. Keep the terminal window open — first launch needs internet, and errors stay visible there.
-3. Select **Kit-managed Hermes** for a new Hermes installation, or **Existing Hermes** if you already use Hermes. Complete installation and provider sign-in under **Hermes settings**.
-4. Open **Companions → Create a companion**. A short guided interview asks how you want things to feel and proposes a personality and a set of boundaries, then shows you every value it chose before anything is written — you can edit any of them, or skip the questions and fill the fields in directly. Already running Hermes? Use **Adopt** instead; your existing `SOUL.md` is left byte-for-byte alone.
+3. Select **Kit-managed Hermes** for a new Hermes installation, or **Existing Hermes** if you already use Hermes. Complete installation and provider sign-in under **Settings → System → Installation & gateway**.
+4. Open **Companions → Create a companion**. A short story-based interview suggests a personality, then asks directly about relationship type, pace, and contact, then shows you every value it chose before anything is written — you can edit any of them, or skip the questions and fill the fields in directly. Already running Hermes? Use **Adopt** instead; your existing `SOUL.md` is left byte-for-byte alone.
 5. Configure a primary model and only the fallback providers you want to pay for/use. Test the saved model chain. Open **Conversation**, send a short message and verify it appears in history.
 6. Review the proposed hooks and scheduled jobs before enabling them. Telegram is optional. Configure its credentials with Hermes if wanted; test gateway startup and Windows reboot recovery before relying on unattended schedules.
 7. Add optional image and voice providers using the guide below. Keep scheduled photos off until manual previews and the image reviewer work.
@@ -30,7 +30,7 @@ Any machine with internet access, a modern browser and room for Hermes plus opti
 - **Image review:** checks actual pixels against intent. A held or unavailable review requires attention; it does not silently approve delivery. Choose a vision-capable review model. Intentional adult content is an explicit per-image option.
 - **Voice Studio:** choose a TTS engine/voice, optional reference cloning where supported, and preview it. Your own licensed/authorized reference audio is required for a cloned voice.
 - **Local models:** guided Ollama installation and model selection, with hardware guidance. ComfyUI, voice models and extra nodes are separate optional installs.
-- **Hermes settings / Jobs & health:** full Hermes setup plus model/provider, gateway and schedule management.
+- **Settings → System:** full Hermes setup plus model/provider, gateway and schedule management.
 - **Updates:** stage a trusted release ZIP with integrity checks and apply it on the next launcher start.
 
 ## Voice conversation

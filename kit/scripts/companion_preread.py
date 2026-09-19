@@ -72,10 +72,24 @@ def fingerprint(c,now=None):
     now=now or dt.datetime.now(_tz(c))
     scene=companion_presence.current(c)
     state=scene['state'] if scene else {}
-    asleep=companion_outreach.in_quiet_hours(c,now)
-    awake=asleep and companion_dispatch.recently_active(c,now,minutes=30)
-    if asleep and not awake:
-        return f"sleep {c.quiet_start}-{c.quiet_end} scene={_digest(state.get('activity'),state.get('location'))}\n"
+    quiet=companion_outreach.in_quiet_hours(c,now)
+    awake=quiet and companion_dispatch.recently_active(c,now,minutes=30)
+    if quiet and not awake:
+        # Quiet hours are a CLOCK, not a claim about what I am doing. Suppress the run unless the
+        # episode genuinely moved, or the gate drafts the agent once per tick until 08:00.
+        #
+        # The mark must come from a CODE-OWNED field, never from prose. `location`, `mood`, `wants`,
+        # `visual` and even `activity` are all re-authored every tick, so any digest of them moves
+        # while nothing changes: hashing (activity, location) woke on the sleep case, then hashing
+        # activity alone woke again the moment the wording went from "finishing the coffee at the
+        # kitchen table" to "..., plate cleared". Two fixes, same mistake -- I kept moving the drift
+        # one field over instead of leaving the prose behind.
+        #
+        # `started_at` is written by companion_presence on an actual transition and is untouched by
+        # rewording, so it moves exactly when the scene does -- which is the only question the gate
+        # is asking. An asleep scene needs no special case: staying asleep leaves started_at alone.
+        mark=state.get('started_at') or 'static'
+        return (f"sleep {c.quiet_start}-{c.quiet_end} scene={_digest(mark)}\n")
     open_loops=companion_loops.loops(c)
     ambient=[]
     folder=c.soul_dir/'ambient'

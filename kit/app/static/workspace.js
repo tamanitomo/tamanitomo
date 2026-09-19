@@ -108,7 +108,9 @@ async function action(path,payload={},onDone){
   activeOperation='submitting';
   try{
     const row=await post(path,payload);
-    return await followOperation(row,onDone);
+    const result=await followOperation(row,onDone);
+    if(result.status!=='complete')throw Error(result.error||'Action did not complete.');
+    return result;
   }finally{if(activeOperation==='submitting')activeOperation=null;}
 }
 function bindAction(id,path,payload={},onDone){const button=$(id);if(button)button.onclick=async()=>{button.disabled=true;try{await action(path,typeof payload==='function'?payload():payload,onDone);}finally{button.disabled=false;}};}
@@ -171,44 +173,14 @@ async function boot(){
 }
 workspaceHandlers.roster=async()=>{
   const d=await api('/profiles');roster=d.profiles;
-  $('roster').innerHTML=heading('A place for your companions','Their conversations, days, and shared memories stay with their Hermes profile. Choose someone to spend time with, or welcome someone new.')+
-  `<div class="card onboarding-guide" style="border-left:4px solid var(--accent);margin-bottom:20px">
-    <h3>✨ Companion-Kit Setup Guide</h3>
-    <p class="dim small">Follow these 4 simple steps to bring your companion to life with Hermes autonomous background routines.</p>
-    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:12px">
-      <div style="padding:10px;border-radius:6px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--border)">
-        <strong>1. Engine</strong>
-        <p class="small dim">${d.runtime.available?'✅ Hermes installed':'⚠️ Hermes needed'}</p>
-        ${!d.runtime.available?'<button class="act small" id="guide-install-hermes" style="margin-top:6px">Install Hermes</button>':''}
-      </div>
-      <div style="padding:10px;border-radius:6px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--border)">
-        <strong>2. Companion Profile</strong>
-        <p class="small dim">${d.profiles.some(p=>p.installed)?`✅ ${d.profiles.filter(p=>p.installed).length} companion(s) active`:'Create your companion’s soul & rhythm'}</p>
-        <button class="quiet small" id="guide-create-companion" style="margin-top:6px">Create Companion</button>
-      </div>
-      <div style="padding:10px;border-radius:6px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--border)">
-        <strong>3. Inference Presets</strong>
-        <p class="small dim">1-click model presets & free fallbacks</p>
-        <button class="quiet small" id="guide-goto-env" style="margin-top:6px">Configure Inference</button>
-      </div>
-      <div style="padding:10px;border-radius:6px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--border)">
-        <strong>4. Connect & Chat</strong>
-        <p class="small dim">Start background life & say hello</p>
-        <button class="act small" id="guide-goto-chat" style="margin-top:6px">Open Chat</button>
-      </div>
-    </div>
-  </div>
-  <div class="actions"><button class="act" id="create-companion">Create a companion</button>${!d.runtime.available?'<button class="quiet" id="install-hermes">Install Hermes here</button>':''}</div>
-  ${!d.runtime.available?`<div class="card"><h2>Set up Hermes</h2><p>${esc(d.runtime.error)}</p><p class="dim">The installer provisions Hermes in this environment. Account setup comes next, in Hermes & providers.</p><code>${esc(d.runtime.root)}</code></div>`:''}
+  $('roster').innerHTML=heading('A place for your companions','Each companion has a Hermes profile with its own identity and memories.')+
+  `  <div class="actions"><button class="act" id="create-companion" ${d.runtime.available?'':'disabled'}>Create a companion</button>${!d.runtime.available?'<button class="quiet" id="install-hermes">Install Hermes here</button>':''}</div>
+  ${!d.runtime.available?`<div class="card"><h2>Set up Hermes</h2><p>${esc(d.runtime.error)}</p><p class="dim">The installer provisions Hermes in this environment. Connect an account in Models & providers.</p><code>${esc(d.runtime.root)}</code></div>`:''}
   <div class="grid">${d.profiles.map(p=>`<button class="card profile-card" data-profile="${esc(p.id)}">${faceForProfile(p.id,p.name)}<h3>${esc(p.name)}</h3><span class="pill">${p.installed?esc(p.type||'companion'):'Ready to adopt'}</span><p class="dim small">${esc(p.id)}</p></button>`).join('')||'<div class="card dim">Your first companion starts here.</div>'}</div>
   <div id="onboarding"></div>
   ${d.archives.length?`<div class="card"><h2>Archived profiles</h2>${d.archives.map(a=>`<div class="actions"><span>${esc(a.id)}</span><button class="quiet" data-restore="${esc(a.id)}">Restore</button><button class="quiet" data-purge="${esc(a.id)}">Delete permanently</button></div>`).join('')}</div>`:''}`;
-  if($('guide-install-hermes'))bindAction('guide-install-hermes','/install');
-  if($('guide-create-companion'))$('guide-create-companion').onclick=()=>onboarding(false);
-  if($('guide-goto-env'))$('guide-goto-env').onclick=()=>{aimSettings('hermes-core');navigateProfile(PROFILE||'default','settings');};
-  if($('guide-goto-chat'))$('guide-goto-chat').onclick=()=>navigateProfile(PROFILE||'default','now');
   $('create-companion').onclick=()=>onboarding(false);
-  bindAction('install-hermes','/install');
+  bindAction('install-hermes','/install',{},()=>render('roster'));
   for(const b of $('roster').querySelectorAll('[data-profile]'))b.onclick=()=>{const p=d.profiles.find(p=>p.id===b.dataset.profile);if(p.installed)navigateProfile(p.id,'companion-edit');else{aimSettings('hermes-core');navigateProfile(p.id,'settings');}};
   for(const b of $('roster').querySelectorAll('[data-restore]'))b.onclick=async()=>{const name=prompt('Original profile name:');if(name)await action('/profile/restore',{archive:b.dataset.restore,profile:name},()=>render('roster'));};
   for(const b of $('roster').querySelectorAll('[data-purge]'))b.onclick=async()=>{const name=prompt('Permanently delete this archived profile, including its sessions. The external vault stays intact. Type the full archive name:\n'+b.dataset.purge);if(name===b.dataset.purge)await action('/profile/purge',{archive:name,confirm:name},()=>render('roster'));};
@@ -254,7 +226,7 @@ workspaceHandlers.chat=async()=>{
   const alive=()=>current==='chat'&&pageGeneration===chatPageGeneration;
   const emotions=await api('/feelings').catch(()=>null);
   if(!alive())return;
-  const moodLabel=emotions?.intimacy?`${emotions.intimacy.stage_badge} · ${emotions.intimacy.score}%`
+  const moodLabel=emotions?.intimacy?.romantic_progression===false?(emotions.intimacy.connection_label||'Familiarity'):emotions?.intimacy?`${emotions.intimacy.stage_badge} · ${emotions.intimacy.score}%`
     :(emotions?.state?.mood||'');
   $('chat').innerHTML=`
     <div class="chat-room">
@@ -518,6 +490,12 @@ function openChatPhoto(imgEl){if(!imgEl)return;const card=imgEl.closest('.chat-m
 function relationshipNow(bars,intimacy,companionName){
   const feelings=bars&&bars.feelings;
   if(!feelings&&!intimacy)return '';
+  if(intimacy?.romantic_progression===false){
+    return `<div class="card rel-now"><h2>${esc(intimacy.connection_label||'Familiarity')}</h2>
+      <p class="dim">Shared experience builds familiarity and trust. This connection has no romantic milestones to complete.</p>
+      ${feelings?.mood?`<p>${esc(feelings.mood)}</p>`:''}
+      ${feelings?feelingMeters(feelings.meters):''}</div>`;
+  }
   const stages=['Just Met','Friends','Chemistry','Intimacy','Bonded'];
   const stage=intimacy?(intimacy.stage||0):0;
   const score=intimacy?(intimacy.score||0):0;
@@ -636,16 +614,18 @@ async function renderHermesInto(host){
   const known=roster.find(p=>p.id===PROFILE);
   host.innerHTML=heading('Hermes settings','Manage the Hermes environment behind this companion. Providers, backups, and scheduled routines all live in Hermes’s own configuration.')+
   `<div class="card" data-hermes-card="installation"><h2>Installation</h2><p><span class="pill">${d.runtime.managed?'Kit-managed':'Existing Hermes'}</span> <span class="dim small">${esc(d.runtime.root)}</span></p>
+  <details><summary>Use an existing Hermes installation</summary><label>Hermes home or config.yaml<input id="hermes-existing-path" placeholder="Path on this host"></label><button type="button" class="quiet" id="hermes-link-existing">Use this installation</button><p class="dim small" id="hermes-link-status"></p></details>
   <div class="actions">${!d.runtime.available?'<button class="act" id="env-install">Install Hermes</button>':'<button class="quiet" id="check-version">Check version</button><button class="quiet" id="update-hermes">Update Hermes</button>'}
   ${known&&!known.installed?'<button class="act" id="adopt-companion">Adopt as a companion</button>':''}</div><p class="dim small">The vault lives outside Hermes’s code checkout. Updates are handled by Hermes; run Health checks afterwards.</p></div>
   <div class="card" data-hermes-card="stack"><h2>Local companion stack</h2><p>Install a local conversation model on the Hermes host, then choose image and voice engines for this companion.</p><div class="actions"><button class="act" id="open-local-models">Local models</button><button class="quiet" id="env-stack-images">Image studio</button><button class="quiet" id="env-stack-voice">Voice studio</button></div></div>
-  ${d.runtime.available?`<div class="card" data-hermes-card="presets"><h2>Inference presets & Free Cascades</h2><p class="dim small">One-click model cascades. Automatically sets your primary model and ordered fallbacks for zero downtime.</p><div id="inference-presets" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:10px"></div></div>
+  ${d.runtime.available?`<div class="card" data-hermes-card="presets"><h2>Model presets</h2><p class="dim small">Choose a primary model and fallback chain.</p><div id="inference-presets" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:10px"></div></div>
   <div class="card" data-hermes-card="models"><h2>Models and fallbacks</h2><p class="dim small">Choose a model available to your account. A configured model is not yet a tested response.</p><datalist id="provider-ids"></datalist>
   <form id="models-form"><div class="form-grid"><label>Primary provider<input id="primary-provider" list="provider-ids" value="${esc(d.model.provider)}" placeholder="openrouter"></label><label>Primary model<input id="primary-model" value="${esc(d.model.default)}" placeholder="provider/model-name" required></label><label class="wide">Custom base URL (optional)<input id="primary-url" type="url" value="${esc(d.model.base_url)}" placeholder="http://localhost:11434/v1"></label></div>
-  <details open><summary>Ordered fallback providers</summary><p class="dim small">Hermes tries this chain when the primary is unavailable. No provider chain can cover a complete network outage.</p><div id="fallbacks"></div><button class="quiet" id="add-fallback" type="button">Add a fallback</button></details>
-  <details><summary>Models for background jobs</summary><div class="form-grid">${['loops','reflection'].map(t=>`<label>${t} provider<input id="tier-${t}-provider" list="provider-ids" value="${esc(d.tiers[t]?.provider||'')}"></label><label>${t} model<input id="tier-${t}-model" value="${esc(d.tiers[t]?.model||'')}" placeholder="Follow profile default"></label><label>${t} reasoning<select id="tier-${t}-effort">${options([['','Hermes default'],['none','None'],['low','Low'],['medium','Medium'],['high','High']],d.tiers[t]?.reasoning_effort||'')}</select></label>`).join('')}</div></details>
-  <div class="actions"><button class="act">Save model configuration</button><button class="quiet" id="test-model" type="button">Test saved model chain</button><button class="quiet" id="apply-models" type="button">Apply job models</button></div></form><p class="dim small">${esc(d.restart_note)}</p></div>
-  <div class="card" data-hermes-card="accounts"><h2>Accounts and credentials</h2><p class="dim">For ChatGPT or Grok account sign-in, choose Account sign-in / OAuth and select the provider in Hermes’s menu. The available login methods come from your installed Hermes version. You can also use an API key below. Stored keys are never sent back to this page.</p>
+  <details><summary>Fallback providers</summary><p class="dim small">Hermes tries this chain when the primary is unavailable. No provider chain can cover a complete network outage.</p><div id="fallbacks"></div><button class="quiet" id="add-fallback" type="button">Add a fallback</button></details>
+  <h3>Background jobs</h3>${['loops','reflection'].map(t=>`<details class="model-tier" ${d.tiers[t]?.model?'':'open'}><summary><strong>${t==='loops'?'Loops':'Reflection'}</strong><span class="dim" data-tier-summary="${t}">${esc(d.tiers[t]?.model||'Primary model')}</span></summary><div class="form-grid"><label>Provider<input id="tier-${t}-provider" value="${esc(d.tiers[t]?.provider||'')}"></label><label>Model<input id="tier-${t}-model" value="${esc(d.tiers[t]?.model||'')}"></label><label>Base URL<input id="tier-${t}-url" value="${esc(d.tiers[t]?.base_url||'')}"></label><label>Reasoning<select id="tier-${t}-effort">${options([['','Hermes default'],['none','None'],['low','Low'],['medium','Medium'],['high','High']],d.tiers[t]?.reasoning_effort||'')}</select></label></div></details>`).join('')}
+
+  <div class="actions"><button class="act">Save models</button><button class="quiet" id="test-model" type="button">Test saved model chain</button><button class="quiet" id="apply-models" type="button">Apply job models</button></div></form><p class="dim small">${esc(d.restart_note)}</p></div>
+  <div class="card" data-hermes-card="accounts"><h2>Accounts and credentials</h2><p class="dim">Sign in through Hermes or add an API key. Saved keys stay hidden.</p>
   <form id="credentials-form"><div class="form-grid"><label>Credential<select id="credential-name"><option>Loading provider catalog…</option></select></label><label>Value (blank removes it)<input id="credential-value" type="password" autocomplete="new-password"></label></div><div class="actions"><button class="act">Save credential</button></div></form><div id="credential-status" class="dim small"></div>
   <div class="actions"><button class="quiet native-console" data-console="models">Account sign-in / OAuth</button><button class="quiet native-console" data-console="messaging">Telegram & messaging</button><button class="quiet native-console" data-console="tools">Tools, voice, images & MCP</button><button class="quiet native-console" data-console="setup">Full Hermes setup</button><button class="quiet" id="advanced-config">All Hermes settings</button></div><div id="native-console"></div></div>
   <div class="card" data-hermes-card="gateway" id="gateway-controls"><h2>Gateway & background life</h2><p class="dim">Closing this app leaves an independently running Hermes gateway and its enabled jobs running. The host must stay awake; photos require an enabled schedule and working image provider.</p><div class="grid">${Object.entries(gateway.preflight.checks).map(([key,value])=>`<div><span class="pill ${value?'status-good':'status-warn'}">${value?'Verified':'Not verified'}</span><p class="small">${esc(key.replaceAll('_',' '))}</p></div>`).join('')}</div><p class="small dim">Gateway owner: ${esc(gateway.preflight.owner_home)}</p>${gateway.preflight.notes.map(n=>`<p class="small warn">${esc(n)}</p>`).join('')}<p class="dim">Review the hooks once, verify the provider, then start the gateway and activate the routine. Model-free maintenance remains active when the routine is paused.</p>
@@ -655,17 +635,24 @@ async function renderHermesInto(host){
   ${PROFILE&&PROFILE!=='default'?`<div class="card" data-hermes-card="lifecycle"><h2>Profile lifecycle</h2><p class="dim">Archive this profile to remove it from the roster. Its external vault stays intact, and you can restore the profile later.</p><button class="quiet" id="archive-profile">Archive ${esc(PROFILE)}</button></div>`:''}`:''}
   <div id="environment-onboarding"></div>`;
   $('open-local-models').onclick=()=>showTab('local-models');$('env-stack-images').onclick=()=>showTab('image-studio');$('env-stack-voice').onclick=()=>showTab('voice');
+  $('hermes-link-existing').onclick=async()=>{
+    if(!await confirmEditorLeave('settings-main'))return;
+    try{const result=await post('/installations/link',{path:$('hermes-existing-path').value});const url=new URL(location.href);url.searchParams.set('installation',result.installation);url.searchParams.set('profile','default');url.hash='roster';location.href=url;}
+    catch(error){$('hermes-link-status').textContent=error.message;}
+  };
   bindAction('env-install','/install');bindAction('check-version','/maintenance/version');
   if($('update-hermes'))$('update-hermes').onclick=()=>{if(confirm('Let Hermes update this installation? Active gateway workers may need a restart afterwards.'))return action('/maintenance/update');};
   if($('adopt-companion'))$('adopt-companion').onclick=()=>onboarding(true);
   if(!d.runtime.available)return;
+  wireAvailableModel($('primary-provider'),$('primary-model'),$('primary-url'),{primary:true});
+  for(const t of ['loops','reflection'])wireAvailableModel($('tier-'+t+'-provider'),$('tier-'+t+'-model'),$('tier-'+t+'-url'));
   d.fallbacks.forEach(addFallback);
   $('add-fallback').onclick=()=>{if($('fallbacks').children.length<8)addFallback({});};
   $('models-form').onsubmit=async e=>{
-    e.preventDefault();const fallbacks=[...$('fallbacks').children].map(row=>({provider:row.querySelector('.fallback-provider').value,model:row.querySelector('.fallback-model').value}));
-    const tiers={};for(const t of ['loops','reflection']){const model=$('tier-'+t+'-model').value,provider=$('tier-'+t+'-provider').value,reasoning_effort=$('tier-'+t+'-effort').value;if(model||reasoning_effort)tiers[t]={model,provider,reasoning_effort};}
+    e.preventDefault();const fallbacks=[...$('fallbacks').children].map(row=>({provider:row.querySelector('.fallback-provider').value,model:row.querySelector('.fallback-model').value,...(row.querySelector('.fallback-url')?.value?{base_url:row.querySelector('.fallback-url').value}:{})}));
+    const tiers={};for(const t of ['loops','reflection']){const model=$('tier-'+t+'-model').value,provider=$('tier-'+t+'-provider').value,reasoning_effort=$('tier-'+t+'-effort').value;const base_url=$('tier-'+t+'-url').value;if(provider&&!model)throw Error('Choose a model for '+t+' or follow the primary provider.');if(model||reasoning_effort)tiers[t]={model,provider,reasoning_effort,...(base_url?{base_url}:{})};}
     const model={provider:$('primary-provider').value,model:$('primary-model').value};if($('primary-url').value)model.base_url=$('primary-url').value;
-    await post('/environment',{model,fallbacks,tiers});notice('Model settings saved. Apply job models, then restart the gateway to reload persistent workers.');
+    await post('/environment',{model,fallbacks,tiers});clearEditorDirty('settings-main-hermes-models');for(const t of ['loops','reflection']){const summary=document.querySelector('[data-tier-summary="'+t+'"]');summary.textContent=$('tier-'+t+'-model').value||'Primary model';summary.closest('details').open=false;}notice('Model settings saved. Apply job models, then restart the gateway to reload persistent workers.');
   };
   bindAction('test-model','/models/probe');bindAction('apply-models','/jobs/apply-models');
   bindAction('repair-companion','/maintenance/repair');bindAction('activate-routine','/maintenance/activate');bindAction('pause-routine','/maintenance/pause');bindAction('doctor-companion','/maintenance/doctor');
@@ -680,9 +667,10 @@ async function renderHermesInto(host){
     const flatten=(value,prefix='')=>{for(const [key,item] of Object.entries(value)){const path=prefix?prefix+'.'+key:key;if(item==='[configured]')continue;if(item&&typeof item==='object'&&!Array.isArray(item))flatten(item,path);else entries.push([path,item]);}};flatten(data.config);
     $('native-console').innerHTML=`<h3>All Hermes settings</h3><p>Choose a setting to inspect or change. Secret values stay in Accounts and credentials.</p><form id="config-value-form"><label>Find a setting<input id="setting-search" type="search" placeholder="Search settings…"></label><label>Setting<select id="setting-select"></select></label><label id="custom-key-label" hidden>New setting key<input id="config-key" placeholder="terminal.backend"></label><label>Value<div id="setting-value"></div></label><button class="act">Save setting</button></form><details><summary>View complete configuration</summary><pre>${esc(JSON.stringify(data.config,null,2))}</pre></details>`;
     const choices=()=>{$('setting-select').innerHTML=options(entries.filter(([key])=>key.includes($('setting-search').value.toLowerCase())).map(([key])=>[key,key]),'')+'<option value="__custom__">Add another setting…</option>';value();};
-    const value=()=>{const key=$('setting-select').value,item=entries.find(([k])=>k===key)?.[1],custom=key==='__custom__';$('custom-key-label').hidden=!custom;$('config-key').required=custom;$('setting-value').innerHTML=typeof item==='boolean'?`<select id="config-value">${options([['true','Enabled'],['false','Disabled']],String(item))}</select>`:typeof item==='number'?`<input id="config-value" type="number" step="any" value="${item}">`:`<textarea id="config-value">${esc(custom?'':typeof item==='string'?item:JSON.stringify(item))}</textarea>`;};
-    $('setting-search').oninput=choices;$('setting-select').onchange=value;choices();
-    $('config-value-form').onsubmit=async e=>{e.preventDefault();const key=$('setting-select').value==='__custom__'?$('config-key').value:$('setting-select').value;let value=$('config-value').value;const previous=entries.find(([k])=>k===key)?.[1];if(typeof previous!=='string'){try{value=JSON.parse(value);}catch{}}await action('/config',{key,value});};
+    const value=()=>{const key=$('setting-select').value,item=entries.find(([k])=>k===key)?.[1],custom=key==='__custom__';$('custom-key-label').hidden=!custom;$('config-key').required=custom;$('setting-value').innerHTML=typeof item==='boolean'?`<select id="config-value">${options([['true','Enabled'],['false','Disabled']],String(item))}</select>`:typeof item==='number'?`<input id="config-value" type="number" step="any" value="${item}">`:Array.isArray(item)&&item.every(x=>typeof x==='string')?tagFieldHTML('config-list','Values','','',false):typeof item==='string'&&!item.includes('\n')?`<input id="config-value" value="${esc(item)}">`:`<textarea id="config-value" rows="3">${esc(custom?'':typeof item==='string'?item:JSON.stringify(item))}</textarea>`;
+      if(Array.isArray(item)&&item.every(x=>typeof x==='string'))writeTags($('setting-value').querySelector('[data-tag-field]'),item);};
+    $('setting-search').oninput=choices;$('setting-select').onchange=value;choices();wireTagFields($('setting-value'),()=>{dirtyEditors.add(editorScope($('setting-value')));updateEditorStatus();});
+    $('config-value-form').onsubmit=async e=>{e.preventDefault();const key=$('setting-select').value==='__custom__'?$('config-key').value:$('setting-select').value;const list=$('setting-value').querySelector('[data-tag-field]');let value=list?readTags(list):$('config-value').value;const previous=entries.find(([k])=>k===key)?.[1];if(!list&&typeof previous!=='string'){try{value=JSON.parse(value);}catch{}}await action('/config',{key,value});const entry=entries.find(([k])=>k===key);if(entry)entry[1]=value;else entries.push([key,value]);clearEditorDirty(editorScope($('setting-value')));};
   };
   // Catalog discovery runs separately so a slow Hermes import doesn't block the workspace.
   api('/providers').then(p=>{if(!host.isConnected||!$('provider-ids'))return;providerRows=p.providers;$('provider-ids').innerHTML=p.providers.map(x=>`<option value="${esc(x.slug)}">${esc(x.label)}</option>`).join('');
@@ -724,7 +712,7 @@ async function renderHermesInto(host){
     }
   }).catch(()=>{});
 }
-function addFallback(row){const el=document.createElement('div');el.className='row';el.style.marginBottom='10px';el.innerHTML=`<label>Provider<input class="fallback-provider" list="provider-ids" value="${esc(row.provider||'')}"></label><label>Model<input class="fallback-model" value="${esc(row.model||'')}" required></label><button class="quiet" type="button" style="flex:0 0 auto;align-self:center">Remove</button>`;el.querySelector('button').onclick=()=>el.remove();$('fallbacks').append(el);}
+function addFallback(row){const el=document.createElement('div');el.className='row';el.style.marginBottom='10px';el.innerHTML=`<label>Provider<input class="fallback-provider" list="provider-ids" value="${esc(row.provider||'')}"></label><label>Model<input class="fallback-model" value="${esc(row.model||'')}" required></label><label>Base URL<input class="fallback-url" type="url" value="${esc(row.base_url||'')}"></label><button class="quiet" type="button" style="flex:0 0 auto;align-self:center">Remove</button>`;el.querySelector('button').onclick=()=>el.remove();$('fallbacks').append(el);wireAvailableModel(el.querySelector('.fallback-provider'),el.querySelector('.fallback-model'),el.querySelector('.fallback-url'));}
 let consoleId=null,consolePoll=null;
 async function openConsole(which){
   const d=await post('/terminal',{action:which});consoleId=d.id;sessionStorage.setItem('console-'+INSTALLATION+'-'+PROFILE,d.id);

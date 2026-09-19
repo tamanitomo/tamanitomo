@@ -155,6 +155,29 @@ def save_config(home, mutate):
         cp.atomic_write(path,yaml.safe_dump(value,sort_keys=False,allow_unicode=True))
 
 
+def inherit_api_credentials(source_home: Path, target_home: Path):
+    """Copy onboarding API credentials into a newly created Hermes profile."""
+    source = source_home / '.env'
+    target = target_home / '.env'
+    if not source.exists() or source.resolve() == target.resolve():
+        return
+    pattern = re.compile(r'^\s*(?:export\s+)?([A-Z][A-Z0-9_]*_API_KEY)\s*=')
+    inherited = {}
+    for line in source.read_text(encoding='utf-8').splitlines():
+        match = pattern.match(line)
+        if match:
+            inherited[match.group(1)] = line
+    if not inherited:
+        return
+    with cp.file_lock(target_home / '.companion-env.lock'):
+        lines = target.read_text(encoding='utf-8').splitlines() if target.exists() else []
+        lines = [line for line in lines if not (pattern.match(line) and pattern.match(line).group(1) in inherited)]
+        lines.extend(inherited.values())
+        cp.atomic_write(target, '\n'.join(lines) + '\n')
+        if os.name != 'nt':
+            target.chmod(0o600)
+
+
 def register(app, select, load, operations):
     from .terminal import Consoles
     consoles=Consoles()
@@ -195,6 +218,24 @@ def register(app, select, load, operations):
     @app.get('/api/installations')
     def installations():
         return {'installations':[dict(id=k,**v.info()) for k,v in app.state.runtimes.items()]}
+
+    @app.post('/api/installations/link')
+    def link_installation(payload:dict):
+        root=Path(text(payload.get('path'),'Hermes location',4096)).expanduser().resolve()
+        if root.is_file() and root.name in ('config.yaml','companion.json'):root=root.parent
+        if not root.is_dir() or not any((root/name).exists() for name in ('config.yaml','profiles','hermes-agent')):
+            raise ValueError('Choose an existing Hermes home, or its config.yaml file.')
+        for ident,runtime in app.state.runtimes.items():
+            if runtime.root.resolve()==root:return {'installation':ident}
+        ident='linked-'+hashlib.sha256(str(root).encode()).hexdigest()[:12]
+        path=app.state.linked_installations_file
+        with cp.file_lock(path.with_suffix('.lock')):
+            saved=hr.read_json(path,{})
+            saved[ident]=str(root);cp.atomic_write(path,json.dumps(saved,indent=2)+'\n')
+            import threading
+            app.state.write_locks[ident]=threading.Lock()
+            app.state.runtimes[ident]=hr.Runtime(root)
+        return {'installation':ident}
 
     @app.post('/api/install')
     def install(): return op('Install Hermes',lambda rt,p,h,report:rt.install(report))
@@ -299,6 +340,38 @@ def register(app, select, load, operations):
                 'boundaries':{k:{'label':v['label'],'description':v['oneline']} for k,v in wizard.BOUNDARY_BANK.items()},
                 'catalog':catalog.load(),'answer_keys':sorted(__import__('kit.cli.questions',fromlist=['known_answer_keys']).known_answer_keys())}
 
+    @app.post('/api/onboarding/schedule')
+    def onboarding_schedule(payload:dict):
+        from kit.cli.common import load_manifest, mapping, next_schedule_offset
+        import companion_render as render
+        rt,_=select()
+        c=cc.Companion(profile=cp.profile_name(payload.get('profile') or 'companion'),hermes_root=rt.root,
+                       agent_type=payload.get('agent_type','companion'),
+                       quiet_start=payload.get('quiet_start','23:00'),quiet_end=payload.get('quiet_end','08:00'),
+                       timezone=payload.get('timezone','UTC'))
+        if payload.get('adopt') is True:
+            original=cc.load(rt.home(payload.get('profile') or 'default'))
+            c=cc.dataclasses.replace(original,quiet_start=c.quiet_start,quiet_end=c.quiet_end,timezone=c.timezone,agent_type=c.agent_type)
+        c.schedule_offset_minutes=next_schedule_offset(c)
+        m=mapping(c,{})
+        return {'timezone':c.timezone,'offset_minutes':c.schedule_offset_minutes,
+                'jobs':[{'name':spec['key'].replace('_',' '), 'schedule':render.render(spec['expr'],m),
+                         'uses_model':not spec.get('no_agent',False)} for spec in load_manifest(c)['jobs']]}
+
+    def approve_schedule(rt,home,report,result,approved):
+        if approved:
+            try:
+                report('Testing the new companion’s model before enabling its approved schedule')
+                response=rt.run(['chat','--quiet','--oneshot','--ignore-rules','--max-turns','1',
+                                 '-q','Reply with exactly: CONNECTION_OK. Do not use any tools.'],home=home,timeout=180)
+                if 'CONNECTION_OK' not in response.stdout:
+                    raise ValueError('The model did not return the connection check.')
+                rt.run(['--home',str(home),'schedule','active'],home=home,kit=True,timeout=600)
+                result.update(schedule_active=True,schedule_note='Schedule approved and enabled. The owning Hermes gateway must be running; review its status in Settings.')
+            except Exception as exc:
+                result['schedule_note']='Companion saved; schedule activation needs attention. '+hr.redact(str(exc))[:400]
+        return result
+
     @app.post('/api/profiles')
     def create(payload:dict):
         name=cp.profile_name(payload.get('profile',''))
@@ -312,14 +385,26 @@ def register(app, select, load, operations):
         if not answers.get('vault'):
             from kit.cli.roster import existing_vault
             answers['vault']=str(existing_vault(rt.root) or (rt.root.parent/'companion-vault' if rt.managed else Path.home()/'vault'))
-        return op('Create '+name,lambda rt,p,h,report: {'output':hr.redact(rt.run(['--home',str(rt.root),'add',name,'--answers',json.dumps(answers)],home=rt.root,kit=True,timeout=600).stdout),'profile':name})
+        approved=payload.get('schedule_approved') is True
+        def create_profile(rt,p,h,report):
+            output=hr.redact(rt.run(['--home',str(rt.root),'add',name,'--answers',json.dumps(answers)],home=rt.root,kit=True,timeout=600).stdout)
+            profile_home=cp.profile_path(rt.root,name)
+            inherit_api_credentials(rt.root,profile_home)
+            result={'output':output,'profile':name,'schedule_active':False,
+                    'schedule_note':'Background model jobs are paused. Enable them in Schedule & usage.'}
+            approve_schedule(rt,profile_home,report,result,approved)
+            return result
+        return op('Create '+name,create_profile)
 
     @app.post('/api/adopt')
     def adopt(payload:dict):
         answers=payload.get('answers',{})
         if not isinstance(answers,dict) or not answers.get('boundary'): raise ValueError('Choose a relationship frame')
-        return op('Adopt existing Hermes companion',lambda rt,p,h,report: {'output':hr.redact(rt.run(
-            ['--home',str(h),'upgrade','--soul','keep','--answers',json.dumps({**answers,'cron_active':False,'gateway_mode':'later','gateway_action':'status'})],home=h,kit=True,timeout=600).stdout)})
+        def adopt_profile(rt,p,h,report):
+            output=hr.redact(rt.run(['--home',str(h),'upgrade','--soul','keep','--answers',json.dumps({**answers,'cron_active':False,'gateway_mode':'later','gateway_action':'status'})],home=h,kit=True,timeout=600).stdout)
+            result={'output':output,'profile':p,'schedule_active':False,'schedule_note':'Background model jobs are paused. Enable them in Schedule & usage.'}
+            return approve_schedule(rt,h,report,result,payload.get('schedule_approved') is True)
+        return op('Adopt existing Hermes companion',adopt_profile)
 
     @app.post('/api/profile/archive')
     def archive(payload:dict):
@@ -917,7 +1002,7 @@ def register(app, select, load, operations):
 
         key=f'custom:{base_url.rstrip("/")}' if base_url else provider
         models,source,note=[],'none',''
-        if not refresh:
+        if not refresh or not base_url:
             try:
                 cache=json.loads((h/'provider_models_cache.json').read_text(encoding='utf-8'))
                 models=[str(m) for m in ((cache.get(key) or {}).get('models') or [])]
@@ -929,8 +1014,7 @@ def register(app, select, load, operations):
             except Exception as exc:
                 note=f'Could not reach {base_url}: '+hr.redact(str(exc))[:160]
         if not models and not note:
-            note=('No cached list for this provider yet. Open it once in the Hermes dashboard, '
-                  'or type the model name — a name you type is always accepted.')
+            note=('Hermes has no model list yet. Connect this provider in Hermes, or enter a model name.')
         return {'models':models,'provider':provider,'base_url':base_url,'source':source,
                 'cache_key':key,'note':note}
 
@@ -1092,7 +1176,7 @@ def register(app, select, load, operations):
             out['prompt_chars']=len(prompt)
             out['last_error']=hr.redact(str(row.get('last_error') or ''))[:600] or None
             rows.append(out)
-        return {'timezone':cc.load(h).timezone,'jobs':rows}
+        return {'timezone':cc.load(h).timezone,'jobs':rows,'usage':hr.job_usage(cc.load(h),rows)}
 
 
     # `hermes cron edit` can set a job's model, provider and reasoning effort, but

@@ -16,6 +16,19 @@ class TimelineTests(unittest.TestCase):
         self.data={'previous_id':None,'outfit':['tee'],'location':'kitchen','activity':'lunch','mood':'cheerful','text':'Making lunch.'}
         presence.update(self.c,self.data,self.now-dt.timedelta(minutes=2))
         self.image=self.folder/'provider.png';Image.new('RGB',(16,16),'green').save(self.image)
+    def test_photo_interval_applies_even_after_the_scene_changes(self):
+        self.c.image_interval_minutes=120
+        first=timeline.prepare(self.c,self.now)
+        timeline.save(self.c,first['capture_id'],str(self.image),'test',self.now)
+        later=self.now+dt.timedelta(minutes=65)
+        previous=presence.current(self.c)
+        presence.update(self.c,{**self.data,'previous_id':previous['id'],'activity':'reading','transition':'Lunch finished.'},later)
+        self.assertFalse(timeline.prepare(self.c,later)['ready'])
+        later=self.now+dt.timedelta(minutes=121)
+        previous=presence.current(self.c)
+        presence.update(self.c,{**self.data,'previous_id':previous['id'],'activity':'writing','transition':'Finished reading.'},later)
+        self.assertTrue(timeline.prepare(self.c,later)['ready'])
+
     def test_opt_out_and_stale_state_prevent_claiming(self):
         self.c.image_timeline=False;self.assertFalse(timeline.prepare(self.c,self.now)['ready'])
         self.c.image_timeline=True

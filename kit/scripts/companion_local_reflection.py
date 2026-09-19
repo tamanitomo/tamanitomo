@@ -139,8 +139,9 @@ def request_plan(c,kind,data,sources,base_url,model,slot,allow_remote=False,api_
       'is NOT a standing instruction. moments are meaningful real exchanges. Ignore routine greetings, '
       'punctuation-only replies and routine task chatter. '
       'answers must answer the selected existing question. open_loops are real unfinished commitments, '
-      'not invented tasks. soul_append is optional: only a lasting insight about yourself, never a human fact '
-      'or changes to locked identity. Do not force a change. The code will write the dated journal and ledgers. '
+      'not invented tasks. soul_append is empty for daily and checkin, and optional for weekly and monthly: '
+      'only a lasting insight about yourself, never a human fact or changes to locked identity. '
+      'Do not force a change. The code will write the dated journal and ledgers. '
       'For checkin, reflection and soul_append are empty; record only something that would otherwise be lost.')
     payload={'model':model,'messages':[{'role':'system','content':instructions},
              {'role':'user','content':json.dumps(data,ensure_ascii=False)}],
@@ -164,7 +165,7 @@ def validate(plan,kind,sources,question_ids):
         if not isinstance(value,str) or len(value)>limit or (not empty and not value.strip()):raise ValueError('invalid reflection text')
     text(plan['reflection'],4000,kind=='checkin');text(plan['soul_append'],1000,True)
     if kind=='checkin' and plan['reflection']:raise ValueError('checkin cannot write a journal')
-    if kind not in ('weekly','monthly') and plan['soul_append']:raise ValueError('this job cannot edit SOUL')
+    if kind not in ('weekly','monthly') and plan['soul_append']:raise ValueError("soul_append must be empty for a "+kind+" reflection (only weekly/monthly may edit SOUL); drop it and keep the journal")
     if any(line.startswith(('## ','# ')) for line in plan['reflection'].splitlines()):raise ValueError('journal headings are supplied by code')
     for key,cap in [('preferences',4),('questions',2),('facts',6),('standing',6),('moments',6),('answers',4),('open_loops',3)]:
         if not isinstance(plan[key],list) or len(plan[key])>cap:raise ValueError('invalid '+key+' list')

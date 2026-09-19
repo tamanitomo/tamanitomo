@@ -995,13 +995,14 @@ class PinAndBackupCliTests(unittest.TestCase):
 
             # Initially no PIN
             r=run('--home',str(home),'pin',expect=0)
-            self.assertIn('No remote PIN configured',r.stdout)
+            self.assertIn('No workspace remote PIN configured',r.stdout)
 
             # Set valid PIN
             r=run('--home',str(home),'pin','--set','5678',expect=0)
-            self.assertIn('set to 5678',r.stdout)
+            self.assertIn('configured',r.stdout)
+            self.assertNotIn('5678',r.stdout)
             c=cc.load(home)
-            self.assertEqual(c.remote_pin,'5678')
+            self.assertEqual(cc.access_pin(home),'5678')
 
             # Inspect configured PIN
             r=run('--home',str(home),'pin',expect=0)
@@ -1015,7 +1016,7 @@ class PinAndBackupCliTests(unittest.TestCase):
             r=run('--home',str(home),'pin','--clear',expect=0)
             self.assertIn('cleared',r.stdout)
             c=cc.load(home)
-            self.assertEqual(c.remote_pin,'')
+            self.assertEqual(cc.access_pin(home),'')
 
     def test_vault_backup_creates_zip(self):
         import zipfile

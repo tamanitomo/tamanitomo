@@ -30,6 +30,7 @@ wheels/
 
 # Companion runtime, state & local data
 companion.json
+.tamanitomo-access.json
 companion-pending-jobs.json
 .creation-integrity.json
 .nsfw-revoked.json

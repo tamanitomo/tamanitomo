@@ -121,3 +121,24 @@ The journal now uses a collapsible entry picker on narrow screens, with a vertic
 Refreshing Conversation or starting a new chat now stops the prior microphone/voice state. A JavaScript regression verifies cancellation, recorder/track stopping, and playback stopping before chat controls are replaced. See `docs/audits/2026-09-12-responsive-acceptance.md` for measurements and limits. Native mobile keyboard/microphone behavior and the Windows/cloud host matrix remain unverified.
 
 Final verification for the responsive pass: 710 tests passed, JavaScript syntax and regression checks passed, and `git diff --check` passed. Browser layout checks covered narrow chat, journal, photos, Together, and health views. No deployment was performed.
+
+
+## September 19 clarification and foundation audit
+
+The current tamanitomo is the self-hosted successor to companion-kit, not the archived E2EE hosted service. Android, Windows, Linux and macOS are supported and have been deployed by the owner.
+
+The personality questionnaire should retain the imaginative, Pokémon Mystery Dungeon-inspired experience. Story choices suggest personality; explicit questions ask what the user wants and set relationship, pace and contact preferences. Settings should be less dense and organized around the user's task. Consolidate duplicated editors and installer implementations while retaining useful behavioural coverage.
+
+See [the foundation audit](audits/2026-09-19-foundation-audit.md) for implementation, evidence and remaining product/acceptance work.
+
+
+## September 19 layout approval checkpoint
+
+One owner can maintain multiple companions, each a Hermes profile. Android is the first native acceptance target after local layout approval. Keep capabilities stable while making settings quick to find and edit, using compact navigation, paired times, chips and shared editors.
+
+Onboarding combines twelve playful scenes with direct preferences and schedule approval. Worker and friendship relationships should feel complete without intimacy progression. Approved schedules may initiate contact after a successful model check and within chosen permissions. Stagger new profiles, expose photo cadence and recorded job tokens, and separate supported Hermes image connections from optional ComfyUI.
+
+
+### Settings navigation correction
+
+The owner rejected dropdown-based settings navigation. Desktop uses a persistent left group sidebar and all related sections on the right. Mobile uses an index and separate group screens with a top-left back arrow. Image provider selection exposes ComfyUI's existing workflow lanes. Onboarding asks for image style and offers an editable first-portrait request to the companion.

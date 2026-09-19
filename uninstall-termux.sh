@@ -288,24 +288,29 @@ echo -e "  ${GREEN}✓ All application assets and caches deleted.${RESET}"
 # 7. (Optional) Purge Installed Packages
 # ------------------------------------------------------------------------------
 if [[ "$PURGE_PACKAGES" -eq 1 && "$IS_TERMUX" -eq 1 ]]; then
-  echo -e "${CYAN}→ [7/7] Purging build packages and toolchain...${RESET}"
-  PACKAGES_TO_PURGE=(
-    python3.11
-    rust
-    clang
-    make
-    pkg-config
-    nodejs
-    ripgrep
-    libheif
-    libjpeg-turbo
-    libpng
-  )
+  echo -e "${CYAN}→ [7/7] Returning Termux packages to the pre-install baseline...${RESET}"
+  BASELINE_FILE="${HOME_DIR}/.tamanitomo-termux-baseline-packages"
+  PACKAGES_TO_PURGE=()
+  if [[ -s "$BASELINE_FILE" ]]; then
+    CURRENT_FILE="${PREFIX_DIR}/tmp/tamanitomo-current-packages.$$"
+    dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\n' 2>/dev/null | awk '$1 == "ii" { sub(/:.*/, "", $2); print $2 }' | sort -u > "$CURRENT_FILE"
+    while IFS= read -r package; do
+      [[ -n "$package" ]] && PACKAGES_TO_PURGE+=("$package")
+    done < <(comm -13 "$BASELINE_FILE" "$CURRENT_FILE")
+    rm -f "$CURRENT_FILE"
+  else
+    # Compatibility fallback for installations made before baseline manifests.
+    # Do not list bootstrap packages such as curl, openssl, or termux-tools.
+    PACKAGES_TO_PURGE=(python3.11 rust clang make pkg-config nodejs ripgrep git tmux termux-services termux-api jq libheif libjpeg-turbo libpng tur-repo)
+  fi
   export DEBIAN_FRONTEND=noninteractive
-  pkg uninstall -y "${PACKAGES_TO_PURGE[@]}" >/dev/null 2>&1 || true
+  if [[ "${#PACKAGES_TO_PURGE[@]}" -gt 0 ]]; then
+    pkg uninstall -y "${PACKAGES_TO_PURGE[@]}" >/dev/null 2>&1 || true
+  fi
   apt autoremove -y --purge >/dev/null 2>&1 || true
   apt clean >/dev/null 2>&1 || true
-  echo -e "  ${GREEN}✓ Build toolchain purged.${RESET}"
+  rm -f "$BASELINE_FILE"
+  echo -e "  ${GREEN}✓ Installer-added packages purged; pre-existing packages preserved.${RESET}"
 else
   echo -e "${CYAN}→ [7/7] Preserving package toolchain (Python, Git, etc. remain ready for fast reinstall).${RESET}"
 fi

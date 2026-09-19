@@ -312,7 +312,9 @@ def register(app,select,load):
     @app.post('/api/images/check')
     def check(payload:dict):
         base=media.endpoint(payload.get('endpoint',''))
-        info=media.request_json(base+'/object_info')
+        try:info=media.request_json(base+'/object_info')
+        except (OSError,ValueError) as exc:
+            raise ValueError('Could not connect to ComfyUI. Check that the server is running and its address is reachable from the Hermes host.') from exc
         models={}
         for node in ('CheckpointLoaderSimple','LoraLoader','UpscaleModelLoader','UnetLoaderGGUF','UNETLoader','CLIPLoader','VAELoader'):
             for key,spec in info.get(node,{}).get('input',{}).get('required',{}).items():

@@ -203,7 +203,8 @@ def prepare(c,now=None):
     if not c.image_timeline:return {'ready':False,'reason':'Image timeline is off'}
     scene=current(c)
     now=now.astimezone(dt.timezone.utc)
-    slot=now.replace(minute=now.minute//15*15,second=0,microsecond=0)
+    seconds=c.image_interval_minutes*60
+    slot=dt.datetime.fromtimestamp(int(now.timestamp())//seconds*seconds,tz=dt.timezone.utc)
     start,end=bounds(now)
     if not scene or not scene['state'].get('confirmed',True) or not start<=timestamp(scene['recorded_at'])<=end:
         return {'ready':False,'reason':'No state confirmed recently enough to make an honest scene; skip rather than invent one'}
@@ -215,7 +216,11 @@ def prepare(c,now=None):
     with file_lock(root(c)/'.lock'):
         if path.exists():return {'ready':False,'reason':'This interval has already been claimed','capture':json.loads(path.read_text(encoding='utf-8'))}
         from companion_day import visual_key
-        saved=[row for _,row in records(c) if row.get('status')=='saved']
+        captures=[row for _,row in records(c)]
+        recent=[row for row in captures if row.get('status') in ('saved','pending') and
+                now-timestamp(row['created_at'])<dt.timedelta(minutes=c.image_interval_minutes)]
+        if recent:return {'ready':False,'reason':'Waiting for the photo interval'}
+        saved=[row for row in captures if row.get('status')=='saved']
         latest=max(saved,key=lambda row:row['created_at'],default=None)
         if (latest and latest.get('image_style')==c.image_style
                 and visual_key(latest['scene']['state'])==visual_key(scene['state'])):

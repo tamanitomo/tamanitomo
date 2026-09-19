@@ -1,19 +1,20 @@
 /* One leave guard for persisted editors, including refresh and browser close. */
 const dirtyEditors=new Set();
-const trackedEditorFields='#note-text, #full-soul, #feelings-controls input, #feelings-controls select, #feelings-controls textarea, #companion-edit-form input, #companion-edit-form select, #companion-edit-form textarea, #settings-panel input:not([type=search]), #settings-panel select, #settings-panel textarea, #identity textarea';
+const trackedEditorFields='#note-text, #full-soul, #feelings-controls input, #feelings-controls select, #feelings-controls textarea, #companion-edit-form input, #companion-edit-form select, #companion-edit-form textarea, #settings-panel input:not([type=search]), #settings-panel select, #settings-panel textarea, #identity textarea, #voice-studio-form input, #voice-studio-form select, #voice-studio-form textarea';
 function editorScope(element){
   if(element.closest('#product-dialog'))return 'dialog';
   if(element.closest('#feelings-settings-form'))return 'relationship-settings';
   if(element.closest('#feelings-experience-form'))return 'relationship-experience';
   if(element.closest('#identity'))return 'identity-'+(element.dataset.section||'appearance');
-  // Settings is one panel at a time, each with its own save, so the whole
-  // open panel is a single scope. The index and its search box are not
-  // editors and are excluded by the selector above.
-  if(element.closest('#settings-panel'))return 'settings-main';
+  // Related settings share a page, but each section owns its save scope.
+  if(element.closest('#settings-panel')){
+    const job=element.closest('.job-row[data-job-id]');
+    return job?'settings-main-job-'+job.dataset.jobId:'settings-main-'+(element.closest('[data-settings-section]')?.dataset.settingsSection||'general');
+  }
   return element.closest('section')?.id;
 }
 function recordEditorChange(event){
-  if(!event.target.matches(trackedEditorFields))return;
+  if(!event.target.matches(trackedEditorFields)||['job-filter','hermes-existing-path'].includes(event.target.id))return;
   const scope=editorScope(event.target);if(scope)dirtyEditors.add(scope);updateEditorStatus();
 }
 document.addEventListener('input',recordEditorChange);

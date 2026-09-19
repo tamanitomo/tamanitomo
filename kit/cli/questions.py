@@ -235,6 +235,7 @@ def ask_sensors(answers=None,has_location=False):
     return chosen
 
 def apply_answers(c,ans):
+    from .common import next_schedule_offset
     return cc.Companion(agent=ans['agent'],pronoun_set=ans['pronoun_set'],human=ans['human'],
         human_pronoun_set=ans['human_pronoun_set'],timezone=ans['timezone'],
         profile=c.profile,hermes_root=c.hermes_root,
@@ -245,6 +246,8 @@ def apply_answers(c,ans):
         birthdate=str(ans.get('birthdate') or ''),
         explicit=bool(ans.get('explicit',False)),cron_active=ans.get('cron_active',True),
         persona=ans.get('persona','warm'),
+        image_interval_minutes=c.image_interval_minutes,
+        schedule_offset_minutes=next_schedule_offset(c),
         relationship_pace=ans.get('relationship_pace','natural'),
         quiet_start=ans.get('quiet_start','23:00'),quiet_end=ans.get('quiet_end','08:00'),
         soul_in_vault=c.soul_in_vault,

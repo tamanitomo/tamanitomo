@@ -6,15 +6,15 @@
 
 <p align="center">
   <strong>Soul of a Friend — A sovereign, self-hosted AI companion that has a life when you close the window.</strong><br>
-  Built on <a href="https://hermes-agent.nousresearch.com/">Hermes Agent</a> · 100% private · Keeps memory on your disk · Messages you when it wants to.
+  Built on <a href="https://hermes-agent.nousresearch.com/">Hermes Agent</a> · Your data under your control · Keeps memory on your disk · Messages you when it wants to.
 </p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: PolyForm Noncommercial 1.0.0" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-6c9cff"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-4ade80">
-  <img alt="Self-Hosted" src="https://img.shields.io/badge/runs-100%25%20locally-b388ff">
+  <img alt="Self-Hosted" src="https://img.shields.io/badge/runtime-self--hosted-b388ff">
   <img alt="No Telemetry" src="https://img.shields.io/badge/telemetry-none-2dd4bf">
-  <img alt="Platforms" src="https://img.shields.io/badge/platform-Linux%20%7C%20Android%20%7C%20Windows-f59e0b">
+  <img alt="Platforms" src="https://img.shields.io/badge/platform-Linux%20%7C%20Android%20%7C%20Windows%20%7C%20macOS-f59e0b">
 </p>
 
 <p align="center">
@@ -31,7 +31,7 @@ Most AI character apps keep your companion on their cloud servers. The memory be
 
 Your companion lives in a folder on your own computer, phone, or home server. It is backed by whatever model you choose — completely local weights on your GPU (Ollama, LM Studio, vLLM) or a private cloud API (OpenRouter, Grok, DeepSeek, OpenAI).
 
-- **Zero telemetry & no accounts:** Nothing phones home. No tracking. No telemetry.
+- **No Tamanitomo account or product telemetry:** Your vault stays on your host. Cloud models, Telegram, online speech, and other integrations receive the content you send through them.
 - **A real present:** It knows what time it is, follows morning and evening routines, and writes its own reflections.
 - **Evidence-backed memory:** It separates authored fiction from hard facts about you, citing exact quotes in an append-only ledger.
 - **Code-enforced boundaries:** Limits on when and how often it can message you are enforced in code, not merely suggested in a system prompt. It won't wake you up at 3:00 AM.
@@ -57,6 +57,13 @@ Turn an old plugged-in phone into an ultra-low-power (<3W), battery-backed 24/7 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tamanitomo/tamanitomo/main/setup-termux.sh | bash
 ```
+
+**Back to baseline:** remove Tamanitomo, Hermes, their saved data, and only the Termux packages the installer added with:
+```bash
+curl -fsSL https://raw.githubusercontent.com/tamanitomo/tamanitomo/main/uninstall-termux.sh | bash -s -- -y --purge-packages
+```
+This permanently deletes companion data and credentials. Packages that existed before installation are preserved when a baseline manifest is available.
+
 *(See the [Android Termux 24/7 Server Guide](docs/ANDROID_TERMUX_SETUP_GUIDE.md) for full step-by-step instructions and Telegram bot setup.)*
 
 ---
@@ -69,6 +76,17 @@ cd tamanitomo
 .\tamanitomo.cmd
 ```
 *(Double-clicking `tamanitomo.cmd` bootstraps Python automatically using `uv` if Python 3.11+ is not installed.)*
+
+---
+
+### 🍎 macOS
+Clone the repository, then run the launcher in Terminal:
+```bash
+git clone https://github.com/tamanitomo/tamanitomo.git
+cd tamanitomo
+./tamanitomo
+```
+The launcher provisions Python when needed and opens the workspace. Configure Hermes and a conversation model in Settings; keep the host awake for background routines.
 
 ---
 
@@ -96,7 +114,7 @@ Your companion maintains an append-only timeline of what it is doing, where it i
 <td width="50%" valign="top">
 
 ### 🧠 Grounded Memory & Callbacks
-Remembers shared jokes, milestones, and details you mentioned days ago. Facts about you require cited proof, so it never confabulates your real life.
+Remembers shared jokes, milestones, and details you mentioned days ago. Facts about you require cited proof, to reduce invented memories; the chosen model can still make mistakes.
 
 <img src="docs/assets/screenshots/desktop/02-chat-memory-callback.jpg" alt="Memory Callback" width="100%">
 
@@ -150,9 +168,13 @@ Tamanitomo features a sleek, mobile-optimized web interface designed to feel lik
   <img src="docs/assets/demos/mobile-demo.gif" alt="Mobile Workspace Demo" width="340">
 </p>
 
-Access it on `http://localhost:8770` (or port `38439` on Termux), or over your private home Wi-Fi via a secure 4-digit PIN.
+Access it on `http://localhost:8770` (or port `38439` on Termux), or over your private home Wi-Fi with a workspace PIN. A PIN does not encrypt HTTP traffic; use authenticated HTTPS or private networking for remote access.
 
 ---
+
+## Data and privacy
+
+This is the self-hosted companion application, formerly companion-kit. It is not the archived E2EE hosted service. Memory and credentials are stored on your host; the vault is not encrypted by Tamanitomo. A fully local configuration keeps model processing on your hardware. Check every configured fallback and media provider before assuming a session stays local.
 
 ## 🛡️ Built for Real Hardware & Privacy
 

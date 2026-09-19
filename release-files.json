@@ -190,6 +190,7 @@
   "tests/fake_hermes.py",
   "tests/test_adopt.py",
   "tests/test_albums.py",
+  "tests/test_installers.py",
   "tests/test_app.py",
   "tests/test_catalog.py",
   "tests/test_cli.py",
@@ -234,5 +235,7 @@
   "tests/test_workflows.py",
   "tests/test_workspace.py",
   "tools/build_release.py",
-  "update_release.py"
+  "update_release.py",
+  "docs/audits/2026-09-19-foundation-audit.md",
+  "docs/audits/2026-09-19-termux-e2e-log.txt"
 ]

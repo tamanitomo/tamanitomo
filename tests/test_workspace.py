@@ -50,6 +50,12 @@ class WorkspaceTests(unittest.TestCase):
             time.sleep(.01)
         self.fail('Operation did not finish')
 
+    def test_named_provider_refresh_keeps_hermes_reported_catalog(self):
+        (self.c.home/'provider_models_cache.json').write_text(json.dumps({'openai-codex':{'models':['fixture-model']}}))
+        row=self.client.get('/api/models/catalog',params={'profile':'nova','provider':'openai-codex','refresh':1},headers=self.headers).json()
+        self.assertEqual(row['models'],['fixture-model'])
+        self.assertEqual(row['source'],'cache')
+
     def test_full_soul_conflict_backup_and_repair(self):
         self.c.soul.write_text('# Nova\nOriginal custom personality.\n')
         doc=self.get('/api/soul-document').json()
@@ -431,6 +437,30 @@ class ModelPinTests(unittest.TestCase):
             self.assertEqual(result['updated'],['Companion companion pulse'])
             self.assertEqual(calls[1],['cron','edit','pulse','--model','small','--provider','local','--reasoning-effort','low'])
             self.assertEqual(json.loads((c.home/'cron/jobs.json').read_text()),original)
+
+    def test_tier_endpoint_requires_hermes_support_and_reaches_job_edit(self):
+        from kit.cli.models import apply_job_models
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            c=cc.Companion(hermes_root=Path(directory),models={'loops':{'model':'small','provider':'custom','base_url':'http://localhost:11434/v1'}})
+            (c.home/'cron').mkdir()
+            (c.home/'cron/jobs.json').write_text(json.dumps({'jobs':[{'id':'pulse','name':'Companion companion pulse'}]}))
+            calls=[]
+            def old(args):
+                calls.append(args)
+                return SimpleNamespace(stdout='--model --provider --reasoning-effort')
+            with self.assertRaisesRegex(ValueError,'No jobs were changed'):apply_job_models(c,old)
+            self.assertEqual(len(calls),1)
+            calls.clear()
+            def modern(args):
+                calls.append(args)
+                return SimpleNamespace(stdout='--model --provider --reasoning-effort --base-url')
+            apply_job_models(c,modern)
+            self.assertEqual(calls[1][-2:],['--base-url','http://localhost:11434/v1'])
+            c.save()
+            self.assertEqual(cc.load(c.home).tier_model('loops')['base_url'],'http://localhost:11434/v1')
+            with self.assertRaises(ValueError):
+                cc.Companion(models={'loops':{'base_url':'file:///tmp/model-endpoint'}})
 
     def test_native_prompt_whitespace_is_not_a_user_edit(self):
         from kit.cli import scaffold

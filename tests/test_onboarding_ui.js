@@ -6,6 +6,8 @@ const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const assert=require('node:assert/strict');
 
 const source=fs.readFileSync(path.join(__dirname,'../kit/app/static/onboarding.js'),'utf8');
+assert.match(source,/id="ob-api-model" value="openrouter\/auto"/);
+assert.doesNotMatch(source,/anthropic\/claude-3\.5-sonnet/);
 const slice=source.slice(source.indexOf('const QUIZ=['),source.indexOf('/* ------------------------------------------------------------------ helpers */'));
 const sandbox={};vm.createContext(sandbox);
 // `const` bindings stay lexical inside the script, so publish them explicitly.
@@ -49,19 +51,19 @@ for(let pick=0;pick<4;pick++){
 }
 
 // "Like a brilliant colleague" must produce a colleague, not a romance.
-const colleague=derive(QUIZ.map((q,i)=>i===7?3:null),catalog);
+const colleague=derive(QUIZ.map((q,i)=>i===QUIZ.length-1?3:null),catalog);
 assert.equal(colleague.agent_type,'colleague');
 assert.notEqual(colleague.boundary,'girlfriend');
 
 // "Like a partner" must not quietly become a colleague.
-const partner=derive(QUIZ.map((q,i)=>i===7?2:null),catalog);
+const partner=derive(QUIZ.map((q,i)=>i===QUIZ.length-1?2:null),catalog);
 assert.equal(partner.agent_type,'companion');
 
 // The contact questions set what they say they set.
-const quiet=derive(QUIZ.map((q,i)=>i===6?2:null),catalog);
+const quiet=derive(QUIZ.map((q,i)=>i===QUIZ.length-2?2:null),catalog);
 assert.equal(quiet.permit_image,'no');
 assert.equal(quiet.outreach,'never');
-const open=derive(QUIZ.map((q,i)=>i===6?0:null),catalog);
+const open=derive(QUIZ.map((q,i)=>i===QUIZ.length-2?0:null),catalog);
 assert.equal(open.permit_image,'yes');
 assert.equal(open.outreach,'free');
 assert.equal(open.outreach_per_day,6);
@@ -71,3 +73,72 @@ for(let pick=0;pick<4;pick++)
   assert.equal(all(pick).explicit,undefined,'interview must not set explicit');
 
 console.log('Creation interview derivation passed');
+
+// Story choices must never override a direct relationship or pace preference.
+for(let story=0;story<4;story++){
+  const picks=QUIZ.map((q,i)=>i<QUIZ.length-3?Math.min(story,q.a.length-1):null);
+  assert.equal(derive(picks,catalog).boundary,'best-friend');
+  picks[QUIZ.length-1]=0;picks[QUIZ.length-3]=0;
+  const friend=derive(picks,catalog);
+  assert.equal(friend.boundary,'best-friend');
+  assert.equal(friend.relationship_pace,'slow');
+  picks[QUIZ.length-1]=3;
+  assert.equal(derive(picks,catalog).agent_type,'colleague');
+}
+
+// Exercise real onboarding event handlers through the real fetch helper. The
+// previous three-argument api calls silently sent GET without the credentials.
+(async()=>{
+  const elements=new Map(),requests=[];
+  const element=id=>{
+    if(!elements.has(id))elements.set(id,{value:'',innerHTML:'',textContent:'',style:{},dataset:{},
+      classList:{toggle(){}},scrollIntoView(){},focus(){},closest(){return {dataset:{}};},
+      querySelectorAll(){return [];},querySelector(){return null;}});
+    return elements.get(id);
+  };
+  const page={window:{},$:element,esc:x=>String(x??''),options:()=>'',
+    PROFILE:'nova',INSTALLATION:'existing',scheduleLabel:x=>x,
+    action:async(path,payload)=>{requests.push({url:'/api'+path,method:'POST',body:JSON.stringify(payload)});},
+    token:'fixture',scoped:x=>x,setInterval:()=>1,clearInterval(){},
+    fetch:async(url,opts)=>{
+      requests.push({url,...opts});
+      return {ok:true,json:async()=>url.endsWith('/catalog')?catalog:
+        url.endsWith('/environment')?{}:url.endsWith('/profiles')?{profiles:[]}:url.endsWith('/onboarding/schedule')?{jobs:[],offset_minutes:0}:{session_id:'fixture-session',status:'pending'}};
+    }};
+  vm.createContext(page);
+  const html=fs.readFileSync(path.join(__dirname,'../kit/app/static/index.html'),'utf8');
+  const apiSource=html.slice(html.indexOf('async function api('),html.indexOf('\nfunction showPinModal'));
+  vm.runInContext(apiSource+"\nconst post=(path,payload={})=>api(path,{method:'POST',body:JSON.stringify(payload)});\n"+source,page);
+  await page.window.onboarding(false);
+  element('btn-welcome-start').onclick();
+  element('ob-tg-token').value='fixture-bot-token';
+  element('ob-tg-userid').value='123';
+  await element('ob-tg-save-btn').onclick();
+  let request=requests.find(r=>r.url.endsWith('/telegram'));
+  assert.equal(request.method,'POST');
+  assert.deepEqual(JSON.parse(request.body),{token:'fixture-bot-token',user_id:'123'});
+  await element('btn-ch-next').onclick();
+  element('btn-pur-next').onclick();
+  for(let i=0;i<QUIZ.length;i++)element('quiz-skip').onclick();
+  element('cust-image-style').value='anime-soft';
+  element('btn-rev-accept').onclick();
+  element('ob-api-provider').value='openrouter';
+  element('ob-api-key').value='fixture-key';
+  element('ob-api-model').value='fixture-model';
+  await element('ob-api-save-btn').onclick();
+  request=requests.find(r=>r.url.endsWith('/inference'));
+  assert.equal(request.method,'POST');
+  assert.equal(JSON.parse(request.body).api_key,'fixture-key');
+  element('ob-oauth-provider').value='openai-codex';
+  await element('ob-oauth-start-btn').onclick();
+  request=requests.find(r=>r.url.endsWith('/oauth/start'));
+  assert.equal(request.method,'POST');
+  assert.equal(JSON.parse(request.body).provider,'openai-codex');
+  await element('btn-inf-finish').onclick();
+  element('ob-schedule-approved').checked=false;
+  await element('ob-schedule-create').onclick();
+  const created=requests.find(r=>r.url==='/api/profiles'&&r.method==='POST');
+  assert.equal(JSON.parse(created.body).answers.image_style,'anime-soft','explicit image style survives profile creation');
+  assert.equal(JSON.parse(created.body).answers.visual,'edit','the companion’s look is left open rather than silently assigned');
+  console.log('Onboarding request contracts passed');
+})().catch(error=>{console.error(error);process.exitCode=1;});

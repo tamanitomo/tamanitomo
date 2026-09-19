@@ -44,6 +44,10 @@ vm.runInContext(workspace.slice(workspace.indexOf('async function followOperatio
   await assert.rejects(vm.runInContext("followOperation({id:'other',profile:'rowan',label:'Chat with Rowan',status:'complete',result:{response:'private'}})",sandbox),/another companion/);
   assert.equal(elements.operation.innerHTML.includes('private'),false);
 
+  sandbox.post=async()=>({id:'save-failed',profile:'nova',label:'Save job',status:'failed',error:'Write failed'});
+  await assert.rejects(vm.runInContext("action('/jobs/example/edit')",sandbox),/Write failed/);
+  assert.equal(stored.has('operation-existing-nova'),false);
+
   vm.runInContext("current='chat';",sandbox);
   await vm.runInContext("followOperation({id:'chat-done',profile:'nova',label:'Chat with Nova',status:'complete',result:{session:'saved'}})",sandbox);
   assert.equal(elements.operation.hidden,true,'a successful reply must not cover the next Send click');
@@ -71,6 +75,15 @@ vm.runInContext(workspace.slice(workspace.indexOf('async function followOperatio
   delete elements['note-text'];
   vm.runInContext("dirtyEditors.add('settings-main');dirtyEditors.add('settings-media');clearEditorDirty('settings-main');",sandbox);
   assert.equal(vm.runInContext("hasEditorChanges('settings')",sandbox),true,'saving contact settings must not mark media edits saved');
+  const settingField=id=>({matches:()=>true,closest:selector=>selector==='#settings-panel'?{}:selector==='[data-settings-section]'?{dataset:{settingsSection:id}}:null});
+  events.input({target:settingField('contact')});
+  events.input({target:settingField('awareness')});
+  vm.runInContext("clearEditorDirty('settings-main-contact')",sandbox);
+  assert.equal(vm.runInContext("hasEditorChanges('settings-main-awareness')",sandbox),true,'saving one section preserves another section’s unsaved edits');
+  confirmResult=false;
+  assert.equal(await vm.runInContext("confirmEditorLeave('settings-main')",sandbox),false);
+  confirmResult=true;
+  assert.equal(await vm.runInContext("confirmEditorLeave('settings-main')",sandbox),true);
   // A server-side transcription failure is a returned terminal operation, not
   // a rejected HTTP request. It must still release all composer controls.
   const voice=read('voice-chat.js');
@@ -101,3 +114,29 @@ vm.runInContext(workspace.slice(workspace.indexOf('async function followOperatio
 
   console.log('Reliability UI regressions passed: media, reconnect, ownership, unsaved edits.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
+
+// Editing an interval must preserve an existing profile's staggered phase.
+{
+  const source=read('settings.js'),context={};vm.createContext(context);
+  vm.runInContext(source.slice(source.indexOf('function scheduleShape('),source.indexOf('/* ------------------------------------------------------------------ panels */'))+'\nglobalThis.schedules={scheduleShape,readSchedule};',context);
+  const {scheduleShape,readSchedule}=context.schedules;
+  assert.equal(scheduleShape('1,16,31,46 * * * *').mode,'15');
+  assert.equal(scheduleShape('20 9 * * 1').mode,'weekly');
+  const fieldValues={'[data-schedule-mode]':'15','[data-schedule-time]':'17:20','[data-schedule-day]':'2','[data-field=schedule]':'every 2h'};
+  const editor={dataset:{mode:'15',original:'1,16,31,46 * * * *'},querySelector:key=>({value:fieldValues[key]})};
+  assert.equal(readSchedule(editor),'1,16,31,46 * * * *');
+  fieldValues['[data-schedule-mode]']='weekly';
+  assert.equal(readSchedule(editor),'20 17 * * 2');
+  fieldValues['[data-schedule-mode]']='custom';
+  assert.equal(readSchedule(editor),'every 2h');
+}
+
+// Hosted OAuth connections must never retain a custom endpoint.
+{
+  const source=read('settings.js'),context={};vm.createContext(context);
+  vm.runInContext(source.match(/^function providerNeedsURL.*$/m)[0],context);
+  assert.equal(context.providerNeedsURL('openai-codex','http://old-server/v1'),false);
+  assert.equal(context.providerNeedsURL('custom'),true);
+  assert.equal(context.providerNeedsURL('openrouter'),false);
+  assert.equal(context.providerNeedsURL('openai','https://my-gateway/v1'),true);
+}

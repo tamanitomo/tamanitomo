@@ -1,19 +1,4 @@
-/* ============================================================================
-   Settings — one page.
-
-   Everything that configures anything used to be scattered across three
-   top-level pages (Preferences, Hermes settings, Jobs & health) with their own
-   sub-tab strips, plus loose cards on the studios. A person looking for "where
-   do I point this at ComfyUI" had no way to guess which of the three it was.
-
-   There is one page now, with three groups and one panel visible at a time:
-
-     Companion    — how she speaks with you and to you
-     Tamanitomo   — this app: how it looks, who can reach it, how it is doing
-     Hermes       — what it is connected to, and what runs on a schedule
-
-   A panel owns its own save. Nothing saves a field you cannot currently see.
-   ========================================================================= */
+/* Settings: five groups, related sections together, independent saves. */
 
 /* The Hermes forms are expensive to build and carry live event handlers, so
    they are rendered once into a pool that stays in the document, and the cards
@@ -38,10 +23,17 @@ function placeHermesCards(host,names){
   // than stacking underneath it.
   host.innerHTML='';
   const pool=hermesPool;
-  if(!pool)return;
-  for(const name of names){
+  if(!pool||!host.isConnected)return;
+  const labels={stack:'Optional local components',gateway:'Gateway & background service',lifecycle:'Profile maintenance',presets:'Ready-made model configurations'};
+  for(const [index,name] of names.entries()){
     const card=pool.querySelector(`[data-hermes-card="${name}"]`);
-    if(card)host.append(card);
+    if(!card)continue;
+    if(index===0){host.append(card);continue;}
+    const disclosure=document.createElement('details');
+    disclosure.className='settings-advanced';
+    const summary=document.createElement('summary');
+    summary.textContent=labels[name]||name;
+    disclosure.append(summary,card);host.append(disclosure);
   }
   if(!host.children.length)
     host.innerHTML='<p class="dim">Hermes is not installed for this profile yet. Install it under Installation &amp; gateway.</p>';
@@ -72,9 +64,9 @@ function wireSave(host,collect,note='Saved'){
     button.disabled=true;status.textContent='Saving…';status.className='dim small';
     try{
       const result=await collect();
+      if(result&&result.operation){const row=await followOperation(result.operation);if(row.status!=='complete')throw Error(row.error||'Saved, but job synchronization failed.');}
       status.textContent=note;
-      clearEditorDirty('settings-main');
-      if(result&&result.operation)await followOperation(result.operation);
+      clearEditorDirty(editorScope(host));
     }catch(error){
       status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;
     }finally{button.disabled=false;}
@@ -101,82 +93,144 @@ function wireToggles(host){
   }
 }
 
+// Common schedules have controls; an advanced expression remains available.
+function scheduleShape(expression){
+  const parts=String(expression||'').trim().split(/\s+/);
+  if(parts.length!==5)return {mode:'custom',expression};
+  const [minute,hour,day,month,weekday]=parts;
+  if(/^\d+$/.test(minute)&&/^\d+$/.test(hour)&&day==='*'&&month==='*'&&(weekday==='*'||/^[0-6]$/.test(weekday)))
+    return {mode:weekday==='*'?'daily':'weekly',time:hour.padStart(2,'0')+':'+minute.padStart(2,'0'),day:weekday,expression};
+  if(parts.slice(1).every(p=>p==='*')){
+    const step=minute.match(/^(?:\*|\d+-59)\/(\d+)$/);
+    if(step&&[5,10,15,20,30].includes(Number(step[1])))return {mode:step[1],expression};
+    if(/^\d+$/.test(minute))return {mode:'60',expression};
+    const times=minute.split(',').map(Number);
+    const spacing=times.length>1?times[1]-times[0]:0;
+    if([5,10,15,20,30].includes(spacing)&&times.length===60/spacing&&times.every((t,i)=>t===times[0]+i*spacing))return {mode:String(spacing),expression};
+  }
+  return {mode:'custom',expression};
+}
+function scheduleLabel(expression){
+  const shape=scheduleShape(expression);
+  if(shape.mode==='daily')return 'Daily at '+shape.time;
+  if(shape.mode==='weekly')return ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][Number(shape.day)]+' at '+shape.time;
+  if(shape.mode!=='custom')return shape.mode==='60'?'Every hour':'Every '+shape.mode+' minutes';
+  return expression||'No schedule';
+}
+function scheduleEditorHTML(id,expression){
+  const s=scheduleShape(expression);
+  return `<div class="schedule-editor wide" data-schedule-editor data-original="${esc(expression)}" data-mode="${esc(s.mode)}">
+    <div class="time-pair"><label>Frequency<select data-schedule-mode>${options([['5','Every 5 minutes'],['10','Every 10 minutes'],['15','Every 15 minutes'],['20','Every 20 minutes'],['30','Every 30 minutes'],['60','Every hour'],['daily','Daily'],['weekly','Weekly'],['custom','Advanced schedule']],s.mode)}</select></label>
+    <label data-schedule-clock ${['daily','weekly'].includes(s.mode)?'':'hidden'}>At<input type="time" data-schedule-time value="${esc(s.time||'09:00')}"></label></div>
+    <label data-schedule-weekday ${s.mode==='weekly'?'':'hidden'}>Day<select data-schedule-day>${options(['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((d,i)=>[String(i),d]),s.day||'0')}</select></label>
+    <label data-schedule-advanced ${s.mode==='custom'?'':'hidden'}>Schedule expression<input data-field="schedule" data-job="${esc(id)}" value="${esc(expression)}" placeholder="Minute hour day month weekday"></label>
+  </div>`;
+}
+function wireScheduleEditors(host){
+  for(const editor of host.querySelectorAll('[data-schedule-editor]')){
+    editor.querySelector('[data-schedule-mode]').onchange=()=>{
+      const mode=editor.querySelector('[data-schedule-mode]').value;
+      editor.querySelector('[data-schedule-clock]').hidden=!['daily','weekly'].includes(mode);
+      editor.querySelector('[data-schedule-weekday]').hidden=mode!=='weekly';
+      editor.querySelector('[data-schedule-advanced]').hidden=mode!=='custom';
+    };
+  }
+}
+function readSchedule(editor){
+  const mode=editor.querySelector('[data-schedule-mode]').value;
+  if(mode==='custom')return editor.querySelector('[data-field=schedule]').value;
+  if(mode==='daily'||mode==='weekly'){
+    const time=editor.querySelector('[data-schedule-time]');if(!time.value)throw Error('Choose a scheduled time.');
+    const [hour,minute]=time.value.split(':').map(Number);
+    return `${minute} ${hour} * * ${mode==='weekly'?editor.querySelector('[data-schedule-day]').value:'*'}`;
+  }
+  // Preserve a staggered phase when the frequency has not changed.
+  if(mode===editor.dataset.mode)return editor.dataset.original;
+  return mode==='60'?'0 * * * *':`*/${mode} * * * *`;
+}
+
 /* ------------------------------------------------------------------ panels */
 
 const settingsPanels=[
 {group:'Companion',id:'contact',title:'Contact & outreach',
- blurb:'When she may write first, and how often',
+ blurb:'When they may write first, and how often',
  keywords:'quiet hours outreach messages photos voice notes boundaries initiative',
  async render(host){
   const s=await api('/settings');
   const perm=k=>options([['yes','Always welcome'],['ask','Ask me first'],['no','Never']],s.content_permissions[k]);
   host.innerHTML=`
   <h2>Contact & outreach</h2>
-  <p class="dim">Replies are always allowed at any hour. Everything on this panel governs messages she starts on her own.</p>
+  <p class="dim">Limits for messages they start. Replies are always allowed.</p>
 
   <h3 class="section-subheading">Quiet hours</h3>
-  <div class="form-grid">
-    <label>Quiet from<input id="qs" value="${esc(s.quiet_start)}" placeholder="22:00"></label>
-    <label>until<input id="qe" value="${esc(s.quiet_end)}" placeholder="08:00"></label>
+  <div class="time-pair">
+    <label>From<input type="time" id="qs" value="${esc(s.quiet_start)}" placeholder="22:00"></label>
+    <label>To<input type="time" id="qe" value="${esc(s.quiet_end)}" placeholder="08:00"></label>
   </div>
-  ${toggleRow('adapt','Drift toward the hours you actually keep',
-    'Quiet hours adjust themselves as she learns your real sleep pattern.',s.adaptive_quiet)}
+  ${toggleRow('adapt','Adapt quiet hours',
+    'Adjust to your sleep pattern.',s.adaptive_quiet)}
 
-  <h3 class="section-subheading">How often she writes first</h3>
-  <div class="form-grid">
-    <label>She may write first
-      <select id="out">${options([['free','Whenever she has something to say'],['updates_only','Only for meaningful updates'],['never','Never — replies only']],s.outreach)}</select>
+  <h3 class="section-subheading">Outreach</h3>
+  <div class="time-pair">
+    <label>They may write first
+      <select id="out">${options([['free','Social & updates'],['updates_only','Updates only'],['never','Replies only']],s.outreach)}</select>
     </label>
-    <label>Most messages a day
-      <input id="cap" type="number" min="1" max="100" value="${s.outreach_per_day||3}" ${s.outreach_per_day===0?'disabled':''}>
+    <label>Daily limit
+      <input id="cap" type="number" min="0" max="100" value="${s.outreach_per_day??3}">
     </label>
   </div>
-  ${toggleRow('cap-unlimited','No daily limit','She writes as often as the setting above allows.',s.outreach_per_day===0)}
+  <p class="dim small">Daily limit: 0 means unlimited.</p>
 
   <h3 class="section-subheading">Unprompted media</h3>
-  <div class="form-grid">
+  <div class="time-pair">
     <label>Photos<select id="pimage">${perm('image')}</select></label>
     <label>Voice notes<select id="pvoice">${perm('voice')}</select></label>
   </div>
-  ${settingsFooter('Save contact settings')}`;
+  ${settingsFooter('Save')}`;
   wireToggles(host);
   const cap=host.querySelector('#cap');
-  host.querySelector('#cap-unlimited').addEventListener('change',e=>{cap.disabled=e.target.checked;});
   wireSave(host,()=>{
-    if(!host.querySelector('#cap-unlimited').checked&&!cap.reportValidity())throw Error('Check the daily limit.');
+    if(!cap.reportValidity())throw Error('Check the daily limit.');
     return saveSettings({
       quiet_start:host.querySelector('#qs').value,quiet_end:host.querySelector('#qe').value,
       adaptive_quiet:host.querySelector('#adapt').checked,outreach:host.querySelector('#out').value,
-      outreach_per_day:host.querySelector('#cap-unlimited').checked?0:Number(cap.value),
+      outreach_per_day:Number(cap.value),
       content_permissions:{image:host.querySelector('#pimage').value,voice:host.querySelector('#pvoice').value}});
   });
  }},
 
-{group:'Companion',id:'rhythm',title:'Daily rhythm',
- blurb:'Her own hours, and what carries between companions',
+{group:'Schedule & usage',id:'rhythm',title:'Daily rhythm',
+ blurb:'Their own hours, and what carries between companions',
  keywords:'autonomy windows routine reflection continuity shared memory',
  async render(host){
   const s=await api('/settings');
   host.innerHTML=`
   <h2>Daily rhythm</h2>
-  <p class="dim">Windows when she acts on her own — reflecting on the day, reading, running her routines — rather than waiting to be spoken to.</p>
-  <label>Autonomy windows
-    <input id="win" value="${esc(s.autonomy_windows.join(', '))}" placeholder="09:00, 14:00, 20:00">
-    <small class="dim">Times in HH:MM, separated by commas.</small>
-  </label>
+  <p class="dim">Times for independent reading and projects.</p>
+  <div id="autonomy-times" class="time-chips"></div>
+  <button type="button" class="quiet small" id="add-autonomy-time">Add time</button>
 
   <h3 class="section-subheading">Shared memory</h3>
-  ${toggleRow('share','Share what she learns about you with your other companions',
-    'Off keeps everything she learns inside this companion.',s.share_people)}
+  ${toggleRow('share','Share memories about you',
+    'Let your other companions use these memories.',s.share_people)}
   ${settingsFooter('Save rhythm')}`;
   wireToggles(host);
+  const times=host.querySelector('#autonomy-times');
+  const addTime=value=>{
+    const row=document.createElement('div');row.className='time-chip';
+    row.innerHTML=`<input type="time" aria-label="Independent activity time" value="${esc(value)}" required><button type="button" class="quiet" aria-label="Remove time">×</button>`;
+    row.querySelector('button').onclick=()=>{row.remove();host.querySelector('#add-autonomy-time').disabled=false;dirtyEditors.add(editorScope(host));updateEditorStatus();};
+    times.append(row);host.querySelector('#add-autonomy-time').disabled=times.children.length>=6;
+  };
+  s.autonomy_windows.forEach(addTime);
+  host.querySelector('#add-autonomy-time').onclick=()=>{addTime('12:00');dirtyEditors.add(editorScope(host));updateEditorStatus();};
   wireSave(host,()=>saveSettings({
-    autonomy_windows:host.querySelector('#win').value.split(',').map(x=>x.trim()).filter(Boolean),
+    autonomy_windows:[...new Set([...times.querySelectorAll('input')].map(x=>x.value))],
     share_people:host.querySelector('#share').checked}));
  }},
 
 {group:'Companion',id:'awareness',title:'Awareness',
- blurb:'Where you live, and what she can passively sense',
+ blurb:'Where you live, and what they can passively sense',
  keywords:'sensors location weather realism ambient context senses awareness',
  async render(host){
   const s=await api('/settings');
@@ -184,7 +238,7 @@ const settingsPanels=[
   const total=Object.keys(s.available_sensors).length;
   host.innerHTML=`
   <h2>Awareness</h2>
-  <p class="dim">Passive context she can read without being told. Anchors her sense of time, weather and place.</p>
+  <p class="dim">Choose what they can notice.</p>
   <label>Where you live<input id="loc" value="${esc(s.location)}" placeholder="Raleigh, NC"></label>
 
   <div class="section-heading" style="margin-top:26px">
@@ -193,7 +247,7 @@ const settingsPanels=[
   </div>
   <div class="toggle-stack">
     ${Object.entries(s.available_sensors).map(([k,blurb])=>
-      toggleRow('sensor-'+k,k.replaceAll('_',' '),blurb,s.sensors.includes(k),`data-sensor="${esc(k)}"`)).join('')}
+      toggleRow('sensor-'+k,({dates:'Important dates',care:'Follow-ups',durations:'Milestones',thread:'Conversation rhythm',daylight:'Daylight',weather:'Weather',music:'Music'})[k]||k,({weather:'Local conditions, updated hourly.',daylight:'Seasons, moon and daylight.',dates:'Upcoming birthdays and anniversaries.',care:'Things worth checking in about.',durations:'Time since important dates.',thread:'Time since your last conversation.',music:'Spotify playback or room mood.'})[k]||blurb,s.sensors.includes(k),`data-sensor="${esc(k)}"`)).join('')}
   </div>
   ${settingsFooter('Save awareness')}`;
   wireToggles(host);
@@ -209,15 +263,16 @@ const settingsPanels=[
     sensors:[...host.querySelectorAll('[data-sensor]')].filter(x=>x.checked).map(x=>x.dataset.sensor)}));
  }},
 
-{group:'Companion',id:'photos',title:'Photo sessions',
- blurb:'Visual glimpses of her day, and what is blurred',
+{group:'Images & voice',id:'photos',title:'Photo sessions',
+ blurb:'Visual glimpses of their day, and what is blurred',
  keywords:'photos timeline images style budget nsfw blur scanner nudenet review',
  async render(host){
   const [s,prefs,scanner]=await Promise.all([api('/settings'),api('/media/preferences'),api('/media/scanner')]);
   host.innerHTML=`
   <h2>Photo sessions</h2>
-  <p class="dim">Every 15 minutes she can render the scene she recorded. Needs a working image provider; results land in Photos &amp; albums.</p>
-  ${toggleRow('tl','Run 15-minute photo sessions','Off stops new renders. Existing photos are kept.',s.image_timeline)}
+  <p class="dim">Capture scenes from their day with your connected image provider.</p>
+  ${toggleRow('tl','Automatic photos','',s.image_timeline)}
+  <label>Time between photos<select id="image-interval">${options([5,10,15,20,30,60,120,240,360,720,1440].map(n=>[String(n),n<60?n+' minutes':n===60?'1 hour':n===1440?'24 hours':(n/60)+' hours']),String(s.image_interval_minutes||15))}</select></label>
   <div class="form-grid" style="margin-top:16px">
     <label>Image style
       <select id="image-style">${options(Object.entries(s.image_styles),s.image_style)}</select>
@@ -228,6 +283,7 @@ const settingsPanels=[
     </label>
   </div>
 
+  <details class="settings-advanced"><summary>Review &amp; blurring</summary>
   <h3 class="section-subheading">Before a picture reaches you</h3>
   <label>Who checks it
     <select id="media-review-mode">${options([
@@ -255,8 +311,9 @@ const settingsPanels=[
   ${toggleRow('media-blur','Pictures found to be sensitive','Open one to reveal it.',prefs.blur_nsfw_initially)}
   ${toggleRow('media-blur-unknown','Pictures nothing has checked',
     'Includes scans that failed, so a check that could not run never passes as a clean one.',prefs.blur_unknown_initially!==false)}
+  </details>
 
-  ${settingsFooter('Save photo settings')}`;
+  ${settingsFooter('Save')}`;
   wireToggles(host);
   /* One question — who checks a picture — decides which details are relevant. */
   const mode=host.querySelector('#media-review-mode');
@@ -270,6 +327,7 @@ const settingsPanels=[
   wireSave(host,async()=>{
     const result=await saveSettings({
       image_timeline:host.querySelector('#tl').checked,
+      image_interval_minutes:Number(host.querySelector('#image-interval').value),
       image_style:host.querySelector('#image-style').value,
       timeline_budget_gb:Number(host.querySelector('#gb').value)});
     const choice=host.querySelector('#media-review-mode').value;
@@ -296,7 +354,7 @@ const settingsPanels=[
   if(!relationshipUnlocked){
     host.innerHTML=`
     <h2>Relationship</h2>
-    <p class="dim">These are not preferences — they shape who she is with you, and changing them rewrites a dynamic the two of you have already built. They stay read-only until you deliberately unlock them.</p>
+    <p class="dim">Unlock to change relationship preferences.</p>
     <dl class="fact-list">
       <div><dt>Progression</dt><dd>${esc(labels.progression[s.relationship_progression]||s.relationship_progression)}</dd></div>
       <div><dt>Pace</dt><dd>${esc(labels.pace[s.relationship_pace]||s.relationship_pace)}</dd></div>
@@ -309,7 +367,7 @@ const settingsPanels=[
     </div>
     <p class="dim small">${net.remote_pin_configured
       ? 'Unlocking asks for your platform PIN.'
-      : 'No platform PIN is set, so unlocking asks you to type her name instead. A PIN can be set under Tamanitomo → Network &amp; access.'}</p>`;
+      : 'No platform PIN is set, so unlocking asks you to type their name instead. A PIN can be set under App &amp; access → Network &amp; access.'}</p>`;
     host.querySelector('#unlock-relationship').onclick=()=>unlockRelationship(net.remote_pin_configured);
     return;
   }
@@ -354,7 +412,7 @@ const settingsPanels=[
   });
  }},
 
-{group:'Tamanitomo',id:'appearance',title:'Appearance',
+{group:'App & access',id:'appearance',title:'Appearance',
  blurb:'Theme, accent and the Hermes runtime this workspace uses',
  keywords:'theme dark light accent colour color appearance runtime installation',
  async render(host){
@@ -362,14 +420,14 @@ const settingsPanels=[
   wireAppearancePanel(host);
  }},
 
-{group:'Tamanitomo',id:'network',title:'Network & access',
+{group:'App & access',id:'network',title:'Network & access',
  blurb:'Where this workspace is reachable, and the PIN that guards it',
  keywords:'network lan wifi address port pin security remote access localhost',
  async render(host){
   const [s,net]=await Promise.all([api('/settings'),api('/network')]);
   host.innerHTML=`
   <h2>Network &amp; access</h2>
-  <p class="dim">Tamanitomo runs as a server. These are the addresses it answers on, and who has to prove themselves first.</p>
+  <p class="dim">Connection addresses and access controls.</p>
 
   <h3 class="section-subheading">Addresses</h3>
   <div class="endpoint-row">
@@ -388,7 +446,7 @@ const settingsPanels=[
   :'<p class="dim small">No external Wi-Fi address was detected on this host.</p>'}
 
   <h3 class="section-subheading">Remote access PIN</h3>
-  <p class="dim">Four digits, asked for when connecting from another device. It also unlocks the relationship settings.</p>
+  <p class="dim">Required on other devices and to unlock relationship settings.</p>
   <div class="pin-row">
     <input id="remote-pin-field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4"
       placeholder="${s.remote_pin?'••••':'1234'}" aria-label="Four digit PIN">
@@ -417,7 +475,7 @@ const settingsPanels=[
   };
  }},
 
-{group:'Tamanitomo',id:'updates',title:'Updates',
+{group:'App & access',id:'updates',title:'Updates',
  blurb:'What version you are on, and how to move',
  keywords:'update version release upgrade changelog github',
  async render(host){
@@ -433,13 +491,13 @@ const settingsPanels=[
   </dl>
   ${d.has_update?`<div class="notice-strip" style="border-left-color:var(--accent);margin-top:16px">
     <p><strong>Tamanitomo v${esc(d.latest_version)} is available.</strong></p>
-    <p class="dim small" style="margin-top:4px">This will update the Tamanitomo application. Sam’s memories, emotions, journals, and vault will remain completely untouched.</p>
+    <p class="dim small" style="margin-top:4px">This will update the Tamanitomo application. Your companion’s memories, emotions, journals, and vault will remain completely untouched.</p>
     <div style="display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap">
       <button class="act" id="btn-inapp-update">⚡ Update to v${esc(d.latest_version)} Now</button>
       ${d.release_url?`<a class="link-button" href="${esc(d.release_url)}" target="_blank" rel="noopener">Release notes →</a>`:''}
     </div>
   </div>`:`<div class="notice-strip" style="margin-top:16px">
-    <p class="dim" style="margin:0">You are running the newest release (v${esc(d.version)}).</p>
+    <p class="dim" style="margin:0">${d.latest_version?'You are up to date.':'No update check is available yet.'} Installed: v${esc(d.version)}.</p>
     <div style="margin-top:10px">
       <button class="quiet" id="btn-check-updates">🔄 Check for updates</button>
     </div>
@@ -452,7 +510,7 @@ const settingsPanels=[
   const updateBtn = host.querySelector('#btn-inapp-update');
   if (updateBtn) {
     updateBtn.onclick = async () => {
-      if (!confirm(`Update Tamanitomo to v${d.latest_version}?\n\nSam's memories and vault files will remain untouched.\nThe workspace will restart automatically.`)) return;
+      if (!confirm(`Update Tamanitomo to v${d.latest_version}?\n\nYour companions’ memories and vault files will remain untouched.\nThe workspace will restart automatically.`)) return;
       updateBtn.disabled = true;
       updateBtn.textContent = 'Updating...';
       try {
@@ -488,7 +546,7 @@ const settingsPanels=[
   }
  }},
 
-{group:'Tamanitomo',id:'diagnostics',title:'Diagnostics',
+{group:'App & access',id:'diagnostics',title:'Diagnostics',
  blurb:'What is healthy, what is full, and what it has cost',
  keywords:'health diagnostics problems memory storage vault usage tokens cost',
  async render(host){
@@ -541,23 +599,23 @@ const settingsPanels=[
   host.querySelector('#diag-activity').onclick=showGatewayActivity;
  }},
 
-{group:'Hermes',id:'hermes-core',bare:true,title:'Installation & gateway',
- blurb:'The runtime behind her, and the process that keeps her alive',
+{group:'App & access',id:'hermes-core',bare:true,title:'Installation & gateway',
+ blurb:'The runtime behind your companion, and the process that keeps it running',
  keywords:'hermes install update gateway routine service hooks doctor repair profile archive',
  async render(host){
   await hermesCards();
   placeHermesCards(host,['installation','stack','gateway','lifecycle']);
  }},
 
-{group:'Hermes',id:'hermes-models',bare:true,title:'Models & fallbacks',
+{group:'Models & providers',id:'hermes-models',bare:true,title:'Models & fallbacks',
  blurb:'Which model answers, and what answers when it cannot',
  keywords:'model provider fallback openrouter ollama base url presets cascade reasoning',
  async render(host){
   await hermesCards();
-  placeHermesCards(host,['presets','models']);
+  placeHermesCards(host,['models','presets']);
  }},
 
-{group:'Hermes',id:'hermes-accounts',bare:true,title:'Accounts & credentials',
+{group:'Models & providers',id:'hermes-accounts',bare:true,title:'Accounts & credentials',
  blurb:'API keys, sign-ins, and Hermes’s own setup menus',
  keywords:'api key credential oauth signin telegram discord token console setup',
  async render(host){
@@ -565,28 +623,26 @@ const settingsPanels=[
   placeHermesCards(host,['accounts']);
  }},
 
-{group:'Hermes',id:'jobs',title:'Scheduled jobs',
+{group:'Schedule & usage',id:'jobs',title:'Scheduled jobs',
  blurb:'Every cron job, what runs it, and whether it worked',
  keywords:'cron jobs schedule routine model tokens prompt run pause resume history',
  render:renderJobsPanel},
 
-{group:'Hermes',id:'connect-images',title:'Image generation',
+{group:'Images & voice',id:'connect-images',title:'Image generation',
  blurb:'ComfyUI, Civitai, and the reference photograph',
  keywords:'comfyui image generation civitai lora checkpoint endpoint portrait',
  async render(host){
   host.innerHTML=await imagesPanelHTML();
   wireImagesPanel(host);
-  host.insertAdjacentHTML('beforeend',
-   `<p class="dim small">Composing and generating pictures happens in the <button type="button" class="link-button" data-goto="image-studio">Image studio</button>. This panel is only the connection.</p>`);
-  host.querySelector('[data-goto]').onclick=()=>showTab('image-studio');
+
  }},
 
-{group:'Hermes',id:'connect-voice',title:'Voice',
+{group:'Images & voice',id:'connect-voice',title:'Voice',
  blurb:'Which engine speaks, and how it sounds',
  keywords:'voice tts speech engine piper edge elevenlabs openai speed pitch',
  render:renderVoicePanel},
 
-{group:'Hermes',id:'dashboard',title:'Hermes dashboard',
+{group:'App & access',id:'dashboard',title:'Hermes dashboard',
  blurb:'Hermes’s own interface, embedded',
  keywords:'hermes dashboard native skills mcp plugins sessions logs channels webhooks',
  render:host=>renderHermesDashboardInto(host)},
@@ -632,7 +688,7 @@ function modelPickerHTML(id,value){
 }
 
 /* Fills one picker and keeps the free-text box in step with it. */
-function wireModelPicker(root,{provider,baseUrl,value,onChange}){
+function wireModelPicker(root,{provider,baseUrl,value,onChange,defaultLabel="Follow the profile default"}){
   const select=root.querySelector('[data-model-select]');
   const custom=root.querySelector('[data-model-custom]');
   const note=root.querySelector('[data-model-note]');
@@ -642,7 +698,7 @@ function wireModelPicker(root,{provider,baseUrl,value,onChange}){
     const models=d.models||[];
     const known=models.includes(custom.value.trim());
     select.innerHTML=
-      `<option value="">Follow the profile default</option>`+
+      `<option value="">${esc(defaultLabel)}</option>`+
       models.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('')+
       `<option value="${CUSTOM}">Write your own…</option>`;
     select.value=custom.value.trim()?(known?custom.value.trim():CUSTOM):'';
@@ -653,7 +709,8 @@ function wireModelPicker(root,{provider,baseUrl,value,onChange}){
   custom.value=value||'';
   const load=refresh=>{
     select.innerHTML='<option>Loading…</option>';
-    return modelList(provider(),baseUrl(),refresh).then(paint);
+    const request=Symbol();root.modelRequest=request;
+    return modelList(provider(),baseUrl(),refresh).then(data=>{if(root.modelRequest===request)paint(data);});
   };
   select.onchange=()=>{
     custom.hidden=select.value!==CUSTOM;
@@ -669,6 +726,33 @@ function wireModelPicker(root,{provider,baseUrl,value,onChange}){
   return {read,reload:()=>load(false)};
 }
 
+// One provider-aware editor for the primary model and background tiers.
+function providerNeedsURL(provider,existing=''){const name=String(provider).toLowerCase();return name!=='openai-codex'&&(Boolean(existing)||['custom','ollama','lmstudio','lm-studio','vllm','local'].includes(name));}
+async function wireAvailableModel(providerField,modelField,urlField,{primary=false}={}){
+  const data=await knownProviders();
+  if(!providerField.isConnected)return;
+  const currentProvider=providerField.value;
+  const choices=new Map(data.providers.map(p=>[p.provider,p.provider==='openai-codex'?'ChatGPT':p.label]));
+  if(currentProvider&&!choices.has(currentProvider))choices.set(currentProvider,currentProvider);
+  choices.set('custom','Custom / local server');
+  const select=document.createElement('select');
+  for(const attribute of providerField.attributes)if(!['list','type','value','placeholder'].includes(attribute.name))select.setAttribute(attribute.name,attribute.value);
+  select.innerHTML=options([['',primary?'Choose a provider':'Follow primary provider'],...choices],currentProvider);
+  providerField.replaceWith(select);
+  modelField.type='hidden';
+  modelField.insertAdjacentHTML('afterend',modelPickerHTML(modelField.id||'available-model',modelField.value));
+  const picker=modelField.nextElementSibling;
+  const refresh=()=>{
+    if(urlField){urlField.closest('label').hidden=!providerNeedsURL(select.value,urlField.value);if(!providerNeedsURL(select.value,urlField.value))urlField.value='';}
+    return wireModelPicker(picker,{provider:()=>select.value||(primary?'':$('primary-provider')?.value||''),baseUrl:()=>urlField?.value||(!select.value&&!primary?$('primary-url')?.value||'':''),value:modelField.value,
+      defaultLabel:primary||select.value?'Choose a model':'Follow primary model',onChange:value=>{modelField.value=value;}});
+  };
+  select.onchange=()=>{modelField.value='';if(urlField)urlField.value='';refresh();};
+  if(urlField)urlField.onchange=()=>refresh();
+  if(!primary)for(const id of ['primary-provider','primary-url'])$(id)?.addEventListener('change',()=>{if(!select.value){modelField.value='';refresh();}});
+  refresh();
+}
+
 /* ------------------------------------------------------------- jobs panel
    The jobs list used to be read-only apart from a schedule prompt(), and the
    model behind each job could only be changed by running Hermes's own CLI.
@@ -679,6 +763,8 @@ async function renderJobsPanel(host){
   const data=await api('/jobs');
   profileTimezone=data.timezone;
   const jobs=data.jobs;
+  const usage=data.usage||{};
+  const tokens=n=>n==null?'Unknown':Number(n).toLocaleString();
   const failed=jobs.filter(j=>j.last_status==='error').length;
   const active=jobs.filter(j=>j.enabled).length;
   const noModel=jobs.filter(j=>!j.no_agent&&!j.model).length;
@@ -687,17 +773,19 @@ async function renderJobsPanel(host){
   <div class="section-heading" style="margin-top:0">
     <h2 style="margin:0">Scheduled jobs</h2>
     <div class="actions" style="margin:0">
-      <button class="quiet" id="jobs-history">Run history</button>
+      <button class="quiet" id="jobs-pause">Pause model jobs</button><button class="quiet" id="jobs-activate">Enable model jobs</button><button class="quiet" id="jobs-history">Run history</button>
       <button class="quiet" id="jobs-apply-models">Apply job models</button>
       <button class="quiet" id="jobs-repair">Install / repair</button>
     </div>
   </div>
-  <p class="dim">Hermes is the scheduler; this is the whole list it holds for this companion. A job with no model of its own follows the profile default under Models &amp; fallbacks.</p>
+  <p class="dim">Times are in ${esc(data.timezone)}. Model-free maintenance stays active when model jobs are paused.</p>
+  <p class="dim small">${esc(usage.note||'Token usage unavailable.')}${usage.partial?' Recent history is truncated.':''}</p>
+  <details><summary>Which model should I use?</summary><p class="dim small">Use a small or fast model with reliable tool use for frequent checks. Try a stronger reasoning model for daily and weekly reflection. Script-only jobs need no model. Image tasks need an image provider; a conversation model alone is not enough.</p></details>
   <div class="stat-strip">
-    <button data-filter="all"><span>Installed</span><strong>${jobs.length}</strong><span>jobs</span></button>
-    <button data-filter="active"><span>Scheduled</span><strong>${active}</strong><span>enabled</span></button>
-    <button data-filter="paused"><span>Paused</span><strong>${jobs.length-active}</strong><span>not running</span></button>
-    <button data-filter="error"><span>Last run failed</span><strong>${failed}</strong><span>need a look</span></button>
+    <button data-filter="all"><span>Installed</span><strong>${jobs.length}</strong></button>
+    <button data-filter="active"><span>Scheduled</span><strong>${active}</strong></button>
+    <button data-filter="paused"><span>Paused</span><strong>${jobs.length-active}</strong></button>
+    <button data-filter="error"><span>Last run failed</span><strong>${failed}</strong></button>
   </div>
   ${noModel?`<p class="dim small">${noModel} model-backed job${noModel===1?' has':'s have'} no model of their own and follow the profile default.</p>`:''}
   <details class="card routing-card" id="job-routing">
@@ -707,11 +795,11 @@ async function renderJobsPanel(host){
       <div class="chip-row" id="routing-presets"><span class="dim small">Finding your providers…</span></div>
       <p class="dim small" id="routing-hint">Pick a provider, then adjust anything below before applying.</p>
       <div class="form-grid">
-        <label>Provider<input id="routing-provider" list="provider-ids" placeholder="custom, openai, anthropic…"></label>
+        <label>Provider<select id="routing-provider"><option value="">Follow primary provider</option></select></label>
         <label>Model${modelPickerHTML('routing','')}
           <input type="hidden" id="routing-model"></label>
         <label class="wide">Endpoint<input id="routing-base-url" placeholder="Leave empty unless the provider needs a specific address">
-          <small class="dim">An address here outranks the provider. This is the field that strands jobs on a dead server when it is changed by hand.</small></label>
+          <small class="dim">Address of your local server or custom gateway.</small></label>
       </div>
       <div class="panel-footer">
         <button class="act" id="routing-apply">Apply to all model-backed jobs</button>
@@ -731,23 +819,24 @@ async function renderJobsPanel(host){
   /* Only cron jobs carry an `expr`; interval and one-shot jobs describe
      themselves in `display` ("every 15m"). Hermes accepts either spelling back,
      so the editable field shows whichever the job actually has. */
-  const schedule=j=>j.schedule?.display||j.schedule?.expr||'';
+  const schedule=j=>j.schedule?.expr||j.schedule?.display||'';
 
   const statusPill=j=>{
     if(j.last_status==='error')return '<span class="pill status-bad">Last run failed</span>';
     if(j.last_status==='ok')return '<span class="pill status-good">Last run ok</span>';
     return '<span class="pill">Not run yet</span>';
   };
-  const draw=()=>{
+  const draw=async()=>{
+    if(!await confirmEditorLeave('settings-main'))return;
     const q=host.querySelector('#job-search').value.toLowerCase();
     const state=host.querySelector('#job-filter').value;
     const rows=jobs.filter(j=>(!q||(j.name||'').toLowerCase().includes(q))&&
       (state==='all'||state==='active'&&j.enabled||state==='paused'&&!j.enabled||state==='error'&&j.last_status==='error'));
     host.querySelector('#job-list').innerHTML=rows.length?rows.map(j=>`
-      <details class="job-row${j.last_status==='error'?' is-failing':''}">
+      <details class="job-row${j.last_status==='error'?' is-failing':''}" data-job-id="${esc(j.id)}">
         <summary>
           <span class="job-name"><strong>${esc(j.name||j.id)}</strong>
-            <small class="dim">${j.no_agent?'Runs a script · no model':esc(j.model||'Profile default model')} · <code>${esc(schedule(j)||'no schedule')}</code></small></span>
+            <small class="dim">${j.no_agent?'Runs a script · no model':esc(j.model||'Profile default model')} · <code data-schedule-label>${esc(scheduleLabel(schedule(j)))}</code></small></span>
           <span class="job-state">${statusPill(j)}${j.enabled?'':'<span class="pill">Paused</span>'}</span>
         </summary>
         <div class="job-body">
@@ -755,18 +844,19 @@ async function renderJobsPanel(host){
             <div><dt>Next run</dt><dd>${j.enabled?esc(when(j.next_run_at)):'Paused'}</dd></div>
             <div><dt>Last run</dt><dd>${j.last_run_at?esc(when(j.last_run_at)):'Never'}</dd></div>
             <div><dt>Prompt size</dt><dd>${j.no_agent?'—':Number(j.prompt_chars||0).toLocaleString()+' characters sent each run'}</dd></div>
+            ${j.no_agent?'<div><dt>Model tokens</dt><dd>None · script only</dd></div>':[['Last run','last_run'],['Last hour','hour'],['Last 24 hours','day'],['Last 7 days','week']].map(([label,key])=>`<div><dt>${label} tokens</dt><dd>${tokens(usage.jobs?.[j.id]?.[key])}</dd></div>`).join('')}
             <div><dt>Delivers to</dt><dd>${esc(j.deliver||'—')}</dd></div>
           </dl>
           ${j.last_error?`<div class="notice-strip"><p><strong>Last error</strong></p><pre class="command-block">${esc(j.last_error)}</pre></div>`:''}
           <div class="form-grid">
-            <label>Schedule<input data-field="schedule" data-job="${esc(j.id)}" value="${esc(schedule(j))}" placeholder="*/15 * * * * or every 15m"></label>
+            ${scheduleEditorHTML(j.id,schedule(j))}
             ${j.no_agent?'':`
-            <label>Provider<input data-field="provider" data-job="${esc(j.id)}" list="provider-ids" value="${esc(j.provider||'')}" placeholder="Follow the profile default"></label>
+            <label>Provider<input data-field="provider" data-job="${esc(j.id)}" list="job-provider-ids" value="${esc(j.provider||'')}" placeholder="Follow the profile default"></label>
             <label>Model${modelPickerHTML('job-'+j.id,j.model)}
               <input type="hidden" data-field="model" data-job="${esc(j.id)}" value="${esc(j.model||'')}"></label>
             <label>Reasoning effort<select data-field="reasoning_effort" data-job="${esc(j.id)}">${options([['','Hermes default'],['none','None'],['low','Low'],['medium','Medium'],['high','High']],j.reasoning_effort||'')}</select></label>
             <label class="wide">Endpoint<input data-field="base_url" data-job="${esc(j.id)}" value="${esc(j.base_url||'')}" placeholder="Leave empty to use the provider's own address">
-              <small class="dim">Only set this to override where the provider sends requests — a local server, or a gateway. An address left here outranks the provider above.</small></label>`}
+              <small class="dim">Address of your local server or custom gateway.</small></label>`}
           </div>
           ${j.no_agent?'':`<details class="job-prompt"><summary class="small dim">What this job is told to do</summary><textarea data-field="prompt" data-job="${esc(j.id)}" rows="5">${esc(j.prompt||'')}</textarea></details>`}
           <div class="panel-footer">
@@ -780,10 +870,19 @@ async function renderJobsPanel(host){
 
     /* A row builds its picker the first time it is opened, not for all 29 at
        once, and rebuilds it when the provider or endpoint underneath changes. */
+    wireScheduleEditors(host);
     for(const row of host.querySelectorAll('.job-row')){
       const picker=row.querySelector('[data-model-picker]');
       if(!picker)continue;
       const field=n=>row.querySelector(`[data-field="${n}"]`);
+      const available=await knownProviders();
+      const providers=new Map(available.providers.map(p=>[p.provider,p.provider==='openai-codex'?'ChatGPT':p.label]));
+      if(field('provider').value&&!providers.has(field('provider').value))providers.set(field('provider').value,field('provider').value);
+      providers.set('custom','Custom / local server');
+      const previous=field('provider');previous.outerHTML=`<select data-field="provider" data-job="${esc(row.dataset.jobId)}">${options([['','Follow primary provider'],...providers],previous.value)}</select>`;
+
+      const paintEndpoint=()=>{const endpoint=field('base_url');if(endpoint){endpoint.closest('label').hidden=!providerNeedsURL(field('provider').value,endpoint.value);if(!providerNeedsURL(field('provider').value,endpoint.value))endpoint.value='';}};
+      paintEndpoint();
       const attach=()=>{
         if(picker.dataset.wired)return;
         picker.dataset.wired='1';
@@ -798,6 +897,7 @@ async function renderJobsPanel(host){
       for(const name of ['provider','base_url']){
         const input=field(name);
         if(input)input.addEventListener('change',()=>{
+          if(name==='provider'){field('model').value='';field('base_url').value='';}paintEndpoint();
           picker.dataset.wired='';attach();
         });
       }
@@ -809,7 +909,7 @@ async function renderJobsPanel(host){
       const field=name=>host.querySelector(`[data-field="${name}"][data-job="${CSS.escape(id)}"]`);
       const job=jobs.find(j=>j.id===id);
       const payload={};
-      const wanted=field('schedule').value.trim();
+      let wanted;try{wanted=readSchedule(field('schedule').closest('[data-schedule-editor]'));}catch(error){status.textContent=error.message;return;}
       if(wanted&&wanted!==schedule(job))payload.schedule=wanted;
       if(!job.no_agent){
         for(const [name,was] of [['model',job.model||''],['provider',job.provider||''],['reasoning_effort',job.reasoning_effort||''],['base_url',job.base_url||'']]){
@@ -824,7 +924,11 @@ async function renderJobsPanel(host){
       try{
         await action('/jobs/'+encodeURIComponent(id)+'/edit',payload);
         status.innerHTML='<span class="good">Saved</span>';
+        clearEditorDirty('settings-main-job-'+id);
         Object.assign(job,payload,payload.schedule?{schedule:{...job.schedule,display:payload.schedule,expr:payload.schedule}}:{});
+        const editor=field('schedule').closest('[data-schedule-editor]');editor.dataset.original=wanted;editor.dataset.mode=editor.querySelector('[data-schedule-mode]').value;field('schedule').value=wanted;
+        b.closest('.job-row').querySelector('[data-schedule-label]').textContent=scheduleLabel(wanted);
+        b.closest('.job-row').open=false;
       }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
       finally{b.disabled=false;}
     };
@@ -839,14 +943,14 @@ async function renderJobsPanel(host){
      under it — those two decide which catalogue the model list comes from. */
   const routingPicker=host.querySelector('#job-routing [data-model-picker]');
   const routingModel=host.querySelector('#routing-model');
-  const buildRoutingPicker=()=>wireModelPicker(routingPicker,{
+  const buildRoutingPicker=()=>{const endpoint=host.querySelector('#routing-base-url');endpoint.closest('label').hidden=!providerNeedsURL(host.querySelector('#routing-provider').value,endpoint.value);if(endpoint.closest('label').hidden)endpoint.value='';return wireModelPicker(routingPicker,{
     provider:()=>host.querySelector('#routing-provider').value.trim(),
     baseUrl:()=>host.querySelector('#routing-base-url').value.trim(),
     value:routingModel.value,
-    onChange:v=>{routingModel.value=v;}});
+    onChange:v=>{routingModel.value=v;}});};
   buildRoutingPicker();
   for(const id of ['#routing-provider','#routing-base-url'])
-    host.querySelector(id).addEventListener('change',buildRoutingPicker);
+    host.querySelector(id).addEventListener('change',()=>{if(id==='#routing-provider'){routingModel.value='';host.querySelector('#routing-base-url').value='';}buildRoutingPicker();});
 
   /* A chip per reachable provider, plus a way back to the profile default.
      Choosing one sets the provider and endpoint and reloads the model list;
@@ -854,6 +958,8 @@ async function renderJobsPanel(host){
   knownProviders().then(d=>{
     if(!host.isConnected)return;
     const strip=host.querySelector('#routing-presets');
+    const choices=new Map(d.providers.map(r=>[r.provider,r.provider==='openai-codex'?'ChatGPT':r.label]));choices.set('custom','Custom / local server');
+    host.querySelector('#routing-provider').innerHTML=options([['','Follow primary provider'],...choices],'');
     const rows=[...d.providers.map(r=>({...r,preset:false})),
                 {key:'__default__',label:'Follow the profile',provider:'',base_url:'',models:0,preset:true}];
     strip.innerHTML=rows.map(r=>`<button type="button" class="chip" data-choice="${esc(r.key)}">${esc(r.label)}${r.models?` <span class="dim">${r.models}</span>`:''}</button>`).join('');
@@ -888,6 +994,8 @@ async function renderJobsPanel(host){
   for(const b of host.querySelectorAll('[data-filter]'))
     b.onclick=()=>{host.querySelector('#job-filter').value=b.dataset.filter;draw();};
   bindAction('jobs-history','/jobs/history');
+  bindAction('jobs-pause','/maintenance/pause',{},()=>openSettings(null,'jobs'));
+  bindAction('jobs-activate','/maintenance/activate',{},()=>openSettings(null,'jobs'));
   bindAction('jobs-apply-models','/jobs/apply-models');
   bindAction('jobs-repair','/maintenance/repair');
   draw();
@@ -897,7 +1005,7 @@ async function renderJobsPanel(host){
   Promise.all([knownProviders(),api('/providers').catch(()=>({providers:[]}))]).then(([mine,all])=>{
     if(!host.isConnected)return;
     const list=document.createElement('datalist');
-    list.id='provider-ids';
+    list.id='job-provider-ids';
     const seen=new Set();
     const rows=[];
     for(const r of mine.providers){
@@ -917,67 +1025,7 @@ async function renderJobsPanel(host){
 /* ------------------------------------------------------------ voice panel
    The connection half of the voice studio: which engine speaks and how. The
    studio keeps cloning, previews and reference clips. */
-async function renderVoicePanel(host){
-  const d=await api('/voice'),tts=d.tts;
-  const provider=tts.provider||'edge';
-  host.innerHTML=`
-  <h2>Voice</h2>
-  <p class="dim">Which engine speaks for her. Local engines run on the machine hosting Tamanitomo; cloud engines bill their own accounts.</p>
-  <form id="voice-connect">
-    <div class="form-grid">
-      <label>Speech engine
-        <select id="voice-provider">${options([['edge','Edge · online, no key needed'],['piper','Piper · local'],['kittentts','KittenTTS · local'],['neutts','NeuTTS · local, reference voice'],['pockettts','Pocket TTS · local'],['openai','OpenAI'],['xai','xAI / Grok'],['elevenlabs','ElevenLabs'],['minimax','MiniMax'],['gemini','Gemini'],['mistral','Mistral']],provider)}</select>
-      </label>
-      <label id="voice-picker-label">Voice
-        <select id="voice-picker"></select>
-        <input id="voice-custom" hidden placeholder="Voice name or ID" aria-label="Custom voice name or ID">
-      </label>
-      <label id="voice-speed-label">Speed <output id="speed-value">1</output>×
-        <input id="voice-speed" type="range" min="0.7" max="1.5" step="0.05" value="1">
-      </label>
-    </div>
-    <div class="panel-footer">
-      <button class="act">Save voice engine</button>
-      <button type="button" class="quiet" id="voice-install-local">Install this local engine</button>
-      <button type="button" class="link-button" id="voice-goto-studio">Open the Voice studio →</button>
-      <span class="dim small" id="voice-connect-status" role="status"></span>
-    </div>
-  </form>`;
-  const choices=voiceChoices;
-  const refresh=()=>{
-    const name=host.querySelector('#voice-provider').value;
-    const cfg=tts[name]||{},value=cfg.voice||cfg.voice_id||(choices[name]||[])[0]||'';
-    const known=(choices[name]||[]).includes(value);
-    host.querySelector('#voice-picker').innerHTML=options((choices[name]||[]).map(v=>[v,v]),value)+'<option value="__custom__">Write your own…</option>';
-    host.querySelector('#voice-picker').value=known?value:'__custom__';
-    host.querySelector('#voice-custom').value=known?'':value;
-    host.querySelector('#voice-custom').hidden=known;
-    host.querySelector('#voice-picker-label').hidden=name==='neutts';
-    host.querySelector('#voice-speed-label').hidden=!['edge','openai','xai','minimax','kittentts'].includes(name);
-    host.querySelector('#voice-speed').value=cfg.speed||1;
-    host.querySelector('#speed-value').textContent=host.querySelector('#voice-speed').value;
-    host.querySelector('#voice-install-local').hidden=!['piper','neutts','kittentts','pockettts'].includes(name);
-  };
-  refresh();
-  host.querySelector('#voice-provider').onchange=refresh;
-  host.querySelector('#voice-picker').onchange=()=>{
-    host.querySelector('#voice-custom').hidden=host.querySelector('#voice-picker').value!=='__custom__';};
-  host.querySelector('#voice-speed').oninput=e=>{host.querySelector('#speed-value').textContent=e.target.value;};
-  host.querySelector('#voice-goto-studio').onclick=()=>showTab('voice');
-  host.querySelector('#voice-install-local').onclick=()=>action('/voice/install',{provider:host.querySelector('#voice-provider').value});
-  host.querySelector('#voice-connect').onsubmit=async e=>{
-    e.preventDefault();
-    const status=host.querySelector('#voice-connect-status');
-    status.textContent='Saving…';
-    try{
-      await action('/voice',{provider:host.querySelector('#voice-provider').value,
-        voice:host.querySelector('#voice-picker').value==='__custom__'
-          ?host.querySelector('#voice-custom').value:host.querySelector('#voice-picker').value,
-        speed:+host.querySelector('#voice-speed').value});
-      status.innerHTML='<span class="good">Saved</span>';
-    }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
-  };
-}
+async function renderVoicePanel(host){return renderVoiceStudio(host,true);}
 
 /* ------------------------------------------------------- relationship unlock
    PIN, then the plain consequence, then a confirmation. Three deliberate steps
@@ -989,7 +1037,7 @@ async function unlockRelationship(pinConfigured){
     <form id="unlock-form">
       ${pinConfigured
         ?'<label>Platform PIN<input id="unlock-pin" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off"></label>'
-        :`<p class="dim small">No platform PIN is set on this workspace. Type <strong>${esc(name)}</strong> below to continue, or set a PIN first under Tamanitomo → Network &amp; access.</p>
+        :`<p class="dim small">No platform PIN is set on this workspace. Type <strong>${esc(name)}</strong> below to continue, or set a PIN first under App &amp; access → Network &amp; access.</p>
           <label>Companion name<input id="unlock-name" autocomplete="off" placeholder="${esc(name)}"></label>`}
       <p class="small" id="unlock-error" role="status"></p>
       <button class="act">Continue</button>
@@ -1005,11 +1053,10 @@ async function unlockRelationship(pinConfigured){
       const body=await r.json().catch(()=>({}));
       if(!r.ok||!body.ok){error.innerHTML='<span class="bad">That PIN is not right.</span>';return;}
     }else if(($('unlock-name').value||'').trim().toLowerCase()!==name.toLowerCase()){
-      error.innerHTML='<span class="bad">That is not her name.</span>';return;
+      error.innerHTML='<span class="bad">That is not their name.</span>';return;
     }
     $('product-dialog').close();
-    if(!confirm(`Changing how ${name} relates to you rewrites a dynamic the two of you have already built. Pace, progression and intimacy all feed her behaviour directly.\n\nContinue?`))return;
-    if(!confirm('Last check — are you sure?'))return;
+    if(!confirm(`Changing how ${name} relates to you rewrites a dynamic the two of you have already built. Pace, progression and intimacy all feed their behaviour directly.\n\nContinue?`))return;
     relationshipUnlocked=true;
     openSettings(null,'relationship');
   };
@@ -1021,101 +1068,91 @@ async function unlockRelationship(pinConfigured){
    workspace first (switching profile, finishing onboarding) still lands on the
    panel it meant to. */
 const PANEL_KEY='settings-panel';
+let settingsDirectLink=false;
 let settingsPanel=(()=>{try{return sessionStorage.getItem(PANEL_KEY);}catch(error){return null;}})();
 function rememberPanel(id){
   settingsPanel=id;
   try{sessionStorage.setItem(PANEL_KEY,id);}catch(error){/* private window */}
 }
 /* Jump straight to a panel from anywhere: openSettings('jobs'). */
-function openSettings(_group,panel){
-  if(panel)rememberPanel(panel);
+async function openSettings(_group,panel){
+  if(current==='settings'&&!await confirmEditorLeave('settings-main'))return;
+  if(panel){rememberPanel(panel);settingsDirectLink=true;}
   if(current!=='settings')return showTab('settings');
   return render('settings');
 }
 /* For links that must reload the workspace before Settings can be drawn. */
-function aimSettings(panel){if(panel)rememberPanel(panel);}
+function aimSettings(panel){if(panel){rememberPanel(panel);settingsDirectLink=true;}}
 window.openSettings=openSettings;
 window.aimSettings=aimSettings;
 
 workspaceHandlers.settings=async()=>{
-  const groups=[];
-  for(const panel of settingsPanels){
-    let row=groups.find(g=>g[0]===panel.group);
-    if(!row)groups.push(row=[panel.group,[]]);
-    row[1].push(panel);
-  }
-  const groupBlurb={
-    Companion:'How she speaks with you, and to you',
-    Tamanitomo:'This app — how it looks, who can reach it, how it is doing',
-    Hermes:'What she is connected to, and what runs on a schedule'};
-  if(!settingsPanels.some(p=>p.id===settingsPanel))settingsPanel=settingsPanels[0].id;
-
-  /* The pool is re-parented on every render, so take it out of the way first
-     and let hermesCards() put it back where it belongs. */
+  const order=['Companion','Models & providers','Images & voice','Schedule & usage','App & access'];
+  const groups=order.map(name=>[name,settingsPanels.filter(p=>p.group===name)]);
+  groups.find(([name])=>name==='Images & voice')[1].sort((a,b)=>['connect-images','photos','connect-voice'].indexOf(a.id)-['connect-images','photos','connect-voice'].indexOf(b.id));
+  const descriptions=['Contact, awareness, relationship','Models, accounts, fallbacks','Providers, workflows, photos, voice','Daily rhythm, jobs, usage','Appearance, access, installation'];
+  const requested=settingsPanels.find(p=>p.id===settingsPanel);
   returnHermesCards();
   const keepPool=hermesPool;
-
   $('settings').innerHTML=`
-  <div class="home-title">
-    <div><h2 class="page-title">Settings</h2>
-      <p class="intro">Everything that configures this companion, this app, and the runtime underneath.</p></div>
-  </div>
-  <div class="settings-shell">
-    <aside class="settings-nav">
-      <label class="settings-search"><input id="settings-search" type="search" placeholder="Search settings…" aria-label="Search settings"></label>
-      ${groups.map(([name,panels])=>`
-        <section class="settings-group" data-group="${esc(name)}">
-          <h3>${esc(name)}<small>${esc(groupBlurb[name]||'')}</small></h3>
-          ${panels.map(p=>`<button class="settings-link" data-panel="${esc(p.id)}" aria-current="${String(p.id===settingsPanel)}">
-            <strong>${esc(p.title)}</strong><small>${esc(p.blurb)}</small></button>`).join('')}
-        </section>`).join('')}
-    </aside>
-    <div class="settings-body">
-      <div class="card" id="settings-panel" role="region" aria-live="polite"></div>
-    </div>
-  </div>`;
+    <div class="home-title settings-title"><h2 class="page-title">Settings</h2></div>
+    <div class="settings-shell">
+      <nav class="settings-sidebar" aria-label="Settings groups">
+        <label class="settings-search-label"><span class="sr-only">Find a setting</span><input id="settings-search" type="search" placeholder="Find a setting"></label>
+        ${groups.map(([name],i)=>`<button class="settings-group-button" data-group="${i}"><span>${esc(name)}</span><small>${esc(descriptions[i])}</small><span class="settings-chevron" aria-hidden="true">›</span></button>`).join('')}
+        <div id="settings-search-results" class="settings-search-results" hidden></div>
+      </nav>
+      <div class="settings-body" id="settings-panel">
+        <div class="settings-group-heading"><button class="quiet settings-back" id="settings-back" aria-label="Back to settings">←</button><h2 id="settings-group-title" tabindex="-1"></h2></div>
+        <div id="settings-group-content"></div>
+      </div>
+    </div>`;
   if(keepPool)$('settings').append(keepPool);
-
-  const body=$('settings-panel');
-  const show=async(id,announce)=>{
-    // Leaving a panel with unsaved edits asks first; each panel saves itself,
-    // so switching away is the only way to lose work.
-    if(!await confirmEditorLeave('settings-main'))return;
-    rememberPanel(id);
+  let request=0;
+  const show=async(index,focusPanel='',enter=true)=>{
+    if(!await confirmEditorLeave('settings-main'))return false;
+    const version=++request,[name,panels]=groups[index];
+    rememberPanel(focusPanel||panels[0].id);
     returnHermesCards();
-    for(const b of $('settings').querySelectorAll('.settings-link'))
-      b.setAttribute('aria-current',String(b.dataset.panel===id));
-    const panel=settingsPanels.find(p=>p.id===id);
-    // A panel that brings its own cards is not wrapped in one, so the borders
-    // do not nest.
-    body.className=panel.bare?'panel-bare':'card';
-    body.innerHTML='<p class="dim" role="status">Loading…</p>';
-    try{await panel.render(body);}
-    catch(error){body.innerHTML=`<div class="notice-strip"><p><strong>${esc(panel.title)} could not load.</strong> ${esc(error.message)}</p></div>`;}
-    // Drawing a panel populates its fields; that is not an edit.
-    clearEditorDirty('settings-main');
-    // On a narrow screen the index sits above the panel, so choosing something
-    // has to carry you to it rather than leaving you at the top of the list.
-    if(announce&&matchMedia('(max-width:1000px)').matches)
-      body.scrollIntoView({behavior:'smooth',block:'start'});
-  };
-  for(const b of $('settings').querySelectorAll('.settings-link'))b.onclick=()=>show(b.dataset.panel,true);
-
-  /* Search filters the index rather than the open panel, so finding a setting
-     means finding the panel it lives on. */
-  const search=$('settings-search');
-  search.oninput=()=>{
-    const q=search.value.trim().toLowerCase();
-    for(const group of $('settings').querySelectorAll('.settings-group')){
-      let shown=0;
-      for(const link of group.querySelectorAll('.settings-link')){
-        const panel=settingsPanels.find(p=>p.id===link.dataset.panel);
-        const hit=!q||`${panel.title} ${panel.blurb} ${panel.keywords} ${panel.group}`.toLowerCase().includes(q);
-        link.hidden=!hit;
-        if(hit)shown++;
-      }
-      group.hidden=!shown;
+    $('settings-group-title').textContent=name;
+    for(const button of $('settings').querySelectorAll('[data-group]'))button.setAttribute('aria-current',Number(button.dataset.group)===index?'page':'false');
+    $('settings').classList.toggle('settings-detail',enter);
+    const content=$('settings-group-content');content.replaceChildren();
+    // Render sequentially: shared Hermes cards keep their handlers and unique IDs.
+    for(const panel of panels){
+      if(version!==request)return false;
+      const host=document.createElement('section');
+      host.dataset.settingsSection=panel.id;host.id='settings-section-'+panel.id;
+      host.className='settings-section '+(panel.bare?'panel-bare':'card');
+      host.setAttribute('aria-label',panel.title);content.append(host);
+      host.innerHTML='<p class="dim" role="status">Loading…</p>';
+      try{await panel.render(host);}catch(error){host.innerHTML=`<h3>${esc(panel.title)}</h3><p class="bad">${esc(error.message)}</p>`;}
     }
+    if(version!==request)return false;
+    if(enter){
+      const destination=focusPanel?document.getElementById('settings-section-'+focusPanel):$('settings-group-title');
+      destination?.scrollIntoView({block:'start'});
+      $('settings-group-title').focus({preventScroll:true});
+    }
+    return true;
   };
-  await show(settingsPanel);
+  for(const button of $('settings').querySelectorAll('[data-group]'))button.onclick=()=>show(Number(button.dataset.group));
+  $('settings-back').onclick=async()=>{
+    if(!await confirmEditorLeave('settings-main'))return;
+    $('settings').classList.remove('settings-detail');
+    $('settings').querySelector('[aria-current="page"]')?.focus();
+    $('settings').scrollIntoView({block:'start'});
+  };
+  const search=$('settings-search'),results=$('settings-search-results');
+  search.oninput=()=>{
+    const q=search.value.trim().toLowerCase();results.hidden=!q;
+    const matches=settingsPanels.filter(p=>`${p.title} ${p.blurb} ${p.keywords} ${p.group}`.toLowerCase().includes(q));
+    results.innerHTML=matches.map(p=>`<button class="quiet" data-panel="${esc(p.id)}">${esc(p.title)}</button>`).join('')||'<p class="dim">No matching settings.</p>';
+    for(const button of results.querySelectorAll('button'))button.onclick=async()=>{
+      const panel=settingsPanels.find(p=>p.id===button.dataset.panel);
+      if(await show(order.indexOf(panel.group),panel.id)){search.value='';results.hidden=true;}
+    };
+  };
+  await show(requested?order.indexOf(requested.group):0,requested?.id||'',Boolean(settingsDirectLink));
+  settingsDirectLink=false;
 };

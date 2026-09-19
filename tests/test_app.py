@@ -66,6 +66,20 @@ class AppTests(unittest.TestCase):
         self.assertEqual(again.quiet_start,'22:30')
         self.assertEqual(again.location,'Lisbon')
 
+    def test_new_profile_inherits_only_api_credentials(self):
+        from kit.app.manage import inherit_api_credentials
+        source=self.c.hermes_root
+        target=source/'profiles'/'new-friend'
+        target.mkdir(parents=True)
+        (source/'.env').write_text('OPENROUTER_API_KEY="secret"\nHERMES_ACCEPT_HOOKS=1\n')
+        (target/'.env').write_text('KEEP_ME=yes\nOPENROUTER_API_KEY="old"\n')
+        inherit_api_credentials(source,target)
+        saved=(target/'.env').read_text()
+        self.assertIn('OPENROUTER_API_KEY="secret"',saved)
+        self.assertIn('KEEP_ME=yes',saved)
+        self.assertNotIn('HERMES_ACCEPT_HOOKS',saved)
+        self.assertNotIn('"old"',saved)
+
     def test_forgetting_a_fact_supersedes_it_and_keeps_the_original(self):
         import companion_self as slf
         import datetime as dt
@@ -195,6 +209,35 @@ class AppTests(unittest.TestCase):
         clear_res=self.client.post('/api/settings',json={'remote_pin':''})
         self.assertEqual(clear_res.status_code,200)
         self.assertEqual(cc.load(self.c.home).remote_pin,'')
+
+    def test_workspace_pin_protects_every_profile_and_bad_config_fails_closed(self):
+        self.client.post('/api/settings',json={'remote_pin':'5678'})
+        other=cc.Companion(agent='Other',profile='other',hermes_root=self.c.hermes_root,vault=self.c.vault)
+        other.save()
+        remote=TestClient(self.client.app,client=('203.0.113.9',50000))
+        for profile in ('default','other'):
+            r=remote.get('/api/settings',params={'profile':profile})
+            self.assertEqual(r.status_code,401)
+        auth=remote.post('/api/auth/pin',params={'profile':'other'},json={'pin':'5678'})
+        self.assertEqual(auth.status_code,200)
+        self.assertEqual(remote.get('/api/settings',params={'profile':'other'}).status_code,200)
+        (self.c.hermes_root/'.tamanitomo-access.json').write_text('broken')
+        self.assertEqual(remote.get('/api/settings').status_code,503)
+
+    def test_pin_attempts_are_limited_across_login_and_header_auth(self):
+        self.client.post('/api/settings',json={'remote_pin':'5678'})
+        remote=TestClient(self.client.app,client=('203.0.113.9',50000))
+        for _ in range(5):
+            self.assertEqual(remote.get('/api/settings',headers={'x-tamanitomo-pin':'0000'}).status_code,401)
+        self.assertEqual(remote.post('/api/auth/pin',json={'pin':'5678'}).status_code,429)
+        self.assertEqual(remote.get('/api/settings',headers={'x-tamanitomo-pin':'5678'}).status_code,401)
+
+    def test_legacy_profile_pin_cannot_be_bypassed_using_default_profile(self):
+        other=cc.Companion(agent='Other',profile='other',hermes_root=self.c.hermes_root,
+                           vault=self.c.vault,remote_pin='5678')
+        other.save()
+        remote=TestClient(self.client.app,client=('203.0.113.9',50000))
+        self.assertEqual(remote.get('/api/settings').status_code,401)
 
 
 if __name__=='__main__':unittest.main()

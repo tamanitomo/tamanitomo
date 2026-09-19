@@ -12,6 +12,7 @@ from typing import Dict, Any, List, Optional
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import companion_config as cc
 import companion_feelings as feelings
+from companion_render import NON_ROMANTIC
 
 STAGES = [
     {
@@ -284,6 +285,8 @@ def compute(c, now=None) -> Dict[str, Any]:
 
     return {
         'at': now.isoformat(),
+        'romantic_progression':c.boundary not in NON_ROMANTIC and c.agent_type=='companion',
+        'connection_label':'Collaboration' if c.agent_type in ('worker','colleague') else 'Friendship',
         'score': score,
         'stage': stage_info['stage'],
         'stage_name': stage_info['name'],

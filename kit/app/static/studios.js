@@ -14,13 +14,14 @@ const laneIcon=key=>LANE_ICON[key]||'\u2728';
 /* The kit stores a pronoun set, because that is what the text needs. People
    think of it as gender, so that is what the box asks for; the stored value is
    unchanged. */
-const FIELD_LABEL={pronoun_set:'Gender',human_pronoun_set:'Your gender'};
-const CHOICE_LABEL={pronoun_set:{she:'Female',he:'Male',they:'They / them'},
-                    human_pronoun_set:{she:'Female',he:'Male',they:'They / them'}};
+const FIELD_LABEL={pronoun_set:'Pronouns',human_pronoun_set:'Your pronouns'};
+const CHOICE_LABEL={pronoun_set:{she:'She / her',he:'He / him',they:'They / them'},
+                    human_pronoun_set:{she:'She / her',he:'He / him',they:'They / them'}};
 const choiceLabel=(key,value)=>(CHOICE_LABEL[key]||{})[value]||formLabel(value);
 
 const profileChoices={agent_type:['companion','colleague','worker'],pronoun_set:['she','he','they'],human_pronoun_set:['she','he','they'],outreach:['updates_only','free','never'],relationship_progression:['off','subtle','milestones'],relationship_pace:['slow','natural','quick'],context_mode:['auto','fixed']};
 function fieldHTML(key,value,choices=[],readonly=false){
+ if(Array.isArray(value)&&value.every(x=>typeof x==='string')&&!readonly)return `<div data-config-list="${esc(key)}">${tagFieldHTML('config-list',FIELD_LABEL[key]||formLabel(key),'','',false)}</div>`;
  if(key==='outreach_per_day')return `<label>Maximum proactive messages per day<input data-config="outreach_per_day" type="number" required min="1" max="100" value="${value||3}" ${value===0?'disabled':''}></label><label class="inline-label"><input id="editor-unlimited" type="checkbox" ${value===0?'checked':''}>No daily limit (unlimited proactive messages)</label>`;
  const disabled=readonly?'disabled':'';
  const input=choices.length?`<select data-config="${esc(key)}" ${disabled}>${options(choices.map(v=>Array.isArray(v)?v:[v,choiceLabel(key,v)]),value)}</select>`:
@@ -31,14 +32,15 @@ function fieldHTML(key,value,choices=[],readonly=false){
 }
 workspaceHandlers['companion-edit']=async()=>{
  const [d,catalog]=await Promise.all([api('/profile/editor'),api('/catalog')]);
- const groups=[['Identity',['agent','human','names','pronoun_set','human_pronoun_set','agent_type','persona','boundary','birthdate','age','timezone']],['Appearance & contact',['image_style','image_timeline','image_mode','content_permissions','outreach','outreach_per_day','quiet_start','quiet_end','share_people']],['More companion settings',Object.keys(d.config).filter(k=>!['agent','human','names','pronoun_set','human_pronoun_set','agent_type','persona','boundary','birthdate','age','timezone','image_style','image_timeline','image_mode','content_permissions','outreach','outreach_per_day','quiet_start','quiet_end','share_people'].includes(k))]];
+ const groups=[['Identity',['agent','human','names','pronoun_set','human_pronoun_set','agent_type','persona','boundary','birthdate','age','timezone']],['Context & storage',['context_mode','context_tokens','sleep_grace_minutes',...d.fixed]]];
  const choices={...profileChoices,timezone:[...new Set([d.config.timezone,...catalog.timezones])].map(z=>[z,z]),persona:Object.entries(catalog.personas).map(([k,v])=>[k,v.label]),boundary:Object.entries(catalog.boundaries).map(([k,v])=>[k,v.label]),image_style:Object.entries(catalog.image_styles).map(([k,v])=>[k,v.label])};
- $('companion-edit').innerHTML=heading('Edit '+d.display_name,'Your companion’s current configuration and authored identity, prefilled from their files.')+`<div class="actions"><button class="quiet" data-editor-route="roster">← All companions</button><button class="quiet" data-editor-route="voice">Voice studio</button><button class="quiet" data-editor-route="image-studio">Image studio</button><button class="quiet" data-editor-route="settings">Settings</button></div><form id="companion-edit-form"><div class="card"><label>Display name <span class="dim small">The name shown in this workspace</span><input id="editor-display-name" value="${esc(d.display_name)}" required maxlength="100"></label></div>${groups.map(([label,keys],i)=>`<details class="card" ${i<2?'open':''}><summary>${label}</summary><div class="form-grid">${keys.map(k=>fieldHTML(k,d.config[k],choices[k]||[],d.fixed.includes(k))).join('')}</div></details>`).join('')}<div class="card"><h2>Who they are</h2><p class="dim">Personality, appearance, boundaries and shared history live in their SOUL, which Identity reads as a document and edits a section at a time. This page is for the configuration around it.</p><div class="actions"><button type="button" class="quiet" data-editor-route="identity">Open Identity \u2192</button></div></div><div class="actions"><button class="act">Save companion</button><button type="button" class="quiet" id="reload-companion">Reload current files</button></div></form>`;
+ $('companion-edit').innerHTML=heading('Edit '+d.display_name,'Your companion’s current configuration and authored identity, prefilled from their files.')+`<div class="actions"><button class="quiet" data-editor-route="roster">← All companions</button><button class="quiet" data-editor-route="voice">Voice studio</button><button class="quiet" data-editor-route="image-studio">Image studio</button><button class="quiet" data-editor-route="settings">Settings</button></div><form id="companion-edit-form"><div class="card"><label>Display name <span class="dim small">The name shown in this workspace</span><input id="editor-display-name" value="${esc(d.display_name)}" required maxlength="100"></label></div>${groups.map(([label,keys],i)=>`<details class="card" ${i===0?'open':''}><summary>${label}</summary><div class="form-grid">${keys.map(k=>fieldHTML(k,d.config[k],choices[k]||[],d.fixed.includes(k))).join('')}</div></details>`).join('')}<div class="card"><h2>Who they are</h2><p class="dim">Personality, appearance, boundaries and shared history live in their SOUL, which Identity reads as a document and edits a section at a time. Contact, schedules, models, and media connections are in Settings.</p><div class="actions"><button type="button" class="quiet" data-editor-route="identity">Open Identity \u2192</button></div></div><div class="actions"><button class="act">Save companion</button><button type="button" class="quiet" id="reload-companion">Reload current files</button></div></form>`;
  for(const b of $('companion-edit').querySelectorAll('[data-editor-route]'))b.onclick=()=>showTab(b.dataset.editorRoute);
-  $('editor-unlimited').onchange=()=>{$('companion-edit').querySelector('[data-config=outreach_per_day]').disabled=$('editor-unlimited').checked;};
+ for(const field of $('companion-edit').querySelectorAll('[data-config-list]'))writeTags(field.querySelector('[data-tag-field]'),d.config[field.dataset.configList]);
+ wireTagFields($('companion-edit-form'),()=>{dirtyEditors.add('companion-edit');updateEditorStatus();});
  $('reload-companion').onclick=async()=>{if(await confirmEditorLeave('companion-edit'))render('companion-edit');};
  $('companion-edit-form').onsubmit=async e=>{e.preventDefault();const config={...d.config};for(const input of $('companion-edit').querySelectorAll('[data-config]')){if(input.disabled)continue;const key=input.dataset.config,old=d.config[key];config[key]=typeof old==='boolean'?input.value==='true':typeof old==='number'?Number(input.value):typeof old==='object'?JSON.parse(input.value):input.value;}
- config.outreach_per_day=$('editor-unlimited').checked?0:Number($('companion-edit').querySelector('[data-config=outreach_per_day]').value);
+ for(const field of $('companion-edit').querySelectorAll('[data-config-list]'))config[field.dataset.configList]=readTags(field.querySelector('[data-tag-field]'));
  const result=await post('/profile/editor',{revision:d.revision,config,soul:d.soul,display_name:$('editor-display-name').value});clearEditorDirty('companion-edit');if(result.operation){const row=await followOperation(result.operation);if(row.status!=='complete')return;}await boot();notice('Companion saved with a backup.'+(result.operation?' Background jobs synchronized.':''));};
 };
 
@@ -553,11 +555,15 @@ const VOICE_ENGINE_DETAILS={
  mistral:{name:'Mistral',badge:'Cloud API',cat:'api',desc:'Mistral conversational speech API.'}
 };
 
-workspaceHandlers.voice=async()=>{
+let voiceMount=null;
+workspaceHandlers.voice=()=>renderVoiceStudio($('voice'));
+async function renderVoiceStudio(host,compact=false){
+ if(voiceMount&&voiceMount!==host)voiceMount.replaceChildren();
+ voiceMount=host;
  const d=await api('/voice'),tts=d.tts;let selected=tts.provider||'edge';const draft={};
  if(!d.labels[selected]){selected='edge';}
  const heroName=chatName();
- $('voice').innerHTML=heading('Voice studio','Give your companion a distinct voice. Local engines run privately on the Hermes host; cloud engines connect instantly.')+`
+ host.innerHTML=(compact?'<h2>Voice connection</h2>':heading('Voice studio','Choose a voice and try a preview.'))+`
  <div class="voice-hero-card">
   <div class="voice-hero-wave" aria-hidden="true">
    <span class="wave-bar b1"></span><span class="wave-bar b2"></span><span class="wave-bar b3"></span><span class="wave-bar b4"></span><span class="wave-bar b5"></span>
@@ -576,29 +582,10 @@ workspaceHandlers.voice=async()=>{
   <form id="voice-studio-form">
    ${PROFILE!=='default'?`<label class="inline-label switch-container" style="margin-bottom:14px"><input id="voice-inherit" type="checkbox" ${tts.provider==='companion-default'?'checked':''}><span class="switch-slider"></span><span class="switch-label">Use the installation’s current voice defaults</span></label>`:''}
    
-   <label style="font-weight:600;display:block;margin-bottom:8px">1 · Select Speech Engine</label>
-   <div class="actions" style="margin-bottom:10px" id="voice-cat-filter">
-    <button type="button" class="quiet is-active" data-cat="all">All engines</button>
-    <button type="button" class="quiet" data-cat="local">💻 Local / Private</button>
-    <button type="button" class="quiet" data-cat="cloud">🌐 Free & Online</button>
-    <button type="button" class="quiet" data-cat="api">☁️ Cloud APIs</button>
-   </div>
-   <select id="studio-voice-provider" hidden>${options(Object.entries(d.labels),selected)}</select>
-
-   <div class="engine-cards-grid" id="engine-cards-list">
-    ${Object.entries(d.labels).map(([key,label])=>{
-      const info=VOICE_ENGINE_DETAILS[key]||{name:label,badge:key,cat:'api',desc:''};
-      const isSelected=key===selected;
-      return `<div class="engine-card ${isSelected?'is-selected':''}" data-engine="${key}" data-cat="${info.cat}">
-       <div class="engine-card-title"><span>${esc(info.name)}</span><span class="engine-tag">${esc(info.badge)}</span></div>
-       <p class="engine-card-desc">${esc(info.desc)}</p>
-       <div style="font-size:11px;color:${isSelected?'var(--accent)':'var(--faint)'}">${isSelected?'✓ Active engine':'Click to select'}</div>
-      </div>`;
-    }).join('')}
-   </div>
-
+   <label>Speech engine<select id="studio-voice-provider">${options(Object.entries(d.labels),selected)}</select></label>
+   <p class="dim small" id="voice-engine-description"></p>
    <div style="margin-top:20px">
-    <label style="font-weight:600;display:block;margin-bottom:8px">2 · Voice Personality & Controls</label>
+    <label style="font-weight:600;display:block;margin-bottom:8px">Voice & connection</label>
     <div id="studio-voice-fields"></div>
    </div>
 
@@ -613,7 +600,7 @@ workspaceHandlers.voice=async()=>{
 
  <div class="card" style="margin-top:20px">
   <h2>Try the saved voice</h2>
-  <p class="dim small">Type any phrase or choose an inspiration chip below to hear how ${esc(heroName)} sounds.</p>
+  <p class="dim small">Type a phrase to hear how ${esc(heroName)} sounds.</p>
   <div class="voice-sample-chips">
    <button type="button" class="voice-sample-chip" data-sample="Hello! It’s really wonderful to spend some quiet time together.">👋 Greeting</button>
    <button type="button" class="voice-sample-chip" data-sample="I was just thinking about you! How has your day been going so far?">✨ Friendly</button>
@@ -621,7 +608,7 @@ workspaceHandlers.voice=async()=>{
    <button type="button" class="voice-sample-chip" data-sample="Between you and me, you make every single day feel a lot brighter.">💭 Whisper</button>
    <button type="button" class="voice-sample-chip" data-sample="All systems are online, synchronized, and ready whenever you are.">⚡ Tech check</button>
   </div>
-  <textarea id="studio-voice-text" class="composer-textarea" readonly style="min-height:75px;background:color-mix(in srgb,var(--ink) 3%,transparent);cursor:default">Hello! It’s really wonderful to spend some quiet time together.</textarea>
+  <textarea id="studio-voice-text" class="composer-textarea" style="min-height:75px">Hello! It’s really wonderful to spend some quiet time together.</textarea>
   <div class="actions" style="margin-top:12px">
    <button class="act" id="studio-preview-voice">Generate preview</button>
    <span class="dim small">Local weights download on first use. Cloud previews use connected provider accounts.</span>
@@ -658,40 +645,26 @@ workspaceHandlers.voice=async()=>{
 
   $('studio-install-voice').hidden=!d.local.includes(selected)&&!['piper','neutts','kittentts'].includes(selected);
   $('studio-voice-status').textContent=d.local.includes(selected)?(d.installed[selected]?'Engine environment installed on host. Preview verifies model audio output.':'Engine is not installed here yet. Click “Install engine on Hermes host” before generating preview.'):'Saved settings apply to new speech synthesis requests.';
-  for(const c of $('engine-cards-list').children){c.classList.toggle('is-selected',c.dataset.engine===selected);}
+  $('voice-engine-description').textContent=VOICE_ENGINE_DETAILS[selected]?.desc||'';
  };
 
  draw();
- for(const card of $('engine-cards-list').querySelectorAll('[data-engine]')){
-  card.onclick=()=>{
-   draft[selected]=collect();
-   selected=card.dataset.engine;
-   $('studio-voice-provider').value=selected;
-   draw();
-  };
- }
- for(const btn of $('voice-cat-filter').querySelectorAll('button')){
-  btn.onclick=()=>{
-   for(const b of $('voice-cat-filter').querySelectorAll('button'))b.classList.remove('is-active');
-   btn.classList.add('is-active');
-   const cat=btn.dataset.cat;
-   for(const card of $('engine-cards-list').children){card.hidden=cat!=='all'&&card.dataset.cat!==cat;}
-  };
- }
- for(const chip of $('voice').querySelectorAll('.voice-sample-chip')){
+ $('studio-voice-provider').onchange=()=>{draft[selected]=collect();selected=$('studio-voice-provider').value;draw();};
+ for(const chip of host.querySelectorAll('.voice-sample-chip')){
   chip.onclick=()=>{$('studio-voice-text').value=chip.dataset.sample;};
  }
  $('studio-install-voice').onclick=()=>action('/voice/install',{provider:selected});
  $('studio-native-voice').onclick=async()=>{await openSettings(null,'hermes-accounts');await openConsole('tools');};
  $('voice-studio-form').onsubmit=async e=>{
   e.preventDefault();
-  if($('voice-inherit')?.checked){await action('/voice/inherit',{});return;}
+  if($('voice-inherit')?.checked){await action('/voice/inherit',{});clearEditorDirty(compact?'settings-main-connect-voice':'voice');return;}
   const file=$('studio-voice-clip')?.files[0];
   if(file){
     const response=await fetch(scoped('/api/voice/reference?provider='+encodeURIComponent(selected)),{method:'POST',headers:{'content-type':'application/octet-stream',...(token?{'x-tamanitomo-token':token,'x-companion-token':token}:{})},body:file});
    if(!response.ok)throw Error((await response.json()).detail);
   }
   await action('/voice',{provider:selected,...collect()});
+  clearEditorDirty(compact?'settings-main-connect-voice':'voice');
  };
  $('studio-preview-voice').onclick=()=>action('/voice/preview',{text:$('studio-voice-text').value},r=>{
   $('studio-voice-player').innerHTML=`
@@ -910,11 +883,11 @@ function wireTagFields(root,onChange){
     const input=event.target.closest('[data-tag-input]');
     if(!input)return;
     const field=input.closest('[data-tag-field]');
-    if(event.key===','||event.key==='Enter'){
+    if(event.key==='Enter'||event.key===','&&field.dataset.tagField!=='config-list'){
       event.preventDefault();
-      const value=input.value.trim().replace(/,+$/,'');
+      const value=field.dataset.tagField==='config-list'?input.value.trim():input.value.trim().replace(/,+$/,'');
       if(!value)return;
-      const added=tagsFromText(value).filter(t=>!warnIfInFloor(t,field));
+      const added=(field.dataset.tagField==='config-list'?[value]:tagsFromText(value)).filter(t=>!warnIfInFloor(t,field));
       if(added.length)writeTags(field,[...readTags(field),...added]);
       input.value='';onChange&&onChange();
     }else if(event.key==='Backspace'&&!input.value){
@@ -928,7 +901,7 @@ function wireTagFields(root,onChange){
     const input=event.target.closest('[data-tag-input]');
     if(!input||!input.value.trim())return;
     const field=input.closest('[data-tag-field]');
-    writeTags(field,[...readTags(field),...tagsFromText(input.value)]);
+    writeTags(field,[...readTags(field),...(field.dataset.tagField==='config-list'?[input.value.trim()]:tagsFromText(input.value))]);
     input.value='';onChange&&onChange();
   },true);
 }
@@ -938,7 +911,7 @@ function wireTagFields(root,onChange){
    paragraph nobody reads. */
 let safetyFloor=[];
 function warnIfInFloor(term,field){
-  if(!safetyFloor.length)return false;
+  if(field?.dataset.tagField==='config-list'||!safetyFloor.length)return false;
   const bare=String(term||'').trim().toLowerCase().replace(/^[([]|[)\]]$/g,'');
   if(!safetyFloor.includes(bare))return false;
   const where=field?.dataset.tagField==='__modesty'?'modesty':'this workflow';

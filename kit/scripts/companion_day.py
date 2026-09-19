@@ -14,6 +14,10 @@ Evaluate the 5 contextual reflection gates:
 Keep the current activity when it still makes sense; do not manufacture a transition each tick.
 Write duration_minutes as the estimated total length of the current activity, next as a tentative
 {activity, duration_minutes, reason} or null. Never claim an intention happened merely because time passed.
+FIELD LIMITS (a value over its cap is rejected and the whole tick is lost; count before writing):
+next.activity is a short phrase, at most 120 characters; next.reason at most 300; the top-level
+activity at most 120; each visual field at most 240; commitment title at most 160 and its reason at
+most 300. Put the detail in reason, never in activity.
 commitments is a PATCH list keyed by stable id: [] preserves all existing commitments. Include
 {id, title, starts_at, ends_at, buffer_minutes, status, reason}; use timezone-aware ISO timestamps,
 status planned/completed/cancelled, and a reason for changes. Buffer includes preparation and travel.
@@ -48,21 +52,52 @@ def schema_fields():
             'visual':obj({key:string(240) for key in ('pose','hands','gaze','framing','props','expression','lighting')})}
 
 
+def _short(value):
+    # Keep a real reason, drop only the leaf's wire encoder. A nested
+    # 'Invalid next: expected [null]' is the degenerate branch verbatim: it
+    # names the schema's null option instead of the mistake in the value.
+    text=repr(value) if isinstance(value,str) else str(value)
+    return text if len(text)<=80 else text[:77]+'...'
+
+
+def _leaf_reason(exc):
+    """Turn one leaf ValueError into (reason, is_null_branch).
+
+    The schema's anyOf branches for 'next' are [intent, null]. A failure inside
+    the object branch already says what is wrong and where; the null branch can
+    only ever answer 'expected [null]', which tells the model nothing and reads
+    like the field wants to be null. The old dedupe could not drop it either,
+    because the object branch's own text contains it, so every such error
+    carried 'expected [null]' into the retry prompt.
+    """
+    text=str(exc)
+    head=text.split(':',1)[0]
+    inner=text.split(':',1)[1].strip() if ':' in text else text.strip()
+    if 'expected' in inner and 'null' in inner and 'string' not in inner and 'integer' not in inner:
+        return '', True
+    return f'{head}: {inner}' if head else inner, False
+
+
 def _validate(value, schema, name):
     # Small schema subset shared with the structured worker. Reject malformed agent writes too.
     if 'anyOf' in schema:
-        reasons=[]
+        failures=[]
         for option in schema['anyOf']:
             try:_validate(value,option,name);return
-            except ValueError as exc:reasons.append(str(exc))
+            except ValueError as exc:failures.append(_leaf_reason(exc))
+        reasons=[reason for reason,is_null in failures if reason]
+        if not reasons:
+            # Nothing but the null branch refused it: say what the value
+            # actually is, or the retry has no way back to a valid one.
+            reasons=[f'expected an object such as {{activity, duration_minutes, reason}} or null, got {_short(value)}']
         # Name every option's reason. A bare 'Invalid next' gives the model nothing to correct, so it
         # resends the same shape and the pulse fails on the same field for hours.
-        raise ValueError(f'Invalid {name}: '+' / '.join(dict.fromkeys(reasons)))
+        raise ValueError(f'Invalid {name}: '+' / '.join(reasons))
     kinds=schema['type'];kinds=kinds if isinstance(kinds,list) else [kinds]
     kind=('null' if value is None else 'boolean' if isinstance(value,bool) else
           'integer' if isinstance(value,int) else 'string' if isinstance(value,str) else
           'object' if isinstance(value,dict) else 'array' if isinstance(value,list) else 'unknown')
-    if kind not in kinds:raise ValueError(f'Invalid {name}: expected {kinds}')
+    if kind not in kinds:raise ValueError(f'Invalid {name}: expected {kinds}, got {_short(value)}')
     if kind=='object':
         if set(value)!=set(schema['properties']):
             # Say which keys are wrong. 'Invalid fields in visual' does not tell the model whether to add
@@ -79,9 +114,14 @@ def _validate(value, schema, name):
         for item in value:_validate(item,schema['items'],name)
     elif kind=='string':
         if 'maxLength' in schema and not schema.get('minLength',0)<=len(value.strip())<=schema['maxLength']:
-            raise ValueError(f'Invalid length for {name}')
+            # A range, not just a ceiling: 'expected 1-120 characters, got 0' is
+            # actionable where 'Invalid length' is not. Reported for every field,
+            # including commitments, because one shape serves them all.
+            low=schema.get('minLength',0)
+            raise ValueError(f'Invalid length for {name}: expected {low}-{schema["maxLength"]} characters, got {len(value.strip())}')
         if 'enum' in schema and value not in schema['enum']:raise ValueError(f'Invalid {name}')
-    elif kind=='integer' and not schema['minimum']<=value<=schema['maximum']:raise ValueError(f'Invalid {name}')
+    elif kind=='integer' and not schema['minimum']<=value<=schema['maximum']:
+        raise ValueError(f'Invalid {name}: expected {schema["minimum"]}-{schema["maximum"]}, got {value}')
 
 
 def timestamp(value):

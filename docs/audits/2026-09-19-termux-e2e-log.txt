@@ -1,0 +1,61 @@
+Tamanitomo Android / Termux end-to-end validation log
+Date: 2026-09-19
+Device: Pixel 8 Pro (Android 17, arm64, GrapheneOS)
+Secrets: redacted; no API key value is stored in this log or repository
+
+1. Baseline verification
+   - ADB device authorization succeeded.
+   - No Termux package was installed in any Android user profile at the start.
+   - Installed official Termux v0.118.3 arm64 from the termux/termux-app GitHub release.
+   - Fresh bootstrap contained 75 installed packages and only ~/.termux state.
+   - No Git, Python, compiler, Hermes, Tamanitomo, profile, vault, or service state existed.
+
+2. First one-line install
+   - Staged the current working tree without .git, host .venv, or caches.
+   - Executed the installer as one piped command with --non-interactive.
+   - Termux packages, the aarch64 wheelhouse, Hermes Agent, Tamanitomo venv,
+     runit services, and the web workspace installed successfully.
+   - Verified HTTP 200 from localhost:38439.
+   - Verified tamanitomo-workspace and tamanitomo-gateway were both supervised and running.
+   - Verified zero companion profiles before browser onboarding.
+
+3. First browser onboarding and defects found
+   - Opened the real wizard in Vanadium on the attached phone.
+   - Selected web workspace, relational companion, skipped optional discovery answers,
+     selected OpenRouter API key setup, and entered the user-supplied key.
+   - Credential UI reported success, but the created profile had an empty .env.
+   - The live model test also exposed a retired default model:
+     anthropic/claude-3.5-sonnet returned OpenRouter HTTP 404.
+   - The schedule correctly remained paused because the connection test failed.
+
+4. Fixes implemented
+   - New profiles inherit only *_API_KEY credentials from the installation root;
+     unrelated environment settings are not copied.
+   - OpenRouter onboarding now defaults to openrouter/auto.
+   - The installer records the exact pre-install Termux package-name baseline.
+   - The full uninstaller removes packages added after that baseline and preserves
+     packages that existed before installation.
+   - Pre-baseline installations use a conservative compatibility package list.
+   - README includes the requested "Back to baseline" one-line command.
+   - Added installer, credential inheritance, and onboarding default regression tests.
+
+5. Reset and second clean install
+   - Ran uninstall-termux.sh -y --purge-packages and confirmed application code,
+     Hermes data, vault, services, credentials, caches, and installer packages were removed.
+   - Cleared Termux application data to obtain a provable factory bootstrap for the
+     second test; verified 75 installed bootstrap packages and only ~/.termux state.
+   - Repeated the one-line install from the current working tree.
+   - Verified the saved package baseline contains the original 75 package names.
+   - Verified HTTP 200 and both supervised services running.
+
+6. Second browser onboarding and final verification
+   - Repeated onboarding in the real Android browser.
+   - Entered the supplied OpenRouter key; its value was never printed or logged.
+   - Created profile "companion" and verified its .env contains an
+     OPENROUTER_API_KEY entry without reading the value.
+   - Selected openrouter/auto and ran a live one-turn Hermes model check.
+   - Result: CONNECTION_OK.
+   - Activated the approved companion schedule.
+   - Final installed state retains Tamanitomo, Hermes, the companion profile,
+     the package baseline manifest, and active workspace/gateway services.
+

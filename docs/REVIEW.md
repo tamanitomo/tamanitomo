@@ -6,7 +6,13 @@ Read it before trusting any single sentence in the README as a guarantee. The or
 where things stand now, then how each phase was verified, then what remains unverified and why, then
 the older rounds kept as a record rather than as a description of the current code.
 
-## Where this stands
+## Foundation audit — September 19, 2026
+
+The current local changes pass **873 tests and 39 subtests** on Linux/Python 3.14. A fresh source release bootstrapped its dependencies and served the workspace on Linux. Browser checks covered settings, unsaved edits, the story questionnaire, creation and persisted preferences, and phone/desktop layouts. One Starlette/httpx deprecation warning remains.
+
+The owner confirms deployed use on Android, Windows, Linux and macOS; support for those platforms is retained. Fresh native reinstall/upgrade, reboot/overnight behaviour and live media/provider delivery were not repeated in this audit. The restored CI matrix has not yet run on GitHub. See the [full foundation audit](audits/2026-09-19-foundation-audit.md) for fixes, product assessment and the remaining acceptance matrix. Changes are local and have not been released.
+
+## Prior release verification (2.2.1)
 
 **Version 2.2.1.** 864 unit and contract tests pass on Linux and Windows under Python 3.11, 3.13, and 3.14. The system has transitioned from initial staging to active daily operation over multiple weeks of continuous real-world use.
 

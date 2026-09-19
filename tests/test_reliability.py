@@ -17,6 +17,105 @@ class ReliabilityTests(unittest.TestCase):
         self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
 
+    def test_new_companions_stagger_without_moving_existing_schedules(self):
+        from kit.cli.common import next_schedule_offset, load_manifest
+        f=self.fixture
+        fresh=cc.Companion(profile='new',hermes_root=f.root,vault=f.vault)
+        self.assertEqual(next_schedule_offset(fresh),1)
+        fresh.schedule_offset_minutes=next_schedule_offset(fresh)
+        fresh.home.mkdir();fresh.save()
+        self.assertEqual(next_schedule_offset(fresh),1)
+        another=dataclasses.replace(fresh,profile='another')
+        self.assertEqual(next_schedule_offset(another),2)
+        base={s['key']:s['expr'] for s in load_manifest(f.c)['jobs']}
+        offset={s['key']:s['expr'] for s in load_manifest(fresh)['jobs']}
+        self.assertNotEqual(base['pulse'],offset['pulse'])
+        self.assertEqual(base['window'],offset['window'])
+        self.assertEqual(base['wake'],offset['wake'])
+        self.assertEqual(cc.load(f.c.home).schedule_offset_minutes,0)
+
+    def test_image_frequency_round_trips_and_rejects_invalid_intervals(self):
+        f=self.fixture
+        for minutes in (5,30,120,1440):
+            response=f.post('/api/settings',{'image_interval_minutes':minutes})
+            self.assertEqual(response.status_code,200,response.text)
+            self.assertEqual(f.get('/api/settings').json()['image_interval_minutes'],minutes)
+        for value in (0,7,-15,True,15.5,'30'):
+            self.assertEqual(f.post('/api/settings',{'image_interval_minutes':value}).status_code,400)
+        self.assertEqual(cc.load(f.c.home).image_interval_minutes,1440)
+
+    def test_image_frequency_sync_keeps_custom_cron_schedules(self):
+        f=self.fixture
+        c=cc.load(f.c.home);c.image_timeline=True;c.image_style='realistic';c.save()
+        path=c.home/'cron/jobs.json';path.parent.mkdir(exist_ok=True)
+        for original,expected in (('3-59/15 * * * *','3 */2 * * *'),('17 9 * * *',None)):
+            c.image_interval_minutes=15;c.save()
+            path.write_text(json.dumps({'jobs':[{'id':'photo','name':'Nova image timeline','schedule':{'expr':original}}]}))
+            calls=[]
+            def run(runtime,args,**kwargs):
+                calls.append(args);return SimpleNamespace(returncode=0,stdout='ok',stderr='')
+            with patch.object(Runtime,'run',run):
+                result=f.post('/api/settings',{'image_interval_minutes':120}).json()
+                row=f.wait(SimpleNamespace(status_code=200,text='',json=lambda:result['operation']))
+            self.assertEqual(row['status'],'complete',row)
+            edits=[args[-1] for args in calls if args[:2]==['cron','edit']]
+            self.assertEqual(edits,[expected] if expected else [])
+
+    def test_non_romantic_connections_do_not_offer_romantic_progress(self):
+        import companion_intimacy
+        f=self.fixture
+        for kind,boundary,expected in (('companion','best-friend',False),('companion','girlfriend',True),('colleague','creative-partner',False),('worker','creative-partner',False)):
+            with self.subTest(kind=kind,boundary=boundary):
+                c=dataclasses.replace(f.c,agent_type=kind,boundary=boundary)
+                self.assertEqual(companion_intimacy.compute(c)['romantic_progression'],expected)
+
+    def test_job_usage_counts_continuations_and_isolates_profiles(self):
+        import sqlite3
+        from kit.app.runtime import job_usage
+        f=self.fixture;now=1800000000
+        con=sqlite3.connect(f.c.home/'state.db')
+        con.execute('CREATE TABLE sessions(id TEXT, source TEXT, started_at REAL, profile_name TEXT, parent_session_id TEXT, input_tokens INTEGER, output_tokens INTEGER)')
+        con.executemany('INSERT INTO sessions VALUES(?,?,?,?,?,?,?)',[
+            ('cron_pulse_20270115_000000','cron',now-100,'nova',None,100,20),
+            ('continuation','cron',now-90,'nova','cron_pulse_20270115_000000',50,10),
+            ('cron_pulse_20270114_000000','cron',now-4000,'nova',None,300,40),
+            ('cron_pulse_20270115_010000','cron',now-50,'rowan',None,9999,9999),
+            ('chat','cli',now-20,'nova',None,8888,8888)])
+        con.commit();con.close()
+        report=job_usage(f.c,[{'id':'pulse'},{'id':'unrun'}],now)
+        self.assertTrue(report['available'])
+        self.assertEqual(report['jobs']['pulse'],{'runs':2,'last_run':180,'hour':180,'day':520,'week':520})
+        self.assertIsNone(report['jobs']['unrun']['last_run'])
+        self.assertIsNone(report['jobs']['unrun']['day'])
+        self.assertFalse(job_usage(f.other,[{'id':'pulse'}],now)['available'])
+
+    def test_link_existing_hermes_config_file_persists_without_changing_it(self):
+        f=self.fixture
+        existing=Path(f.tmp.name)/'separate hermes';existing.mkdir()
+        config=existing/'config.yaml';config.write_text('model: preserved\n')
+        result=f.post('/api/installations/link',{'path':str(config)})
+        self.assertEqual(result.status_code,200,result.text)
+        ident=result.json()['installation']
+        self.assertEqual(f.app.state.runtimes[ident].root,existing)
+        self.assertEqual(config.read_text(),'model: preserved\n')
+        self.assertEqual(f.post('/api/installations/link',{'path':str(existing)}).json()['installation'],ident)
+        self.assertEqual(f.post('/api/installations/link',{'path':str(existing/'missing')}).status_code,400)
+
+    def test_schedule_approval_requires_a_successful_model_check(self):
+        f=self.fixture
+        for approved,reply,expected in ((False,'CONNECTION_OK',False),(True,'Provider unavailable',False),(True,'CONNECTION_OK',True)):
+            calls=[]
+            def run(runtime,args,**kwargs):
+                calls.append(args)
+                return SimpleNamespace(stdout=reply if args[0]=='chat' else 'saved',stderr='',returncode=0)
+            with self.subTest(approved=approved,reply=reply),patch.object(Runtime,'run',run):
+                response=f.post('/api/profiles',{'profile':'test-profile','answers':{'agent':'Test','boundary':'best-friend'},'schedule_approved':approved})
+                result=f.wait(response)
+                self.assertEqual(result['status'],'complete',result)
+                self.assertEqual(result['result']['schedule_active'],expected)
+                self.assertEqual(any('active' in args for args in calls),expected)
+                self.assertEqual(any(args[0]=='chat' for args in calls),approved)
+
     def test_page_versions_its_assets_to_avoid_mixed_cached_controllers(self):
         response = self.fixture.client.get('/')
         self.assertEqual(response.status_code, 200)

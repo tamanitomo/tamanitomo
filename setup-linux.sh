@@ -34,6 +34,7 @@ DRY_RUN=0
 NON_INTERACTIVE=0
 SERVICE_ONLY=0
 NO_SERVICE=0
+SKIP_HERMES=0
 UPGRADE_MODE=0
 
 usage() {
@@ -58,6 +59,7 @@ Options:
   --hermes-home <dir>       Hermes Agent state directory (default: ~/.hermes)
   --service-only            Only install / update systemd user service and exit
   --no-service              Skip systemd user service setup
+  --skip-hermes             Leave missing Hermes installation for Settings
   --upgrade                 Upgrade existing installation dependencies and templates
   --non-interactive         Do not prompt for missing values (use defaults/flags)
   --dry-run                 Validate inputs and show generated configuration only
@@ -82,6 +84,7 @@ while [[ $# -gt 0 ]]; do
     --hermes-home) HERMES_HOME="$2"; shift 2 ;;
     --service-only) SERVICE_ONLY=1; shift ;;
     --no-service) NO_SERVICE=1; shift ;;
+    --skip-hermes) SKIP_HERMES=1; shift ;;
     --upgrade) UPGRADE_MODE=1; shift ;;
     --non-interactive) NON_INTERACTIVE=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
@@ -90,6 +93,16 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# curl | bash has script bytes on stdin. Prompts use the controlling terminal.
+if [[ "$NON_INTERACTIVE" -eq 0 && "$DRY_RUN" -eq 0  ]]; then
+  if ( : </dev/tty ) 2>/dev/null; then
+    exec 3</dev/tty
+  else
+    echo 'No interactive terminal. Pass --non-interactive to use defaults.' >&2
+    exit 1
+  fi
+fi
+
 echo -e "${BOLD}${CYAN}"
 echo "  ╔═══════════════════════════════════════════════════════════════╗"
 echo "  ║             Tamanitomo — Linux Turnkey Setup                  ║"
@@ -97,7 +110,7 @@ echo "  ╚═══════════════════════
 echo -e "${RESET}"
 
 CURRENT_DIR="$(pwd)"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-setup-linux.sh}")" >/dev/null 2>&1 && pwd)"
 
 # Resolve kit directory
 if [[ -n "$INSTALL_DIR" ]]; then
@@ -113,6 +126,17 @@ fi
 echo -e "${DIM}• Target kit directory: ${KIT_DIR}${RESET}"
 echo -e "${DIM}• Hermes home directory: ${HERMES_HOME}${RESET}"
 
+if [[ ! "$PORT" =~ ^[0-9]+$ ]] || ((10#$PORT < 1 || 10#$PORT > 65535)); then
+  echo 'Port must be between 1 and 65535.' >&2; exit 1
+fi
+if [[ -n "$REMOTE_PIN" && ! "$REMOTE_PIN" =~ ^[0-9]{4}$ ]]; then
+  echo 'Remote PIN must contain exactly four digits.' >&2; exit 1
+fi
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "Dry run: install into $KIT_DIR; Hermes home $HERMES_HOME; port $PORT. No files changed."
+  exit 0
+fi
+
 # ------------------------------------------------------------------------------
 # Service-only mode fast path
 # ------------------------------------------------------------------------------
@@ -120,6 +144,17 @@ setup_systemd_service() {
   local target_kit="$1"
   local target_hermes="$2"
   local target_port="$3"
+  local BIND_HOST
+  BIND_HOST=$("$target_kit/.venv/bin/python" - "$target_kit" "$target_hermes" "$REMOTE_PIN" <<'PYACCESS'
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(sys.argv[1]) / 'kit/scripts'))
+from companion_config import access_pin, save_access_pin
+root = Path(sys.argv[2])
+if sys.argv[3]:save_access_pin(root, sys.argv[3])
+print('0.0.0.0' if access_pin(root) else '127.0.0.1')
+PYACCESS
+  )
   local sv_user_dir="$HOME/.config/systemd/user"
 
   echo -e "${CYAN}→ Configuring systemd user service...${RESET}"
@@ -133,12 +168,12 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=${target_kit}
-ExecStart=${target_kit}/.venv/bin/python -m kit.app.hosted
-Environment=HERMES_HOME=${target_hermes}
-Environment=TAMANITOMO_BIND=0.0.0.0
+WorkingDirectory="${target_kit}"
+ExecStart="${target_kit}/.venv/bin/python" -m kit.app.hosted
+Environment="HERMES_HOME=${target_hermes}"
+Environment=TAMANITOMO_BIND=${BIND_HOST}
 Environment=TAMANITOMO_PORT=${target_port}
-Environment=COMPANION_BIND=0.0.0.0
+Environment=COMPANION_BIND=${BIND_HOST}
 Environment=COMPANION_PORT=${target_port}
 Restart=on-failure
 RestartSec=5
@@ -154,9 +189,9 @@ EOF
 
   if command -v systemctl >/dev/null 2>&1; then
     if systemctl --user status >/dev/null 2>&1; then
-      systemctl --user daemon-reload || true
-      systemctl --user enable tamanitomo.service || true
-      systemctl --user restart tamanitomo.service || true
+      systemctl --user daemon-reload
+      systemctl --user enable tamanitomo.service
+      systemctl --user restart tamanitomo.service
       echo -e "${GREEN}✓ tamanitomo.service enabled and started via systemctl --user${RESET}"
     else
       echo -e "${YELLOW}! systemd user session not active (headless/container); service file created at ~/.config/systemd/user/tamanitomo.service${RESET}"
@@ -210,7 +245,7 @@ fi
 
 if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then
   echo -e "${YELLOW}Missing packages: ${MISSING_PKGS[*]}${RESET}"
-  if [[ "$NON_INTERACTIVE" -eq 0 && "$EUID" -ne 0 ]]; then
+  if [[ "$NON_INTERACTIVE" -eq 0 && "$EUID" -ne 0 && "$DRY_RUN" -eq 0 ]]; then
     echo -e "Attempting package installation (sudo may prompt for password)..."
     if command -v apt-get >/dev/null 2>&1; then
       sudo apt-get update -y && sudo apt-get install -y "${MISSING_PKGS[@]}" || true
@@ -248,13 +283,13 @@ echo -e "${GREEN}✓ Prerequisites satisfied (Python: $("$PYTHON_BIN" --version)
 # ------------------------------------------------------------------------------
 # Step 2: Interactive Prompts (if not non-interactive)
 # ------------------------------------------------------------------------------
-if [[ "$NON_INTERACTIVE" -eq 0 && "$UPGRADE_MODE" -eq 0 ]]; then
+if [[ "$NON_INTERACTIVE" -eq 0 && "$UPGRADE_MODE" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
   echo ""
   echo -e "${BOLD}1. Companion Persona Details${RESET}"
-  read -r -p "   Companion display name [${COMPANION_NAME}]: " input_name
+  read -u 3 -r -p "   Companion display name [${COMPANION_NAME}]: " input_name
   COMPANION_NAME="${input_name:-$COMPANION_NAME}"
 
-  read -r -p "   What should your companion call you? [${HUMAN_NAME}]: " input_human
+  read -u 3 -r -p "   What should your companion call you? [${HUMAN_NAME}]: " input_human
   HUMAN_NAME="${input_human:-$HUMAN_NAME}"
 
   echo ""
@@ -264,7 +299,7 @@ if [[ "$NON_INTERACTIVE" -eq 0 && "$UPGRADE_MODE" -eq 0 ]]; then
   echo "   [2] OpenAI (GPT-4o, GPT-4o-mini)"
   echo "   [3] xAI (Grok-2)"
   echo "   [4] DeepSeek (DeepSeek V3 / R1)"
-  read -r -p "   Select choice [1-4, default: 1]: " provider_choice
+  read -u 3 -r -p "   Select choice [1-4, default: 1]: " provider_choice
   provider_choice="${provider_choice:-1}"
 
   case "$provider_choice" in
@@ -272,7 +307,7 @@ if [[ "$NON_INTERACTIVE" -eq 0 && "$UPGRADE_MODE" -eq 0 ]]; then
       PRIMARY_PROVIDER="openrouter"
       MODEL_CHOICE="${MODEL_CHOICE:-openrouter/auto}"
       if [[ -z "$OPENROUTER_KEY" ]]; then
-        read -r -s -p "   Enter OpenRouter API Key (sk-or-...): " OPENROUTER_KEY
+        read -u 3 -r -s -p "   Enter OpenRouter API Key (sk-or-...): " OPENROUTER_KEY
         echo ""
       fi
       ;;
@@ -280,7 +315,7 @@ if [[ "$NON_INTERACTIVE" -eq 0 && "$UPGRADE_MODE" -eq 0 ]]; then
       PRIMARY_PROVIDER="openai"
       MODEL_CHOICE="${MODEL_CHOICE:-gpt-4o}"
       if [[ -z "$OPENAI_KEY" ]]; then
-        read -r -s -p "   Enter OpenAI API Key (sk-...): " OPENAI_KEY
+        read -u 3 -r -s -p "   Enter OpenAI API Key (sk-...): " OPENAI_KEY
         echo ""
       fi
       ;;
@@ -288,7 +323,7 @@ if [[ "$NON_INTERACTIVE" -eq 0 && "$UPGRADE_MODE" -eq 0 ]]; then
       PRIMARY_PROVIDER="xai"
       MODEL_CHOICE="${MODEL_CHOICE:-xai/grok-2-latest}"
       if [[ -z "$XAI_KEY" ]]; then
-        read -r -s -p "   Enter xAI API Key (xai-...): " XAI_KEY
+        read -u 3 -r -s -p "   Enter xAI API Key (xai-...): " XAI_KEY
         echo ""
       fi
       ;;
@@ -296,7 +331,7 @@ if [[ "$NON_INTERACTIVE" -eq 0 && "$UPGRADE_MODE" -eq 0 ]]; then
       PRIMARY_PROVIDER="deepseek"
       MODEL_CHOICE="${MODEL_CHOICE:-deepseek/deepseek-chat}"
       if [[ -z "$DEEPSEEK_KEY" ]]; then
-        read -r -s -p "   Enter DeepSeek API Key: " DEEPSEEK_KEY
+        read -u 3 -r -s -p "   Enter DeepSeek API Key: " DEEPSEEK_KEY
         echo ""
       fi
       ;;
@@ -304,7 +339,11 @@ if [[ "$NON_INTERACTIVE" -eq 0 && "$UPGRADE_MODE" -eq 0 ]]; then
 
   echo ""
   echo -e "${BOLD}3. Workspace Web Security${RESET}"
-  read -r -p "   Create a 4-digit PIN for remote/LAN access (leave empty for none): " REMOTE_PIN
+  read -u 3 -r -p "   Create a 4-digit PIN for remote/LAN access (leave empty for none): " REMOTE_PIN
+fi
+
+if [[ -n "$REMOTE_PIN" && ! "$REMOTE_PIN" =~ ^[0-9]{4}$ ]]; then
+  echo 'Remote PIN must contain exactly four digits.' >&2; exit 1
 fi
 
 # Set default model choice if unset
@@ -341,7 +380,7 @@ echo -e "${CYAN}→ Bootstrapping Python virtual environment...${RESET}"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo -e "${YELLOW}[DRY RUN] Would run launch.py in ${KIT_DIR}${RESET}"
 else
-  (cd "$KIT_DIR" && "$PYTHON_BIN" launch.py --dry-run >/dev/null 2>&1 || true)
+   # Dependencies are installed below; launch.py starts the application.
   if [[ ! -d "$KIT_DIR/.venv" ]]; then
     echo -e "Creating virtual environment via $PYTHON_BIN -m venv .venv..."
     "$PYTHON_BIN" -m venv "$KIT_DIR/.venv"
@@ -355,7 +394,7 @@ fi
 # Step 5: Detect or Configure Hermes Agent
 # ------------------------------------------------------------------------------
 echo -e "${CYAN}→ Checking Hermes Agent...${RESET}"
-mkdir -p "$HERMES_HOME"
+if [[ "$DRY_RUN" -eq 0 ]]; then mkdir -p "$HERMES_HOME"; fi
 
 HERMES_BIN=""
 if command -v hermes >/dev/null 2>&1; then
@@ -368,27 +407,41 @@ fi
 
 if [[ -n "$HERMES_BIN" ]]; then
   echo -e "${GREEN}✓ Found Hermes Agent: ${HERMES_BIN}${RESET}"
+elif [[ "$SKIP_HERMES" -eq 1 ]]; then
+  echo 'Hermes not found. Install it in Settings → App & access → Installation & gateway.'
 else
-  echo -e "${YELLOW}! Hermes Agent CLI not found in PATH.${RESET}"
-  echo -e "  Tamanitomo can run standalone or alongside Hermes."
-  echo -e "  To install Hermes Agent later: curl -fsSL https://raw.githubusercontent.com/nousresearch/hermes-agent/main/install.sh | bash"
+  echo 'Installing Hermes with its official installer…'
+  "$KIT_DIR/.venv/bin/python" - "$KIT_DIR" "$HERMES_HOME" <<'PYHERMES'
+import sys
+from pathlib import Path
+sys.path[:0] = [sys.argv[1], str(Path(sys.argv[1])/'kit/scripts')]
+from kit.app.runtime import Runtime
+Runtime(Path(sys.argv[2])).install(lambda message: print(message, flush=True))
+PYHERMES
+
 fi
 
 # Configure provider keys in Hermes .env if keys were provided
 HERMES_ENV="$HERMES_HOME/.env"
-touch "$HERMES_ENV"
-chmod 600 "$HERMES_ENV" 2>/dev/null || true
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  touch "$HERMES_ENV"
+  chmod 600 "$HERMES_ENV"
+fi
 
 update_env_key() {
-  local key="$1"
-  local val="$2"
-  if [[ -n "$val" ]]; then
-    if grep -q "^${key}=" "$HERMES_ENV" 2>/dev/null; then
-      sed -i "s|^${key}=.*|${key}=${val}|" "$HERMES_ENV"
-    else
-      echo "${key}=${val}" >> "$HERMES_ENV"
-    fi
-  fi
+  local key="$1" value="$2"
+  [[ -z "$value" ]] && return 0
+  "$PYTHON_BIN" - "$HERMES_ENV" "$key" "$value" <<'PYENV'
+import json, re, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+key, value = sys.argv[2:]
+lines = path.read_text().splitlines() if path.exists() else []
+lines = [line for line in lines if not re.match(r'^\s*(?:export\s+)?' + re.escape(key) + r'\s*=', line)]
+lines.append(key + '=' + json.dumps(value))
+path.write_text('\n'.join(lines) + '\n')
+path.chmod(0o600)
+PYENV
 }
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
@@ -403,28 +456,29 @@ fi
 # ------------------------------------------------------------------------------
 echo -e "${CYAN}→ Environment provisioned. Leaving profiles at 0 for interactive web onboarding...${RESET}"
 
-# Save model configuration to Hermes config.yaml if provider and model were supplied
-if [[ "$DRY_RUN" -eq 0 && -n "$MODEL_CHOICE" ]]; then
-  "$KIT_DIR/.venv/bin/python" -c "
-import yaml, os
-cfg_path = '$HERMES_HOME/config.yaml'
-cfg = {}
-if os.path.exists(cfg_path):
-    try:
-        with open(cfg_path, 'r', encoding='utf-8') as f:
-            cfg = yaml.safe_load(f) or {}
-    except Exception:
-        pass
-cfg.setdefault('model', {})
-if isinstance(cfg['model'], str):
-    cfg['model'] = {'default': cfg['model']}
-cfg['model']['default'] = '$MODEL_CHOICE'
-if '$PRIMARY_PROVIDER':
-    cfg['model']['provider'] = '$PRIMARY_PROVIDER'
-with open(cfg_path, 'w', encoding='utf-8') as f:
-    yaml.safe_dump(cfg, f)
-" || true
-fi
+# Preserve existing provider choices and save host access before starting services.
+"$KIT_DIR/.venv/bin/python" - "$HERMES_HOME" "$MODEL_CHOICE" "$PRIMARY_PROVIDER" "$REMOTE_PIN" <<'PYCONFIG'
+import json, os, sys
+from pathlib import Path
+import yaml
+root = Path(sys.argv[1])
+path = root / 'config.yaml'
+cfg = yaml.safe_load(path.read_text()) if path.exists() else {}
+cfg = {} if cfg is None else cfg
+if not isinstance(cfg, dict):
+    raise SystemExit('Existing Hermes configuration must be a mapping; left unchanged.')
+if 'model' not in cfg:
+    cfg['model'] = {'default': sys.argv[2], 'provider': sys.argv[3]}
+    with path.open('w') as stream:
+        yaml.safe_dump(cfg, stream)
+    path.chmod(0o600)
+if sys.argv[4]:
+    access = root / '.tamanitomo-access.json'
+    fd = os.open(access, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w') as stream:
+        json.dump({'remote_pin': sys.argv[4]}, stream)
+    access.chmod(0o600)
+PYCONFIG
 
 # ------------------------------------------------------------------------------
 # Step 7: Configure Systemd User Service
@@ -455,11 +509,11 @@ echo -e "  ${BOLD}Interactive Setup:${RESET} Open ${CYAN}http://localhost:${PORT
 echo -e "                       to begin your interactive onboarding and bring ${BOLD}${COMPANION_NAME}${RESET} to life!"
 echo -e "  ${BOLD}Primary Model:${RESET}     ${MODEL_CHOICE:-'(Configure in Web Onboarding)'} (${PRIMARY_PROVIDER:-'Cloud'})"
 echo -e "  ${BOLD}Local Workspace:${RESET}   ${CYAN}http://localhost:${PORT}${RESET}"
-if [[ "$LOCAL_IP" != "127.0.0.1" ]]; then
+if [[ "$LOCAL_IP" != "127.0.0.1" && -n "$REMOTE_PIN" ]]; then
   echo -e "  ${BOLD}LAN / Wi-Fi URL:${RESET}   ${CYAN}http://${LOCAL_IP}:${PORT}${RESET}"
 fi
 if [[ -n "$REMOTE_PIN" ]]; then
-  echo -e "  ${BOLD}Remote Access PIN:${RESET} ${GREEN}Active (${REMOTE_PIN})${RESET}"
+  echo -e "  ${BOLD}Remote Access PIN:${RESET} ${GREEN}Configured${RESET}"
 fi
 echo ""
 if [[ "$NO_SERVICE" -eq 0 ]]; then
@@ -473,3 +527,8 @@ echo -e "  • CLI Menu:      ${DIM}${KIT_DIR}/bin/tamanitomo${RESET}"
 echo -e "  • Run Doctor:    ${DIM}${KIT_DIR}/bin/tamanitomo doctor${RESET}"
 echo ""
 echo -e "${BOLD}Open ${CYAN}http://localhost:${PORT}${RESET} to begin!${RESET}"
+
+if [[ "$NO_SERVICE" -eq 1 ]]; then
+  echo "No background service was started. Launch the workspace with:"
+  printf '  %q --home %q app --host 127.0.0.1 --port %q\n' "$KIT_DIR/tamanitomo" "$HERMES_HOME" "$PORT"
+fi

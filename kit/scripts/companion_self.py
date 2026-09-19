@@ -91,6 +91,9 @@ def record_fact(root,statement,evidence,now,category='other',confidence='stated'
 def record_pref(root,text,now,valence='like',subject='',agent='the companion'):
     if valence not in VALENCE:raise ValueError(f'valence must be one of {VALENCE}')
     text=_text(text,600,'text');subject=(subject or text)[:120].strip()
+    # Pref IDs are keyed on (valence, subject, day) -- so two different feelings filed under the
+    # same subject on the same day silently collapse into one row: the first stands, the second is
+    # dropped with written:false and no error. Make the collision visible rather than silent.
     row={'id':_mkid('pref',valence,subject.lower(),now.date().isoformat()),
          'kind':'companion_preference','valence':valence,'subject':subject,'text':text,
          'recorded_at':now.isoformat(),'provenance':f"{agent}'s own authored preference or feeling"}

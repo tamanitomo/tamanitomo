@@ -325,6 +325,50 @@ def _encode_cursor(stamp,ident):
     return base64.urlsafe_b64encode(json.dumps([stamp,ident],separators=(',',':')).encode()).decode().rstrip('=')
 
 
+def job_usage(c, jobs, now=None):
+    """Read Hermes counters, scoped to this profile. No billing estimates.
+
+    Windows attribute a run to its start time, not to individual token timestamps.
+    Compressed continuations belong to the original cron run.
+    """
+    now=time.time() if now is None else now
+    unavailable={'available':False,'jobs':{},'note':'Token accounting is unavailable in this Hermes session store.'}
+    try:
+        with session_db(c) as state:
+            if state is None:return unavailable
+            con,columns,scope,params=state
+            if not {'input_tokens','output_tokens'}<=columns:return unavailable
+            fields=['id','source','started_at','input_tokens','output_tokens']
+            fields += [f for f in ('parent_session_id','api_call_count') if f in columns]
+            deadline=time.monotonic()+2
+            con.set_progress_handler(lambda:int(time.monotonic()>deadline),1000)
+            rows=[dict(r) for r in con.execute(f"SELECT {','.join(fields)} FROM sessions WHERE {scope} AND started_at>=? ORDER BY started_at DESC LIMIT 10001",(*params,now-7*86400))]
+    except (ValueError,sqlite3.Error):return unavailable
+    truncated=len(rows)>10000;rows=rows[:10000]
+    by_id={r['id']:r for r in rows};runs={}
+    pattern=re.compile(r'^cron_(.+)_(\d{8}_\d{6})$')
+    allowed={str(j['id']) for j in jobs}
+    for row in rows:
+        root=row;seen=set()
+        while root.get('parent_session_id') in by_id and root['id'] not in seen:
+            seen.add(root['id']);root=by_id[root['parent_session_id']]
+        match=pattern.fullmatch(str(root['id']))
+        if not match or root['source']!='cron' or match[1] not in allowed:continue
+        run=runs.setdefault(root['id'],{'job':match[1],'at':root['started_at'],'tokens':0,'recorded':False})
+        tokens=max(0,int(row.get('input_tokens') or 0))+max(0,int(row.get('output_tokens') or 0))
+        run['tokens']+=tokens;run['recorded']|=tokens>0 or bool(row.get('api_call_count'))
+    totals={}
+    for job in jobs:
+        own=sorted((r for r in runs.values() if r['job']==str(job['id'])),key=lambda r:r['at'],reverse=True)
+        total={'runs':len(own),'last_run':own[0]['tokens'] if own and own[0]['recorded'] else None}
+        for label,seconds in (('hour',3600),('day',86400),('week',7*86400)):
+            window=[r for r in own if r['at']>=now-seconds]
+            total[label]=sum(r['tokens'] for r in window) if window and all(r['recorded'] for r in window) else None
+        totals[str(job['id'])]=total
+    return {'available':True,'jobs':totals,'partial':truncated,
+            'note':'Recorded input + output tokens, grouped by run start in the last hour, 24 hours, and 7 days. Unrecorded usage is unknown; image charges and costs are not included.'}
+
+
 def sessions_page(c, limit=100, before=None):
     if type(limit)!=int or not 1<=limit<=200:raise ValueError('History page size must be 1–200')
     cursor=_page_cursor(before)

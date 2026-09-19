@@ -157,6 +157,8 @@ def apply_job_models(c,run=None):
     help_text=run(['cron','edit','--help']).stdout
     if not all(flag in help_text for flag in ('--model','--provider','--reasoning-effort')):
         raise ValueError('This Hermes does not support editing model pins; update Hermes first. No jobs were changed.')
+    if any(c.tier_model(t).get('base_url') for t in ('loops','reflection')) and '--base-url' not in help_text:
+        raise ValueError('Update Hermes to apply custom job endpoints. No jobs were changed.')
     specs={spec['name'].replace('{{AGENT}}',c.agent):spec for spec in load_manifest(c)['jobs']}
     updated=[]
     with cp.file_lock(c.home/'.companion-jobs.lock'):
@@ -166,7 +168,7 @@ def apply_job_models(c,run=None):
             pick=c.tier_model(spec.get('tier','chat'))
             try:
                 run(['cron','edit',job['id'],'--model',pick.get('model',''),
-                     '--provider',pick.get('provider',''),'--reasoning-effort',pick.get('reasoning_effort','')])
+                     '--provider',pick.get('provider',''),'--reasoning-effort',pick.get('reasoning_effort','')]+(['--base-url',pick.get('base_url','')] if '--base-url' in help_text else []))
             except (ValueError,OSError,subprocess.SubprocessError) as exc:
                 raise ValueError(f'Updated {len(updated)} jobs; stopped at {job["name"]}: {exc}. Retry Apply to finish.') from exc
             updated.append(job['name'])

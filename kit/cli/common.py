@@ -56,7 +56,45 @@ def load_manifest(c=None):
         if c is None:return False
         if optional=='image_timeline':return c.image_timeline
         return c.image_timeline or (c.data/'image-timeline').exists()
-    return {'jobs':[spec for spec in data['jobs'] if wanted(spec)]}
+    jobs=[spec for spec in data['jobs'] if wanted(spec)]
+    if c is not None:
+        for spec in jobs:
+            if spec['key']=='timeline':
+                n=c.image_interval_minutes
+                spec['expr']=(f'3-59/{n} * * * *' if n<60 else f'3 */{n//60} * * *')
+                if n==1440:spec['expr']='3 0 * * *'
+            spec['expr']=stagger_schedule(spec['expr'],c.schedule_offset_minutes)
+    return {'jobs':jobs}
+
+def stagger_schedule(expr,offset):
+    """Phase default jobs without changing frequency or user-edited schedules.
+
+    Clock-bound wake/window jobs retain their explicit human-selected times.
+    Daily jobs near an hour boundary retain theirs rather than changing dates.
+    """
+    if not offset or '{{' in expr:return expr
+    fields=expr.split()
+    minutes=set()
+    for part in fields[0].split(','):
+        base,_,step=part.partition('/')
+        step=int(step or 1)
+        if base=='*':lo,hi=0,59
+        elif '-' in base:lo,hi=map(int,base.split('-'))
+        else:lo=hi=int(base)
+        minutes.update(range(lo,hi+1,step))
+    if fields[1]!='*' and max(minutes)+offset>=60:return expr
+    fields[0]=','.join(str(m) for m in sorted({(m+offset)%60 for m in minutes}))
+    return ' '.join(fields)
+
+def next_schedule_offset(c):
+    """Keep existing companions stable; spread new profiles over 15 phases."""
+    if (c.home/cc.CONFIG_NAME).exists():return c.schedule_offset_minutes
+    from .roster import discover
+    counts=[0]*15
+    for _,home in discover(c.hermes_root):
+        if home==c.home or not (home/cc.CONFIG_NAME).exists():continue
+        other=cc.load(home);counts[other.schedule_offset_minutes]+=1
+    return min(range(15),key=lambda phase:counts[phase])
 
 def script_job_names(c,m=None):
     """Jobs that run without a model.

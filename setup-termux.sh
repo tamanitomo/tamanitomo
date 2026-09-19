@@ -99,6 +99,16 @@ echo "  ║          Tamanitomo — Android Termux Turnkey Setup            ║"
 echo "  ╚═══════════════════════════════════════════════════════════════╝"
 echo -e "${RESET}"
 
+# curl | bash has script bytes on stdin. Prompts use the controlling terminal.
+if [[ "$NON_INTERACTIVE" -eq 0 && "$DRY_RUN" -eq 0  ]]; then
+  if ( : </dev/tty ) 2>/dev/null; then
+    exec 3</dev/tty
+  else
+    echo 'No interactive terminal. Pass --non-interactive to use defaults.' >&2
+    exit 1
+  fi
+fi
+
 # Detect Termux or Test Mode
 IS_TERMUX=0
 if [[ -n "${PREFIX:-}" && "$PREFIX" == *"com.termux"* ]] || [[ -d "/data/data/com.termux" ]]; then
@@ -108,7 +118,7 @@ fi
 if [[ "$IS_TERMUX" -eq 0 && "$TEST_MODE" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
   echo -e "${YELLOW}Warning: Not running inside Android Termux.${RESET}"
   echo -e "If you are testing this installer on a standard Linux PC, use ${BOLD}--test-mode${RESET}."
-  read -r -p "Continue anyway in test mode? [y/N]: " proceed
+  read -u 3 -r -p "Continue anyway in test mode? [y/N]: " proceed
   if [[ "$proceed" =~ ^[Yy]$ ]]; then
     TEST_MODE=1
   else
@@ -123,7 +133,7 @@ if [[ "$IS_TERMUX" -eq 1 ]]; then
 else
   HOME_DIR="${HOME}"
   PREFIX_DIR="/tmp/tamanitomo-termux-test/usr"
-  mkdir -p "$PREFIX_DIR"
+  if [[ "$DRY_RUN" -eq 0 ]]; then mkdir -p "$PREFIX_DIR"; fi
 fi
 
 # Auto-detect if running directly from an existing checkout
@@ -159,7 +169,7 @@ echo -e "${DIM}Hermes directory: ${HERMES_HOME}${RESET}"
 echo -e "${DIM}Tamanitomo:       ${KIT_DIR}${RESET}"
 echo ""
 
-if [[ "$UPGRADE_MODE" -eq 1 ]]; then
+if [[ "$UPGRADE_MODE" -eq 1 && "$DRY_RUN" -eq 0 ]]; then
   echo -e "${CYAN}→ Upgrading existing installation in $KIT_DIR...${RESET}"
   if [[ ! -d "$KIT_DIR" ]]; then
     echo -e "${RED}Error: Cannot find existing installation at $KIT_DIR${RESET}" >&2
@@ -167,17 +177,17 @@ if [[ "$UPGRADE_MODE" -eq 1 ]]; then
   fi
   if [[ -d "$KIT_DIR/.git" ]]; then
     echo -e "  Pulling latest commits from git..."
-    git -C "$KIT_DIR" fetch origin main 2>/dev/null || true
-    git -C "$KIT_DIR" pull --ff-only origin main 2>/dev/null || true
+    git -C "$KIT_DIR" fetch origin main
+    git -C "$KIT_DIR" pull --ff-only origin main
   fi
   VENV_DIR="$KIT_DIR/.venv"
   if [[ -f "$KIT_DIR/requirements.txt" && -x "$VENV_DIR/bin/pip" ]]; then
     echo -e "  Updating Python dependencies..."
-    "$VENV_DIR/bin/pip" install -r "$KIT_DIR/requirements.txt" >/dev/null 2>&1 || true
+    "$VENV_DIR/bin/python" -m pip install -r "$KIT_DIR/requirements.txt"
   fi
   echo -e "  Refreshing companion templates and cron shims..."
   "$VENV_DIR/bin/python" "$KIT_DIR/bin/tamanitomo" --home "$HERMES_HOME" upgrade --answers "$HOME_DIR/.companion-init-answers.json" >/dev/null 2>&1 || \
-  "$VENV_DIR/bin/python" "$KIT_DIR/bin/tamanitomo" --home "$HERMES_HOME" upgrade >/dev/null 2>&1 || true
+  "$VENV_DIR/bin/python" "$KIT_DIR/bin/tamanitomo" --home "$HERMES_HOME" upgrade
   if command -v sv >/dev/null 2>&1; then
     echo -e "  Restarting services..."
     for s in tamanitomo-workspace companion-workspace tamanitomo-gateway companion-gateway; do
@@ -189,7 +199,7 @@ if [[ "$UPGRADE_MODE" -eq 1 ]]; then
 fi
 
 # Request wake-lock on Termux so Android CPU doesn't sleep
-if [[ "$IS_TERMUX" -eq 1 ]]; then
+if [[ "$IS_TERMUX" -eq 1 && "$DRY_RUN" -eq 0 ]]; then
   echo -e "${CYAN}→ Acquiring Termux wake-lock (prevents sleep while serving)...${RESET}"
   if command -v termux-wake-lock >/dev/null 2>&1; then
     termux-wake-lock || true
@@ -200,26 +210,26 @@ fi
 # Interactive prompts for credentials if not supplied via flags
 # ------------------------------------------------------------------------------
 if [[ "$NON_INTERACTIVE" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
-  if [[ -t 0 ]]; then
+  if [[ -t 3 ]]; then
     echo -e "${BOLD}1. Companion Identity${RESET}"
-    read -r -p "   Companion Name [${COMPANION_NAME}]: " input_name
+    read -u 3 -r -p "   Companion Name [${COMPANION_NAME}]: " input_name
     COMPANION_NAME="${input_name:-$COMPANION_NAME}"
 
-    read -r -p "   Your Name [${HUMAN_NAME}]: " input_human
+    read -u 3 -r -p "   Your Name [${HUMAN_NAME}]: " input_human
     HUMAN_NAME="${input_human:-$HUMAN_NAME}"
     echo ""
 
     echo -e "${BOLD}2. Telegram Configuration (24/7 companion messaging)${RESET}"
     echo -e "${DIM}   Create a bot with @BotFather on Telegram to get your token.${RESET}"
     if [[ -z "$TELEGRAM_TOKEN" ]]; then
-      read -r -p "   Telegram Bot Token: " TELEGRAM_TOKEN
+      read -u 3 -r -p "   Telegram Bot Token: " TELEGRAM_TOKEN
     else
       echo -e "   Telegram Bot Token: ${GREEN}[Provided via flag]${RESET}"
     fi
 
     if [[ -z "$TELEGRAM_USER_ID" ]]; then
       echo -e "${DIM}   Find your numeric User ID by messaging @userinfobot on Telegram.${RESET}"
-      read -r -p "   Telegram User ID (numeric chat owner): " TELEGRAM_USER_ID
+      read -u 3 -r -p "   Telegram User ID (numeric chat owner): " TELEGRAM_USER_ID
     else
       echo -e "   Telegram User ID:    ${GREEN}[Provided via flag]${RESET}"
     fi
@@ -233,7 +243,7 @@ if [[ "$NON_INTERACTIVE" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
       echo "   3) xAI / Grok (grok-2, grok-beta)"
       echo "   4) DeepSeek (deepseek-chat, deepseek-reasoner)"
       echo ""
-      read -r -p "   Choose primary provider [1-4, default: 1]: " provider_num
+      read -u 3 -r -p "   Choose primary provider [1-4, default: 1]: " provider_num
       case "$provider_num" in
         2) PRIMARY_PROVIDER="openai" ;;
         3) PRIMARY_PROVIDER="xai" ;;
@@ -249,7 +259,7 @@ if [[ "$NON_INTERACTIVE" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
     case "$PRIMARY_PROVIDER" in
       openrouter)
         if [[ -z "$OPENROUTER_KEY" ]]; then
-          read -r -p "   OpenRouter API Key: " OPENROUTER_KEY
+          read -u 3 -r -p "   OpenRouter API Key: " OPENROUTER_KEY
         else
           echo -e "   OpenRouter API Key:  ${GREEN}[Provided via flag]${RESET}"
         fi
@@ -257,7 +267,7 @@ if [[ "$NON_INTERACTIVE" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
         ;;
       openai)
         if [[ -z "$OPENAI_KEY" ]]; then
-          read -r -p "   OpenAI API Key: " OPENAI_KEY
+          read -u 3 -r -p "   OpenAI API Key: " OPENAI_KEY
         else
           echo -e "   OpenAI API Key:      ${GREEN}[Provided via flag]${RESET}"
         fi
@@ -265,7 +275,7 @@ if [[ "$NON_INTERACTIVE" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
         ;;
       xai)
         if [[ -z "$XAI_KEY" ]]; then
-          read -r -p "   xAI (Grok) API Key: " XAI_KEY
+          read -u 3 -r -p "   xAI (Grok) API Key: " XAI_KEY
         else
           echo -e "   xAI (Grok) API Key:  ${GREEN}[Provided via flag]${RESET}"
         fi
@@ -273,7 +283,7 @@ if [[ "$NON_INTERACTIVE" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
         ;;
       deepseek)
         if [[ -z "$DEEPSEEK_KEY" ]]; then
-          read -r -p "   DeepSeek API Key: " DEEPSEEK_KEY
+          read -u 3 -r -p "   DeepSeek API Key: " DEEPSEEK_KEY
         else
           echo -e "   DeepSeek API Key:    ${GREEN}[Provided via flag]${RESET}"
         fi
@@ -284,23 +294,23 @@ if [[ "$NON_INTERACTIVE" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
 
     echo -e "${DIM}   (Optional) Secondary / Fallback API Keys (press Enter to skip):${RESET}"
     if [[ "$PRIMARY_PROVIDER" != "openrouter" && -z "$OPENROUTER_KEY" ]]; then
-      read -r -p "   OpenRouter API Key (press Enter to skip): " OPENROUTER_KEY
+      read -u 3 -r -p "   OpenRouter API Key (press Enter to skip): " OPENROUTER_KEY
     fi
     if [[ "$PRIMARY_PROVIDER" != "openai" && -z "$OPENAI_KEY" ]]; then
-      read -r -p "   OpenAI API Key (press Enter to skip): " OPENAI_KEY
+      read -u 3 -r -p "   OpenAI API Key (press Enter to skip): " OPENAI_KEY
     fi
     if [[ "$PRIMARY_PROVIDER" != "deepseek" && -z "$DEEPSEEK_KEY" ]]; then
-      read -r -p "   DeepSeek API Key (press Enter to skip): " DEEPSEEK_KEY
+      read -u 3 -r -p "   DeepSeek API Key (press Enter to skip): " DEEPSEEK_KEY
     fi
     if [[ "$PRIMARY_PROVIDER" != "xai" && -z "$XAI_KEY" ]]; then
-      read -r -p "   xAI (Grok) API Key (press Enter to skip): " XAI_KEY
+      read -u 3 -r -p "   xAI (Grok) API Key (press Enter to skip): " XAI_KEY
     fi
     echo ""
 
     echo -e "${BOLD}4. Remote Security PIN (Optional 4-digit PIN for Wi-Fi access)${RESET}"
     echo -e "${DIM}   Protect access when visiting from another device on your Wi-Fi (e.g. laptop).${RESET}"
     if [[ -z "$REMOTE_PIN" ]]; then
-      read -r -p "   4-Digit PIN (press Enter to skip): " REMOTE_PIN
+      read -u 3 -r -p "   4-Digit PIN (press Enter to skip): " REMOTE_PIN
     else
       echo -e "   4-Digit PIN:         ${GREEN}[Provided via flag]${RESET}"
     fi
@@ -310,7 +320,7 @@ if [[ "$NON_INTERACTIVE" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
       echo -e "${BOLD}5. GitHub Access (For Private Repository)${RESET}"
       echo -e "${DIM}   If tamanitomo/tamanitomo is private, supply a GitHub Personal Access Token (PAT).${RESET}"
       if [[ -z "$GITHUB_TOKEN" ]]; then
-        read -r -p "   GitHub Token (press Enter to skip): " GITHUB_TOKEN
+        read -u 3 -r -p "   GitHub Token (press Enter to skip): " GITHUB_TOKEN
       else
         echo -e "   GitHub Token:        ${GREEN}[Provided via flag]${RESET}"
       fi
@@ -319,11 +329,15 @@ if [[ "$NON_INTERACTIVE" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
   fi
 fi
 
+if [[ ! "$PORT" =~ ^[0-9]+$ ]] || ((10#$PORT < 1 || 10#$PORT > 65535)); then
+  echo 'Port must be between 1 and 65535.' >&2; exit 1
+fi
+
 # Validate Remote PIN if provided
 if [[ -n "$REMOTE_PIN" ]]; then
   if [[ ! "$REMOTE_PIN" =~ ^[0-9]{4}$ ]]; then
-    echo -e "${YELLOW}! Warning: Remote PIN must be exactly 4 numeric digits. Disabling PIN protection.${RESET}"
-    REMOTE_PIN=""
+    echo "Remote PIN must contain exactly four digits." >&2
+    exit 1
   fi
 fi
 
@@ -358,7 +372,7 @@ else
 fi
 
 # Validate Telegram Token if provided
-if [[ -n "$TELEGRAM_TOKEN" ]]; then
+if [[ -n "$TELEGRAM_TOKEN" && "$DRY_RUN" -eq 0 ]]; then
   echo -e "${CYAN}→ Validating Telegram Bot Token with Telegram API...${RESET}"
   BOT_INFO=$(curl -sS --max-time 10 "https://api.telegram.org/bot${TELEGRAM_TOKEN}/getMe" 2>/dev/null || echo '{"ok":false}')
   if echo "$BOT_INFO" | grep -q '"ok":true'; then
@@ -395,6 +409,13 @@ fi
 if [[ "$IS_TERMUX" -eq 1 ]]; then
   echo -e "${CYAN}→ Installing required Termux packages (python 3.11, git, curl, build tools)...${RESET}"
   export DEBIAN_FRONTEND=noninteractive
+  # Remember the user's package set before the first install.  The uninstaller
+  # uses this immutable manifest to remove only packages added by Tamanitomo.
+  TERMUX_BASELINE="${HOME_DIR}/.tamanitomo-termux-baseline-packages"
+  if [[ ! -f "$TERMUX_BASELINE" ]]; then
+    dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\n' 2>/dev/null | awk '$1 == "ii" { sub(/:.*/, "", $2); print $2 }' | sort -u > "$TERMUX_BASELINE"
+    chmod 0600 "$TERMUX_BASELINE"
+  fi
   dpkg --configure -a --force-confdef --force-confold 2>/dev/null || true
   pkg update -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" || true
   pkg install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" tur-repo || true
@@ -506,7 +527,7 @@ if ! command -v hermes >/dev/null 2>&1; then
     if [[ ! -d "$HERMES_REPO/.git" ]]; then
       echo -e "  Cloning Hermes Agent repository..."
       rm -rf "$HERMES_REPO"
-      git clone --depth 1 https://github.com/NousResearch/hermes-agent.git "$HERMES_REPO" || true
+      git clone --depth 1 https://github.com/NousResearch/hermes-agent.git "$HERMES_REPO"
     fi
     if [[ ! -d "$HERMES_VENV" ]]; then
       echo -e "  Setting up Hermes virtual environment..."
@@ -521,11 +542,11 @@ if ! command -v hermes >/dev/null 2>&1; then
       fi
       if [[ -f "$HERMES_REPO/pyproject.toml" ]]; then
         echo -e "  Installing Hermes Agent..."
-        "$HERMES_VENV/bin/pip" install -e "$HERMES_REPO" >/dev/null 2>&1 || true
+        "$HERMES_VENV/bin/pip" install -e "$HERMES_REPO"
       fi
     fi
   else
-    curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup || curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup || true
+    curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup || curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup
   fi
 fi
 
@@ -543,14 +564,19 @@ chmod 0600 "$ENV_FILE"
 
 # Helper to upsert key-value in .env
 upsert_env() {
-  local k="$1"
-  local v="$2"
-  [[ -z "$v" ]] && return 0
-  if grep -q "^${k}=" "$ENV_FILE" 2>/dev/null; then
-    sed -i "s|^${k}=.*|${k}=${v}|" "$ENV_FILE"
-  else
-    echo "${k}=${v}" >> "$ENV_FILE"
-  fi
+  local key="$1" value="$2"
+  [[ -z "$value" ]] && return 0
+  python3 - "$ENV_FILE" "$key" "$value" <<'PYENV'
+import json, re, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+key, value = sys.argv[2:]
+lines = path.read_text().splitlines() if path.exists() else []
+lines = [line for line in lines if not re.match(r'^\s*(?:export\s+)?' + re.escape(key) + r'\s*=', line)]
+lines.append(key + '=' + json.dumps(value))
+path.write_text('\n'.join(lines) + '\n')
+path.chmod(0o600)
+PYENV
 }
 
 upsert_env "TELEGRAM_BOT_TOKEN" "$TELEGRAM_TOKEN"
@@ -568,6 +594,7 @@ upsert_env "HERMES_ACCEPT_HOOKS" "1"
 echo -e "${CYAN}→ Generating $HERMES_HOME/config.yaml...${RESET}"
 CONFIG_YAML="$HERMES_HOME/config.yaml"
 
+if [[ ! -f "$CONFIG_YAML" ]]; then
 cat > "$CONFIG_YAML" <<EOF
 model:
   default: ${MODEL_CHOICE}
@@ -627,6 +654,7 @@ terminal:
   auto_source_bashrc: true
 EOF
 
+fi
 chmod 0600 "$CONFIG_YAML"
 
 # ------------------------------------------------------------------------------
@@ -668,9 +696,10 @@ if [[ -d "$WHEELS_DIR" && $(find "$WHEELS_DIR" -maxdepth 1 -name "*.whl" 2>/dev/
   "$VENV_DIR/bin/pip" install "$WHEELS_DIR"/*.whl >/dev/null 2>&1 || true
 fi
 if [[ -f "$KIT_DIR/requirements.txt" ]]; then
-  "$VENV_DIR/bin/pip" install -r "$KIT_DIR/requirements.txt" >/dev/null 2>&1 || true
+  "$VENV_DIR/bin/python" -m pip install -r "$KIT_DIR/requirements.txt"
 else
-  "$VENV_DIR/bin/pip" install fastapi uvicorn pyyaml pydantic httpx requests >/dev/null 2>&1 || true
+  echo 'Repository requirements.txt is missing; installation cannot continue.' >&2
+  exit 1
 fi
 
 # ------------------------------------------------------------------------------
@@ -678,28 +707,29 @@ fi
 # ------------------------------------------------------------------------------
 echo -e "${CYAN}→ Environment provisioned. Leaving profiles at 0 for interactive web onboarding...${RESET}"
 
-# Save model configuration to Hermes config.yaml if provider and model were supplied
-if [[ -n "$MODEL_CHOICE" ]]; then
-  "$VENV_DIR/bin/python" -c "
-import yaml, os
-cfg_path = '$HERMES_HOME/config.yaml'
-cfg = {}
-if os.path.exists(cfg_path):
-    try:
-        with open(cfg_path, 'r', encoding='utf-8') as f:
-            cfg = yaml.safe_load(f) or {}
-    except Exception:
-        pass
-cfg.setdefault('model', {})
-if isinstance(cfg['model'], str):
-    cfg['model'] = {'default': cfg['model']}
-cfg['model']['default'] = '$MODEL_CHOICE'
-if '$PRIMARY_PROVIDER':
-    cfg['model']['provider'] = '$PRIMARY_PROVIDER'
-with open(cfg_path, 'w', encoding='utf-8') as f:
-    yaml.safe_dump(cfg, f)
-" || true
-fi
+# Preserve existing provider choices and save host access before starting services.
+"$VENV_DIR/bin/python" - "$HERMES_HOME" "$MODEL_CHOICE" "$PRIMARY_PROVIDER" "$REMOTE_PIN" <<'PYCONFIG'
+import json, os, sys
+from pathlib import Path
+import yaml
+root = Path(sys.argv[1])
+path = root / 'config.yaml'
+cfg = yaml.safe_load(path.read_text()) if path.exists() else {}
+cfg = {} if cfg is None else cfg
+if not isinstance(cfg, dict):
+    raise SystemExit('Existing Hermes configuration must be a mapping; left unchanged.')
+if 'model' not in cfg:
+    cfg['model'] = {'default': sys.argv[2], 'provider': sys.argv[3]}
+    with path.open('w') as stream:
+        yaml.safe_dump(cfg, stream)
+    path.chmod(0o600)
+if sys.argv[4]:
+    access = root / '.tamanitomo-access.json'
+    fd = os.open(access, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w') as stream:
+        json.dump({'remote_pin': sys.argv[4]}, stream)
+    access.chmod(0o600)
+PYCONFIG
 
 # ------------------------------------------------------------------------------
 # Step 7: Configure 24/7 Background Supervision (termux-services / runit)
@@ -874,7 +904,7 @@ if [[ "$IS_TERMUX" -eq 1 ]]; then
   fi
 fi
 if [[ -n "$REMOTE_PIN" ]]; then
-  echo -e "  ${BOLD}Remote Access PIN:${RESET}   ${GREEN}Active (${REMOTE_PIN})${RESET}"
+  echo -e "  ${BOLD}Remote Access PIN:${RESET}   ${GREEN}Configured${RESET}"
 else
   echo -e "  ${BOLD}Remote Access PIN:${RESET}   ${YELLOW}None (Open to local network)${RESET}"
 fi
