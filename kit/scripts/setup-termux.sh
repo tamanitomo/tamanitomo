@@ -794,17 +794,42 @@ EOF
       echo "export SVDIR=\"${PREFIX_DIR}/var/service\"" >> "$rc"
     fi
   done
+  if [[ -f "${PREFIX_DIR}/etc/profile.d/start-services.sh" ]]; then
+    # shellcheck disable=SC1090
+    source "${PREFIX_DIR}/etc/profile.d/start-services.sh" 2>/dev/null || true
+  fi
   if command -v sv-enable >/dev/null 2>&1; then
     sv-enable tamanitomo-gateway || true
     sv-enable tamanitomo-workspace || true
   fi
   if command -v service-daemon >/dev/null 2>&1; then
-    service-daemon start || true
+    service-daemon start >/dev/null 2>&1 || true
   fi
+
+  # Wait for runsvdir to scan $SVDIR and attach service supervisors (up to 10 seconds)
+  echo -e "  Waiting for background service supervisor to initialize..."
+  for i in {1..10}; do
+    if sv status tamanitomo-workspace >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
+
   if command -v sv >/dev/null 2>&1; then
-    sleep 2
     sv up tamanitomo-gateway >/dev/null 2>&1 || true
     sv up tamanitomo-workspace >/dev/null 2>&1 || true
+  fi
+
+  # Check actual service status
+  GATEWAY_RUNNING=0
+  WORKSPACE_RUNNING=0
+  if command -v sv >/dev/null 2>&1; then
+    if sv status tamanitomo-gateway 2>/dev/null | grep -q "^run:"; then
+      GATEWAY_RUNNING=1
+    fi
+    if sv status tamanitomo-workspace 2>/dev/null | grep -q "^run:"; then
+      WORKSPACE_RUNNING=1
+    fi
   fi
 fi
 
@@ -835,6 +860,19 @@ echo ""
 echo -e "  ${BOLD}Interactive Setup:${RESET}   Open ${CYAN}http://localhost:${PORT}${RESET} (or ${CYAN}http://${LOCAL_IP}:${PORT}${RESET}) in your browser"
 echo -e "                         to begin your interactive onboarding and bring ${BOLD}${COMPANION_NAME}${RESET} to life!"
 echo -e "  ${BOLD}Primary Model:${RESET}       ${MODEL_CHOICE:-'(Configure in Web Onboarding)'} (${PRIMARY_PROVIDER:-'Cloud'})"
+if [[ "$IS_TERMUX" -eq 1 ]]; then
+  if [[ "$WORKSPACE_RUNNING" -eq 1 ]]; then
+    echo -e "  ${BOLD}Workspace Service:${RESET}   ${GREEN}Active & Serving${RESET}"
+  else
+    echo -e "  ${BOLD}Workspace Service:${RESET}   ${YELLOW}Pending shell restart${RESET}"
+    echo -e "                         ${YELLOW}(If page does not load, run: ${CYAN}source \$PREFIX/etc/profile.d/start-services.sh && sv up tamanitomo-workspace${YELLOW})${RESET}"
+  fi
+  if [[ "$GATEWAY_RUNNING" -eq 1 ]]; then
+    echo -e "  ${BOLD}Hermes Gateway:${RESET}      ${GREEN}Active${RESET}"
+  elif [[ -n "$TELEGRAM_TOKEN" ]]; then
+    echo -e "  ${BOLD}Hermes Gateway:${RESET}      ${YELLOW}Pending start${RESET} (${DIM}sv up tamanitomo-gateway${RESET})"
+  fi
+fi
 if [[ -n "$REMOTE_PIN" ]]; then
   echo -e "  ${BOLD}Remote Access PIN:${RESET}   ${GREEN}Active (${REMOTE_PIN})${RESET}"
 else
@@ -853,5 +891,6 @@ echo -e "  3. ${BOLD}Service Controls:${RESET}"
 echo -e "     • Check gateway:   ${DIM}sv status tamanitomo-gateway${RESET}"
 echo -e "     • Check workspace: ${DIM}sv status tamanitomo-workspace${RESET}"
 echo -e "     • Restart:         ${DIM}sv restart tamanitomo-gateway${RESET}"
+echo -e "     • Manual start:    ${DIM}cd ~/tamanitomo && ./.venv/bin/python -m kit.app.hosted${RESET}"
 echo ""
 echo -e "${BOLD}Open ${CYAN}http://${LOCAL_IP}:${PORT}${RESET} to begin!${RESET}"
