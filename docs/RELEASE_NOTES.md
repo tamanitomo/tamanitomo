@@ -1,4 +1,4 @@
-Tamanitomo 2.2.2 makes the official GitHub release the shared update source.
+Tamanitomo 2.2.3 puts the patch notes directly in the app before installation.
 
 ### Install
 
@@ -6,9 +6,9 @@ Download **tamanitomo-release.zip** below, extract it into its own application f
 
 ### Update
 
-Open **Settings → App & access → Updates** in your desktop or mobile browser, check for updates, then select **Update to v2.2.2 Now**. The host downloads and installs the application and restarts the workspace. Your Hermes profiles, credentials, memories, journals and vault remain in their existing external locations.
+Open **Settings → App & access → Updates** in your desktop or mobile browser. When a release is available, the app shows its patch notes first and places **Update to v2.2.3 Now** beneath them. The home-screen update notice opens this review screen instead of installing immediately. The host downloads and installs the application and restarts the workspace. Your Hermes profiles, credentials, memories, journals and vault remain in their existing external locations.
 
-Updates now check the published release and asset, show connection failures honestly, verify available download digests, stop on dependency failures, and retain a backup of the previous application files. Locally modified application code requires manual attention. Reconnection waits for the updated server.
+Release notes are safely displayed as text, retain their line breaks, and scroll within a mobile-friendly panel when long. Updates continue to verify the published release asset, stop on dependency failures, retain rollback files, and wait for the updated server before reconnecting.
 
 This release also includes the onboarding and Termux lifecycle fixes from main. See CHANGELOG.md for details. The adjacent `.sha256` file verifies the complete ZIP.
 

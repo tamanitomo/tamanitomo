@@ -53,11 +53,29 @@ class UpdateTests(unittest.TestCase):
             self.assertTrue(info['has_update'])
             self.assertEqual(info['latest_version'], '2.3.0')
             self.assertEqual(info['release_url'], 'https://github.com/tamanitomo/tamanitomo/releases/tag/v2.3.0')
+            self.assertEqual(info['release_notes'], 'Release notes for 2.3.0')
 
             # Test same version
             _UPDATE_CACHE['checked_at'] = 0
             info_same = check_github_update('2.3.0', force=True)
             self.assertFalse(info_same['has_update'])
+
+    def test_release_notes_are_bounded_without_losing_normal_patch_notes(self):
+        from unittest.mock import patch, MagicMock
+        from kit.app.updates import check_github_update
+        response = MagicMock()
+        response.read.return_value = json.dumps({
+            'tag_name': 'v9.9.9',
+            'body': 'x' * 13000,
+            'assets': [{'name': 'tamanitomo-release.zip',
+                        'browser_download_url': 'https://github.com/tamanitomo/tamanitomo/releases/download/v9.9.9/tamanitomo-release.zip'}]
+        }).encode()
+        response.__enter__.return_value = response
+        with patch('urllib.request.urlopen', return_value=response):
+            info = check_github_update('2.2.2', force=True)
+        self.assertTrue(info['has_update'])
+        self.assertLessEqual(len(info['release_notes']), 12003)
+        self.assertTrue(info['release_notes'].endswith('…'))
 
     def test_perform_in_app_update_git_flow(self):
         from unittest.mock import patch, MagicMock

@@ -2483,3 +2483,7 @@ body[data-page="chat"] main{padding:0}
 .model-tier{margin:10px 0}.model-tier>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0}.model-tier>summary:before{content:'▸'}.model-tier[open]>summary:before{content:'▾'}.model-tier>summary span{margin-left:auto;font-size:12px;overflow-wrap:anywhere}
 .model-picker [data-model-note]:empty{display:none}
 @media(max-width:600px){.fact-list{grid-template-columns:1fr}.model-tier>summary span{max-width:60%}}
+.update-release-notes{margin-top:16px;padding:16px;border:1px solid var(--edge);border-radius:var(--r-md);background:color-mix(in srgb,var(--panel) 82%,transparent)}
+.update-release-notes h3{margin:0 0 10px;font-size:1rem}
+.update-release-notes-body{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;max-height:min(42vh,28rem);overflow:auto;color:var(--ink)}
+.update-actions{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap}

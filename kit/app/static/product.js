@@ -748,8 +748,7 @@ workspaceHandlers.now=async()=>{
         <p class="dim small" style="margin:2px 0 0 0">Your companions’ memories, journals, and vault remain completely untouched.</p>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
-        <button class="act small" id="banner-apply-update">⚡ Update Now</button>
-        <button class="link-button small" data-settings-panel="updates">View details</button>
+        <button class="act small" data-settings-panel="updates">See what’s new &amp; update</button>
       </div>
     </div>
   </div>`:''}
@@ -852,22 +851,6 @@ workspaceHandlers.now=async()=>{
   </div>`;
 
   wireRoutes($('now'));
-  const bannerUpdate = $('banner-apply-update');
-  if (bannerUpdate) {
-    bannerUpdate.onclick = async () => {
-      if (!confirm(`Update Tamanitomo to v${updateInfo.latest_version}?\n\nYour companions’ memories and vault files will remain untouched.\nThe workspace will restart automatically.`)) return;
-      bannerUpdate.disabled = true;
-      bannerUpdate.textContent = 'Updating...';
-      try {
-        const result = await action('/updates/apply', {});
-        if (result.result?.restarting && window.waitForRestart) window.waitForRestart(result.result.version, updateInfo.instance_id);
-      } catch (err) {
-        bannerUpdate.disabled = false;
-        bannerUpdate.textContent = '⚡ Update Now';
-        notice('Update failed: ' + err.message, true);
-      }
-    };
-  }
   if($('presence-switch'))$('presence-switch').onclick=openCompanionSwitchDialog;
   wireCalendarComponent($('now'), d.missions, d.agent, () => render('now'), 'home-cal');
   if($('read-latest'))$('read-latest').onclick=()=>{if(entry?.id)selectedJournal=entry.id;showTab('journals');};

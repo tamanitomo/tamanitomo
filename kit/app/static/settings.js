@@ -492,9 +492,13 @@ const settingsPanels=[
   ${d.has_update?`<div class="notice-strip" style="border-left-color:var(--accent);margin-top:16px">
     <p><strong>Tamanitomo v${esc(d.latest_version)} is available.</strong></p>
     <p class="dim small" style="margin-top:4px">This will update the Tamanitomo application. Your companion’s memories, emotions, journals, and vault will remain completely untouched.</p>
-    <div style="display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap">
+    <section class="update-release-notes" aria-labelledby="update-release-notes-title">
+      <h3 id="update-release-notes-title">What’s new in v${esc(d.latest_version)}</h3>
+      <div class="update-release-notes-body">${esc(d.release_notes||'No patch notes were provided for this release.')}</div>
+    </section>
+    <div class="update-actions">
       <button class="act" id="btn-inapp-update">⚡ Update to v${esc(d.latest_version)} Now</button>
-      ${d.release_url?`<a class="link-button" href="${esc(d.release_url)}" target="_blank" rel="noopener">Release notes →</a>`:''}
+      ${d.release_url?`<a class="link-button" href="${esc(d.release_url)}" target="_blank" rel="noopener">Open release page →</a>`:''}
     </div>
   </div>`:`<div class="notice-strip" style="margin-top:16px">
     <p class="dim" style="margin:0">${d.error?esc(d.error):d.latest_version?'You have the latest stable release.':'No update check is available yet.'} Installed: v${esc(d.version)}.</p>
@@ -509,7 +513,7 @@ const settingsPanels=[
   const updateBtn = host.querySelector('#btn-inapp-update');
   if (updateBtn) {
     updateBtn.onclick = async () => {
-      if (!confirm(`Update Tamanitomo to v${d.latest_version}?\n\nYour companions’ memories and vault files will remain untouched.\nThe workspace will restart automatically.`)) return;
+      if (!confirm(`Install Tamanitomo v${d.latest_version} now?\n\nYour companions’ memories and vault files will remain untouched.\nThe workspace will restart automatically.`)) return;
       updateBtn.disabled = true;
       updateBtn.textContent = 'Updating...';
       try {

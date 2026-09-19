@@ -84,9 +84,12 @@ def check_github_update(current_version: str, force: bool = False) -> dict:
         expected = f'https://github.com/tamanitomo/tamanitomo/releases/download/{tag}/{ASSET_NAME}'
         if url != expected:
             raise ValueError('The release asset is not on the official download URL.')
+        notes = (release.get('body') or '').strip()
+        if len(notes) > 12000:
+            notes = notes[:12000].rstrip() + '\n\n…'
         result.update(has_update=_version(latest) > _version(current_version),
                       latest_version=latest, release_url=release.get('html_url'),
-                      release_notes=(release.get('body') or '')[:300], download_url=url,
+                      release_notes=notes, download_url=url,
                       digest=asset.get('digest'), tag=tag, checked=True)
     except urllib.error.HTTPError as exc:
         result['error'] = ('No published release is available yet.' if exc.code == 404
@@ -238,4 +241,3 @@ def register(app):
             chunks.append(chunk)
         try:return stage(b''.join(chunks))
         except (zipfile.BadZipFile,KeyError,UnicodeError,json.JSONDecodeError):raise ValueError('Not a Tamanitomo release package')
-

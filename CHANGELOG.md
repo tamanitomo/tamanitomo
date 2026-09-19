@@ -1,3 +1,9 @@
+## 2.2.3 — Patch notes before updating (2026-09-19)
+
+- Show the latest stable release notes directly in the Updates panel, with the Update button beneath them.
+- Send the home-screen update notice to that review screen instead of installing immediately.
+- Preserve line breaks, safely escape release text, and keep long notes usable on mobile in a bounded scrolling panel.
+
 ## 2.2.2 — Official release updates (2026-09-19)
 
 - Publish a source-only `tamanitomo-release.zip` with an explicit file manifest and SHA-256 checksums for every stable release.
