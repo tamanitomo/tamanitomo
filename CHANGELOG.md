@@ -1,3 +1,8 @@
+## 2.3.4 — Reliable pulse-to-image handoff (2026-09-19)
+
+- Teach companion pulses the smallest valid recovery when clothing-care timing rules conflict with a full bedtime transition, preventing stale state from needlessly starving image timeline captures.
+- Flatten mood and current wants into clean emotional-tone text instead of leaking Python list notation into hosted image prompts.
+
 ## 2.3.3 — Simpler companion settings (2026-09-19)
 
 - Move Daily rhythm into the Companion settings group and remove the now-empty Schedule & usage menu.

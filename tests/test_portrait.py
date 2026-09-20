@@ -109,6 +109,15 @@ class PromptTests(unittest.TestCase):
         self.assertLess(prompt.index('making coffee'),prompt.index('seen from the doorway'))
         self.assertLess(prompt.index('seen from the doorway'),prompt.index('anime'))
 
+    def test_structured_feeling_flattens_wants_without_python_list_syntax(self):
+        presence.update_wardrobe(self.c,[{'id':'sweater','description':'grey wool sweater','use':'day'}])
+        presence.update(self.c,{'previous_id':None,'outfit':['sweater'],'location':'the kitchen',
+            'activity':'making coffee','mood':'settled','wants':['a warm drink','a quiet morning'],
+            'care':[],'transition':'','text':'Coffee.'},self.now)
+        feeling=portrait.prompt_parts(self.c)['feeling']
+        self.assertEqual(feeling,'settled, a warm drink, a quiet morning')
+        self.assertNotIn('[',feeling)
+
 
 if __name__=='__main__':unittest.main()
 

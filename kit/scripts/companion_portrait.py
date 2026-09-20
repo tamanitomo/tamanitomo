@@ -126,6 +126,17 @@ def lighting_guess(c,location='',now=None):
     return daylight
 
 
+def feeling_text(state):
+    """Flatten mood and immediate wants without leaking Python list syntax."""
+    values=[]
+    mood=str(state.get('mood','')).strip()
+    if mood:values.append(mood)
+    wants=state.get('wants',[])
+    if isinstance(wants,list):values.extend(str(value).strip() for value in wants if str(value).strip())
+    elif str(wants).strip():values.append(str(wants).strip())
+    return ', '.join(values)
+
+
 def prompt_parts(c,record=None):
     """The recorded moment, split into the boxes a workflow actually has.
 
@@ -141,7 +152,7 @@ def prompt_parts(c,record=None):
     visual=state.get('visual') or {}
     location=state.get('location','')
     where=', '.join(p for p in (state.get('activity',''),location) if p)
-    feeling=', '.join(str(v).strip() for v in (state.get('mood',''),state.get('wants','')) if str(v).strip())
+    feeling=feeling_text(state)
     return {'identity':identity_block(c),'scene':where,'wardrobe':outfit,'feeling':feeling,
             'lighting':visual.get('lighting') or lighting_guess(c,location),
             'camera':visual.get('framing') or ''}
@@ -155,7 +166,7 @@ def recorded_overrides(c,record=None):
     outfit=', '.join(item['description'] for item in record['state'].get('outfit',[]))
     visual=record['state'].get('visual') or {}
     state=record.get('state') or {}
-    feeling=', '.join(str(v).strip() for v in (state.get('mood',''),state.get('wants','')) if str(v).strip())
+    feeling=feeling_text(state)
     overrides={'scene':scene,'wardrobe':outfit,'feeling':feeling}
     if visual.get('framing'):overrides['camera']=visual['framing']
     if visual.get('lighting'):overrides['lighting']=visual['lighting']

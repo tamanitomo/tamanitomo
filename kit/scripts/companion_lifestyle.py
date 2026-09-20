@@ -47,7 +47,11 @@ On an available shopping opportunity, optionally choose up to three new pieces f
 season or a wardrobe gap: supply wardrobe_additions [{id,description,use,category,condition:"clean"}]
 and a shop action. It is a fictional acquisition, no purchases, web checkout or messages.
 Never invent completed care to satisfy validation. If not ready, keep current clothes and do the
-missing routine step. Feelings and enjoyment are yours to author, not a compulsory cheerful mood.'''
+missing routine step. When a piece reaches its 24-hour limit and there is not enough elapsed time
+for a full shower or laundry routine, take the smallest honest transition: brush teeth if needed,
+change into clean non-sleep clothing, and leave shower and laundry for later. Removing a washable
+piece marks it dirty automatically; do not include laundry_start until it is off the body.
+Feelings and enjoyment are yours to author, not a compulsory cheerful mood.'''
 
 
 def policy(c):
@@ -160,7 +164,9 @@ def evolve(c,data,outfit,previous,closet,now):
         result['clothes'][i]='wearing'
         result['wearing_since'].setdefault(i,now.isoformat())
         if known.get(i,{}).get('category')!='footwear' and now-day.timestamp(result['wearing_since'][i])>=dt.timedelta(hours=24):
-            raise ValueError(f'CARE: {i} has been worn for 24 hours; change into clean clothes and put it in the hamper')
+            raise ValueError(f'CARE: {i} has been worn for 24 hours. Remove it now. If elapsed time is tight, '
+                             'record only brush_teeth (2 minutes) and change into clean non-sleep clothing; '
+                             'the removed piece becomes dirty automatically, and shower/laundry can wait.')
     return result
 
 

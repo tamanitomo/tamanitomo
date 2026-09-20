@@ -1,4 +1,6 @@
-Tamanitomo 2.3.3 moves Daily rhythm into the Companion settings menu and removes the now-empty Schedule & usage menu.
+Tamanitomo 2.3.4 makes the pulse-to-image handoff more resilient. When clothing-care timing prevents a full bedtime transition, the companion is now told how to make the smallest honest valid update instead of leaving its confirmed scene stale and starving the image timeline. Hosted image prompts also receive clean emotional-tone text rather than Python list notation.
+
+It also moves Daily rhythm into the Companion settings menu and removes the now-empty Schedule & usage menu.
 
 It includes the 2.3.2 updater fixes: both the staging and rollback installers can safely adopt an installed hot-fix that exactly matches the trusted release. Update progress remains visible through its application-wide operation, and the update button remains readable on narrow layouts.
 
@@ -10,7 +12,7 @@ Download **tamanitomo-release.zip** below, extract it into its own application f
 
 ### Update
 
-Open **Settings → App & access → Updates** in your desktop or mobile browser. When the release is available, review these notes and choose **Update to v2.3.3 now**. The host downloads and installs the application and restarts the workspace. Your Hermes profiles, credentials, memories, journals and vault remain in their existing external locations.
+Open **Settings → App & access → Updates** in your desktop or mobile browser. When the release is available, review these notes and choose **Update to v2.3.4 now**. The host downloads and installs the application and restarts the workspace. Your Hermes profiles, credentials, memories, journals and vault remain in their existing external locations.
 
 ### Companion continuity
 

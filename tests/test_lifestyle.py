@@ -94,7 +94,9 @@ class LifestyleTests(unittest.TestCase):
         self.write(17*60+15,outfit=['fresh'],care_actions=self.actions('brush_teeth'))
     def test_unchanged_clothes_cannot_continue_forever(self):
         self.write(15)
-        with self.assertRaisesRegex(ValueError,'24 hours'):self.write(24*60+30)
+        with self.assertRaisesRegex(ValueError,'24 hours') as error:self.write(24*60+30)
+        self.assertIn('clean non-sleep clothing',str(error.exception))
+        self.assertIn('shower/laundry can wait',str(error.exception))
     def test_shopping_is_atomic_bounded_and_profile_local(self):
         item=dict(id='new',description='plum sports bra',use='exercise',category='active',condition='clean')
         bad=self.data(outfit=['new'],care_actions=self.actions('shop'),wardrobe_additions=[item])
