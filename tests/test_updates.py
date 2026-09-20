@@ -41,6 +41,9 @@ class UpdateTests(unittest.TestCase):
             (root/'README.md').write_bytes(b'fixed')
             result=stage(raw,root)
             self.assertTrue(result['staged'])
+            apply_pending(root)
+            self.assertEqual((root/'VERSION').read_bytes(),b'2')
+            self.assertEqual((root/'README.md').read_bytes(),b'fixed')
     def test_check_github_update_and_caching(self):
         from unittest.mock import patch, MagicMock
         from kit.app.updates import check_github_update, _UPDATE_CACHE

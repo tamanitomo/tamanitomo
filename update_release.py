@@ -33,7 +33,13 @@ def _apply_pending(root):
         p=folder/name
         if p.is_symlink() or not p.is_file() or hashlib.sha256(p.read_bytes()).hexdigest()!=digest:raise ValueError('Staged update changed; reinstall a trusted package')
     for name,digest in old.items():
-        if not (root/name).is_file() or hashlib.sha256((root/name).read_bytes()).hexdigest()!=digest:raise ValueError('Installed code changed after staging; update stopped')
+        installed=root/name
+        installed_digest=(hashlib.sha256(installed.read_bytes()).hexdigest()
+                          if installed.is_file() else None)
+        # A bootstrap hot-fix may already equal the verified staged file. It is
+        # safe to adopt; anything else is still an unrelated local change.
+        if installed_digest!=digest and installed_digest!=hashes.get(name):
+            raise ValueError('Installed code changed after staging; update stopped')
     backup=root/'.update-backups'/uuid.uuid4().hex;backup.mkdir(parents=True)
     names=set(old)|set(hashes)|{'SHA256SUMS.json'};written=[]
     try:

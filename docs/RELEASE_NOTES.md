@@ -1,4 +1,4 @@
-Tamanitomo 2.3.1 fixes the in-app update flow reported immediately after the continuity release. Update progress is now followed through its application-wide operation, trusted release files can safely adopt an identical installed hot-fix, and the update button remains readable on narrow layouts.
+Tamanitomo 2.3.2 completes the in-app update fix reported immediately after the continuity release. Both the staging and rollback installers can safely adopt an installed hot-fix that exactly matches the trusted release. Update progress remains visible through its application-wide operation, and the update button remains readable on narrow layouts.
 
 It also includes everything in 2.3.0: explicit model control for companion continuity and structured cross-provider image prompts.
 
@@ -8,7 +8,7 @@ Download **tamanitomo-release.zip** below, extract it into its own application f
 
 ### Update
 
-Open **Settings → App & access → Updates** in your desktop or mobile browser. When the release is available, review these notes and choose **Update to v2.3.1 now**. The host downloads and installs the application and restarts the workspace. Your Hermes profiles, credentials, memories, journals and vault remain in their existing external locations.
+Open **Settings → App & access → Updates** in your desktop or mobile browser. When the release is available, review these notes and choose **Update to v2.3.2 now**. The host downloads and installs the application and restarts the workspace. Your Hermes profiles, credentials, memories, journals and vault remain in their existing external locations.
 
 ### Companion continuity
 

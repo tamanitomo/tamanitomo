@@ -1,3 +1,7 @@
+## 2.3.2 — Hot-fix update completion (2026-09-19)
+
+- Let the rollback installer complete when an installed bootstrap file already exactly matches the verified staged release, while continuing to reject unrelated local edits.
+
 ## 2.3.1 — Reliable in-app updates (2026-09-19)
 
 - Keep application-wide update operations visible to the browser while preserving installation and profile isolation.
