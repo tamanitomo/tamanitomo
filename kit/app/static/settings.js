@@ -199,7 +199,7 @@ const settingsPanels=[
   });
  }},
 
-{group:'Schedule & usage',id:'rhythm',title:'Daily rhythm',
+{group:'Companion',id:'rhythm',title:'Daily rhythm',
  blurb:'Their own hours, and what carries between companions',
  keywords:'autonomy windows routine reflection continuity shared memory',
  async render(host){
@@ -1098,10 +1098,10 @@ window.openSettings=openSettings;
 window.aimSettings=aimSettings;
 
 workspaceHandlers.settings=async()=>{
-  const order=['Companion','Models & providers','Images & voice','Schedule & usage','App & access'];
+  const order=['Companion','Models & providers','Images & voice','App & access'];
   const groups=order.map(name=>[name,settingsPanels.filter(p=>p.group===name)]);
   groups.find(([name])=>name==='Images & voice')[1].sort((a,b)=>['connect-images','photos','connect-voice'].indexOf(a.id)-['connect-images','photos','connect-voice'].indexOf(b.id));
-  const descriptions=['Contact, awareness, relationship','Models, accounts, fallbacks','Providers, workflows, photos, voice','Daily rhythm, jobs, usage','Appearance, access, installation'];
+  const descriptions=['Contact, rhythm, awareness, relationship','Models, accounts, fallbacks','Providers, workflows, photos, voice','Appearance, access, installation'];
   const requested=settingsPanels.find(p=>p.id===settingsPanel);
   returnHermesCards();
   const keepPool=hermesPool;

@@ -3,7 +3,9 @@ const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/st
 const path=require('node:path');
 const root=path.join(__dirname,'../kit/app/static');
 const read=name=>fs.readFileSync(path.join(root,name),'utf8');
-const index=read('index.html'),workspace=read('workspace.js');
+const index=read('index.html'),workspace=read('workspace.js'),settings=read('settings.js');
+assert.match(settings,/\{group:'Companion',id:'rhythm',title:'Daily rhythm'/,'daily rhythm belongs to Companion settings');
+assert.doesNotMatch(settings,/Schedule & usage/,'empty Schedule & usage group is removed');
 const stored=new Map(),elements={operation:{innerHTML:'',hidden:true},'dismiss-notice':{}};
 const events={},windowEvents={};
 let confirmResult=false,rendered=0,posted=0;

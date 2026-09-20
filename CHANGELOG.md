@@ -1,3 +1,7 @@
+## 2.3.3 — Simpler companion settings (2026-09-19)
+
+- Move Daily rhythm into the Companion settings group and remove the now-empty Schedule & usage menu.
+
 ## 2.3.2 — Hot-fix update completion (2026-09-19)
 
 - Let the rollback installer complete when an installed bootstrap file already exactly matches the verified staged release, while continuing to reject unrelated local edits.
