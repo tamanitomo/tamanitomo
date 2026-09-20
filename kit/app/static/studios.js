@@ -6,7 +6,7 @@ const presetSuffix=()=>Array.from(crypto.getRandomValues(new Uint8Array(8)),v=>v
 // Prompt boxes a workflow keeps. The rest describe one moment, are filled per
 // render, and are deliberately not written back when a workflow is saved.
 const SAVED_PARTS=['quality','identity'];
-const TRANSIENT_PARTS=['scene','wardrobe','lighting','camera'];
+const TRANSIENT_PARTS=['scene','wardrobe','feeling','lighting','camera'];
 const formLabel=key=>key.replaceAll('_',' ').replace(/^./,s=>s.toUpperCase());
 /* A lane reads faster with a face on it. Unknown lanes fall back to a star. */
 const LANE_ICON={portrait:'\u{1F5BC}\uFE0F',anime:'\u{1F338}',realistic:'\u{1F4F7}',landscape:'\u{1F3D4}\uFE0F',other:'\u2728'};
@@ -1053,7 +1053,7 @@ workspaceHandlers['image-studio']=async()=>{
   for(const k of ['width','height'])if($('preset-'+k))p[k]=Number($('preset-'+k).value)||p[k];
   for(const k of ['steps','cfg','seed','denoise'])if($('preset-'+k))p[k]=Number($('preset-'+k).value);
   if(p.provider==='comfyui'){try{p.workflow=JSON.parse($('preset-workflow').value);p.mappings=JSON.parse($('preset-mappings').value);}catch(e){}}
-  else if(p.provider==='openai'){p.model=$('preset-model').value;p.api_key_env=$('preset-key-env').value;}
+  else if(p.provider==='openai'||p.provider==='mistral'){if($('preset-model'))p.model=$('preset-model').value;if($('preset-key-env'))p.api_key_env=$('preset-key-env').value;}
  }
 
  function updateActiveLaneBadge(){
@@ -1074,7 +1074,9 @@ workspaceHandlers['image-studio']=async()=>{
   const allRows=[['', 'Choose a workflow'], ...rows];
   $('image-preset-select').innerHTML=options(
     [...settings.presets.map((p,i)=>[String(i),p.name+(p.incomplete?' \u00b7 draft':'')]),
-     ['__new__','\u002b Create a new workflow\u2026']],String(presetIndex));
+     ['__new_mistral__','\u002b Connect Mistral AI (FLUX)\u2026'],
+     ['__new_api__','\u002b Connect OpenAI-compatible API\u2026'],
+     ['__new__','\u002b Create a new ComfyUI workflow\u2026']],String(presetIndex));
   $('image-default-preset').innerHTML=options(allRows,defaultId);
   $('image-default-preset').onchange=e=>{defaultId=e.target.value;menus();updateActiveLaneBadge();};
 
@@ -1137,7 +1139,7 @@ workspaceHandlers['image-studio']=async()=>{
      one moment and is filled per render, so saving does not keep it. The lock
      says which is which without a paragraph explaining it. */
   const PART_HINT={quality:'Rendering quality, not subject',identity:'Leave empty to follow '+chatName(),
-    scene:'Filled per render',wardrobe:'Filled per render',
+    scene:'Filled per render',wardrobe:'Filled per render',feeling:'Mood and emotional intention for this moment',
     lighting:'Filled per render',camera:'Filled per render'};
 
   $('image-preset-editor').innerHTML=`
@@ -1150,8 +1152,10 @@ workspaceHandlers['image-studio']=async()=>{
         </select>
         <small class="dim">Assign it to a lane once you have tested it.</small>
       </label>
-      ${p.provider!=='hermes'?`<p class="dim small endpoint-note">Renders on <code>${esc(p.endpoint||'the address in Preferences')}</code></p>`:''}
+      ${p.provider!=='hermes'&&p.provider!=='mistral'?`<p class="dim small endpoint-note">Renders on <code>${esc(p.endpoint||'the address in Preferences')}</code></p>`:''}
       ${p.provider==='hermes'?`<p class="dim">Hermes provider: ${esc(p.hermes_provider||'Follow current Hermes default')} · ${esc(p.model||'Provider default')}${p.available===false?' · Reconnect this provider in Hermes settings':''}</p>`:''}
+      ${p.provider==='mistral'?`<p class="dim">Mistral AI (FLUX 1.1 Pro Ultra via Conversations API)</p>
+        <label>API-key environment variable<input id="preset-key-env" value="${esc(p.api_key_env||'MISTRAL_API_KEY')}"></label>`:''}
       ${p.provider==='openai'?`<label>Model<input id="preset-model" value="${esc(p.model||'')}" placeholder="Model supported by this API"></label>
         <label>API-key environment variable<input id="preset-key-env" value="${esc(p.api_key_env||'OPENAI_API_KEY')}"></label>`:''}
     </div>
@@ -1241,6 +1245,9 @@ workspaceHandlers['image-studio']=async()=>{
         <button type="button" class="chip-button" id="insert-companion"
           title="Fill these boxes from ${esc(chatName())}\u2019s saved image identity and what she is doing now"
           >\u21e5 Fill from ${esc(chatName())}</button></div>
+      <p class="dim small">${p.provider==='comfyui'
+        ? 'Each named part is written to its own mapped ComfyUI node input when that mapping exists. The combined prompt is used only by workflows that map a single prompt input.'
+        : 'Hosted providers receive these as labelled constraints, keeping identity, wardrobe, scene, feeling, lighting, and camera distinct.'}</p>
       <div class="tag-fields">
         ${d.parts.map(k=>tagFieldHTML(k,SAVED_PARTS.includes(k)?'\u{1F512} '+formLabel(k):formLabel(k),
           p.parts?.[k]||'',PART_HINT[k]||'',false,
@@ -1368,7 +1375,7 @@ workspaceHandlers['image-studio']=async()=>{
     try{
       const parts=await api('/images/companion-parts');
       const filled=[];
-      for(const key of ['identity','scene','wardrobe','lighting','camera']){
+      for(const key of ['identity','wardrobe','scene','feeling','lighting','camera']){
         const value=(parts[key]||'').trim();
         const field=root.querySelector(`[data-tag-field="${key}"]`);
         if(!value||!field)continue;
@@ -1532,23 +1539,61 @@ workspaceHandlers['image-studio']=async()=>{
   }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
   finally{button.disabled=false;}
  };
- $('image-preset-select').onchange=async e=>{
-  readPreset();
-  if(e.target.value==='__new__'){
-   const blank=await api('/images/modular-template');
-   blank.id='comfy-'+presetSuffix();
-   blank.name='New workflow';
-   blank.category='';
-   blank.incomplete=true;
-   try{blank.endpoint=(await api('/workflows')).settings?.endpoint||blank.endpoint;}catch(error){}
-   settings.presets.push(blank);
-   presetIndex=settings.presets.length-1;
-   setWorkflowMode('edit');await drawPreset();
-   notice('New workflow started. Choose a model, then test it before saving.');
-   return;
-  }
-  presetIndex=Number(e.target.value);setWorkflowMode('edit');drawPreset();
- };
+  $('image-preset-select').onchange=async e=>{
+   readPreset();
+   if(e.target.value==='__new_mistral__'){
+    settings.presets.push({
+      id:'mistral-'+presetSuffix(),
+      name:'Mistral AI (FLUX)',
+      provider:'mistral',
+      category:'portrait',
+      endpoint:'https://api.mistral.ai/v1',
+      api_key_env:'MISTRAL_API_KEY',
+      model:'flux-1.1-pro-ultra',
+      width:1024,
+      height:1024,
+      parts:{},
+      negative:''
+    });
+    presetIndex=settings.presets.length-1;
+    setWorkflowMode('edit');await drawPreset();menus();
+    notice('Mistral AI workflow added. Test it before saving.');
+    return;
+   }
+   if(e.target.value==='__new_api__'){
+    settings.presets.push({
+      id:'api-'+presetSuffix(),
+      name:'Image API',
+      provider:'openai',
+      category:'portrait',
+      endpoint:'https://api.openai.com/v1',
+      api_key_env:'OPENAI_API_KEY',
+      model:'',
+      width:1024,
+      height:1024,
+      parts:{},
+      negative:''
+    });
+    presetIndex=settings.presets.length-1;
+    setWorkflowMode('edit');await drawPreset();menus();
+    notice('Image API workflow added.');
+    return;
+   }
+   if(e.target.value==='__new__'){
+    const blank=await api('/images/modular-template');
+    blank.id='comfy-'+presetSuffix();
+    blank.name='New workflow';
+    blank.category='';
+    blank.incomplete=true;
+    try{blank.endpoint=(await api('/workflows')).settings?.endpoint||blank.endpoint;}catch(error){}
+    settings.presets.push(blank);
+    presetIndex=settings.presets.length-1;
+    setWorkflowMode('edit');await drawPreset();menus();
+    notice('New workflow started. Choose a model, then test it before saving.');
+    return;
+   }
+   presetIndex=Number(e.target.value);setWorkflowMode('edit');drawPreset();
+  };
  /* Create, edit or import: one of three, and only one on screen. */
  /* Edit what exists, or make a new one; importing is a way of making one. */
  function setWorkflowMode(mode){

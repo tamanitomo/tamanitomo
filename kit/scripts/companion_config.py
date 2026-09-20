@@ -58,7 +58,7 @@ AGENT_TYPES={'companion':'A full life: a present, moods, a relationship, and per
 JOB_TIERS={'loops':'the 15- and 30-minute loops that keep the present moving',
            'reflection':'the daily, weekly and monthly jobs that decide what lasts',
            'chat':'conversation itself, which Hermes owns'}
-REASONING_EFFORTS=('none','low','medium','high')
+REASONING_EFFORTS=('none','minimal','low','medium','high','xhigh','max','ultra')
 
 # What an unprompted message may contain, and whether it may. "ask" is the
 # middle setting that most people actually want: she may offer a photo, she may

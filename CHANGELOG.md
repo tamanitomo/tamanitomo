@@ -1,3 +1,13 @@
+## 2.3.0 — Companion continuity and structured image routing (2026-09-19)
+
+- Add Companion Continuity Settings under Models & providers with live provider/model dropdowns, the full Hermes reasoning-effort range, per-job guidance, bulk routing, failure details, and editable schedules/prompts.
+- Migrate recognizable legacy Tamanitomo workers that bypassed Hermes through provider-pinned scripts back to native Hermes agent jobs without changing job IDs, schedules, enabled state, or run history.
+- Keep script-only maintenance explicitly model-free while making every model-backed Tamanitomo job configurable through the UI.
+- Give hosted image providers a labelled identity, wardrobe, scene, feeling, lighting, camera, and quality brief. Preserve ComfyUI's mapped-node contract: separately mapped parts remain separate, while single-prompt workflows retain their combined diffusion prompt.
+- Bundle direct Mistral model and FLUX image-provider plugins, add Mistral model discovery, image-studio setup, and Voxtral voice model selection.
+- Add photo multi-select album/delete actions and allow an existing vault image to become the companion's reference portrait.
+- Preserve the current provider/model settings when repairing jobs and expose the expanded Hermes reasoning levels from `none` through `ultra`.
+
 ## 2.2.3 — Patch notes before updating (2026-09-19)
 
 - Show the latest stable release notes directly in the Updates panel, with the Update button beneath them.

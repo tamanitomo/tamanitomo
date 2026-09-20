@@ -209,7 +209,7 @@ class PromptPartsTests(unittest.TestCase):
     def test_no_recorded_moment_still_returns_every_box(self):
         with patch.object(portrait, 'identity_block', return_value=TAGS):
             parts = portrait.prompt_parts(self.c, {})
-        self.assertEqual(set(parts), {'identity', 'scene', 'wardrobe', 'lighting', 'camera'})
+        self.assertEqual(set(parts), {'identity', 'scene', 'wardrobe', 'feeling', 'lighting', 'camera'})
         self.assertEqual(parts['identity'], TAGS)
         self.assertEqual(parts['scene'], '')
 

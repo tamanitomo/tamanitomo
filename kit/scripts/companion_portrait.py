@@ -141,7 +141,8 @@ def prompt_parts(c,record=None):
     visual=state.get('visual') or {}
     location=state.get('location','')
     where=', '.join(p for p in (state.get('activity',''),location) if p)
-    return {'identity':identity_block(c),'scene':where,'wardrobe':outfit,
+    feeling=', '.join(str(v).strip() for v in (state.get('mood',''),state.get('wants','')) if str(v).strip())
+    return {'identity':identity_block(c),'scene':where,'wardrobe':outfit,'feeling':feeling,
             'lighting':visual.get('lighting') or lighting_guess(c,location),
             'camera':visual.get('framing') or ''}
 
@@ -153,7 +154,9 @@ def recorded_overrides(c,record=None):
     # Replace the preset's old outfit with the actual one instead of blanking it.
     outfit=', '.join(item['description'] for item in record['state'].get('outfit',[]))
     visual=record['state'].get('visual') or {}
-    overrides={'scene':scene,'wardrobe':outfit}
+    state=record.get('state') or {}
+    feeling=', '.join(str(v).strip() for v in (state.get('mood',''),state.get('wants','')) if str(v).strip())
+    overrides={'scene':scene,'wardrobe':outfit,'feeling':feeling}
     if visual.get('framing'):overrides['camera']=visual['framing']
     if visual.get('lighting'):overrides['lighting']=visual['lighting']
     return overrides

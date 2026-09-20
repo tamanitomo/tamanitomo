@@ -257,6 +257,55 @@ def register(app,load):
         result=timeline.add_to_album(c,str(source),album)
         review.write_metadata(Path(result['file']),review.metadata(source))
         return {'saved':True,'album':result['album']}
+    @app.post('/api/content/batch-album')
+    def batch_album(payload:dict):
+        import companion_timeline as timeline
+        c=load();paths=payload.get('paths',[])
+        album=payload.get('album','Favorites')
+        if not isinstance(paths,list) or not paths:raise ValueError('Choose at least one image')
+        if len(paths)>200:raise ValueError('Too many items in one batch')
+        if not isinstance(album,str) or not timeline.ALBUM_NAME.fullmatch(album):raise ValueError('Use letters, numbers, spaces, hyphens, or underscores for the album name')
+        folder=c.data/'albums'/album
+        if (c.data/'albums').is_symlink() or folder.is_symlink() or not folder.resolve().is_relative_to(c.data.resolve()):raise ValueError('Album directories must stay inside the companion vault')
+        count=0
+        for rel in paths:
+            source=resolve(c,rel)
+            if KINDS[source.suffix.lower()]!='image':continue
+            result=timeline.add_to_album(c,str(source),album)
+            review.write_metadata(Path(result['file']),review.metadata(source))
+            count+=1
+        return {'saved':True,'album':album,'count':count}
+    @app.post('/api/content/batch-delete')
+    def batch_delete(payload:dict):
+        c=load();items=payload.get('items',[])
+        if not isinstance(items,list) or not items:raise ValueError('Choose at least one file to delete')
+        if len(items)>200:raise ValueError('Too many items in one batch')
+        # Validate every item before deleting anything.
+        resolved=[]
+        for entry in items:
+            relative=entry.get('path','');p=resolve(c,relative)
+            if not deletable(relative):raise ValueError(f'Protected file cannot be deleted: {relative}')
+            stat=p.stat()
+            if entry.get('etag')!=str(stat.st_mtime_ns)+':'+str(stat.st_size):raise ValueError(f'A file changed since you selected it. Refresh before deleting.')
+            resolved.append((relative,p))
+        count=0
+        for relative,p in resolved:
+            p.unlink()
+            review.sidecar(p).unlink(missing_ok=True)
+            if relative.startswith('creations/image-studio/'):
+                p.with_suffix('.json').unlink(missing_ok=True)
+            if relative.startswith('image-timeline/images/'):
+                import companion_timeline as timeline
+                record=c.data/'image-timeline/captures'/(p.stem+'.json')
+                if not record.is_symlink() and record.is_file():
+                    row=review.read_json(record);row.update(status='deleted',filename=None)
+                    from companion_platform import atomic_write
+                    atomic_write(record,json.dumps(row,indent=2))
+            count+=1
+        if any(r.startswith('image-timeline/images/') for r,_ in resolved):
+            import companion_timeline as timeline
+            timeline.render_gallery(c)
+        return {'deleted':True,'count':count}
     @app.get('/api/content/text')
     def text_content(path:str):
         p=resolve(load(),path)

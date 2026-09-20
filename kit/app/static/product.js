@@ -1,5 +1,5 @@
 function mediaPrivacy(item){return item.blur?'class="concealed-media" title="Sensitive or unreviewed image · open details to reveal"':'';}
-const paths={now:'M3 11 12 3l9 8v10h-6v-7H9v7H3Z',chat:'M4 4h16v12H9l-5 4Z',timeline:'M6 3v18M10 5h10M10 12h7M10 19h10',photos:'M3 4h18v16H3ZM3 16l5-5 5 5 3-3 5 5M16 8h.01',journals:'M5 3h14v18H5ZM8 7h8M8 11h8M8 15h5',creations:'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z',relationship:'M12 20S2 14 2 8a5 5 0 0 1 10-1 5 5 0 0 1 10 1c0 6-10 12-10 12Z',loops:'M4 5h16v16H4ZM8 2v6M16 2v6M4 11h16',knows:'M12 3v18M12 6C7 1 2 5 3 10c-3 5 2 10 9 8M12 6c5-5 10-1 9 4 3 5-2 10-9 8',vault:'M3 6h7l2 3h9v12H3Z',identity:'M8 7a4 4 0 1 0 8 0 4 4 0 1 0-8 0M4 21v-3c0-6 16-6 16 0v3',settings:'M4 7h16M4 17h16M8 4v6M16 14v6','local-models':'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Zm5 3h6v6H9V9Zm-5 2h2m-2 4h2m14-4h2m-2 4h2m-9-11v2m4-2v2m-4 14v2m4-2v2',environment:'M12 2v4M12 18v4M2 12h4M18 12h4M5 5l3 3M16 16l3 3M19 5l-3 3M8 16l-3 3M7 12a5 5 0 1 0 10 0 5 5 0 1 0-10 0',health:'M2 12h5l3-8 4 16 3-8h5',roster:'M8 8a3 3 0 1 0 6 0 3 3 0 1 0-6 0M3 21v-3c0-5 14-5 14 0v3M17 5c5 0 5 6 0 6M20 15c2 1 2 3 2 6',search:'M10 3a7 7 0 1 0 0 14 7 7 0 1 0 0-14M16 16l5 5',download:'M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',album:'M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16l-8-4-8 4V5Z',shield_alert:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Zm0-14v4m0 4h.01',shield_check:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Zm-2-10 2 2 4-4',info:'M12 16v-4m0-4h.01M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z',trash:'M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',close:'M18 6 6 18M6 6l12 12',chevron_left:'M15 18l-6-6 6-6',chevron_right:'M9 18l6-6-6-6',arrow_left:'M19 12H5m7 7-7-7 7-7',arrow_right:'M5 12h14m-7-7 7 7-7 7',voice:'M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Zm5 9a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z','image-studio':'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z',more:'M5 12h.01M12 12h.01M19 12h.01',pin:'M12 17v5M9 3h6l-1 7 3 3v2H7v-2l3-3-1-7Z'};
+const paths={now:'M3 11 12 3l9 8v10h-6v-7H9v7H3Z',chat:'M4 4h16v12H9l-5 4Z',timeline:'M6 3v18M10 5h10M10 12h7M10 19h10',photos:'M3 4h18v16H3ZM3 16l5-5 5 5 3-3 5 5M16 8h.01',journals:'M5 3h14v18H5ZM8 7h8M8 11h8M8 15h5',creations:'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z',relationship:'M12 20S2 14 2 8a5 5 0 0 1 10-1 5 5 0 0 1 10 1c0 6-10 12-10 12Z',loops:'M4 5h16v16H4ZM8 2v6M16 2v6M4 11h16',knows:'M12 3v18M12 6C7 1 2 5 3 10c-3 5 2 10 9 8M12 6c5-5 10-1 9 4 3 5-2 10-9 8',vault:'M3 6h7l2 3h9v12H3Z',identity:'M8 7a4 4 0 1 0 8 0 4 4 0 1 0-8 0M4 21v-3c0-6 16-6 16 0v3',settings:'M4 7h16M4 17h16M8 4v6M16 14v6','local-models':'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Zm5 3h6v6H9V9Zm-5 2h2m-2 4h2m14-4h2m-2 4h2m-9-11v2m4-2v2m-4 14v2m4-2v2',environment:'M12 2v4M12 18v4M2 12h4M18 12h4M5 5l3 3M16 16l3 3M19 5l-3 3M8 16l-3 3M7 12a5 5 0 1 0 10 0 5 5 0 1 0-10 0',health:'M2 12h5l3-8 4 16 3-8h5',roster:'M8 8a3 3 0 1 0 6 0 3 3 0 1 0-6 0M3 21v-3c0-5 14-5 14 0v3M17 5c5 0 5 6 0 6M20 15c2 1 2 3 2 6',search:'M10 3a7 7 0 1 0 0 14 7 7 0 1 0 0-14M16 16l5 5',download:'M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',album:'M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16l-8-4-8 4V5Z',shield_alert:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Zm0-14v4m0 4h.01',shield_check:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Zm-2-10 2 2 4-4',info:'M12 16v-4m0-4h.01M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z',trash:'M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',close:'M18 6 6 18M6 6l12 12',chevron_left:'M15 18l-6-6 6-6',chevron_right:'M9 18l6-6-6-6',arrow_left:'M19 12H5m7 7-7-7 7-7',arrow_right:'M5 12h14m-7-7 7 7-7 7',voice:'M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Zm5 9a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z','image-studio':'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z',more:'M5 12h.01M12 12h.01M19 12h.01',pin:'M12 17v5M9 3h6l-1 7 3 3v2H7v-2l3-3-1-7Z',select:'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',profile:'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8M16 3l2 2 4-4'};
 const icon=name=>`<svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="${paths[name]||paths.creations}"/></svg>`;
 const tabLabel=id=>({chat:'Chat',photos:'Photos',journals:'Journal',now:'Home'}[id])||(TABS.find(t=>t[0]===id)?.[1])||({'image-studio':'Image studio','voice':'Voice studio','local-models':'Local models','companion-edit':'Edit companion'}[id])||id;
 /* ---------------------------------------------------------------- navigation
@@ -1216,6 +1216,7 @@ function renderViewerPhoto(){
     <button class="viewer-icon-btn ${isNsfw?'is-safe':'is-warn'}" id="viewer-btn-rate" title="${isNsfw?'Mark safe':'Mark NSFW'}" aria-label="${isNsfw?'Mark safe':'Mark NSFW'}">${icon(isNsfw?'shield_check':'shield_alert')}</button>
     <button class="viewer-icon-btn" id="viewer-btn-album" title="Add copy to album" aria-label="Add copy to album">${icon('album')}</button>
     <a class="viewer-icon-btn" href="${downloadUrl}" download title="Download image" aria-label="Download image">${icon('download')}</a>
+    <button class="viewer-icon-btn" id="viewer-btn-profile" title="Set as profile photo" aria-label="Set as profile photo">${icon('profile')}</button>
     <button class="viewer-icon-btn" id="viewer-btn-info" title="Details (i)" aria-label="Details">${icon('info')}</button>
     ${item.deletable?`<button class="viewer-icon-btn viewer-btn-danger" id="viewer-btn-delete" title="Delete photo" aria-label="Delete photo">${icon('trash')}</button>`:''}
   `;
@@ -1235,6 +1236,11 @@ function renderViewerPhoto(){
     pop.hidden=false;await populateAlbumChips(item);
   };
   $('viewer-btn-info').onclick=()=>toggleViewerInfo();
+  if($('viewer-btn-profile'))$('viewer-btn-profile').onclick=async()=>{
+    const item=viewerItems[viewerIndex];if(!item)return;
+    if(!confirm('Set this image as the companion\'s profile photo?'))return;
+    try{await post('/portrait/from-content',{path:item.path});portraitVersion=Date.now();portraitStored=true;notice('Profile photo updated');if(current==='photos')render('photos');}catch(err){notice('Failed: '+err.message);}
+  };
   if($('viewer-btn-delete')){
     $('viewer-btn-delete').onclick=async()=>{
       if(!confirm('Permanently delete this photo from the vault? Separate album copies are unaffected.'))return;
@@ -1268,6 +1274,29 @@ function photoForCollection(x,collection){const copy=(x.copies||[]).find(p=>coll
 function mergePhotos(content,timeline){const captures=new Map(timeline.captures.map(x=>[x.image.split('/').pop(),x]));return content.items.filter(x=>x.kind==='image').map(x=>{const copy=(x.copies||[x]).find(p=>p.source==='photo session'),capture=copy?captures.get(copy.path.split('/').pop()):null;return capture?{...x,at:capture.at||x.at,title:capture.activity||x.title,mood:capture.mood,outfit:capture.outfit,capture:capture.id}:x;}).sort((a,b)=>(Date.parse(b.at)||0)-(Date.parse(a.at)||0));}
 function photoDays(items){const groups=new Map();items.forEach((item,index)=>{const day=dayKey(item.at)||'unknown';if(!groups.has(day))groups.set(day,{day,items:[]});groups.get(day).items.push({item,index});});return [...groups.values()];}
 const photoBrowse={query:'',day:'',collection:'all'};
+const photoSelection=new Set();
+let selectMode=false;
+function toggleSelectMode(){
+  selectMode=!selectMode;
+  photoSelection.clear();
+  const grid=document.querySelector('#photo-grid');
+  if(grid)grid.classList.toggle('is-select-mode',selectMode);
+  updateSelectionBar();
+  const btn=$('photo-select-toggle');
+  if(btn){btn.textContent=selectMode?'Cancel':'Select';btn.setAttribute('aria-pressed',String(selectMode));}
+}
+function updateSelectionBar(){
+  const bar=$('photo-selection-bar');
+  if(!bar)return;
+  if(!selectMode||photoSelection.size===0){bar.hidden=true;return;}
+  bar.hidden=false;
+  bar.querySelector('.selection-count').textContent=`${photoSelection.size} selected`;
+}
+function togglePhotoSelected(contentId,cardEl){
+  if(photoSelection.has(contentId)){photoSelection.delete(contentId);cardEl.classList.remove('is-selected');cardEl.querySelector('.photo-select-check')?.classList.remove('checked');}
+  else{photoSelection.add(contentId);cardEl.classList.add('is-selected');cardEl.querySelector('.photo-select-check')?.classList.add('checked');}
+  updateSelectionBar();
+}
 let photoPageGeneration=0;
 /* The photos panel in Preferences owns every photo setting, including the blur
    toggles and the local scanner. The gear goes there rather than opening a
@@ -1296,13 +1325,22 @@ workspaceHandlers.photos=async()=>{
       <div class="photo-chips" id="photo-chips" role="tablist" aria-label="Collections">
         ${collections.map(([value,label])=>`<button class="photo-chip" role="tab" data-collection="${esc(value)}"
           aria-selected="${value===photoBrowse.collection}">${esc(label)}</button>`).join('')}
+        <button class="photo-chip" id="photo-select-toggle" aria-pressed="false">Select</button>
         <button class="photo-chip photo-chip-icon" id="photo-manage-settings-btn" title="Manage photo settings" aria-label="Manage photo settings">\u2699</button>
       </div>
     </div>
     <div id="photo-grid" class="photo-library"></div>
     <div class="photo-scrubber" id="photo-scrubber" aria-hidden="true"></div>
-    <p class="dim small" id="photo-count" role="status"></p>`;
+    <p class="dim small" id="photo-count" role="status"></p>
+    <div class="photo-selection-bar" id="photo-selection-bar" hidden>
+      <span class="selection-count">0 selected</span>
+      <button class="act" id="sel-add-album">Add to album</button>
+      <button class="act" id="sel-new-album">Create album</button>
+      <button class="quiet viewer-btn-danger" id="sel-delete">Delete</button>
+    </div>`;
   if($('photo-manage-settings-btn'))$('photo-manage-settings-btn').onclick=openPhotoSettings;
+  if($('photo-select-toggle'))$('photo-select-toggle').onclick=toggleSelectMode;
+  if(selectMode&&$('photo-grid'))$('photo-grid').classList.add('is-select-mode');
   const draw=()=>{
     const shown=items.map(x=>photoForCollection(x,photoBrowse.collection));
     // One continuous grid. The pictures never break into per-day blocks; the
@@ -1313,8 +1351,9 @@ workspaceHandlers.photos=async()=>{
       const starts=day!==runningDay;
       if(starts)runningDay=day;
       return `
-      <div class="photo-card" data-photo="${i}" ${starts?`data-day="${esc(day)}"`:''} tabindex="0" role="button" aria-label="Open ${esc(x.title)}">
+      <div class="photo-card${photoSelection.has(x.content_id||x.path)?' is-selected':''}" data-photo="${i}" data-content-id="${esc(x.content_id||x.path)}" ${starts?`data-day="${esc(day)}"`:''} tabindex="0" role="button" aria-label="Open ${esc(x.title)}">
         <div class="photo-wrap">
+          <div class="photo-select-check${photoSelection.has(x.content_id||x.path)?' checked':''}" aria-hidden="true"></div>
           <img ${mediaPrivacy(x)} src="${mediaUrl(x.url)}" loading="lazy" alt="${esc(x.title)}">
           ${starts?`<span class="photo-date-marker">${esc(day==='unknown'?'No date':stamp(x.at,{month:'short',day:'numeric'}))}</span>`:''}
         </div>
@@ -1336,12 +1375,14 @@ workspaceHandlers.photos=async()=>{
     for(const b of $('photo-grid').querySelectorAll('.photo-card')){
       b.onclick=e=>{
         if(e.target.closest('.photo-card-actions'))return;
+        if(selectMode){const x=shown[+b.dataset.photo];togglePhotoSelected(x.content_id||x.path,b);draw();return;}
         openPhotoViewer(shown[+b.dataset.photo],shown,+b.dataset.photo);
       };
       b.onkeydown=e=>{
         if(e.key==='Enter'||e.key===' '){
           if(e.target.closest('.photo-card-actions'))return;
           e.preventDefault();
+          if(selectMode){const x=shown[+b.dataset.photo];togglePhotoSelected(x.content_id||x.path,b);draw();return;}
           openPhotoViewer(shown[+b.dataset.photo],shown,+b.dataset.photo);
         }
       };
@@ -1368,6 +1409,36 @@ workspaceHandlers.photos=async()=>{
       };
     }
     wireRoutes($('photos'));
+    updateSelectionBar();
+    if($('sel-add-album'))$('sel-add-album').onclick=async()=>{
+      const items=shown.filter(x=>photoSelection.has(x.content_id||x.path));
+      if(!items.length)return;
+      const name=prompt('Album name:','Favorites');
+      if(!name)return;
+      try{await post('/content/batch-album',{paths:items.map(x=>x.path),album:name});notice(`Added ${items.length} photo(s) to ${name}`);selectMode=false;photoSelection.clear();await render('photos');}catch(err){notice('Failed: '+err.message);}
+    };
+    if($('sel-new-album'))$('sel-new-album').onclick=async()=>{
+      const items=shown.filter(x=>photoSelection.has(x.content_id||x.path));
+      if(!items.length)return;
+      const name=prompt('New album name:');
+      if(!name)return;
+      try{await post('/content/batch-album',{paths:items.map(x=>x.path),album:name});notice(`Created album "${name}" with ${items.length} photo(s)`);selectMode=false;photoSelection.clear();await render('photos');}catch(err){notice('Failed: '+err.message);}
+    };
+    if($('sel-delete'))$('sel-delete').onclick=async()=>{
+      const items=shown.filter(x=>photoSelection.has(x.content_id||x.path));
+      if(!items.length)return;
+      const d=document.createElement('dialog');d.className='editor-leave-dialog';
+      d.setAttribute('aria-label','Confirm deletion');
+      d.innerHTML=`<h2>Delete ${items.length} photo(s)?</h2><p>This permanently deletes the selected photos from the vault. Separate album copies are unaffected.</p><div class="actions"><button class="quiet" data-cancel autofocus>Cancel</button><button class="act viewer-btn-danger" data-confirm>Delete ${items.length} photo(s)</button></div>`;
+      const finish=(confirmed)=>{d.close();d.remove();return confirmed;};
+      d.querySelector('[data-cancel]').onclick=()=>finish(false);
+      d.querySelector('[data-confirm]').onclick=async()=>{
+        finish(true);
+        try{await post('/content/batch-delete',{items:items.filter(x=>x.deletable).map(x=>({path:x.path,etag:x.etag}))});notice(`Deleted ${items.length} photo(s)`);selectMode=false;photoSelection.clear();await render('photos');}catch(err){notice('Delete failed: '+err.message);}
+      };
+      d.addEventListener('cancel',e=>{e.preventDefault();finish(false);});
+      document.body.append(d);d.showModal();
+    };
     buildScrubber();
   };
 
@@ -2040,4 +2111,4 @@ workspaceHandlers.identity=async()=>{
 /* The Voice studio's page and its known voices. The studio itself is drawn by
    studios.js; the Settings page reuses this same list for the engine picker. */
 TABS.push(['voice','Voice studio']);const voiceSection=document.createElement('section');voiceSection.id='voice';voiceSection.hidden=true;document.querySelector('main').append(voiceSection);if(!$('tabs').querySelector('[data-tab="voice"]')){const voiceNav=document.createElement('button');voiceNav.dataset.tab='voice';voiceNav.innerHTML=icon('voice')+'<span>Voice studio</span>';voiceNav.onclick=()=>showTab('voice');($('tabs').querySelector('.nav-more')||$('tabs').lastElementChild||$('tabs')).append(voiceNav);}
-const voiceChoices={edge:['en-US-AriaNeural','en-US-GuyNeural','en-GB-SoniaNeural'],piper:['en_US-lessac-medium'],kittentts:['Jasper','Bella','Luna','Bruno','Rosie','Hugo','Kiki','Leo'],openai:['alloy','echo','fable','onyx','nova','shimmer'],xai:['eve','ara','rex','sal','leo'],gemini:['Kore','Puck','Charon','Aoede'],neutts:[],elevenlabs:[],minimax:['English_expressive_narrator'],mistral:[]};
+const voiceChoices={edge:['en-US-AriaNeural','en-US-GuyNeural','en-GB-SoniaNeural'],piper:['en_US-lessac-medium'],kittentts:['Jasper','Bella','Luna','Bruno','Rosie','Hugo','Kiki','Leo'],openai:['alloy','echo','fable','onyx','nova','shimmer'],xai:['eve','ara','rex','sal','leo'],gemini:['Kore','Puck','Charon','Aoede'],neutts:[],elevenlabs:[],minimax:['English_expressive_narrator'],mistral:['c69964a6-ab8b-4f8a-9465-ec0925096ec8','1024d823-a11e-43ee-bf3d-d440dccc0577','98559b22-62b5-4a64-a7cd-fc78ca41faa8','5940190b-f58a-4c3e-8264-a40d63fd6883','01d985cd-5e0c-4457-bfd8-80ba31a5bc03']};

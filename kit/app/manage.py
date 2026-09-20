@@ -39,6 +39,7 @@ APPEARANCE_DEFAULT={'theme':'midnight','accent':'','follow_system':False,
 
 FALLBACK_CATALOG=[
  {'slug':'openrouter','label':'OpenRouter','api_key_env_vars':['OPENROUTER_API_KEY'],'auth_type':'api_key'},
+ {'slug':'mistral','label':'Mistral AI','api_key_env_vars':['MISTRAL_API_KEY'],'auth_type':'api_key'},
  {'slug':'deepseek','label':'DeepSeek','api_key_env_vars':['DEEPSEEK_API_KEY'],'auth_type':'api_key'},
  {'slug':'openai','label':'OpenAI','api_key_env_vars':['OPENAI_API_KEY'],'auth_type':'api_key'},
  {'slug':'anthropic','label':'Anthropic','api_key_env_vars':['ANTHROPIC_API_KEY'],'auth_type':'api_key'},
@@ -86,6 +87,23 @@ INFERENCE_PRESETS=[
  },
 ]
 
+# Recommendations describe the work, not a vendor SKU. Provider catalogues
+# change and account access differs; the UI pairs this advice with the live
+# model dropdown so a person can choose something they actually have.
+CONTINUITY_RECOMMENDATIONS={
+ 'pulse':('Fast, reliable tool-use model','low','Preserve the present without overthinking every 15-minute tick.'),
+ 'autonomy':('Strong general model with tool use','medium','Planning and follow-through benefit from some reasoning.'),
+ 'daily':('Strong reasoning model','medium','Daily memory should be careful without becoming an essay.'),
+ 'weekly':('Best reasoning model available','high','This run decides which patterns and memories last.'),
+ 'monthly':('Best reasoning model available','high','Long-horizon reflection is rare and worth the strongest model.'),
+ 'hygiene':('Fast, reliable tool-use model','low','Mostly bounded cleanup and integrity checks.'),
+ 'timeline':('Fast multimodal/tool-use model','low','Chooses a moment and hands a structured brief to the image provider.'),
+ 'wake':('Fast, warm conversational model','low','A short grounded start to the day.'),
+ 'winddown':('Fast, warm conversational model','low','A short continuity update, not deep analysis.'),
+ 'window':('Strong general model with web/tool use','medium','Independent work needs judgment and reliable tools.'),
+ 'checkin':('Fast, reliable extraction model','low','Turns recent conversation into verified continuity records.'),
+}
+
 def _live_models(home, base_url, model_cfg):
     """Ask an OpenAI-shaped endpoint what it serves, using the profile's credential.
 
@@ -102,6 +120,12 @@ def _live_models(home, base_url, model_cfg):
         key = str(values.get(match.group(1)) or os.environ.get(match.group(1)) or '')
     elif raw and not raw.startswith('$'):
         key = raw
+    if not key:
+        values = _env_values(home)
+        if 'mistral' in base_url.lower():
+            key = str(values.get('MISTRAL_API_KEY') or os.environ.get('MISTRAL_API_KEY') or '')
+        elif 'openai' in base_url.lower():
+            key = str(values.get('OPENAI_API_KEY') or os.environ.get('OPENAI_API_KEY') or '')
     request = urllib.request.Request(base_url.rstrip('/') + '/models')
     if key:
         request.add_header('Authorization', 'Bearer ' + key)
@@ -645,6 +669,7 @@ def register(app, select, load, operations):
             env_var = p_row.get('api_key_env_vars', [None])[0] if p_row else None
             if not env_var:
                 env_var = {
+                    'mistral': 'MISTRAL_API_KEY',
                     'openrouter': 'OPENROUTER_API_KEY',
                     'openai': 'OPENAI_API_KEY',
                     'xai': 'XAI_API_KEY',
@@ -1008,11 +1033,19 @@ def register(app, select, load, operations):
                 models=[str(m) for m in ((cache.get(key) or {}).get('models') or [])]
                 if models:source='cache'
             except Exception:pass
-        if not models and base_url:
+        target_url = base_url or ('https://api.mistral.ai/v1' if provider == 'mistral' else '')
+        if not models and target_url:
             try:
-                models=_live_models(h,base_url,cfg);source='live'
+                models=_live_models(h,target_url,cfg);source='live'
             except Exception as exc:
-                note=f'Could not reach {base_url}: '+hr.redact(str(exc))[:160]
+                if provider == 'mistral':
+                    models=['mistral-large-latest','mistral-medium-latest','mistral-small-latest','ministral-14b-latest','ministral-8b-latest','codestral-latest']
+                    source='static'
+                else:
+                    note=f'Could not reach {target_url}: '+hr.redact(str(exc))[:160]
+        elif not models and provider == 'mistral':
+            models=['mistral-large-latest','mistral-medium-latest','mistral-small-latest','ministral-14b-latest','ministral-8b-latest','codestral-latest']
+            source='static'
         if not models and not note:
             note=('Hermes has no model list yet. Connect this provider in Hermes, or enter a model name.')
         return {'models':models,'provider':provider,'base_url':base_url,'source':source,
@@ -1034,9 +1067,10 @@ def register(app, select, load, operations):
         cache={}
         try:cache=json.loads((h/'provider_models_cache.json').read_text(encoding='utf-8'))
         except Exception:pass
-        labels={}
+        labels={'mistral':'Mistral AI'}
         try:
-            for row in (rt.catalog() if rt.info()['available'] else []) or []:
+            catalog_rows = (rt.catalog() if rt.info()['available'] else []) or FALLBACK_CATALOG
+            for row in catalog_rows:
                 labels[str(row.get('slug') or '').lower()]=row.get('label') or row.get('slug')
         except Exception:pass
 
@@ -1064,7 +1098,8 @@ def register(app, select, load, operations):
         try:
             from companion_gateway import _env_values
             values=_env_values(h)
-            for row in (rt.catalog() if rt.info()['available'] else []) or []:
+            check_rows = (rt.catalog() if rt.info()['available'] else []) or FALLBACK_CATALOG
+            for row in check_rows:
                 if any(bool(values.get(k) or os.environ.get(k)) for k in row.get('api_key_env_vars',[])):
                     add(str(row.get('slug') or '').lower(),'',True,'key configured')
         except Exception:pass
@@ -1156,6 +1191,8 @@ def register(app, select, load, operations):
     @app.get('/api/jobs')
     def jobs():
         from kit.cli.common import _read_jobs
+        from kit.cli.common import load_manifest
+        import companion_render as cr
         rt,p,h=context()
         # The settings page edits these jobs in place, so it needs the whole
         # picture per job: which model answers it, how hard it is told to think,
@@ -1163,9 +1200,21 @@ def register(app, select, load, operations):
         fields=('id','name','schedule','enabled','no_agent','model','provider','base_url',
                 'reasoning_effort','last_status','last_error','last_run_at','next_run_at',
                 'script','deliver','skills')
+        companion=cc.load(h)
+        specs={cr.render(spec['name'],{'AGENT':companion.agent}):spec for spec in load_manifest(companion)['jobs']}
         rows=[]
         for row in _read_jobs(h/'cron/jobs.json')['jobs']:
             out={k:row.get(k) for k in fields}
+            spec=specs.get(row.get('name'))
+            if spec:
+                key=spec.get('key','');advice=CONTINUITY_RECOMMENDATIONS.get(key)
+                out.update(companion_job=True,job_key=key,tier=spec.get('tier'),
+                           expected_no_agent=bool(spec.get('no_agent')))
+                if advice:
+                    out['recommendation']={'model_role':advice[0],'reasoning_effort':advice[1],'why':advice[2]}
+                script_name=str(row.get('script') or '')
+                out['legacy_worker']=bool(row.get('no_agent') and not spec.get('no_agent') and
+                                          script_name.startswith('companion-local-'))
             # Two spellings of the same field exist in the wild.
             out['provider']=row.get('provider') or row.get('model_provider')
             out['model_provider']=out['provider']
@@ -1176,7 +1225,7 @@ def register(app, select, load, operations):
             out['prompt_chars']=len(prompt)
             out['last_error']=hr.redact(str(row.get('last_error') or ''))[:600] or None
             rows.append(out)
-        return {'timezone':cc.load(h).timezone,'jobs':rows,'usage':hr.job_usage(cc.load(h),rows)}
+        return {'timezone':companion.timezone,'jobs':rows,'usage':hr.job_usage(companion,rows)}
 
 
     # `hermes cron edit` can set a job's model, provider and reasoning effort, but
@@ -1211,7 +1260,7 @@ def register(app, select, load, operations):
             args += ['--provider', text(payload.get('provider'), 'provider', 120, empty=True)]
         effort = payload.get('reasoning_effort')
         if effort is not None:
-            if effort not in ('', 'none', 'low', 'medium', 'high'):
+            if effort not in ('', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'):
                 raise ValueError('Unknown reasoning effort')
             args += ['--reasoning-effort', effort]
         return args

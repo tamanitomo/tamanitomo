@@ -629,9 +629,9 @@ const settingsPanels=[
   placeHermesCards(host,['accounts']);
  }},
 
-{group:'Schedule & usage',id:'jobs',title:'Scheduled jobs',
- blurb:'Every cron job, what runs it, and whether it worked',
- keywords:'cron jobs schedule routine model tokens prompt run pause resume history',
+{group:'Models & providers',id:'jobs',title:'Companion continuity',
+ blurb:'Models and reasoning for the jobs that keep a companion’s life coherent',
+ keywords:'continuity cron jobs schedule routine model provider reasoning tokens prompt run failures',
  render:renderJobsPanel},
 
 {group:'Images & voice',id:'connect-images',title:'Image generation',
@@ -733,12 +733,12 @@ function wireModelPicker(root,{provider,baseUrl,value,onChange,defaultLabel="Fol
 }
 
 // One provider-aware editor for the primary model and background tiers.
-function providerNeedsURL(provider,existing=''){const name=String(provider).toLowerCase();return name!=='openai-codex'&&(Boolean(existing)||['custom','ollama','lmstudio','lm-studio','vllm','local'].includes(name));}
+function providerNeedsURL(provider,existing=''){const name=String(provider).toLowerCase();return name!=='openai-codex'&&name!=='mistral'&&(Boolean(existing)||['custom','ollama','lmstudio','lm-studio','vllm','local'].includes(name));}
 async function wireAvailableModel(providerField,modelField,urlField,{primary=false}={}){
   const data=await knownProviders();
   if(!providerField.isConnected)return;
   const currentProvider=providerField.value;
-  const choices=new Map(data.providers.map(p=>[p.provider,p.provider==='openai-codex'?'ChatGPT':p.label]));
+  const choices=new Map(data.providers.map(p=>[p.provider,p.provider==='openai-codex'?'ChatGPT':p.provider==='mistral'?'Mistral AI':p.label]));
   if(currentProvider&&!choices.has(currentProvider))choices.set(currentProvider,currentProvider);
   choices.set('custom','Custom / local server');
   const select=document.createElement('select');
@@ -774,19 +774,21 @@ async function renderJobsPanel(host){
   const failed=jobs.filter(j=>j.last_status==='error').length;
   const active=jobs.filter(j=>j.enabled).length;
   const noModel=jobs.filter(j=>!j.no_agent&&!j.model).length;
+  const legacy=jobs.filter(j=>j.legacy_worker).length;
 
   host.innerHTML=`
   <div class="section-heading" style="margin-top:0">
-    <h2 style="margin:0">Scheduled jobs</h2>
+    <h2 style="margin:0">Companion continuity settings</h2>
     <div class="actions" style="margin:0">
       <button class="quiet" id="jobs-pause">Pause model jobs</button><button class="quiet" id="jobs-activate">Enable model jobs</button><button class="quiet" id="jobs-history">Run history</button>
       <button class="quiet" id="jobs-apply-models">Apply job models</button>
       <button class="quiet" id="jobs-repair">Install / repair</button>
     </div>
   </div>
-  <p class="dim">Times are in ${esc(data.timezone)}. Model-free maintenance stays active when model jobs are paused.</p>
+  <p class="dim">Choose the provider, model, and reasoning used by every model-backed part of the companion’s lived continuity. Times are in ${esc(data.timezone)}. Script-only maintenance has no model to configure and stays active when model jobs are paused.</p>
+  ${legacy?`<div class="notice-strip"><p><strong>${legacy} legacy continuity worker${legacy===1?' is':'s are'} bypassing these model controls.</strong></p><p class="dim small">Install / repair migrates the old provider-pinned scripts to native Hermes routing, preserving job IDs and run history.</p></div>`:''}
   <p class="dim small">${esc(usage.note||'Token usage unavailable.')}${usage.partial?' Recent history is truncated.':''}</p>
-  <details><summary>Which model should I use?</summary><p class="dim small">Use a small or fast model with reliable tool use for frequent checks. Try a stronger reasoning model for daily and weekly reflection. Script-only jobs need no model. Image tasks need an image provider; a conversation model alone is not enough.</p></details>
+  <details open><summary>Which model should I use?</summary><p class="dim small">Use a fast model with reliable tool use for frequent presence and check-in work. Use your strongest reasoning model for weekly and monthly reflection. Each Tamanitomo job below shows its own recommendation. Image timeline jobs plan the moment here, then call the separately configured image provider.</p></details>
   <div class="stat-strip">
     <button data-filter="all"><span>Installed</span><strong>${jobs.length}</strong></button>
     <button data-filter="active"><span>Scheduled</span><strong>${active}</strong></button>
@@ -854,13 +856,14 @@ async function renderJobsPanel(host){
             <div><dt>Delivers to</dt><dd>${esc(j.deliver||'—')}</dd></div>
           </dl>
           ${j.last_error?`<div class="notice-strip"><p><strong>Last error</strong></p><pre class="command-block">${esc(j.last_error)}</pre></div>`:''}
+          ${j.recommendation?`<div class="notice-strip"><p><strong>Recommended: ${esc(j.recommendation.model_role)} · ${esc(j.recommendation.reasoning_effort)} reasoning</strong></p><p class="dim small">${esc(j.recommendation.why)} <button type="button" class="link-button small" data-recommend-effort="${esc(j.recommendation.reasoning_effort)}">Use recommended effort</button></p></div>`:''}
           <div class="form-grid">
             ${scheduleEditorHTML(j.id,schedule(j))}
             ${j.no_agent?'':`
             <label>Provider<input data-field="provider" data-job="${esc(j.id)}" list="job-provider-ids" value="${esc(j.provider||'')}" placeholder="Follow the profile default"></label>
             <label>Model${modelPickerHTML('job-'+j.id,j.model)}
               <input type="hidden" data-field="model" data-job="${esc(j.id)}" value="${esc(j.model||'')}"></label>
-            <label>Reasoning effort<select data-field="reasoning_effort" data-job="${esc(j.id)}">${options([['','Hermes default'],['none','None'],['low','Low'],['medium','Medium'],['high','High']],j.reasoning_effort||'')}</select></label>
+            <label>Reasoning effort<select data-field="reasoning_effort" data-job="${esc(j.id)}">${options([['','Hermes default'],['none','None'],['minimal','Minimal'],['low','Low'],['medium','Medium'],['high','High'],['xhigh','Extra high'],['max','Maximum'],['ultra','Ultra']],j.reasoning_effort||'')}</select></label>
             <label class="wide">Endpoint<input data-field="base_url" data-job="${esc(j.id)}" value="${esc(j.base_url||'')}" placeholder="Leave empty to use the provider's own address">
               <small class="dim">Address of your local server or custom gateway.</small></label>`}
           </div>
@@ -881,8 +884,10 @@ async function renderJobsPanel(host){
       const picker=row.querySelector('[data-model-picker]');
       if(!picker)continue;
       const field=n=>row.querySelector(`[data-field="${n}"]`);
+      const recommend=row.querySelector('[data-recommend-effort]');
+      if(recommend)recommend.onclick=()=>{field('reasoning_effort').value=recommend.dataset.recommendEffort;field('reasoning_effort').dispatchEvent(new Event('change',{bubbles:true}));};
       const available=await knownProviders();
-      const providers=new Map(available.providers.map(p=>[p.provider,p.provider==='openai-codex'?'ChatGPT':p.label]));
+      const providers=new Map(available.providers.map(p=>[p.provider,p.provider==='openai-codex'?'ChatGPT':p.provider==='mistral'?'Mistral AI':p.label]));
       if(field('provider').value&&!providers.has(field('provider').value))providers.set(field('provider').value,field('provider').value);
       providers.set('custom','Custom / local server');
       const previous=field('provider');previous.outerHTML=`<select data-field="provider" data-job="${esc(row.dataset.jobId)}">${options([['','Follow primary provider'],...providers],previous.value)}</select>`;
@@ -964,7 +969,7 @@ async function renderJobsPanel(host){
   knownProviders().then(d=>{
     if(!host.isConnected)return;
     const strip=host.querySelector('#routing-presets');
-    const choices=new Map(d.providers.map(r=>[r.provider,r.provider==='openai-codex'?'ChatGPT':r.label]));choices.set('custom','Custom / local server');
+    const choices=new Map(d.providers.map(r=>[r.provider,r.provider==='openai-codex'?'ChatGPT':r.provider==='mistral'?'Mistral AI':r.label]));choices.set('custom','Custom / local server');
     host.querySelector('#routing-provider').innerHTML=options([['','Follow primary provider'],...choices],'');
     const rows=[...d.providers.map(r=>({...r,preset:false})),
                 {key:'__default__',label:'Follow the profile',provider:'',base_url:'',models:0,preset:true}];

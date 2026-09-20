@@ -1,0 +1,7 @@
+name: mistral
+version: 1.0.0
+description: "Mistral AI image generation backend (FLUX 1.1 Pro Ultra via Conversations API). Text-to-image."
+author: Tamanitomo
+kind: backend
+requires_env:
+  - MISTRAL_API_KEY

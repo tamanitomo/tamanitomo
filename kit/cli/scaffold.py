@@ -187,6 +187,36 @@ def _install_jobs_locked(c,m,report):
             job=existing[name]
             additions=[]
             template=(T/'cron'/spec['file']).read_text(encoding='utf-8')
+            # Early structured workers were installed as --no-agent scripts
+            # whose argv contained a provider URL/model/API-key name. Editing
+            # the cron model pin could never affect them. Migrate only that
+            # recognizable kit-owned shape back to a native Hermes agent job;
+            # unrelated script jobs remain untouched.
+            legacy_script=str(job.get('script') or '')
+            if (not spec.get('no_agent') and job.get('no_agent') and
+                    legacy_script.startswith('companion-local-')):
+                rendered=cr.render(template,m);backups=c.home/'cron/prompt-backups'
+                backups.mkdir(parents=True,exist_ok=True)
+                stamp=dt.datetime.now().strftime('%Y%m%dT%H%M%S')
+                (backups/f'{name}-{stamp}-legacy-worker.md').write_text(job.get('prompt',''),encoding='utf-8')
+                updates=['--prompt',rendered,'--agent']
+                if spec.get('preread'):
+                    updates+=['--script',write_preread_script(c,spec,'preread').name]
+                else:updates+=['--script','']
+                if spec.get('monitor'):
+                    updates+=['--monitor-script',write_preread_script(c,spec,'fingerprint').name]
+                else:updates+=['--monitor-script','']
+                if spec.get('continuity'):updates+=['--continuity']
+                result=subprocess.run(cp.hermes_command('cron','edit',job['id'],*updates),
+                    capture_output=True,text=True,encoding='utf-8',timeout=60,
+                    env={**os.environ,'HERMES_HOME':str(c.home),'HERMES_TIMEZONE':c.timezone})
+                if result.returncode:
+                    report.append(f'  ! could not migrate {name} away from its legacy provider-pinned worker')
+                else:
+                    job={**job,'prompt':rendered,'no_agent':False,
+                         'script':write_preread_script(c,spec,'preread').name if spec.get('preread') else None}
+                    record_fingerprint(c,name,rendered)
+                    report.append(f'  {name}: migrated to native Hermes model routing')
             for marker in ('MEMORY CHECK:','LIVED STATE v1:','PRESENCE CHECK:','DAY CONTINUITY v2:'):
                 if marker not in job.get('prompt',''):
                     check=next((line for line in template.splitlines() if line.startswith(marker)),None)

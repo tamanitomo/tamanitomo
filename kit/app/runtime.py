@@ -54,10 +54,36 @@ def redact(text):
     return re.sub(r'\b(?:sk-|sk-or-|ghp_|gho_)[A-Za-z0-9_-]{12,}', '[redacted]', text)
 
 
+def sync_bundled_plugins(root):
+    """Sync bundled kit plugins (e.g. Mistral model provider & image gen) into hermes-agent/plugins."""
+    try:
+        bundled = Path(__file__).resolve().parents[1]/'plugins'
+        if not bundled.is_dir(): return
+        target = Path(root)/'hermes-agent'/'plugins'
+        if not target.is_dir(): return
+        for category in ('model-providers', 'image_gen'):
+            src_cat = bundled/category
+            dst_cat = target/category
+            if src_cat.is_dir():
+                dst_cat.mkdir(parents=True, exist_ok=True)
+                for plugin_dir in src_cat.iterdir():
+                    if plugin_dir.is_dir() and not plugin_dir.name.startswith('.'):
+                        dest = dst_cat/plugin_dir.name
+                        dest.mkdir(parents=True, exist_ok=True)
+                        for f in plugin_dir.iterdir():
+                            if f.is_file() and not f.name.startswith('.'):
+                                target_file = dest/f.name
+                                if not target_file.exists() or target_file.read_bytes() != f.read_bytes():
+                                    shutil.copy2(f, target_file)
+    except Exception:
+        pass
+
+
 class Runtime:
     def __init__(self, root, managed=False):
         self.root = Path(root).expanduser().absolute()
         self.managed = managed
+        sync_bundled_plugins(self.root)
 
     def command(self):
         override = os.environ.get('COMPANION_HERMES_COMMAND')
@@ -225,6 +251,7 @@ class Runtime:
             except subprocess.TimeoutExpired as exc:
                 raise ValueError(f'Installer stage {stage} timed out; rerun installation to recover.') from exc
             if r.returncode: raise ValueError(f'Installer stage {stage} failed:\n'+redact(r.stderr or r.stdout)[-6000:])
+        sync_bundled_plugins(self.root)
         command=self.command()
         cp.atomic_write(self.root/'.companion-runtime.json',json.dumps({'command':command}))
         return {'installed':True,'installer_sha256':hashlib.sha256(content).hexdigest(),'root':str(self.root)}

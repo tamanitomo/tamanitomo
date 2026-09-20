@@ -1,4 +1,4 @@
-Tamanitomo 2.2.3 puts the patch notes directly in the app before installation.
+Tamanitomo 2.3.0 adds explicit model control for companion continuity and structured cross-provider image prompts.
 
 ### Install
 
@@ -6,11 +6,23 @@ Download **tamanitomo-release.zip** below, extract it into its own application f
 
 ### Update
 
-Open **Settings → App & access → Updates** in your desktop or mobile browser. When a release is available, the app shows its patch notes first and places **Update to v2.2.3 Now** beneath them. The home-screen update notice opens this review screen instead of installing immediately. The host downloads and installs the application and restarts the workspace. Your Hermes profiles, credentials, memories, journals and vault remain in their existing external locations.
+Open **Settings → App & access → Updates** in your desktop or mobile browser. When the release is available, review these notes and choose **Update to v2.3.0 Now**. The host downloads and installs the application and restarts the workspace. Your Hermes profiles, credentials, memories, journals and vault remain in their existing external locations.
 
-Release notes are safely displayed as text, retain their line breaks, and scroll within a mobile-friendly panel when long. Updates continue to verify the published release asset, stop on dependency failures, retain rollback files, and wait for the updated server before reconnecting.
+### Companion continuity
 
-This release also includes the onboarding and Termux lifecycle fixes from main. See CHANGELOG.md for details. The adjacent `.sha256` file verifies the complete ZIP.
+Every model-backed Tamanitomo cron job can now be routed from **Settings → Models & providers → Companion continuity**. Each job shows its provider, model, reasoning effort, recommendation and last failure. Script-only maintenance remains model-free. Repair safely migrates older provider-pinned continuity scripts to native Hermes model routing while preserving their history.
+
+### Images across GPT, Grok, Mistral and ComfyUI
+
+Hosted image providers receive a labelled brief with separate identity, wardrobe, scene, feeling, lighting, camera and quality constraints. ComfyUI workflows retain their native mapping behavior: each named mapping is written to its own node input, and only single-prompt workflows receive a combined diffusion prompt. This release also bundles Mistral model and FLUX image-provider support.
+
+### Photos and identity
+
+Photos can be selected in batches for albums or deletion, and any eligible vault image can become the companion's reference portrait.
+
+Updates continue to verify the published release asset, stop on dependency failures, retain rollback files, and wait for the updated server before reconnecting.
+
+See CHANGELOG.md for details. The adjacent `.sha256` file verifies the complete ZIP.
 
 ### Validation scope
 

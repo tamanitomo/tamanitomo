@@ -658,6 +658,19 @@ def build(home=None,token='',state_dir=None):
             try:_os.unlink(handle.name)
             except OSError:pass
 
+    @app.post('/api/portrait/from-content')
+    def portrait_from_content(payload:dict):
+        """Copy an existing vault image to become the companion's reference portrait."""
+        c=load()
+        from .content import resolve, KINDS
+        import companion_portrait as pt, companion_timeline as tl
+        path_str=payload.get('path','')
+        p=resolve(c,path_str)
+        if KINDS[p.suffix.lower()]!='image':raise HTTPException(400,'Choose an image file')
+        if p.stat().st_size>tl.MAX_BYTES:raise HTTPException(400,'Image exceeds 32 MB')
+        try:return pt.save_reference(c,str(p))
+        except (ValueError,OSError) as exc:raise HTTPException(400,str(exc))
+
     @app.delete('/api/portrait')
     def forget_portrait():
         c=load()

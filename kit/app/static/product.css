@@ -2487,3 +2487,20 @@ body[data-page="chat"] main{padding:0}
 .update-release-notes h3{margin:0 0 10px;font-size:1rem}
 .update-release-notes-body{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;max-height:min(42vh,28rem);overflow:auto;color:var(--ink)}
 .update-actions{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap}
+
+/* ── Photo multi-select ─────────────────────────────────────────── */
+.photo-select-check{position:absolute;top:6px;left:6px;width:22px;height:22px;border-radius:50%;border:2px solid rgba(255,255,255,0.7);background:rgba(0,0,0,0.25);z-index:4;opacity:0;pointer-events:none;transition:opacity .15s,background .15s,transform .15s;display:grid;place-items:center}
+.photo-select-check::after{content:'';display:block;width:10px;height:10px;border-radius:50%;background:transparent;transition:background .15s}
+.is-select-mode .photo-select-check{opacity:1}
+.photo-select-check.checked{background:var(--accent);border-color:var(--accent);transform:scale(1.1)}
+.photo-select-check.checked::after{background:#fff}
+.is-select-mode .photo-card{cursor:pointer}
+.is-select-mode .photo-card.is-selected .photo-wrap img{opacity:0.7}
+.is-select-mode .photo-card.is-selected{outline:3px solid var(--accent);outline-offset:-3px;border-radius:4px}
+.is-select-mode .photo-card-actions{display:none}
+.photo-selection-bar{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:50;display:flex;align-items:center;gap:10px;padding:10px 18px;background:color-mix(in srgb,var(--panel) 96%,transparent);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--edge);border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,0.25);white-space:nowrap;font-size:14px}
+.photo-selection-bar[hidden]{display:none}
+.photo-selection-bar .selection-count{font-weight:600;margin-right:6px}
+.photo-selection-bar .viewer-btn-danger{color:#ef4444;border-color:rgba(239,68,68,0.3)}
+.photo-selection-bar .viewer-btn-danger:hover{background:rgba(239,68,68,0.15)}
+@media(max-width:900px){.photo-selection-bar{bottom:80px;left:8px;right:8px;transform:none;justify-content:center;flex-wrap:wrap;gap:8px;padding:8px 12px}}

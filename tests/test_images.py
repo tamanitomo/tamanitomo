@@ -30,6 +30,19 @@ class DraftRenderTests(unittest.TestCase):
         self.assertEqual(out['preset']['name'],'Unsaved draft')
         self.assertIn('crisp',out['prompt'])
 
+    def test_hosted_providers_get_separate_continuity_sections(self):
+        c=self.f.c
+        draft=copy.deepcopy(self._preset())
+        draft.update(provider='openai',endpoint='https://images.example.test/v1',
+                     parts={'identity':'same face and copper hair','wardrobe':'green coat'})
+        out=media.compile(c,'','realistic',{'scene':'waiting at a railway platform',
+            'feeling':'hopeful, with a little nervous anticipation'},draft)
+        structured=out['structured_prompt']
+        for heading in ('IDENTITY — KEEP CONSISTENT','WARDROBE — SHOW EXACTLY',
+                        'SCENE AND ACTION','EMOTIONAL TONE'):
+            self.assertIn(heading+':',structured)
+        self.assertIn('hopeful, with a little nervous anticipation',structured)
+
     def test_an_incomplete_draft_is_refused_rather_than_half_rendered(self):
         with self.assertRaises(ValueError):
             media.compile(self.f.c,'','anime',None,{'name':'no provider'})

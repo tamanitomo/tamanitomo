@@ -16,7 +16,7 @@ import uuid
 import companion_config as cc
 from companion_platform import atomic_write, file_lock
 
-PARTS=('quality','identity','scene','wardrobe','lighting','camera')
+PARTS=('quality','identity','wardrobe','scene','feeling','lighting','camera')
 CATEGORIES=('portrait','anime','realistic','landscape','other')
 CONFIG='companion-images.json'
 
@@ -193,10 +193,10 @@ def validate(data):
         if not isinstance(ident,str) or not re.fullmatch('[a-z0-9][a-z0-9_-]{0,63}',ident) or ident in ids:raise ValueError('Preset IDs must be unique lowercase names')
         ids.add(ident)
         if not isinstance(p.get('name'),str) or not 1<=len(p['name'])<=100:raise ValueError('Name each preset')
-        if p.get('provider') not in ('comfyui','openai','hermes'):raise ValueError('Choose ComfyUI, Hermes, or an OpenAI-compatible image API')
+        if p.get('provider') not in ('comfyui','openai','hermes','mistral'):raise ValueError('Choose ComfyUI, Hermes, Mistral, or an OpenAI-compatible image API')
         if p['provider']=='hermes' and not re.fullmatch('[a-z0-9][a-z0-9_-]{0,55}|',p.get('hermes_provider','')):raise ValueError('Invalid Hermes image provider')
         if not isinstance(p.get('model',''),str) or len(p.get('model',''))>300:raise ValueError('Invalid image model')
-        if p['provider']!='hermes':endpoint(p.get('endpoint',''))
+        if p['provider'] not in ('hermes','mistral') or (p['provider']=='mistral' and p.get('endpoint')):endpoint(p.get('endpoint','https://api.mistral.ai/v1' if p['provider']=='mistral' else ''))
         if not isinstance(p.get('include_identity',True),bool):raise ValueError('Include identity must be true or false')
         if p.get('category') not in CATEGORIES:raise ValueError('Choose an image category')
         for k,v in p.get('parts',{}).items():
@@ -276,6 +276,15 @@ def compile(c,preset_id='',category='portrait',overrides=None,draft=None,intimat
         if k in overrides:parts[k]=str(overrides[k])
     prompt=', '.join(parts.get(k,'').strip().rstrip(',') for k in PARTS if parts.get(k,'').strip())
     if not prompt:raise ValueError('Write a scene or identity before generating')
+    # Hosted multimodal providers understand prose and headings better than a
+    # diffusion-style comma bag. Keep `prompt` for ComfyUI compatibility, but
+    # give GPT/xAI/Mistral and other Hermes providers the same explicit contract
+    # so identity, clothing and emotional intent cannot blur into one another.
+    labels={'quality':'VISUAL QUALITY','identity':'IDENTITY — KEEP CONSISTENT',
+            'wardrobe':'WARDROBE — SHOW EXACTLY','scene':'SCENE AND ACTION',
+            'feeling':'EMOTIONAL TONE','lighting':'LIGHTING','camera':'CAMERA AND FRAMING'}
+    structured='Create one coherent image. Treat every section below as a separate visual constraint.\n\n'+\
+        '\n\n'.join(f'{labels[k]}:\n{parts[k].strip()}' for k in PARTS if parts.get(k,'').strip())
     seed=p.get('seed',-1)
     if seed==-1:seed=int.from_bytes(os.urandom(6),'big')
     # The gate is checked here rather than at each caller, because this is the
@@ -295,7 +304,8 @@ def compile(c,preset_id='',category='portrait',overrides=None,draft=None,intimat
         if key in values:workflow[str(node)]['inputs'][field]=values[key]
     reference=portrait.portrait_path(c)
     if p.get('requires_reference') and not reference.is_file():raise ValueError('Add a reference portrait before using this image-to-image preset')
-    return {'preset':p,'parts':parts,'prompt':prompt,'negative':values['negative'],'seed':seed,
+    return {'preset':p,'parts':parts,'prompt':prompt,'structured_prompt':structured,
+            'negative':values['negative'],'seed':seed,
             'intimate':bool(intimate),'workflow':workflow,
             'reference_image':str(reference) if reference.is_file() and p['provider']=='comfyui' and p.get('mappings',{}).get('reference_image') else None}
 
@@ -361,9 +371,10 @@ def generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:N
 
 def _generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:None,allow_nsfw=False,draft=None,intimate=False):
     result=compile(c,preset_id,category,overrides,draft,intimate);p=result['preset'];base=endpoint(p['endpoint']) if p['provider']!='hermes' else ''
+    provider_prompt=result['prompt'] if p['provider']=='comfyui' else result['structured_prompt']
     report('Generating with '+p['name'])
     if p['provider']=='hermes':
-        reply=hermes_bridge(c,'generate',{'prompt':result['prompt'],'hermes_provider':p.get('hermes_provider',''),
+        reply=hermes_bridge(c,'generate',{'prompt':provider_prompt,'hermes_provider':p.get('hermes_provider',''),
             'image_url':result['reference_image'] if p.get('include_identity',True) else None,
             'model':p.get('model',''),'aspect_ratio':'landscape' if category=='landscape' else 'portrait'})
         if not reply.get('success'):raise ValueError(str(reply.get('error','Hermes returned no image')))
@@ -399,12 +410,39 @@ def _generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:
         if not images:raise ValueError('No saved image returned; the job may still be queued. Check ComfyUI before retrying.')
         url=base+'/view?'+urllib.parse.urlencode(images[0])
         with urllib.request.urlopen(url,timeout=60) as response:raw=response.read(40_000_001)
+    elif p['provider']=='mistral':
+        from companion_gateway import _env_values
+        keys=_env_values(c.home)
+        key=keys.get(p.get('api_key_env','') or 'MISTRAL_API_KEY') or os.environ.get(p.get('api_key_env','') or 'MISTRAL_API_KEY')
+        if not key:raise ValueError('No MISTRAL_API_KEY found in .env or environment')
+        aspect='landscape' if category=='landscape' else 'portrait'
+        aspect_text=f' (aspect ratio {aspect})' if aspect!='1:1' else ''
+        conv_model=p.get('model') or 'mistral-small-latest'
+        if not conv_model.startswith('mistral-') and not conv_model.startswith('ministral-'):
+            conv_model='mistral-small-latest'
+        payload={'model':conv_model,
+                 'tools':[{'type':'image_generation'}],
+                 'inputs':[{'role':'user','content':f"Generate an image using this specification:{aspect_text}\n\n{provider_prompt}"}]}
+        headers={'Authorization':'Bearer '+key}
+        reply=request_json('https://api.mistral.ai/v1/conversations',payload,headers)
+        image_url=None
+        for entry in (reply.get('outputs') or []):
+            if entry.get('type')=='tool.execution' and entry.get('name')=='image_generation':
+                info=entry.get('info') or {}
+                res_str=info.get('result') or '{}'
+                try:
+                    res_json=json.loads(res_str) if isinstance(res_str,str) else res_str
+                    image_url=res_json.get('url')
+                except Exception:pass
+                if image_url:break
+        if not image_url:raise ValueError('Mistral Conversations API returned no image')
+        with urllib.request.urlopen(image_url,timeout=60) as response:raw=response.read(40_000_001)
     else:
         from companion_gateway import _env_values
         keys=_env_values(c.home)
         key=keys.get(p.get('api_key_env','')) or os.environ.get(p.get('api_key_env',''))
         headers={'Authorization':'Bearer '+key} if key else {}
-        reply=request_json(base+'/images/generations',{'model':p.get('model',''),'prompt':result['prompt'],'size':f'{p.get("width",1024)}x{p.get("height",1024)}','n':1},headers)
+        reply=request_json(base+'/images/generations',{'model':p.get('model',''),'prompt':provider_prompt,'size':f'{p.get("width",1024)}x{p.get("height",1024)}','n':1},headers)
         image=(reply.get('data') or [{}])[0]
         if image.get('b64_json'):raw=base64.b64decode(image['b64_json'],validate=True)
         elif image.get('url'):
@@ -419,19 +457,19 @@ def _generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:
     if not ext:raise ValueError('Image must be PNG, JPEG or WebP')
     folder=c.data/'creations'/'image-studio';folder.mkdir(parents=True,exist_ok=True)
     ident=uuid.uuid4().hex;path=folder/(ident+ext);path.write_bytes(raw)
-    atomic_write(folder/(ident+'.json'),json.dumps({'prompt':result['prompt'],'parts':result['parts'],'preset':p['name'],'seed':result['seed']},indent=2))
+    atomic_write(folder/(ident+'.json'),json.dumps({'prompt':provider_prompt,'parts':result['parts'],'preset':p['name'],'seed':result['seed']},indent=2))
     import companion_media_review as review
-    generation=('ComfyUI' if p['provider']=='comfyui' else p.get('hermes_provider') or p['provider'])+' · '+p['name']
+    generation=('ComfyUI' if p['provider']=='comfyui' else 'Mistral' if p['provider']=='mistral' else p.get('hermes_provider') or p['provider'])+' · '+p['name']
     review.write_metadata(path,{'generation':generation,'preset_id':p['id'],'seed':result['seed']})
     if review.preferences(c)['review_before_delivery']:
         report('Reviewing the actual image before releasing it for delivery')
-        try:decision=review.inspect(c,path,result['prompt'],allow_nsfw)
+        try:decision=review.inspect(c,path,provider_prompt,allow_nsfw)
         except Exception:
             review.write_metadata(path,{'review':{'status':'unavailable'}})
             raise ValueError('Image saved for inspection in Photos, but review is unavailable. Do not send it; check the reviewer in Media preferences.')
         if decision['status']!='passed':raise ImageHeld('Image held for inspection in Photos; do not send it. '+str(decision.get('reason','It did not match the intended image.'))[:400],path,review.metadata(path)['rating'])
     meta=review.metadata(path)
-    return {'path':str(path),'file':path.name,'provider':generation,'prompt':result['prompt'],'seed':result['seed'],
+    return {'path':str(path),'file':path.name,'provider':generation,'prompt':provider_prompt,'seed':result['seed'],
             'rating':meta['rating'],'blur':review.should_blur(review.preferences(c),meta),'review':meta.get('review')}
 
 

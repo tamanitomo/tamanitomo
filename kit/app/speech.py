@@ -23,7 +23,7 @@ FIELDS={
  'xai':{'speed':SPEED},
  'elevenlabs':{'model':string('Model','eleven_multilingual_v2')},
  'minimax':{'speed':SPEED,'pitch':number('Pitch',0,-12,12,1),'emotion':choice('Emotion',['neutral','happy','sad','angry','fearful','disgusted','surprised'],'neutral')},
- 'gemini':{'model':string('Model','gemini-2.5-flash-preview-tts')},'mistral':{},
+ 'gemini':{'model':string('Model','gemini-2.5-flash-preview-tts')},'mistral':{'model':string('Model','voxtral-mini-tts-2603')},
  'neutts':{},'kittentts':{'speed':SPEED},
  'piper':{'length_scale':number('Length scale (higher = slower)',1,.1,3),'noise_scale':number('Voice variation',.667,0,2),'noise_w_scale':number('Phoneme variation',.8,0,2),'volume':number('Volume',1,0,2),'speaker_id':number('Speaker ID',0,0,10000,1)},
  'chatterbox':{'device':DEVICE,'exaggeration':number('Expressiveness',.5,0,2),'cfg_weight':number('Guidance weight',.5,0,1),'temperature':TEMP,'top_p':TOPP,'repetition_penalty':number('Repetition penalty',1.2,1,3),'seed':SEED},
