@@ -268,7 +268,10 @@ def register(app, select, load, operations):
     def operation(ident:str):
         row=operations.get(ident)
         rt,profile=select()
-        if row['scope']!=str(rt.root) or row.get('profile')!=(profile or 'default'): raise HTTPException(404,'Unknown operation')
+        application_root=str(Path(__file__).resolve().parents[2])
+        visible_scope=(row['scope']==str(rt.root) or
+                       (row.get('kind')=='application' and row['scope']==application_root))
+        if not visible_scope or row.get('profile')!=(profile or 'default'): raise HTTPException(404,'Unknown operation')
         return row
 
     @app.get('/api/profiles')

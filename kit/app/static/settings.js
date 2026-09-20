@@ -497,7 +497,7 @@ const settingsPanels=[
       <div class="update-release-notes-body">${esc(d.release_notes||'No patch notes were provided for this release.')}</div>
     </section>
     <div class="update-actions">
-      <button class="act" id="btn-inapp-update">⚡ Update to v${esc(d.latest_version)} Now</button>
+      <button class="act update-primary-action" id="btn-inapp-update"><span aria-hidden="true">⚡</span><span>Update to v${esc(d.latest_version)} now</span></button>
       ${d.release_url?`<a class="link-button" href="${esc(d.release_url)}" target="_blank" rel="noopener">Open release page →</a>`:''}
     </div>
   </div>`:`<div class="notice-strip" style="margin-top:16px">
@@ -522,7 +522,7 @@ const settingsPanels=[
         else openSettings(null, 'updates');
       } catch (err) {
         updateBtn.disabled = false;
-        updateBtn.textContent = `⚡ Update to v${d.latest_version} Now`;
+        updateBtn.innerHTML = `<span aria-hidden="true">⚡</span><span>Update to v${esc(d.latest_version)} now</span>`;
         alert('Update failed: ' + err.message);
       }
     };

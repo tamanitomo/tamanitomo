@@ -6,6 +6,7 @@ const product=fs.readFileSync(require('node:path').join(__dirname,'../kit/app/st
 assert.match(settings,/What’s new in v\$\{esc\(d\.latest_version\)\}/,'updates panel shows patch notes before installation');
 assert.ok(settings.indexOf('update-release-notes-body') < settings.indexOf('btn-inapp-update'),'patch notes appear before the Update button');
 assert.match(settings,/esc\(d\.release_notes/,'release notes are escaped before entering HTML');
+assert.match(settings,/class="act update-primary-action"/,'update action has a dedicated readable layout');
 assert.doesNotMatch(product,/id="banner-apply-update"/,'home banner must open review instead of updating immediately');
 assert.match(product,/See what’s new &amp; update/);
 let reloaded=false,element=null,tick,status={version:'2.2.1',instance_id:'old'};

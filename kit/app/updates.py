@@ -38,7 +38,16 @@ def stage(raw,root=ROOT):
         if not current.is_file():raise ValueError('This is a development checkout. Install updates in an extracted release, not this working tree.')
         old=json.loads(current.read_text())
         if any((root/n).exists() and n not in old for n in files):raise ValueError('Update would overwrite an unmanaged local file; move it aside first')
-        changed=[n for n,digest in old.items() if not (root/n).is_file() or hashlib.sha256((root/n).read_bytes()).hexdigest()!=digest]
+        changed=[]
+        for name,digest in old.items():
+            installed=root/name
+            installed_digest=(hashlib.sha256(installed.read_bytes()).hexdigest()
+                              if installed.is_file() else None)
+            incoming_digest=(hashlib.sha256(files[name]).hexdigest() if name in files else None)
+            # A prior hot-fix that is byte-for-byte identical to this trusted
+            # release is safe to adopt. Unrelated local edits remain protected.
+            if installed_digest!=digest and installed_digest!=incoming_digest:
+                changed.append(name)
         if changed:raise ValueError('Local code changes detected; keep them and update manually: '+', '.join(changed[:5]))
         folder=root/'.pending-update'
         if folder.exists():raise ValueError('An update is already staged; relaunch before staging another')
@@ -229,7 +238,8 @@ def register(app):
             str(ROOT),
             'Update Tamanitomo',
             run,
-            profile=prof
+            profile=prof,
+            kind='application'
         )
 
     @app.post('/api/updates/stage')

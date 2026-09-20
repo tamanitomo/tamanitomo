@@ -2487,6 +2487,9 @@ body[data-page="chat"] main{padding:0}
 .update-release-notes h3{margin:0 0 10px;font-size:1rem}
 .update-release-notes-body{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;max-height:min(42vh,28rem);overflow:auto;color:var(--ink)}
 .update-actions{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap}
+.update-primary-action{min-height:44px;padding:10px 16px;line-height:1.35;text-align:center;white-space:normal}
+.update-primary-action>span:last-child{display:block}
+@media(max-width:480px){.update-actions{align-items:stretch}.update-primary-action{width:100%}}
 
 /* ── Photo multi-select ─────────────────────────────────────────── */
 .photo-select-check{position:absolute;top:6px;left:6px;width:22px;height:22px;border-radius:50%;border:2px solid rgba(255,255,255,0.7);background:rgba(0,0,0,0.25);z-index:4;opacity:0;pointer-events:none;transition:opacity .15s,background .15s,transform .15s;display:grid;place-items:center}

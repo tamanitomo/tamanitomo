@@ -266,12 +266,13 @@ class Operations:
         self.rows={}
         self.busy=set()
 
-    def submit(self, scope, label, action, *, profile="default"):
+    def submit(self, scope, label, action, *, profile="default", kind="runtime"):
         with self.lock:
             if scope in self.busy: raise ValueError('Another action is still running for this installation.')
             self.busy.add(scope)
             ident=uuid.uuid4().hex
-            row={'id':ident,'scope':scope,'profile':profile or 'default','label':label,'status':'running','progress':'Starting',
+            row={'id':ident,'scope':scope,'profile':profile or 'default','kind':kind,
+                 'label':label,'status':'running','progress':'Starting',
                  'started_at':dt.datetime.now(dt.timezone.utc).isoformat()}
             self.rows[ident]=row
             self._save(row)

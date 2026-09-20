@@ -277,6 +277,12 @@ class WorkspaceTests(unittest.TestCase):
         path=ops.directory/(row['id']+'.json');data=json.loads(path.read_text());data['status']='running';path.write_text(json.dumps(data))
         self.assertEqual(persisted.get(row['id'])['status'],'interrupted')
 
+    def test_application_update_operation_is_visible_only_to_its_profile(self):
+        row=self.app.state.operations.submit(str(ROOT),'Update Tamanitomo',lambda report:{'ok':True},
+                                             profile='nova',kind='application')
+        self.assertEqual(self.get('/api/operations/'+row['id'],'nova').status_code,200)
+        self.assertEqual(self.get('/api/operations/'+row['id'],'rowan').status_code,404)
+
     def test_create_then_archive_restore_preserves_vault(self):
         created=self.wait(self.post('/api/profiles',{'profile':'mira','answers':{'agent':'Mira','human_names':'Alex','boundary':'best-friend','vault':str(self.vault),'visual':'none'}}))
         self.assertEqual(created['status'],'complete',created)

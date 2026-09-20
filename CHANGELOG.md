@@ -1,3 +1,9 @@
+## 2.3.1 — Reliable in-app updates (2026-09-19)
+
+- Keep application-wide update operations visible to the browser while preserving installation and profile isolation.
+- Allow a trusted release to adopt files that already exactly match it, so an official update can replace an earlier hot-fix without weakening local-change protection.
+- Give the primary update action comfortable line height, spacing and mobile wrapping.
+
 ## 2.3.0 — Companion continuity and structured image routing (2026-09-19)
 
 - Add Companion Continuity Settings under Models & providers with live provider/model dropdowns, the full Hermes reasoning-effort range, per-job guidance, bulk routing, failure details, and editable schedules/prompts.

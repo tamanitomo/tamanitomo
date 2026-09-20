@@ -32,6 +32,15 @@ class UpdateTests(unittest.TestCase):
             malicious,_=package({'../escape':b'bad'})
             with self.assertRaisesRegex(ValueError, 'Unsafe release path'):
                 stage(malicious,root)
+
+    def test_hotfix_identical_to_incoming_release_is_adopted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);_,old=package({'VERSION':b'1','README.md':b'old'})
+            for name,data in old.items():(root/name).write_bytes(data)
+            raw,_=package({'VERSION':b'2','README.md':b'fixed'})
+            (root/'README.md').write_bytes(b'fixed')
+            result=stage(raw,root)
+            self.assertTrue(result['staged'])
     def test_check_github_update_and_caching(self):
         from unittest.mock import patch, MagicMock
         from kit.app.updates import check_github_update, _UPDATE_CACHE
@@ -119,10 +128,11 @@ class UpdateTests(unittest.TestCase):
 
         app = FastAPI()
         class MockOps:
-            def submit(self, root, label, fn, profile='default'):
+            def submit(self, root, label, fn, profile='default', kind='runtime'):
                 rep = []
                 res = fn(rep.append)
-                return {'id': 'op-123', 'label': label, 'status': 'done', 'profile': profile, 'result': res}
+                return {'id': 'op-123', 'label': label, 'status': 'done', 'profile': profile,
+                        'kind': kind, 'result': res}
         app.state.operations = MockOps()
         register_updates(app)
         client = TestClient(app)
@@ -144,6 +154,7 @@ class UpdateTests(unittest.TestCase):
                 op_data = apply_res.json()
                 self.assertEqual(op_data['id'], 'op-123')
                 self.assertEqual(op_data['profile'], 'sam')
+                self.assertEqual(op_data['kind'], 'application')
                 self.assertTrue(op_data['result']['success'])
 
 class OfficialReleaseTests(unittest.TestCase):
