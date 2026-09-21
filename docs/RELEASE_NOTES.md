@@ -1,35 +1,15 @@
-Tamanitomo 2.3.4 makes the pulse-to-image handoff more resilient. When clothing-care timing prevents a full bedtime transition, the companion is now told how to make the smallest honest valid update instead of leaving its confirmed scene stale and starving the image timeline. Hosted image prompts also receive clean emotional-tone text rather than Python list notation.
+Tamanitomo 2.3.5 separates sleeping from being quiet.
 
-It also moves Daily rhythm into the Companion settings menu and removes the now-empty Schedule & usage menu.
+Quiet hours were doing two unrelated jobs: deciding when the companion may message you, and deciding whether she was living at all. Only the first was ever the point. A night of quiet hours used to shut down her pulse, her photographs and her recorded life for nine hours, which is not what "don't text me after eleven" means. Quiet hours now govern outreach and nothing else.
 
-It includes the 2.3.2 updater fixes: both the staging and rollback installers can safely adopt an installed hot-fix that exactly matches the trusted release. Update progress remains visible through its application-wide operation, and the update button remains readable on narrow layouts.
+Sleep is something she declares instead. At wind-down she writes down how long the night is meant to be, and everything overnight reads that one answer rather than guessing at it. If she never declared a night, her own recorded state decides. Writing to her wakes her, whatever the hour.
 
-It also includes everything in 2.3.0: explicit model control for companion continuity and structured cross-provider image prompts.
+This also fixes a gate that had been repaired three times without holding. The overnight suppressor watches a scene clock that was quietly derived from the activity *sentence*, so the same sleep described in fresher words read as a brand-new scene and woke every job that had been told to stay quiet. The result was twenty to thirty near-identical photographs of a dark bedroom per night.
+
+Photographs are taken when there is something new to see, rather than on a timer. A quiet hour of the same activity stays one picture instead of four. The decision now happens before the model is called at all, so an unchanged scene — or a whole night's sleep — costs nothing rather than a scheduled generation call every fifteen minutes.
+
+Elsewhere: timed commitments appear on the calendar alongside missions, the photo gallery explains its own pace, and the daily rhythm settings live together in one place.
 
 ### Install
 
 Download **tamanitomo-release.zip** below, extract it into its own application folder, and run the Tamanitomo launcher. Keep your Hermes home and vault outside that folder. The automatically generated GitHub source archives are for development; use the attached release ZIP for in-app updates.
-
-### Update
-
-Open **Settings → App & access → Updates** in your desktop or mobile browser. When the release is available, review these notes and choose **Update to v2.3.4 now**. The host downloads and installs the application and restarts the workspace. Your Hermes profiles, credentials, memories, journals and vault remain in their existing external locations.
-
-### Companion continuity
-
-Every model-backed Tamanitomo cron job can now be routed from **Settings → Models & providers → Companion continuity**. Each job shows its provider, model, reasoning effort, recommendation and last failure. Script-only maintenance remains model-free. Repair safely migrates older provider-pinned continuity scripts to native Hermes model routing while preserving their history.
-
-### Images across GPT, Grok, Mistral and ComfyUI
-
-Hosted image providers receive a labelled brief with separate identity, wardrobe, scene, feeling, lighting, camera and quality constraints. ComfyUI workflows retain their native mapping behavior: each named mapping is written to its own node input, and only single-prompt workflows receive a combined diffusion prompt. This release also bundles Mistral model and FLUX image-provider support.
-
-### Photos and identity
-
-Photos can be selected in batches for albums or deletion, and any eligible vault image can become the companion's reference portrait.
-
-Updates continue to verify the published release asset, stop on dependency failures, retain rollback files, and wait for the updated server before reconnecting.
-
-See CHANGELOG.md for details. The adjacent `.sha256` file verifies the complete ZIP.
-
-### Validation scope
-
-The release workflow runs the full test suite on Linux and update-specific tests on Linux, macOS and Windows. The broader existing macOS/Windows test matrix has known failures and is not claimed to pass in this release.
