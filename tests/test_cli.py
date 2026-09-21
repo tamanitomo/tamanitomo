@@ -705,6 +705,10 @@ class SettingsTests(unittest.TestCase):
                 if 'Do not contact' not in prompt:continue
                 self.assertIn('between 22:30 and 07:15',prompt,name)
                 self.assertNotIn('between 23:00 and 08:00',prompt,name)
+            schedules={j['name']:j.get('schedule',{}).get('expr') for j in json.loads((home/'cron/jobs.json').read_text())['jobs']}
+            c=cc.load(home)
+            self.assertEqual(schedules.get(c.agent+' morning'),'25 7 * * *')
+            self.assertEqual(schedules.get(c.agent+' wind-down'),'10 22 * * *')
 
     def test_the_gate_honours_the_new_window_without_a_repair(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -782,6 +786,24 @@ class SettingsTests(unittest.TestCase):
             out=run('--home',str(home),'settings',expect=0)
             self.assertEqual(json.loads(out.stdout)['quiet_hours'],'23:00-08:00')
             self.assertEqual((home/'companion.json').read_text(),before)
+
+    def test_quiet_hours_drift_updates_cron_schedules_and_prose(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home=self.install(tmp)
+            import companion_quiet as quiet
+            import datetime as dt
+            from zoneinfo import ZoneInfo
+            c=cc.load(home);c.adaptive_quiet=True;c.save()
+            now=dt.datetime(2026,3,15,12,0,tzinfo=ZoneInfo(c.timezone))
+            # 5 nights of activity just after 23:00
+            messages=[dt.datetime(2026,3,day,23,15,tzinfo=ZoneInfo(c.timezone)) for day in range(1,6)]
+            plan=quiet.apply(c,now=now,messages=messages)
+            self.assertTrue(plan.get('applied'))
+            self.assertEqual(plan.get('quiet_start'),'23:30')
+            schedules={j['name']:j.get('schedule',{}).get('expr') for j in json.loads((home/'cron/jobs.json').read_text())['jobs']}
+            self.assertEqual(schedules.get(c.agent+' wind-down'),'10 23 * * *')
+            pulse=next(p for n,p in self.prompts(home).items() if 'pulse' in n)
+            self.assertIn('between 23:30 and 08:00',pulse)
 
 
 

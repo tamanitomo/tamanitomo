@@ -60,22 +60,13 @@ def synchronize(app, runtime, old, updated):
         return None
 
     def sync(report):
-        from kit.cli.common import load_manifest, mapping, _read_jobs
-        import companion_render as render
+        from kit.cli.scaffold import refresh_schedules
         from .runtime import redact
-        before, after = mapping(old, {}), mapping(updated, {})
-        specs = {render.render(spec['name'], before): spec
-                 for spec in load_manifest(old)['jobs']}
-        next_specs = {render.render(spec['name'], after): spec
-                      for spec in load_manifest(updated)['jobs']}
         report('Preferences saved; updating background jobs')
-        for job in _read_jobs(updated.home / 'cron/jobs.json')['jobs']:
-            spec = specs.get(job.get('name'))
-            next_spec = next_specs.get(job.get('name'))
-            if spec and next_spec:
-                was, now = render.render(spec['expr'], before), render.render(next_spec['expr'], after)
-                if was != now and job.get('schedule', {}).get('expr') == was:
-                    runtime.run(['cron', 'edit', job['id'], '--schedule', now], home=updated.home)
+        sync_report = []
+        refresh_schedules(old, updated, sync_report, run_cmd=runtime.run)
+        for line in sync_report:
+            report(line.strip())
         result = runtime.run(['--home', str(updated.home), 'repair'], home=updated.home,
                              kit=True, timeout=600, check=False)
         if result.returncode:

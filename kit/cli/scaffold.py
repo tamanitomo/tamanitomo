@@ -373,6 +373,42 @@ def refresh_prose(old,new,report):
         if stale:
             report.append(f"  ! {job['name']} no longer contains the {'/'.join(k.lower() for k in stale)} wording this kit wrote; "
                           f"it was edited by hand, so update it there too")
+def refresh_schedules(old,new,report,run_cmd=None):
+    """Carry cadence / timing changes into installed cron job schedules.
+
+    If a job's schedule in Hermes matches what the kit previously rendered (was),
+    it is updated to the newly computed schedule (now). Custom schedules edited
+    by the user in Hermes are left untouched.
+    """
+    if not (new.home/'cron/jobs.json').exists():return
+    m_old,m_new=mapping(old,{}),mapping(new,{})
+    specs_old={cr.render(spec['name'],m_old):spec for spec in load_manifest(old)['jobs']}
+    specs_new={cr.render(spec['name'],m_new):spec for spec in load_manifest(new)['jobs']}
+    with cp.file_lock(new.home/'.companion-jobs.lock'):
+        for job in _read_jobs(new.home/'cron/jobs.json').get('jobs',[]):
+            spec_old=specs_old.get(job.get('name'))
+            spec_new=specs_new.get(job.get('name'))
+            if not (spec_old and spec_new):continue
+            was=cr.render(spec_old['expr'],m_old)
+            now=cr.render(spec_new['expr'],m_new)
+            current_expr=job.get('schedule',{}).get('expr')
+            if was!=now and current_expr==was:
+                try:
+                    if run_cmd is not None:
+                        result=run_cmd(['cron','edit',job['id'],'--schedule',now],home=new.home)
+                    else:
+                        result=subprocess.run(
+                            cp.hermes_command('cron','edit',job['id'],'--schedule',now),
+                            capture_output=True,text=True,encoding='utf-8',timeout=30,
+                            env={**os.environ,'HERMES_HOME':str(new.home),'HERMES_TIMEZONE':new.timezone}
+                        )
+                    if getattr(result,'returncode',0):
+                        report.append(f"  ! could not update schedule for {job.get('name',job['id'])}; retry repair")
+                    else:
+                        report.append(f"  {job.get('name',job['id'])}: schedule updated {was} -> {now}")
+                except (OSError,ValueError,subprocess.SubprocessError) as exc:
+                    report.append(f"  ! could not update schedule for {job.get('name',job['id'])}: {exc}")
+
 def install_hook(c,m,report):
     guide=c.home/'skills/companion-image-workflows/SKILL.md'
     guide_source=(T/'skills/companion-image-workflows/SKILL.md').read_text(encoding='utf-8')

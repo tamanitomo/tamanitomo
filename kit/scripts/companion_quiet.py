@@ -118,6 +118,7 @@ def apply(c,now=None,messages=None):
     now=now or dt.datetime.now(_tz(c))
     plan=propose(c,now,messages)
     if not plan.get('change'):return plan
+    old=cc.dataclasses.replace(c)
     c.quiet_start=plan['quiet_start'];c.quiet_end=plan['quiet_end'];c.save()
     path=c.soul_dir/'ambient/quiet-hours.md'
     path.parent.mkdir(parents=True,exist_ok=True)
@@ -130,6 +131,14 @@ def apply(c,now=None,messages=None):
     with log.open('a',encoding='utf-8') as f:
         f.write(json.dumps({'at':now.isoformat(),**{k:v for k,v in plan.items() if k!='evidence'}},
                            ensure_ascii=False)+'\n')
+    try:
+        kit_root=str(pathlib.Path(__file__).resolve().parents[2])
+        if kit_root not in sys.path:sys.path.insert(0,kit_root)
+        from kit.cli.scaffold import refresh_prose, refresh_schedules
+        sync_report=[]
+        refresh_prose(old,c,sync_report)
+        refresh_schedules(old,c,sync_report)
+    except Exception:pass
     return {**plan,'applied':True}
 
 def main():

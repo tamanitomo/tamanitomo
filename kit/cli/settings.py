@@ -10,7 +10,7 @@ import companion_wizard as wiz
 from .common import input, mapping, print, resolve
 from .ops import cmd_schedule
 from .questions import ask, ask_outreach_cap, check_timezone, parse_cap, pick_key, pick_timezone, strict_hhmm
-from .scaffold import install_hook, refresh_prose
+from .scaffold import install_hook, refresh_prose, refresh_schedules
 from .timeline import cmd_timeline
 
 OUTREACH_LABELS={'free':'yes, socially whenever they want',
@@ -47,6 +47,7 @@ def commit_settings(c,updated,report):
         report.append('  nothing changed');return c
     updated.save()
     refresh_prose(c,updated,report)
+    refresh_schedules(c,updated,report)
     if updated.timezone!=c.timezone:
         install_hook(updated,mapping(updated,{}),report)
         report.append(f'  timezone {c.timezone} -> {updated.timezone}; Hermes config.yaml updated')

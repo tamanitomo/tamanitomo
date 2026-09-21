@@ -162,29 +162,46 @@ const settingsPanels=[
   <h2>Contact & outreach</h2>
   <p class="dim">Limits for messages they start. Replies are always allowed.</p>
 
-  <h3 class="section-subheading">Quiet hours</h3>
-  <div class="time-pair">
-    <label>From<input type="time" id="qs" value="${esc(s.quiet_start)}" placeholder="22:00"></label>
-    <label>To<input type="time" id="qe" value="${esc(s.quiet_end)}" placeholder="08:00"></label>
-  </div>
-  ${toggleRow('adapt','Adapt quiet hours',
-    'Adjust to your sleep pattern.',s.adaptive_quiet)}
+  <div class="contact-settings">
+    <div class="contact-row">
+      <label class="contact-label" for="qs">Quiet Hours:</label>
+      <div class="contact-controls">
+        <input type="time" id="qs" value="${esc(s.quiet_start)}" placeholder="22:00" aria-label="Quiet hours start">
+        <span class="range-sep" aria-hidden="true">–</span>
+        <input type="time" id="qe" value="${esc(s.quiet_end)}" placeholder="08:00" aria-label="Quiet hours end">
+        <label class="switch-container compact-toggle" data-toggle-row title="Adjust to your sleep pattern">
+          <input type="checkbox" id="adapt" ${s.adaptive_quiet?'checked':''}>
+          <span class="switch-slider" aria-hidden="true"></span>
+          <span class="switch-label">Adapt quiet hours</span>
+        </label>
+      </div>
+    </div>
 
-  <h3 class="section-subheading">Outreach</h3>
-  <div class="time-pair">
-    <label>They may write first
-      <select id="out">${options([['free','Social & updates'],['updates_only','Updates only'],['never','Replies only']],s.outreach)}</select>
-    </label>
-    <label>Daily limit
-      <input id="cap" type="number" min="0" max="100" value="${s.outreach_per_day??3}">
-    </label>
-  </div>
-  <p class="dim small">Daily limit: 0 means unlimited.</p>
+    <div class="contact-row">
+      <label class="contact-label" for="out">Outreach:</label>
+      <div class="contact-controls">
+        <select id="out">${options([['free','Social & updates'],['updates_only','Updates only'],['never','Replies only']],s.outreach)}</select>
+        <div class="daily-limit-field" title="Daily message limit (0 means unlimited)">
+          <input id="cap" type="number" min="0" max="100" value="${s.outreach_per_day??3}" aria-label="Daily message limit (0 means unlimited)">
+          <span class="dim small">/ day</span>
+        </div>
+      </div>
+    </div>
 
-  <h3 class="section-subheading">Unprompted media</h3>
-  <div class="time-pair">
-    <label>Photos<select id="pimage">${perm('image')}</select></label>
-    <label>Voice notes<select id="pvoice">${perm('voice')}</select></label>
+    <h3 class="section-subheading" style="margin-top:16px;margin-bottom:4px">Unprompted Media</h3>
+    <div class="contact-row">
+      <label class="contact-label" for="pimage">Photos:</label>
+      <div class="contact-controls">
+        <select id="pimage">${perm('image')}</select>
+      </div>
+    </div>
+
+    <div class="contact-row">
+      <label class="contact-label" for="pvoice">Voice Notes:</label>
+      <div class="contact-controls">
+        <select id="pvoice">${perm('voice')}</select>
+      </div>
+    </div>
   </div>
   ${settingsFooter('Save')}`;
   wireToggles(host);
@@ -207,12 +224,24 @@ const settingsPanels=[
   host.innerHTML=`
   <h2>Daily rhythm</h2>
   <p class="dim">Times for independent reading and projects.</p>
-  <div id="autonomy-times" class="time-chips"></div>
-  <button type="button" class="quiet small" id="add-autonomy-time">Add time</button>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0 16px">
+    <div id="autonomy-times" class="time-chips" style="margin:0"></div>
+    <button type="button" class="quiet small" id="add-autonomy-time" style="padding:6px 12px;height:34px">+ Add time</button>
+  </div>
 
   <h3 class="section-subheading">Shared memory</h3>
-  ${toggleRow('share','Share memories about you',
-    'Let your other companions use these memories.',s.share_people)}
+  <div class="contact-settings" style="margin-top:10px">
+    <div class="contact-row">
+      <label class="contact-label">Shared memory:</label>
+      <div class="contact-controls">
+        <label class="switch-container compact-toggle" data-toggle-row title="Let your other companions use these memories">
+          <input type="checkbox" id="share" ${s.share_people?'checked':''}>
+          <span class="switch-slider" aria-hidden="true"></span>
+          <span class="switch-label">Share memories about you with other companions</span>
+        </label>
+      </div>
+    </div>
+  </div>
   ${settingsFooter('Save rhythm')}`;
   wireToggles(host);
   const times=host.querySelector('#autonomy-times');
@@ -239,13 +268,20 @@ const settingsPanels=[
   host.innerHTML=`
   <h2>Awareness</h2>
   <p class="dim">Choose what they can notice.</p>
-  <label>Where you live<input id="loc" value="${esc(s.location)}" placeholder="Raleigh, NC"></label>
+  <div class="contact-settings" style="margin-bottom:18px">
+    <div class="contact-row">
+      <label class="contact-label" for="loc">Where you live:</label>
+      <div class="contact-controls">
+        <input id="loc" value="${esc(s.location)}" placeholder="Raleigh, NC" style="max-width:300px">
+      </div>
+    </div>
+  </div>
 
-  <div class="section-heading" style="margin-top:26px">
+  <div class="section-heading" style="margin-top:20px">
     <h3 class="section-subheading" style="margin:0">Sensors</h3>
     <span class="pill ${on?'status-good':'status-warn'}" id="sensor-count">${on} of ${total} on</span>
   </div>
-  <div class="toggle-stack">
+  <div class="sensor-grid">
     ${Object.entries(s.available_sensors).map(([k,blurb])=>
       toggleRow('sensor-'+k,({dates:'Important dates',care:'Follow-ups',durations:'Milestones',thread:'Conversation rhythm',daylight:'Daylight',weather:'Weather',music:'Music'})[k]||k,({weather:'Local conditions, updated hourly.',daylight:'Seasons, moon and daylight.',dates:'Upcoming birthdays and anniversaries.',care:'Things worth checking in about.',durations:'Time since important dates.',thread:'Time since your last conversation.',music:'Spotify playback or room mood.'})[k]||blurb,s.sensors.includes(k),`data-sensor="${esc(k)}"`)).join('')}
   </div>
@@ -271,27 +307,51 @@ const settingsPanels=[
   host.innerHTML=`
   <h2>Photo sessions</h2>
   <p class="dim">Capture scenes from their day with your connected image provider.</p>
-  ${toggleRow('tl','Automatic photos','',s.image_timeline)}
-  <label>Time between photos<select id="image-interval">${options([5,10,15,20,30,60,120,240,360,720,1440].map(n=>[String(n),n<60?n+' minutes':n===60?'1 hour':n===1440?'24 hours':(n/60)+' hours']),String(s.image_interval_minutes||15))}</select></label>
-  <div class="form-grid" style="margin-top:16px">
-    <label>Image style
-      <select id="image-style">${options(Object.entries(s.image_styles),s.image_style)}</select>
-    </label>
-    <label>Storage budget
-      <input id="gb" type="number" step="0.5" min="0" value="${s.timeline_budget_gb}">
-      <small class="dim">Gigabytes kept before the oldest are pruned.</small>
-    </label>
+
+  <div class="contact-settings">
+    <div class="contact-row">
+      <label class="contact-label">Automatic photos:</label>
+      <div class="contact-controls">
+        <label class="switch-container compact-toggle" data-toggle-row>
+          <input type="checkbox" id="tl" ${s.image_timeline?'checked':''}>
+          <span class="switch-slider" aria-hidden="true"></span>
+          <span class="switch-label">Enabled</span>
+        </label>
+        <span class="range-sep" aria-hidden="true">·</span>
+        <label for="image-interval" style="margin:0;font-size:13.5px;color:var(--dim);display:inline-flex;align-items:center;gap:6px">Interval:
+          <select id="image-interval" style="margin:0">${options([5,10,15,20,30,60,120,240,360,720,1440].map(n=>[String(n),n<60?n+' minutes':n===60?'1 hour':n===1440?'24 hours':(n/60)+' hours']),String(s.image_interval_minutes||15))}</select>
+        </label>
+      </div>
+    </div>
+
+    <div class="contact-row">
+      <label class="contact-label" for="image-style">Image style:</label>
+      <div class="contact-controls">
+        <select id="image-style">${options(Object.entries(s.image_styles),s.image_style)}</select>
+        <span class="range-sep" aria-hidden="true">·</span>
+        <div class="daily-limit-field" title="Gigabytes kept before the oldest are pruned">
+          <label for="gb" style="margin:0;font-size:13.5px;color:var(--dim);display:inline-flex;align-items:center;gap:6px">Budget:
+            <input id="gb" type="number" step="0.5" min="0" value="${s.timeline_budget_gb}" style="width:75px">
+            <span class="dim small">GB</span>
+          </label>
+        </div>
+      </div>
+    </div>
   </div>
 
   <details class="settings-advanced"><summary>Review &amp; blurring</summary>
-  <h3 class="section-subheading">Before a picture reaches you</h3>
-  <label>Who checks it
-    <select id="media-review-mode">${options([
-      ['none','Nobody — deliver as generated'],
-      ['local','This machine, privately (NudeNet)'],
-      ['remote','A vision model']],
-      !prefs.review_before_delivery?'none':(prefs.review_provider==='local-nsfw'?'local':'remote'))}</select>
-  </label>
+  <div class="contact-settings" style="margin-top:12px">
+    <div class="contact-row">
+      <label class="contact-label" for="media-review-mode">Who checks it:</label>
+      <div class="contact-controls">
+        <select id="media-review-mode">${options([
+          ['none','Nobody — deliver as generated'],
+          ['local','This machine, privately (NudeNet)'],
+          ['remote','A vision model']],
+          !prefs.review_before_delivery?'none':(prefs.review_provider==='local-nsfw'?'local':'remote'))}</select>
+      </div>
+    </div>
+  </div>
   <div id="media-review-local" hidden>
     <p class="dim small">NudeNet runs here and nothing leaves the machine. About 12&nbsp;MB of model and roughly
       150&nbsp;MB of memory while scanning. It finds exposed intimate anatomy; it does not judge scene accuracy
@@ -301,16 +361,39 @@ const settingsPanels=[
   </div>
   <div id="media-review-remote" hidden>
     <p class="dim small">A vision model can also judge scene and clothing, but the picture is sent to it.</p>
-    <div class="form-grid">
-      <label>Provider<input id="media-review-provider" value="${esc(prefs.review_provider==='local-nsfw'?'':prefs.review_provider)}" placeholder="openai, anthropic…"></label>
-      <label>Model<input id="media-review-model" value="${esc(prefs.review_model)}" placeholder="Leave empty for the compression model"></label>
+    <div class="contact-settings">
+      <div class="contact-row">
+        <label class="contact-label" for="media-review-provider">Provider:</label>
+        <div class="contact-controls">
+          <input id="media-review-provider" value="${esc(prefs.review_provider==='local-nsfw'?'':prefs.review_provider)}" placeholder="openai, anthropic…">
+        </div>
+      </div>
+      <div class="contact-row">
+        <label class="contact-label" for="media-review-model">Model:</label>
+        <div class="contact-controls">
+          <input id="media-review-model" value="${esc(prefs.review_model)}" placeholder="Leave empty for the compression model">
+        </div>
+      </div>
     </div>
   </div>
 
-  <h3 class="section-subheading">What stays blurred</h3>
-  ${toggleRow('media-blur','Pictures found to be sensitive','Open one to reveal it.',prefs.blur_nsfw_initially)}
-  ${toggleRow('media-blur-unknown','Pictures nothing has checked',
-    'Includes scans that failed, so a check that could not run never passes as a clean one.',prefs.blur_unknown_initially!==false)}
+  <h3 class="section-subheading" style="margin-top:16px;margin-bottom:6px">What stays blurred</h3>
+  <div class="contact-settings">
+    <div class="contact-row">
+      <label class="switch-container compact-toggle" data-toggle-row title="Open one to reveal it">
+        <input type="checkbox" id="media-blur" ${prefs.blur_nsfw_initially?'checked':''}>
+        <span class="switch-slider" aria-hidden="true"></span>
+        <span class="switch-label">Blur pictures found to be sensitive</span>
+      </label>
+    </div>
+    <div class="contact-row">
+      <label class="switch-container compact-toggle" data-toggle-row title="Includes scans that failed, so a check that could not run never passes as a clean one">
+        <input type="checkbox" id="media-blur-unknown" ${prefs.blur_unknown_initially!==false?'checked':''}>
+        <span class="switch-slider" aria-hidden="true"></span>
+        <span class="switch-label">Blur pictures nothing has checked</span>
+      </label>
+    </div>
+  </div>
   </details>
 
   ${settingsFooter('Save')}`;
@@ -375,22 +458,43 @@ const settingsPanels=[
   host.innerHTML=`
   <h2>Relationship <span class="pill status-warn">Unlocked</span></h2>
   <p class="dim">Unlocked for this visit. It locks again when you reload.</p>
-  <div class="form-grid">
-    <label>Progression
-      <select id="progression">${options([['off','Hide progression'],['subtle','Subtle, natural familiarity'],['milestones','Show shared milestones']],s.relationship_progression)}</select>
-    </label>
-    <label>Pace
-      <select id="pace">${options([['slow','Slow and gradual'],['natural','Natural'],['quick','Open to quicker familiarity']],s.relationship_pace)}</select>
-    </label>
-    <label>Intimacy &amp; romance
-      <select id="adult-themes">${options([['false','Friendly / platonic only'],['true','Romantic connection enabled']],String(s.explicit))}</select>
-    </label>
-    <label>Other companions
-      <select id="peer-interaction">${options([['true','May interact'],['false','Kept apart']],String(s.peer_interaction))}</select>
-    </label>
+  <div class="contact-settings">
+    <div class="contact-row">
+      <label class="contact-label" for="progression">Progression:</label>
+      <div class="contact-controls">
+        <select id="progression">${options([['off','Hide progression'],['subtle','Subtle, natural familiarity'],['milestones','Show shared milestones']],s.relationship_progression)}</select>
+      </div>
+    </div>
+    <div class="contact-row">
+      <label class="contact-label" for="pace">Pace:</label>
+      <div class="contact-controls">
+        <select id="pace">${options([['slow','Slow and gradual'],['natural','Natural'],['quick','Open to quicker familiarity']],s.relationship_pace)}</select>
+      </div>
+    </div>
+    <div class="contact-row">
+      <label class="contact-label" for="adult-themes">Romance:</label>
+      <div class="contact-controls">
+        <select id="adult-themes">${options([['false','Friendly / platonic only'],['true','Romantic connection enabled']],String(s.explicit))}</select>
+        <span class="dim small" style="margin-left:4px">(Permanent if turned off)</span>
+      </div>
+    </div>
+    <div class="contact-row">
+      <label class="contact-label" for="peer-interaction">Companions:</label>
+      <div class="contact-controls">
+        <select id="peer-interaction">${options([['true','May interact with each other'],['false','Kept apart']],String(s.peer_interaction))}</select>
+      </div>
+    </div>
+    <div class="contact-row">
+      <label class="contact-label">Meters:</label>
+      <div class="contact-controls">
+        <label class="switch-container compact-toggle" data-toggle-row>
+          <input type="checkbox" id="bars" ${s.bars?'checked':''}>
+          <span class="switch-slider" aria-hidden="true"></span>
+          <span class="switch-label">Show connection, feelings and closeness meters</span>
+        </label>
+      </div>
+    </div>
   </div>
-  <p class="dim small">Turning romance off is permanent for this companion — it cannot be turned back on.</p>
-  ${toggleRow('bars','Show connection, feelings and closeness meters','',s.bars)}
   ${settingsFooter('Save relationship settings')}`;
   wireToggles(host);
   wireSave(host,async()=>{
@@ -447,11 +551,16 @@ const settingsPanels=[
 
   <h3 class="section-subheading">Remote access PIN</h3>
   <p class="dim">Required on other devices and to unlock relationship settings.</p>
-  <div class="pin-row">
-    <input id="remote-pin-field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4"
-      placeholder="${s.remote_pin?'••••':'1234'}" aria-label="Four digit PIN">
-    <button class="act" id="save-remote-pin" type="button">${s.remote_pin?'Replace PIN':'Set PIN'}</button>
-    ${s.remote_pin?'<button class="quiet" id="clear-remote-pin" type="button">Remove PIN</button>':''}
+  <div class="contact-settings">
+    <div class="contact-row">
+      <label class="contact-label" for="remote-pin-field">4-digit PIN:</label>
+      <div class="contact-controls pin-row" style="margin:0">
+        <input id="remote-pin-field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4"
+          placeholder="${s.remote_pin?'••••':'1234'}" aria-label="Four digit PIN">
+        <button class="act" id="save-remote-pin" type="button">${s.remote_pin?'Replace PIN':'Set PIN'}</button>
+        ${s.remote_pin?'<button class="quiet" id="clear-remote-pin" type="button">Remove PIN</button>':''}
+      </div>
+    </div>
   </div>
   <p class="dim small" style="margin-top:6px">Locked out from another device? Run <code>tamanitomo pin --clear</code> in your terminal to remove it instantly.</p>
   <p class="small" id="pin-feedback" role="status"></p>`;
