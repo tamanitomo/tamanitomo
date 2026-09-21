@@ -33,9 +33,7 @@ def capture(c,now=None):
         # it is, so reaching here with an undressed scene means the permissions hold.
         # Saying so lifts the modesty negatives; leaving them on is what put clothes
         # back into the shower.
-        from companion_presence import undress
-        kind,_=undress(claimed['scene']['state'])
-        intimate=kind in ('undressed','bathing')
+        intimate=timeline.is_private(claimed['scene']['state'])
         generated=media.generate(c,preset,'portrait',overrides,intimate=intimate)
         saved=timeline.save(c,ident,generated['path'],generated['provider'],now,prompts=generated.get('prompts'))
         return {'status':saved['status'],'capture_id':ident,

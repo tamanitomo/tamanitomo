@@ -78,11 +78,14 @@ class SectionsDoNotBleedTests(unittest.TestCase):
             with self.subTest(key=key):
                 self.assertEqual(overrides.get(key, ''), split.get(key, ''))
 
-    def test_the_single_line_form_still_carries_everything(self):
-        """`scene_block` is for workflows with one box; it must stay complete."""
+    def test_the_prose_form_carries_everything_once(self):
+        """A hosted provider takes one block of text, so it needs every part — but
+        each said once, with the scene still only the scene."""
         line, _ = portrait.scene_block(self.c, self.record)
-        for piece in ('waiting for morning', 'bedroom', WARDROBE):
-            self.assertIn(piece, line)
+        self.assertIn('waiting for morning', line)
+        self.assertIn('bedroom', line)
+        for owned in (WARDROBE, LIGHTING, FRAMING):
+            self.assertNotIn(owned, line, 'the scene is carrying something with its own box')
 
 
 if __name__ == '__main__':
@@ -121,3 +124,60 @@ class WardrobeWinsOverAGeneralDescriptionTests(unittest.TestCase):
         # Deciding this by looking for clothing words in someone's description is the
         # habit this codebase keeps having to undo.
         self.assertNotIn("for w in ('sweat','hoodie'", media)
+
+
+class ABathCannotBeTakenInClothesTests(unittest.TestCase):
+    """The record said "taking a hot morning shower" and listed pyjamas.
+
+    Nothing was undressed, so nothing marked the moment private, so the capture gate
+    never fired and the picture came out exactly as the record read: a clothed
+    shower. The words are used only to refuse and ask for a correction — the outfit
+    stays the thing that is believed.
+    """
+
+    def setUp(self):
+        import companion_presence as presence
+        self.presence = presence
+        tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
+        base = pathlib.Path(tmp.name)
+        self.c = cc.Companion(agent='Nova', human='Alex', profile='n',
+                              hermes_root=base / 'h', vault=base / 'v')
+        self.c.home.mkdir(parents=True); self.c.life.mkdir(parents=True); self.c.save()
+        presence.update_wardrobe(self.c, [
+            {'id': 'pj', 'description': 'soft pyjamas', 'use': 'sleep', 'category': 'sleep'},
+            {'id': 'tee', 'description': 'a tee', 'use': 'day', 'category': 'day'}])
+        self.now = dt.datetime(2026, 9, 21, 7, 30, tzinfo=UTC)
+
+    def write(self, minutes, **kw):
+        row = {'previous_id': (self.presence.current(self.c) or {}).get('id'),
+               'outfit': ['pj'], 'location': 'the bathroom', 'activity': 'brushing teeth',
+               'mood': 'ok', 'text': 'x', 'transition': 'x', **kw}
+        return self.presence.update(self.c, row, self.now + dt.timedelta(minutes=minutes))
+
+    def test_showering_in_pyjamas_is_refused(self):
+        with self.assertRaisesRegex(ValueError, 'cannot be taken in clothes'):
+            self.write(0, activity='taking a hot morning shower')
+
+    def test_recording_it_honestly_is_accepted_and_marked_private(self):
+        self.write(0, activity='taking a hot morning shower', outfit=['bathing'])
+        state = self.presence.current(self.c)['state']
+        self.assertTrue(state['private'], 'a bath should mark the moment private')
+
+    def test_ordinary_business_in_a_bathroom_is_untouched(self):
+        for n, activity in enumerate(('brushing teeth', 'cleaning the shower', 'putting on a bathrobe',
+                                      'sunbathing on the deck', 'shopping for a bathing suit')):
+            with self.subTest(activity=activity):
+                self.write(n * 20, activity=activity, transition='Moved on.')
+
+    def test_privacy_does_not_leak_into_the_next_moment(self):
+        """A bath that quietly persisted into breakfast would be worse than useless."""
+        self.write(0, activity='taking a hot morning shower', outfit=['bathing'])
+        self.write(20, activity='making breakfast', location='the kitchen', outfit=['tee'],
+                   care_actions=[], transition='Got dressed.')
+        self.assertFalse(self.presence.current(self.c)['state'].get('private'))
+
+    def test_a_private_moment_is_not_photographed_at_this_closeness(self):
+        import companion_timeline as timeline
+        self.write(0, activity='taking a hot morning shower', outfit=['bathing'])
+        state = self.presence.current(self.c)['state']
+        self.assertTrue(timeline.is_private(state))

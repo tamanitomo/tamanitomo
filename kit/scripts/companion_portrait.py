@@ -73,26 +73,33 @@ def identity_block(c,use_override=True):
     lines=[l for l in lines if not l.startswith('<!--') and not l.startswith('#')]
     return ' '.join(lines).strip()
 
+# Visual fields that have a box of their own. Anything else in `visual` describes
+# what she is doing, so it belongs with the scene.
+OWN_BOX={'lighting':'lighting','framing':'camera'}
+
+
 def scene_block(c,record=None):
-    """What she is actually doing, from the recorded state."""
+    """Where she is and what she is doing. Only that.
+
+    It used to append the outfit, the light and the framing as well, which put the
+    same clothes into the scene box and the wardrobe box, and the framing into the
+    scene, the camera box and the tag list at once. Every one of those has a place
+    of its own; what belongs here is the moment.
+    """
     from companion_presence import current
     scene=record if record is not None else current(c)
     if not scene:return '',None
     state=scene['state']
-    from companion_presence import undress
-    _kind,outfit=undress(state)
     # Locations get recorded however they were written — "the kitchen" wants an
     # "in", "in the car on the highway" already has one.
     place=state.get('location','')
     if place and not re.match(r'(in|on|at|by|near|inside|outside|under|beside)\b',place.strip(),re.I):
         place='in '+place
-    from companion_presence import wardrobe_clause
-    parts=[state.get('activity',''),place]
-    clause=wardrobe_clause(outfit)
-    if clause:parts.append(clause)
     visual=state.get('visual') or {}
-    parts.extend(f'{key}: {value}' for key,value in visual.items() if value)
+    parts=[state.get('activity',''),place]
+    parts.extend(f'{key}: {value}' for key,value in visual.items() if value and key not in OWN_BOX)
     return ', '.join(p for p in parts if p),scene
+
 
 # Daylight by the clock, for the times nothing recorded the light. Approximate
 # on purpose: a picture wants to know it is golden hour, not the sun's azimuth.
@@ -138,11 +145,6 @@ def feeling_text(state):
     if isinstance(wants,list):values.extend(str(value).strip() for value in wants if str(value).strip())
     elif str(wants).strip():values.append(str(wants).strip())
     return ', '.join(values)
-
-
-# Visual fields that have a box of their own. Anything else in `visual` describes
-# what she is doing, so it belongs with the scene.
-OWN_BOX={'lighting':'lighting','framing':'camera'}
 
 
 def recorded_parts(c,record=None):
@@ -206,8 +208,14 @@ def style_block(c):
     return style.get('soul','')
 
 def compile_prompt(c,extra='',use_reference=False):
-    """The whole prompt: who, then what, then how it should look."""
+    """The whole prompt as prose, for a provider that takes one block of text.
+
+    A hosted model reads sentences, so everything is spelled out here rather than
+    split into boxes — but each thing is still said exactly once, and the scene is
+    the scene rather than a bag with the wardrobe and the lighting folded into it.
+    """
     identity=identity_block(c)
+    parts=recorded_parts(c)
     scene,record=scene_block(c)
     style=style_block(c)
     if not identity:
@@ -219,7 +227,13 @@ def compile_prompt(c,extra='',use_reference=False):
         return {'ready':False,
                 'reason':'no recorded state, so there is no moment to photograph. A scene invented '
                          'for the camera is exactly what this pipeline exists to prevent.'}
-    pieces=[identity,scene]
+    from companion_presence import wardrobe_clause
+    pieces=[identity]
+    if parts.get('wardrobe'):pieces.append('She is '+wardrobe_clause(parts['wardrobe']))
+    pieces.append(scene)
+    if parts.get('feeling'):pieces.append(parts['feeling'])
+    if parts.get('lighting'):pieces.append(parts['lighting'])
+    if parts.get('camera'):pieces.append(parts['camera'])
     if extra.strip():pieces.append(extra.strip())
     if style:pieces.append(style)
     prompt=' '.join(p.rstrip('.')+'.' for p in pieces if p)

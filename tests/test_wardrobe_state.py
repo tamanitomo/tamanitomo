@@ -45,9 +45,9 @@ class WardrobeIsReadFromTheRecordTests(unittest.TestCase):
                                    ('sunbathing on the deck', 'the back garden'),
                                    ('putting on a bathrobe', 'the bedroom'),
                                    ('shopping for a bathing suit', 'the mall')):
-            scene, _ = portrait.scene_block(self.c, self.rec(activity, location, DRESSED))
+            parts = portrait.recorded_parts(self.c, self.rec(activity, location, DRESSED))
             with self.subTest(activity=activity):
-                self.assertIn('a green cotton tee', scene)
+                self.assertIn('a green cotton tee', parts['wardrobe'])
 
     def test_the_recorded_tokens_do_undress_her(self):
         for outfit, expected in ((NUDE, ''), ([], ''), (TOWEL, 'wrapped in a bath towel')):
@@ -56,22 +56,33 @@ class WardrobeIsReadFromTheRecordTests(unittest.TestCase):
                 self.assertEqual(parts['wardrobe'], expected)
 
     def test_the_towel_reads_as_a_sentence(self):
-        scene, _ = portrait.scene_block(self.c, self.rec('drying off', 'the bedroom', TOWEL))
-        self.assertIn('wrapped in a bath towel', scene)
-        self.assertNotIn('wearing wrapped', scene)
+        from companion_presence import wardrobe_clause
+        parts = portrait.recorded_parts(self.c, self.rec('drying off', 'the bedroom', TOWEL))
+        clause = wardrobe_clause(parts['wardrobe'])
+        self.assertEqual(clause, 'wrapped in a bath towel')
+        self.assertNotIn('wearing wrapped', clause)
 
     def test_both_prompt_paths_agree_about_how_dressed_she_is(self):
         """Three copies of the rule meant the towel survived one path and not another,
         so which preset you used decided whether she had anything on."""
         for outfit in (DRESSED, TOWEL, NUDE, []):
             record = self.rec('stepping out of the shower', 'the bathroom', outfit)
-            scene, _ = portrait.scene_block(self.c, record)
-            wardrobe = portrait.prompt_parts(self.c, record)['wardrobe']
             with self.subTest(outfit=outfit):
-                if wardrobe:
-                    self.assertIn(wardrobe, scene)
-                else:
-                    self.assertNotIn('wearing', scene)
+                self.assertEqual(portrait.recorded_parts(self.c, record)['wardrobe'],
+                                 portrait.prompt_parts(self.c, record)['wardrobe'])
+
+    def test_the_scene_is_only_the_scene(self):
+        """Camera, light and clothing each have a box; the scene is where she is
+        and what she is doing, and nothing else."""
+        record = self.rec('drying off', 'the bedroom', TOWEL)
+        record['state']['visual'] = {'framing': 'close from the doorway',
+                                     'lighting': 'warm bulb overhead',
+                                     'pose': 'towelling her hair'}
+        scene, _ = portrait.scene_block(self.c, record)
+        self.assertIn('drying off', scene)
+        self.assertIn('towelling her hair', scene)
+        for elsewhere in ('wrapped in a bath towel', 'close from the doorway', 'warm bulb overhead'):
+            self.assertNotIn(elsewhere, scene, elsewhere)
 
 
 class PublicIsAPlaceNotAWordTests(unittest.TestCase):

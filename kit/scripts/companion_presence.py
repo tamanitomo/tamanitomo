@@ -8,7 +8,7 @@ person knows about themselves and does not announce. Emotive.md is rendered from
 this, never written by hand, so there is nothing for it to disagree with.
 """
 from __future__ import annotations
-import argparse, datetime as dt, hashlib, json, pathlib, sys
+import re, argparse, datetime as dt, hashlib, json, pathlib, sys
 from zoneinfo import ZoneInfo
 import companion_config as cc
 from companion_platform import atomic_write, file_lock
@@ -22,6 +22,17 @@ VIRTUAL_TOKENS={'nude':'undressed','undressed':'undressed',
                 'bathing':'in the bath/shower','towel':'wrapped in a bath towel'}
 # The ones that mean nothing is being worn, as opposed to very little.
 BARE_TOKENS=('nude','undressed','bathing')
+
+
+# Being in the water, as opposed to being near it or dressed for it. Deliberately
+# narrow, and used for one thing only: refusing a record that says she is bathing
+# while listing the clothes she is wearing. "sunbathing" has no word break before
+# "bathing", and a bathing suit, a bathroom and a shower that is being cleaned are
+# all excluded, because each of them is a thing done with clothes on.
+BATHING_ACTIVITY=re.compile(
+    r'\b(?:in|under|taking|having|getting|steps?|stepping|stood|standing)\b[^.,;]{0,24}'
+    r'\b(?:shower|bath|tub)\b(?!\s*(?:suit|costume|room|mat|robe))'
+    r'|\bshowering\b|\bbathing\b(?!\s*(?:suit|costume))|\bsoaking in\b',re.I)
 
 
 # Somewhere she could be seen. Matched on whole words against the LOCATION only:
@@ -165,6 +176,15 @@ def update(c,data,now=None):
             if item not in closet and item not in VIRTUAL_TOKENS:raise ValueError('Add new items to the wardrobe before wearing them')
         loc=text(data.get('location'),'location',240)
         act=text(data.get('activity'),'activity',120)
+        # "Taking a hot morning shower" recorded while still wearing pyjamas is not a
+        # scene, it is two records disagreeing -- and it photographed exactly as it
+        # read. The words are only used to REFUSE and ask for a correction, never to
+        # decide anything on their own; the outfit stays the thing that is believed.
+        dressed=[i for i in outfit if i not in VIRTUAL_TOKENS and closet.get(i,{}).get('category') not in ('underwear',)]
+        if dressed and BATHING_ACTIVITY.search(act) and not data.get('private'):
+            raise ValueError('A bath or shower cannot be taken in clothes: record the outfit as '
+                             'bathing, towel or undressed, or say what you are really doing. '
+                             'If this is something else in a bathroom, set private explicitly.')
         is_undressed_state=not outfit or all(i in VIRTUAL_TOKENS or closet.get(i,{}).get('category')=='underwear' for i in outfit)
         if is_undressed_state and 'towel' not in outfit and in_public(loc,act):
             raise ValueError('Changing or undressed states require a private setting; dress in daytime or active clothes before going out')
@@ -199,6 +219,12 @@ def update(c,data,now=None):
         # which is what lets a pre-upgrade replay still compare equal.
         if 'asleep' in data:state['asleep']=bool(data['asleep'])
         elif previous and 'asleep' in previous['state']:state['asleep']=bool(previous['state']['asleep'])
+        # Whether this is a moment she would not want photographed. Like `asleep`, a
+        # field she sets rather than something a later reader infers from the words.
+        # It does NOT carry forward: privacy is about this moment, and a bath that
+        # quietly persisted into breakfast would be worse than useless.
+        if 'private' in data:state['private']=bool(data['private'])
+        elif undress(state)[0] in ('undressed','bathing','towel'):state['private']=True
         narrative=text(data.get('text'),'episode text',1600)
         import companion_day
         parent=previous
