@@ -175,6 +175,12 @@ class Companion:
     bars:bool=True
     relationship_progression:str='subtle'
     relationship_pace:str='natural'
+    # The day this relationship began, as YYYY-MM-DD. Closeness is earned over days
+    # spent together, and without an anchor that count reaches back through every
+    # conversation the underlying assistant ever had -- so a companion installed onto
+    # a year-old Hermes would start out already close to someone it had just met.
+    # Empty means "no anchor recorded", which reads the whole history as before.
+    relationship_started:str=''
     peer_interaction:bool=True
     # Which sensors this profile has switched on, by name.
     sensors:list=dataclasses.field(default_factory=list)
@@ -189,6 +195,11 @@ class Companion:
             raise ValueError('relationship_progression must be off, subtle, or milestones')
         if self.relationship_pace not in ('slow','natural','quick'):
             raise ValueError('relationship_pace must be slow, natural, or quick')
+        if self.relationship_started:
+            import datetime as _dt
+            try:_dt.date.fromisoformat(self.relationship_started)
+            except (TypeError,ValueError):
+                raise ValueError('relationship_started must be a date as YYYY-MM-DD, or empty')
         if not isinstance(self.peer_interaction,bool):raise ValueError('peer_interaction must be true or false')
         if not isinstance(self.explicit,bool):raise ValueError('explicit must be true or false')
         if self.explicit:

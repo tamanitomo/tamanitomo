@@ -163,6 +163,18 @@ def compute(c, now=None) -> Dict[str, Any]:
             if con:
                 con.close()
 
+    # Closeness is earned over days spent together, so only days that belong to THIS
+    # relationship count. Without the anchor the tally reaches back through every
+    # conversation the underlying assistant ever had, and a companion installed onto
+    # a long-lived Hermes wakes up already intimate with someone it has just met.
+    started = getattr(c, 'relationship_started', '') or ''
+    if started:
+        try:
+            first_day = dt.date.fromisoformat(started)
+            active_dates = {d for d in active_dates if d >= first_day}
+        except (TypeError, ValueError):
+            pass
+
     active_days = len(active_dates)
     if not active_days and connections:
         active_days = 1
@@ -181,14 +193,20 @@ def compute(c, now=None) -> Dict[str, Any]:
         # Stage 1+ slow burn: ~1.25 points per active day past Friends (~56 days to reach Bonded 90 pts)
         days_past_friends = max(0, active_days - 4)
         slow_burn_points = days_past_friends * 1.25 * pace_mult
-        earned_score = stage0_points + min(75.0, slow_burn_points)
+        earned_score = stage0_points + slow_burn_points
 
         # Scale by trust & warmth factor (emotional health)
         expected_trust = 0.7 if temperament == 'steady' else 0.65 if temperament == 'expressive' else 0.5
         trust_norm = trust / expected_trust
         warmth_norm = warmth / 0.65
         trust_factor = max(0.2, min(1.0, (trust_norm * 0.6 + warmth_norm * 0.4)))
-        earned_score *= trust_factor
+        # Trust sets the RATE, not the ceiling. Capping the days first and scaling
+        # afterwards meant the best score a relationship could ever reach was
+        # 100 x trust_factor -- so a steady companion resting at default meters
+        # topped out at 88 and could not reach Bonded at all, however many years
+        # went by. Scaling first and capping here leaves a healthy relationship
+        # arithmetically unchanged and lets a cooler one arrive late instead of never.
+        earned_score = min(100.0, earned_score * trust_factor)
 
         # Penalties for hurt & irritation
         hurt_mult = 1.4 if temperament == 'expressive' else 1.0
