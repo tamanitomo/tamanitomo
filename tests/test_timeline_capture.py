@@ -91,7 +91,7 @@ class CaptureTests(unittest.TestCase):
         def generate(c,preset,category,overrides,allow_nsfw=False,intimate=False,**kw):
             seen['intimate']=intimate
             return {'path':str(self.image),'provider':'dual-prompt-generator',
-                    'prompts':{'prose':'warm steam in bathroom','structured':'steamy bathroom, natural light'}}
+                    'prompts':{'structured':'warm steam in bathroom','tags':'steamy bathroom, natural light'}}
         import companion_portrait as pt
         with patch.object(pt,'undressed_render_allowed',return_value=(True,'')), \
              patch.object(worker.media,'effective',return_value={'default_preset':'saved'}), \
@@ -100,7 +100,7 @@ class CaptureTests(unittest.TestCase):
             self.assertEqual(result['status'],'saved')
             self.assertTrue(seen['intimate'],'the modesty negatives were left on, so the model was asked to both undress and not')
             row=json.loads(timeline.capture_path(self.c,result['capture_id']).read_text())
-            self.assertEqual(row['prompts'],{'prose':'warm steam in bathroom','structured':'steamy bathroom, natural light'})
+            self.assertEqual(row['prompts'],{'structured':'warm steam in bathroom','tags':'steamy bathroom, natural light'})
 
 
 if __name__=='__main__':unittest.main()

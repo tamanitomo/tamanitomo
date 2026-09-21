@@ -304,3 +304,36 @@ class DeletingAVariantReachesTheRightFileTests(unittest.TestCase):
         self.assertIn('forget_timeline_image', content)
         # The capture id is not the image stem; that assumption was the whole bug.
         self.assertNotIn("(p.stem+'.json')", content)
+
+
+class PromptsAreFiledUnderTheirOwnNamesTests(unittest.TestCase):
+    """Each compiled prompt was filed under the other one's name.
+
+    `prompt` is the comma-joined tag bag a diffusion model wants; the labelled
+    section text is the structured one. They were stored as 'structured' and
+    'prose' respectively -- each under the other's label -- so the viewer showed
+    the identity-led tag bag as the prose prompt and the sectioned text as the
+    structured one, with the headings plainly visible under the wrong title.
+    """
+
+    def test_compile_files_the_section_text_as_structured(self):
+        media = (Path(__file__).resolve().parents[1] / 'kit/scripts/companion_media.py').read_text(encoding='utf-8')
+        self.assertIn("'prompts':{'structured':structured,'tags':prompt}", media)
+        self.assertNotIn("'prose':structured", media, 'the section text is filed as prose again')
+        self.assertIn("active_type='tags' if p['provider']=='comfyui' else 'structured'", media)
+
+    def test_the_viewer_translates_records_written_under_the_old_names(self):
+        js = (Path(__file__).resolve().parents[1] / 'kit/app/static/product.js').read_text(encoding='utf-8')
+        self.assertIn('function normalisePrompts', js)
+        fn = js.split('function normalisePrompts')[1].split('function populateViewerInfo')[0]
+        # Both old names moved; translating only one leaves the other pointing at
+        # the prompt it no longer names.
+        self.assertIn("p.prose!==undefined", fn)
+        self.assertIn("'tags'", fn)
+
+    def test_the_viewer_does_not_print_the_same_scene_twice(self):
+        """Two open boxes repeated every wardrobe and activity line."""
+        js = (Path(__file__).resolve().parents[1] / 'kit/app/static/product.js').read_text(encoding='utf-8')
+        block = js.split("let promptsHtml='';")[1].split("$('viewer-info-body')")[0]
+        self.assertIn('prompt-alt', block, 'the second prompt should be folded away')
+        self.assertEqual(block.count('prompt-box'), 2, 'only one prompt box should be rendered open')

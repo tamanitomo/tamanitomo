@@ -1169,13 +1169,50 @@ function toggleViewerInfo(){
   if(!pane.hidden)pane.hidden=true;
   else{pane.hidden=false;populateViewerInfo(viewerItems[viewerIndex]);}
 }
+function normalisePrompts(item){
+  /* Records written before the naming was corrected hold each prompt under the
+     other's key: what they call `prose` is the labelled-section text, and what
+     they call `structured` is the comma-separated tag bag. Read both shapes so an
+     older picture does not show its prompts swapped forever. */
+  const p=item&&item.prompts;
+  if(!p)return null;
+  const structured=p.structured!==undefined&&p.tags!==undefined?p.structured:(p.prose||p.structured||'');
+  const tags=p.tags!==undefined?p.tags:(p.structured&&p.prose?p.structured:'');
+  if(!structured&&!tags)return null;
+  /* Both of the old names moved, not just one: `prose` meant the section text and
+     `structured` meant the tag bag, so an old marker has to be translated rather
+     than passed through under a name that now means the other thing. */
+  const legacy=p.prose!==undefined;
+  let active=item.active_prompt_type;
+  if(legacy)active=active==='prose'?'structured':active==='structured'?'tags':active;
+  if(active!=='structured'&&active!=='tags')
+    active=(item.generation||'').includes('ComfyUI')?'tags':'structured';
+  if(!({structured,tags})[active])active=structured?'structured':'tags';
+  return {structured,tags,active};
+}
+
 function populateViewerInfo(item){
   if(!item)return;
   const copies=(item.copies||[]).map(c=>esc(c.source+(c.path?' ('+c.path+')':''))).join('<br>')||'Original file';
   let promptsHtml='';
-  if(item.prompts&&(item.prompts.prose||item.prompts.structured)){
-    const active=item.active_prompt_type||(item.generation?.includes('ComfyUI')?'structured':'prose');
-    promptsHtml=`<div><div class="info-field-label">Prompts</div><div class="viewer-prompts-block"><div class="prompt-box ${active==='prose'?'is-active':''}"><div class="prompt-box-header"><strong>Prose Prompt</strong> ${active==='prose'?'<span class="pill status-good">Active / Sent</span>':''}</div><pre class="prompt-text">${esc(item.prompts.prose||'None recorded')}</pre></div><div class="prompt-box ${active==='structured'?'is-active':''}"><div class="prompt-box-header"><strong>Structured Prompt</strong> ${active==='structured'?'<span class="pill status-good">Active / Sent</span>':''}</div><pre class="prompt-text">${esc(item.prompts.structured||'None recorded')}</pre></div></div></div>`;
+  const prompts=normalisePrompts(item);
+  if(prompts){
+    // The two entries are the same scene in two formats, so showing both open side
+    // by side repeated every wardrobe and activity line twice. The one that was
+    // actually sent leads; the other is available but folded away.
+    const activeKey=prompts.active;
+    const other=activeKey==='structured'?'tags':'structured';
+    const label={structured:'Structured (sections)',tags:'Tags (comma-separated)'};
+    promptsHtml=`<div><div class="info-field-label">Prompt sent</div>
+      <div class="viewer-prompts-block">
+        <div class="prompt-box is-active">
+          <div class="prompt-box-header"><strong>${esc(label[activeKey])}</strong>
+            <span class="pill status-good">Sent to ${esc(item.generation||'the provider')}</span></div>
+          <pre class="prompt-text">${esc(prompts[activeKey]||'None recorded')}</pre>
+        </div>
+        ${prompts[other]?`<details class="prompt-alt"><summary>Also compiled: ${esc(label[other])}</summary>
+          <pre class="prompt-text">${esc(prompts[other])}</pre></details>`:''}
+      </div></div>`;
   }else if(item.prompt){
     promptsHtml=`<div><div class="info-field-label">Prompt</div><div class="info-field-value"><pre class="prompt-text">${esc(item.prompt)}</pre></div></div>`;
   }

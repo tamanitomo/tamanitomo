@@ -304,8 +304,12 @@ def compile(c,preset_id='',category='portrait',overrides=None,draft=None,intimat
         if key in values:workflow[str(node)]['inputs'][field]=values[key]
     reference=portrait.portrait_path(c)
     if p.get('requires_reference') and not reference.is_file():raise ValueError('Add a reference portrait before using this image-to-image preset')
+    # Name each form for what it is. `prompt` is the comma-joined tag bag a diffusion
+    # model wants; `structured` is the labelled-section text hosted models read. They
+    # were previously filed as 'structured' and 'prose' respectively -- each under the
+    # other's name -- so the viewer showed the two prompts with their labels swapped.
     return {'preset':p,'parts':parts,'prompt':prompt,'structured_prompt':structured,
-            'prose_prompt':structured,'prompts':{'prose':structured,'structured':prompt},
+            'prompts':{'structured':structured,'tags':prompt},
             'negative':values['negative'],'seed':seed,
             'intimate':bool(intimate),'workflow':workflow,
             'reference_image':str(reference) if reference.is_file() and p['provider']=='comfyui' and p.get('mappings',{}).get('reference_image') else None}
@@ -458,7 +462,7 @@ def _generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:
     if not ext:raise ValueError('Image must be PNG, JPEG or WebP')
     folder=c.data/'creations'/'image-studio';folder.mkdir(parents=True,exist_ok=True)
     ident=uuid.uuid4().hex;path=folder/(ident+ext);path.write_bytes(raw)
-    active_type='structured' if p['provider']=='comfyui' else 'prose'
+    active_type='tags' if p['provider']=='comfyui' else 'structured'
     atomic_write(folder/(ident+'.json'),json.dumps({'prompt':provider_prompt,'prompts':result['prompts'],'active_prompt_type':active_type,'parts':result['parts'],'preset':p['name'],'seed':result['seed']},indent=2))
     import companion_media_review as review
     generation=('ComfyUI' if p['provider']=='comfyui' else 'Mistral' if p['provider']=='mistral' else p.get('hermes_provider') or p['provider'])+' · '+p['name']
