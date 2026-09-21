@@ -32,25 +32,36 @@ def resolve(c,relative):
     if not path.is_relative_to(root) or not path.is_file() or path.suffix.lower() not in KINDS:raise ValueError('Content file not found')
     return path
 
-def with_etags(c,variants):
-    """Each variant, carrying the etag of its own file.
+def with_etags(c,variants,prefs=None):
+    """Each variant, carrying the etag and the review state of its own file.
 
     Switching variants in the viewer repoints the item at a different picture, so
     without this the delete that follows sent the new path with the old picture's
     etag and was refused as "the file changed" -- every time, for every variant.
+
+    The rating travels with it for the same reason. A variant arrived carrying no
+    review at all, so the viewer read it as safe and took the blur off the moment
+    you picked one -- the one action you might take precisely because you did not
+    want to see it. An unreviewed variant is treated as unreviewed, not as safe.
     """
+    if prefs is None:
+        prefs=review.preferences(c)
     folder=c.data/'image-timeline/images'
     out=[]
     for v in variants:
         if not isinstance(v,dict) or not v.get('filename'):continue
         row=dict(v)
+        path=folder/v['filename']
         try:
-            stat=(folder/v['filename']).stat()
+            stat=path.stat()
             row['etag']=str(stat.st_mtime_ns)+':'+str(stat.st_size)
-            row['path']='image-timeline/images/'+v['filename']
         except OSError:
             row['etag']=None
-            row['path']='image-timeline/images/'+v['filename']
+        row['path']='image-timeline/images/'+v['filename']
+        meta=review.metadata(path)
+        row['rating']=meta.get('rating','unknown')
+        row['review']=meta.get('review',row.get('review'))
+        row['blur']=review.should_blur(prefs,meta)
         out.append(row)
     return out
 
@@ -165,7 +176,7 @@ def catalog(c,limit=1500,before=None,kind='',q='',day='',collection='all',conten
                 scene=capture.get('scene',{});state=scene.get('state',{})
                 row.update(at=scene.get('recorded_at') or row['at'],title=state.get('activity') or row['title'],mood=state.get('mood',''),
                            capture_id=capture.get('id'),capture=capture.get('id'),
-                           variants=with_etags(c,capture.get('variants',[])),
+                           variants=with_etags(c,capture.get('variants',[]),prefs),
                            primary_filename=capture.get('primary_filename',capture.get('filename')),
                            prompts=capture.get('prompts') or row.get('prompts'),
                            active_prompt_type=capture.get('active_prompt_type') or row.get('active_prompt_type'))
@@ -266,6 +277,41 @@ def register(app,load):
                 paths=[resolve(c,copy['path']) for copy in copies];break
         for path in paths:review.write_metadata(path,{'rating':payload['rating'],'rating_source':'user'})
         return {'saved':True}
+    def _remove(c,relative,p):
+        """Delete one file, its review sidecar, its studio record and its capture entry."""
+        if p.is_file():
+            p.unlink()
+            review.sidecar(p).unlink(missing_ok=True)
+            if relative.startswith('creations/image-studio/'):
+                p.with_suffix('.json').unlink(missing_ok=True)
+        forget_timeline_image(c,relative)
+
+    def sibling_copies(c,relative,p):
+        """The other saved copies of the same picture, outside the albums.
+
+        Every generated picture is written twice -- once into the studio and once
+        into the photo session -- and the two are byte-identical, so the library
+        shows them as one photo. Deleting that photo removed whichever copy the
+        grouping happened to name first and left the other on disk, whereupon the
+        photo reappeared on the next refresh. It looked exactly like a delete
+        button that did nothing, and reported success while doing it.
+
+        Album copies are deliberately left alone; the confirmation says so.
+        """
+        if not p.is_file() or relative.startswith('albums/'):return []
+        try:
+            stat=p.stat()
+            digest=_image_digest(str(p),stat.st_mtime_ns,stat.st_ctime_ns,stat.st_size,stat.st_ino)
+        except (OSError,ValueError,KeyError):return []
+        out=[]
+        for item in catalog(c,content_id=digest)['items']:
+            for copy in item.get('copies',[]):
+                other=copy['path']
+                if other==relative or other.startswith('albums/') or not deletable(other):continue
+                try:out.append((other,resolve(c,other)))
+                except (OSError,ValueError):pass
+        return out
+
     @app.post('/api/content/delete')
     def delete_content(payload:dict):
         c=load();relative=payload.get('path','');p=resolve(c,relative)
@@ -276,13 +322,10 @@ def register(app,load):
         if p.is_file():
             stat=p.stat()
             if payload.get('etag')!=str(stat.st_mtime_ns)+':'+str(stat.st_size):raise ValueError('The file changed; refresh before deleting')
-            # Delete only the chosen file and its own metadata, never another album copy.
-            p.unlink()
-            review.sidecar(p).unlink(missing_ok=True)
-            if relative.startswith('creations/image-studio/'):
-                p.with_suffix('.json').unlink(missing_ok=True)
-        forget_timeline_image(c,relative)
-        return {'deleted':True,'path':relative}
+        others=sibling_copies(c,relative,p)
+        _remove(c,relative,p)
+        for other,path in others:_remove(c,other,path)
+        return {'deleted':True,'path':relative,'also_deleted':[other for other,_ in others]}
     @app.get('/api/content')
     def list_content(limit:int=1500,before:str|None=None,kind:str='',q:str='',day:str='',collection:str='all'):return catalog(load(),limit,before,kind,q,day,collection)
     @app.get('/api/journals')
@@ -334,15 +377,16 @@ def register(app,load):
                 stat=p.stat()
                 if entry.get('etag')!=str(stat.st_mtime_ns)+':'+str(stat.st_size):raise ValueError(f'A file changed since you selected it. Refresh before deleting.')
             resolved.append((relative,p))
-        count=0
+        count=0;done=set()
         for relative,p in resolved:
-            if p.is_file():
-                p.unlink()
-                review.sidecar(p).unlink(missing_ok=True)
-                if relative.startswith('creations/image-studio/'):
-                    p.with_suffix('.json').unlink(missing_ok=True)
-            forget_timeline_image(c,relative)
-            count+=1
+            # The same expansion as a single delete: a photo shown once is deleted
+            # once, however many identical copies the pipeline wrote for it.
+            others=sibling_copies(c,relative,p)
+            if relative not in done:
+                _remove(c,relative,p);done.add(relative);count+=1
+            for other,path in others:
+                if other in done:continue
+                _remove(c,other,path);done.add(other)
         return {'deleted':True,'count':count}
     @app.get('/api/content/text')
     def text_content(path:str):

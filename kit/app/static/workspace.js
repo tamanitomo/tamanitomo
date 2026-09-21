@@ -25,6 +25,23 @@ function notice(message,bad=false){
 }
 const operationKey=()=> 'operation-'+INSTALLATION+'-'+(PROFILE||'default');
 const operationCallbacks=new Map();
+// A wheel for the status toast: a filled ring when the worker knows how far
+// along it is, and a turning one when it genuinely does not. A long render used
+// to show one unchanging line, which reads exactly like something that has hung.
+const WHEEL_CIRCUMFERENCE=2*Math.PI*9;
+function progressWheel(percent){
+  const known=typeof percent==='number'&&isFinite(percent);
+  // Clamp once, here, so the ring, the label and the announcement can never
+  // disagree about how far along it is.
+  const value=known?Math.round(Math.max(0,Math.min(100,percent))):null;
+  const offset=known?WHEEL_CIRCUMFERENCE*(1-value/100):WHEEL_CIRCUMFERENCE*0.75;
+  return `<svg class="op-wheel${known?'':' is-spinning'}" viewBox="0 0 22 22" width="22" height="22" role="img" aria-label="${known?`${value} percent complete`:'Working'}">
+    <circle class="op-wheel-track" cx="11" cy="11" r="9" fill="none" stroke-width="2.5"></circle>
+    <circle class="op-wheel-fill" cx="11" cy="11" r="9" fill="none" stroke-width="2.5" stroke-linecap="round"
+      stroke-dasharray="${WHEEL_CIRCUMFERENCE.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"
+      transform="rotate(-90 11 11)"></circle>
+  </svg>${known?`<span class="op-wheel-pct">${value}%</span>`:''}`;
+}
 function operationError(error){
   notice(error?.message||String(error),true);
   if(sessionStorage.getItem(operationKey())){
@@ -53,7 +70,7 @@ async function followOperation(row,onDone){
       if(op){
         op.hidden=current==='chat'&&row.label.startsWith('Chat with ')&&['running','complete'].includes(row.status);
         op.classList?.remove?.('toast-exit');
-        op.innerHTML=`<button class="quiet" id="dismiss-notice" style="display:none">✕</button><strong>${esc(row.label)}</strong><div class="dim">${esc(row.progress)}</div>`;
+        op.innerHTML=`<button class="quiet" id="dismiss-notice" style="display:none">✕</button>${progressWheel(row.percent)}<div class="toast-body"><strong>${esc(row.label)}</strong><div class="dim">${esc(row.progress)}</div></div>`;
       }
       if(row.status!=='running'){
         activeOperation=null;sessionStorage.removeItem(operationKey());operationCallbacks.delete(row.id);

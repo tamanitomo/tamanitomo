@@ -142,3 +142,32 @@ vm.runInContext(workspace.slice(workspace.indexOf('async function followOperatio
   assert.equal(context.providerNeedsURL('openrouter'),false);
   assert.equal(context.providerNeedsURL('openai','https://my-gateway/v1'),true);
 }
+
+// The status wheel: determinate when the worker reports steps, turning when it
+// does not. A long render showed one unchanging line, which reads exactly like
+// a job that has hung.
+{
+  const wheel=vm.runInContext('progressWheel(0)',sandbox);
+  assert.match(wheel,/op-wheel/);
+  assert.doesNotMatch(wheel,/is-spinning/,'a known percentage must not spin');
+  assert.match(wheel,/0%/);
+
+  const half=vm.runInContext('progressWheel(50)',sandbox);
+  assert.match(half,/50%/);
+  const dash=Number(half.match(/stroke-dasharray="([\d.]+)"/)[1]);
+  const offset=Number(half.match(/stroke-dashoffset="([\d.]+)"/)[1]);
+  assert.ok(Math.abs(offset-dash/2)<0.05,'half done must be half the ring');
+
+  const full=vm.runInContext('progressWheel(100)',sandbox);
+  assert.ok(Number(full.match(/stroke-dashoffset="([\d.]+)"/)[1])<0.01,'a finished ring is closed');
+
+  for(const unknown of ['progressWheel(undefined)','progressWheel(null)','progressWheel(NaN)']){
+    const spun=vm.runInContext(unknown,sandbox);
+    assert.match(spun,/is-spinning/,unknown+' should spin rather than claim a number');
+    assert.doesNotMatch(spun,/%<\/span>/,unknown+' should not print a percentage it does not have');
+  }
+
+  // Out of range readings are clamped rather than drawn outside the ring.
+  assert.match(vm.runInContext('progressWheel(140)',sandbox),/100%/);
+  assert.match(vm.runInContext('progressWheel(-20)',sandbox),/0%/);
+}

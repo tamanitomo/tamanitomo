@@ -323,13 +323,25 @@ def build(home=None,token='',state_dir=None):
         if payload.get('seed') is not None:
             try:overrides['seed']=int(payload['seed'])
             except (ValueError,TypeError):pass
-        try:
-            generated=media.generate(c,preset['id'],'portrait',overrides)
-            updated=tl.add_variant(c,capture,generated['path'],generated['provider'],prompts=generated.get('prompts'))
+        # Rendering took as long as rendering takes while the request sat open,
+        # so pressing Generate did nothing visible at all: no progress, no wheel,
+        # nothing in the status toast that follows you around the site, and on a
+        # slow provider the connection gave out before the picture arrived. It
+        # goes through the same operation queue as every other long job now, so
+        # the toast reports it wherever you happen to be.
+        def run(rt,companion,report):
+            generated=media.generate(companion,preset['id'],'portrait',overrides,report)
+            updated=tl.add_variant(companion,capture,generated['path'],generated['provider'],prompts=generated.get('prompts'))
             variant=updated.get('variants',[])[-1] if updated.get('variants') else None
-            return {'status':'saved','capture_id':capture,'variant':variant,'capture':updated}
-        except Exception as exc:
-            raise HTTPException(400,str(exc))
+            if variant:
+                from .content import with_etags
+                variant=with_etags(companion,[variant])[0]
+                updated=dict(updated,variants=with_etags(companion,updated.get('variants',[])))
+            return {'status':'saved','capture_id':capture,'variant':variant,'capture':updated,
+                    'note':'New version ready for this moment.'}
+        runtime,profile_name=select()
+        return app.state.operations.submit(str(runtime.root),'Regenerate photo',
+                                           lambda report:run(runtime,c,report),profile=profile_name)
 
     @app.post('/api/timeline/{capture}/select-variant')
     def select_timeline_variant(capture:str,payload:dict):

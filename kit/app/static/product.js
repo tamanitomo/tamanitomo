@@ -1320,8 +1320,11 @@ function renderViewerPhoto(){
               // default profile: a thumbnail of whoever happens to hold that
               // filename, or nothing at all when only this companion has it.
               const thumbUrl=mediaUrl(`/media/timeline/${v.filename}`);
+              // The strip showed every version in the clear while the picture
+              // above it was blurred, which made the blur worth nothing: the
+              // thumbnail is the same picture, smaller.
               return `<button class="viewer-variant-thumb ${active?'is-active':''}" data-variant-fn="${esc(v.filename)}" title="${esc(v.provider||'Variant '+(vIdx+1))}">
-                <img src="${thumbUrl}" alt="Variant ${vIdx+1}" loading="lazy">
+                <img ${mediaPrivacy(v)} src="${thumbUrl}" alt="Variant ${vIdx+1}" loading="lazy">
                 <span class="variant-idx">#${vIdx+1}</span>
               </button>`;
             }).join('')}
@@ -1342,8 +1345,12 @@ function renderViewerPhoto(){
           // the original's behind made every delete of a variant fail as a conflict.
           item.etag=v.etag||null;
           item.generation=v.provider;
-          item.rating=v.rating||'safe';
-          item.blur=Boolean(v.blur);
+          // Picking a version must never be what reveals it. A variant that
+          // arrives without a review is unreviewed, not safe, and defaulting it
+          // to safe took the blur off the moment you touched the strip -- which
+          // is the one thing you cannot take back by putting it on again.
+          item.rating=v.rating||'unknown';
+          item.blur=v.blur===undefined?(item.blur!==false):Boolean(v.blur);
           renderViewerPhoto();
         };
       }
@@ -1424,9 +1431,11 @@ async function openRetryProviderDialog(item){
     // provider failed, the only place that said so was a dialog the user was stuck
     // in. It runs on its own now and reports back through the usual toast.
     $('product-dialog').close();
-    notice('Generating a new variant… you can carry on; this will finish on its own.');
 
-    post(`/timeline/${captureId}/rerender`,payload).then(res=>{
+    // Through the operation queue, so the status toast that follows you around
+    // the site reports it -- including the render's own step count. Pressing
+    // Generate used to open a plain request that said nothing until it was done.
+    action(`/timeline/${captureId}/rerender`,payload,res=>{
       if(res.capture?.variants){
         item.variants=res.capture.variants;
       }else if(res.variant){
@@ -1437,10 +1446,12 @@ async function openRetryProviderDialog(item){
         item.url=`/media/timeline/${res.variant.filename}`;
         item.path=`image-timeline/images/${res.variant.filename}`;
         item.generation=res.variant.provider;
-        item.rating=res.variant.rating||'safe';
-        item.blur=Boolean(res.variant.blur);
+        // A picture nobody has reviewed yet is unreviewed, not safe. A fresh
+        // render arriving unblurred was how an explicit one got shown before
+        // anyone had decided it could be.
+        item.rating=res.variant.rating||'unknown';
+        item.blur=res.variant.blur===undefined?true:Boolean(res.variant.blur);
       }
-      notice('New variant ready for this moment.');
       // Only redraw the viewer if it is still open; a render finishing after the
       // user moved on must not drag them back to the picture they left.
       if($('photo-viewer')?.open)renderViewerPhoto();

@@ -226,6 +226,7 @@
   "tests/test_sleep.py",
   "tests/test_present.py",
   "tests/test_prompts.py",
+  "tests/test_render_progress.py",
   "tests/test_reliability.py",
   "tests/test_content_ui.js",
   "tests/test_reliability_ui.js",

@@ -1,3 +1,13 @@
+## 2.4.1 — Deleting, and knowing a render is running (2026-09-21)
+
+- Delete every saved copy of a photo rather than whichever one the grouping named first; the other copy survived, so the picture reappeared and delete looked broken while reporting success.
+- Leave album copies alone, as the confirmation has always promised, and delete only the album copy when that is the one chosen.
+- Apply the same expansion to a batch delete, so a photo shown once is deleted once.
+- Queue a regeneration through the operation status toast instead of holding the request open for the length of the render, which is why pressing Generate appeared to do nothing.
+- Show a progress wheel in that toast, filled from the render's own step count where the provider reports one and turning where it does not, and report queue position while a job waits its turn.
+- Blur the versions in a photo's version strip; they were shown in the clear beneath a blurred picture.
+- Send each version's own review with it, so choosing one no longer removes the blur, and treat an unreviewed or newly made version as unreviewed rather than safe.
+
 ## 2.4.0 — A day counts for what was in it (2026-09-21)
 
 - Score each day of conversation on its own merits rather than counting any day the human spoke, so closeness reflects what was actually said.

@@ -2612,3 +2612,19 @@ body[data-page="chat"] main{padding:0}
 .viewer-prompts-block{display:flex;flex-direction:column;gap:10px}
 .viewer-prompts-block .prompt-box:not(.is-active){opacity:.72}
 .viewer-prompts-block .prompt-box:not(.is-active):hover{opacity:1}
+
+/* Status wheel in the operation toast. Determinate when the worker reports a
+   step count -- a ComfyUI render does -- and a turning ring when it does not,
+   so a long job never looks like a stalled one. */
+#operation .op-wheel{order:0;flex:none;width:22px;height:22px}
+#operation .op-wheel-track{stroke:color-mix(in srgb,var(--ink) 14%,transparent)}
+#operation .op-wheel-fill{stroke:var(--accent);transition:stroke-dashoffset .4s ease}
+#operation .op-wheel.is-spinning{animation:op-wheel-spin 1.1s linear infinite}
+#operation .op-wheel.is-spinning .op-wheel-fill{transition:none}
+#operation .op-wheel-pct{order:0;flex:none;font-size:11px;font-variant-numeric:tabular-nums;color:var(--dim)}
+#operation .toast-body{flex:1 1 auto;min-width:0}
+@keyframes op-wheel-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#operation .op-wheel.is-spinning{animation-duration:2.4s}}
+/* A blurred picture stays blurred in the version strip; it is the same picture,
+   only smaller, and showing it there made the blur above it worth nothing. */
+.viewer-variant-thumb img.concealed-media{filter:blur(10px);transform:scale(1.04)}

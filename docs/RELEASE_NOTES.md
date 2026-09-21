@@ -1,14 +1,10 @@
-Tamanitomo 2.4.0 measures closeness by what a day of talking actually contained.
+Tamanitomo 2.4.1 fixes deleting a photo, and makes a render say how far along it is.
 
-Until now a day counted if you said anything at all in it, which meant a single "k" at midnight was worth exactly as much as an hour of real conversation. It also meant the quiet kind of drifting apart cost nothing: a one-word ping every day reset the inactivity clock completely while earning almost nothing, so neglect and devotion looked the same from the inside.
+Deleting a photo did not delete it. Every picture is saved in two places at once, and the library correctly shows the two as one photo — but deleting it removed only one of them, reported success, and left the other on disk, so the picture came straight back on the next refresh. Deleting a photo now removes the photo. Copies you deliberately kept in an album are still left alone, exactly as the confirmation says.
 
-A day is now scored on its own merits. How much was said, how many times you came back to it, and how much of the day it touched all matter, and each one on its own is not enough — a single long paste is not a day's conversation, and neither is twenty one-word messages in two minutes. Saying the same thing over and over does not count twice. Showing up briefly still counts for something, because a quick good-morning is a real thing people do; it is simply not a day.
+Pressing Generate on a new version of a moment gave no sign that anything was happening. It now goes through the same status toast as every other long job, which follows you around the site, and carries a wheel that fills as the render progresses — a real step count where the provider reports one, and a turning ring where it does not. If it is waiting behind something else, it says so rather than sitting silent.
 
-Keeping in touch is now measured over the past fortnight against a gentle par of a real conversation every other day. Falling short of it costs the same as going quiet does, and the two are never charged at once.
-
-How long the stages take is unchanged: friendship in about four days, and the deepest stage at around two months of genuine daily conversation at a natural pace. Days that were half-hearted simply take about twice as long, which is the point. Days are also counted in your own timezone now, so an evening conversation is one evening rather than two half-days.
-
-Because closeness is worked out from your history rather than stored, an existing companion's standing may move when you update. It reflects the conversations you actually had.
+A blurred picture stays blurred. The strip of versions under a photo showed every one of them in the clear beneath the blurred picture above it, and picking a version took the blur off — which made it impossible to choose one, or delete it, without first being shown the thing you were trying not to look at. Versions in the strip are blurred like anything else now, and choosing one no longer reveals it. A version that nobody has reviewed yet is treated as unreviewed rather than assumed safe, including a version that has only just been made.
 
 ### Install
 

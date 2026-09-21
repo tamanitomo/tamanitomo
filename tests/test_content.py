@@ -112,6 +112,17 @@ class ContentTests(unittest.TestCase):
         self.assertEqual(result['entries'],[])
         self.assertTrue(result['warnings'])
 
+    def settled(self,ident,tries=100):
+        """Wait for a queued operation and hand back its result."""
+        import time
+        for _ in range(tries):
+            row=self.client.get('/api/operations/'+ident,headers=self.headers).json()
+            if row['status']!='running':
+                self.assertEqual(row['status'],'complete',row.get('error'))
+                return row['result']
+            time.sleep(0.05)
+        self.fail('operation never finished')
+
     def test_timeline_rerender_and_select_variant(self):
         from PIL import Image
         import companion_presence as presence
@@ -135,13 +146,23 @@ class ContentTests(unittest.TestCase):
 
         img2=self.c.data/'img2.png';Image.new('RGB',(16,16),'red').save(img2)
         with patch.object(media,'generate',return_value={'path':str(img2),'provider':'Alt Engine · Hermes'}):
+            # Rendering is queued, not awaited: it used to hold the request open
+            # for as long as the render took, which is why pressing Generate
+            # looked like it did nothing at all.
             res=self.client.post(f'/api/timeline/{cid}/rerender',headers=self.headers,json={'preset_id':'p-alt'})
             self.assertEqual(res.status_code,200,res.text)
-            data=res.json()
+            queued=res.json()
+            self.assertEqual(queued['status'],'running')
+            self.assertEqual(queued['label'],'Regenerate photo')
+            data=self.settled(queued['id'])
             self.assertEqual(data['status'],'saved')
             self.assertEqual(len(data['capture']['variants']),2)
             var_fn=data['variant']['filename']
             self.assertTrue(var_fn.startswith(cid+'_v2.'))
+            # The new version arrives with its own review, so the viewer cannot
+            # read it as safe and reveal it before anyone has judged it.
+            self.assertIn('blur',data['variant'])
+            self.assertIn('rating',data['variant'])
 
             res_sel=self.client.post(f'/api/timeline/{cid}/select-variant',headers=self.headers,json={'filename':var_fn})
             self.assertEqual(res_sel.status_code,200,res_sel.text)
@@ -224,3 +245,139 @@ class GalleryArchiveTests(unittest.TestCase):
     def test_invalid_gallery_filters_are_rejected(self):
         for params in ({'limit':0},{'before':'broken'},{'day':'2026-02-30'},{'kind':'secret'},{'q':'x'*201}):
             with self.subTest(params=params),self.assertRaises(ValueError):catalog(self.f.c,**params)
+
+
+class DeletingAPhotoDeletesThePhotoTests(unittest.TestCase):
+    """Deleting a photo must delete the photo, not one of its two copies.
+
+    Every generated picture is written twice -- into the studio and into the
+    photo session -- byte-identical, so the library groups them and shows one
+    photo. Delete removed whichever copy the grouping happened to name first and
+    left the other on disk, so the picture came straight back on the next
+    refresh: a delete button that reported success and did nothing.
+    """
+
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
+        p=Path(self.tmp.name)
+        self.c=cc.Companion(profile='nova',agent='Nova',vault=p/'vault',hermes_root=p/'hermes',context_mode='fixed')
+        self.c.home.mkdir(parents=True);self.c.soul_dir.mkdir(parents=True);self.c.save()
+        self.client=TestClient(build(self.c.home,token='private',state_dir=p/'state'))
+        self.headers={'x-companion-token':'private'}
+
+    def both_copies(self,name='shot.png',colour='blue'):
+        """The same bytes in both places, exactly as a generated picture lands."""
+        from PIL import Image
+        studio=self.c.data/'creations/image-studio'/name
+        session=self.c.data/'image-timeline/images'/name
+        studio.parent.mkdir(parents=True,exist_ok=True)
+        session.parent.mkdir(parents=True,exist_ok=True)
+        Image.new('RGB',(8,8),colour).save(studio)
+        session.write_bytes(studio.read_bytes())
+        return studio,session
+
+    def listed(self):
+        return self.client.get('/api/content?kind=image',headers=self.headers).json()['items']
+
+    def test_one_photo_is_listed_for_the_two_copies(self):
+        self.both_copies()
+        items=self.listed()
+        self.assertEqual(len(items),1)
+        self.assertEqual({c['path'] for c in items[0]['copies']},
+                         {'creations/image-studio/shot.png','image-timeline/images/shot.png'})
+
+    def test_deleting_it_takes_both_copies_and_it_stays_gone(self):
+        studio,session=self.both_copies()
+        item=self.listed()[0]
+        response=self.client.post('/api/content/delete',headers=self.headers,
+                                  json={'path':item['path'],'etag':item['etag']})
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertFalse(studio.exists(),'the studio copy survived')
+        self.assertFalse(session.exists(),'the photo session copy survived, so it came back')
+        self.assertEqual(self.listed(),[])
+
+    def test_an_album_copy_is_left_alone_as_promised(self):
+        """The confirmation says separate album copies are unaffected."""
+        self.both_copies()
+        kept=self.client.post('/api/content/album',headers=self.headers,
+                              json={'path':'creations/image-studio/shot.png','album':'Favorites'})
+        self.assertEqual(kept.status_code,200,kept.text)
+        album=list((self.c.data/'albums/Favorites').glob('*.png'))
+        self.assertEqual(len(album),1)
+        item=next(x for x in self.listed() if any(c['source']!='album' for c in x['copies']))
+        self.client.post('/api/content/delete',headers=self.headers,
+                         json={'path':item['path'],'etag':item['etag']})
+        self.assertTrue(album[0].exists(),'the album copy was collateral')
+
+    def test_deleting_the_album_copy_leaves_the_original(self):
+        studio,session=self.both_copies()
+        self.client.post('/api/content/album',headers=self.headers,
+                         json={'path':'creations/image-studio/shot.png','album':'Favorites'})
+        album=list((self.c.data/'albums/Favorites').glob('*.png'))[0]
+        rel='albums/Favorites/'+album.name
+        stat=album.stat()
+        response=self.client.post('/api/content/delete',headers=self.headers,
+                                  json={'path':rel,'etag':f'{stat.st_mtime_ns}:{stat.st_size}'})
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertFalse(album.exists())
+        self.assertTrue(studio.exists() and session.exists())
+
+    def test_a_batch_delete_clears_every_copy_too(self):
+        first=self.both_copies('one.png','blue')
+        second=self.both_copies('two.png','red')
+        items=self.listed()
+        self.assertEqual(len(items),2)
+        response=self.client.post('/api/content/batch-delete',headers=self.headers,
+                                  json={'items':[{'path':x['path'],'etag':x['etag']} for x in items]})
+        self.assertEqual(response.status_code,200,response.text)
+        for path in (*first,*second):
+            self.assertFalse(path.exists(),path)
+        self.assertEqual(self.listed(),[])
+
+
+class VariantsCarryTheirOwnReviewTests(unittest.TestCase):
+    """A version in the preview strip must arrive with its own review attached.
+
+    It did not, so the viewer read every variant as safe: the strip showed each
+    one in the clear beneath a blurred picture, and picking one took the blur off
+    the main image. The one action you might take precisely because you did not
+    want to look at it was the action that showed it to you.
+    """
+
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
+        p=Path(self.tmp.name)
+        self.c=cc.Companion(profile='nova',agent='Nova',vault=p/'vault',hermes_root=p/'hermes',context_mode='fixed')
+        self.c.home.mkdir(parents=True);self.c.soul_dir.mkdir(parents=True);self.c.save()
+
+    def make(self,name,rating):
+        from PIL import Image
+        import companion_media_review as review
+        path=self.c.data/'image-timeline/images'/name
+        path.parent.mkdir(parents=True,exist_ok=True)
+        Image.new('RGB',(8,8),'blue').save(path)
+        if rating is not None:review.write_metadata(path,{'rating':rating})
+        return path
+
+    def variants(self,names):
+        from kit.app.content import with_etags
+        return with_etags(self.c,[{'filename':n} for n in names])
+
+    def test_each_variant_carries_its_rating_and_blur(self):
+        self.make('a.png','nsfw');self.make('b.png','safe')
+        rows={v['filename']:v for v in self.variants(['a.png','b.png'])}
+        self.assertEqual(rows['a.png']['rating'],'nsfw')
+        self.assertTrue(rows['a.png']['blur'])
+        self.assertEqual(rows['b.png']['rating'],'safe')
+        self.assertFalse(rows['b.png']['blur'])
+
+    def test_an_unreviewed_variant_is_unreviewed_rather_than_safe(self):
+        self.make('c.png',None)
+        row=self.variants(['c.png'])[0]
+        self.assertNotEqual(row['rating'],'safe')
+        self.assertTrue(row['blur'],'an unreviewed picture must not arrive already revealed')
+
+    def test_a_variant_whose_file_is_gone_is_still_not_called_safe(self):
+        row=self.variants(['missing.png'])[0]
+        self.assertIsNone(row['etag'])
+        self.assertTrue(row['blur'])

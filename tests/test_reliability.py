@@ -267,13 +267,19 @@ class NoticeStripAndRetryLayoutTests(unittest.TestCase):
 
     def test_generating_a_variant_does_not_hold_the_page(self):
         """The dialog used to await the render, so a slow provider pinned the user
-        to a modal and a failed one reported only inside it."""
+        to a modal and a failed one reported only inside it.
+
+        It also has to go through the operation queue rather than a plain request,
+        or pressing Generate reports nothing at all until the picture exists --
+        which is what it did, for as long as a render takes.
+        """
         js = self.source('product.js')
         handler = js.split("$('retry-modal-submit').onclick=")[1].split('\n  };')[0]
         self.assertNotIn('await post(', handler, 'the render is awaited behind the modal again')
         close_at = handler.index("$('product-dialog').close()")
-        post_at = handler.index('post(`/timeline/')
-        self.assertLess(close_at, post_at, 'the dialog must close before the request starts')
+        submit_at = handler.index('action(`/timeline/')
+        self.assertLess(close_at, submit_at, 'the dialog must close before the request starts')
+        self.assertNotIn('post(`/timeline/', handler, 'the render bypasses the operation queue again')
         self.assertIn('.catch(', handler, 'a failed render has to reach the toast')
 
 

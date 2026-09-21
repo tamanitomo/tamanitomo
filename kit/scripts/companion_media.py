@@ -390,6 +390,47 @@ def generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:N
         return replacement
 
 
+def _comfy_progress(base,client_id,ident,report):
+    """Follow a ComfyUI render step by step, for as long as it will tell us.
+
+    Polling `/history` says nothing at all until the picture exists, so a two
+    minute render was reported as one unchanging line -- which reads exactly like
+    a job that has hung. ComfyUI publishes step progress on its websocket, so we
+    listen where we can and fall back to the queue position, which is plain HTTP
+    and always there. Neither is allowed to fail the render: this is commentary,
+    not the result.
+    """
+    try:
+        from websockets.sync.client import connect
+    except Exception:
+        return None
+    url=base.replace('https://','wss://',1).replace('http://','ws://',1)+'/ws?clientId='+client_id
+    def follow():
+        try:
+            with connect(url,open_timeout=5,close_timeout=1) as socket:
+                while True:
+                    try:raw=socket.recv(timeout=60)
+                    except Exception:return
+                    if isinstance(raw,(bytes,bytearray)):continue
+                    try:event=json.loads(raw)
+                    except ValueError:continue
+                    data=event.get('data') or {}
+                    if data.get('prompt_id') not in (None,ident):continue
+                    if event.get('type')=='progress':
+                        value,total=data.get('value'),data.get('max')
+                        report(f'Rendering step {value} of {total}')
+                        getattr(report,'percent',lambda *a:None)(value,total)
+                    elif event.get('type')=='executing' and data.get('node') is None and data.get('prompt_id')==ident:
+                        getattr(report,'percent',lambda *a:None)(1,1)
+                        return
+        except Exception:
+            return
+    import threading
+    thread=threading.Thread(target=follow,daemon=True)
+    thread.start()
+    return thread
+
+
 def _generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:None,allow_nsfw=False,draft=None,intimate=False):
     result=compile(c,preset_id,category,overrides,draft,intimate);p=result['preset'];base=endpoint(p['endpoint']) if p['provider']!='hermes' else ''
     provider_prompt=result['prompt'] if p['provider']=='comfyui' else result['structured_prompt']
@@ -417,15 +458,28 @@ def _generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:
             req=urllib.request.Request(base+'/upload/image',data=body,headers={'Content-Type':'multipart/form-data; boundary='+boundary})
             with urllib.request.urlopen(req,timeout=30) as response:uploaded=json.load(response)
             node,field=p['mappings']['reference_image'];graph[str(node)]['inputs'][field]=uploaded['name']
-        queued=request_json(base+'/prompt',{'prompt':graph,'client_id':uuid.uuid4().hex})
+        client_id=uuid.uuid4().hex
+        queued=request_json(base+'/prompt',{'prompt':graph,'client_id':client_id})
         if queued.get('node_errors'):raise ValueError('Workflow validation failed: '+json.dumps(queued['node_errors'])[:3000])
         ident=queued.get('prompt_id')
         if not ident:raise ValueError('ComfyUI did not return a prompt ID')
-        deadline=time.monotonic()+600;history={}
+        _comfy_progress(base,client_id,str(ident),report)
+        deadline=time.monotonic()+600;history={};waited=0
         while time.monotonic()<deadline:
             history=request_json(base+'/history/'+str(ident)).get(str(ident),{})
             if history.get('status',{}).get('status_str')=='error':raise ValueError('ComfyUI generation failed: '+json.dumps(history.get('status'))[:2000])
             if history.get('outputs'):break
+            # Queue position is the one progress signal that is always available,
+            # and it is the answer to the only question worth asking while nothing
+            # is happening yet: is it stuck, or is something else in front of it?
+            if waited and waited%3==0:
+                try:
+                    pending=request_json(base+'/queue')
+                    ahead=sum(1 for row in pending.get('queue_pending',[]) if row and str(row[1])!=str(ident))
+                    if not any(str(row[1])==str(ident) for row in pending.get('queue_running',[]) if row):
+                        report(f'Waiting in the ComfyUI queue; {ahead} ahead' if ahead else 'Waiting for ComfyUI to start')
+                except Exception:pass
+            waited+=1
             time.sleep(1)
         images=[im for output in history.get('outputs',{}).values() for im in output.get('images',[]) if im.get('type')=='output']
         if not images:raise ValueError('No saved image returned; the job may still be queued. Check ComfyUI before retrying.')

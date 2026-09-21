@@ -281,7 +281,21 @@ class Operations:
                 row['progress']=redact(message); self._save(row)
         def stream(delta):
             with self.lock:row['stream_text']=(row.get('stream_text','')+str(delta))[-1000000:]
+        def percent(done,total):
+            """How far along, when the worker actually knows.
+
+            A long render reported one unchanging line for two minutes, which is
+            indistinguishable from a job that has hung. `None` means genuinely
+            unknown and leaves the indicator spinning rather than inventing a
+            number for it."""
+            value=None
+            if total:
+                try:value=max(0,min(100,round(float(done)/float(total)*100)))
+                except (TypeError,ValueError,ZeroDivisionError):value=None
+            with self.lock:
+                row['percent']=value; self._save(row)
         report.stream=stream
+        report.percent=percent
         def work():
             try:
                 result=action(report)
