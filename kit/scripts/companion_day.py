@@ -131,7 +131,7 @@ def timestamp(value):
     return parsed
 
 
-def evolve(data, state, previous, now):
+def evolve(data, state, previous, now, asleep=False):
     before=previous['state'] if previous else {}
     fields=schema_fields()
     for key in fields:
@@ -139,6 +139,14 @@ def evolve(data, state, previous, now):
     changed=any(state.get(k)!=before.get(k) for k in ('activity','location'))
     if data.get('activity_change')=='continue' and state.get('location')==before.get('location'):changed=False
     elif data.get('activity_change')=='transition':changed=True
+    # `started_at` is what the overnight gate watches, on the promise that it moves only
+    # when the scene does. It is derived from `activity`, which is PROSE -- so "asleep at
+    # home" becoming "asleep at home, deeper into the night" read as a new scene, reset
+    # the clock, and woke every job that had been told to stay quiet. Inside a declared
+    # sleep window a reworded sentence in the same place is the same sleep, and only an
+    # explicit transition (getting up) starts anything.
+    if asleep and data.get('activity_change')!='transition' and state.get('location')==before.get('location'):
+        changed=False
     result={'started_at':now.isoformat() if changed else before.get('started_at',previous['recorded_at']),
             'previous':before.get('previous')}
     if previous and changed:

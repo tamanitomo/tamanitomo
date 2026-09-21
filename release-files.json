@@ -147,6 +147,7 @@
   "kit/scripts/companion_rotate.py",
   "kit/scripts/companion_self.py",
   "kit/scripts/companion_sensors.py",
+  "kit/scripts/companion_sleep.py",
   "kit/scripts/companion_thread.py",
   "kit/scripts/companion_timeline.py",
   "kit/scripts/companion_timeline_capture.py",

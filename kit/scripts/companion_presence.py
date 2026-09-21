@@ -118,6 +118,13 @@ def update(c,data,now=None):
                # an unwatched hour as a confirmed present.
                'confirmed':True}
         if len(state['transition'])>500:raise ValueError('Keep transition under 500 characters')
+        # Whether she is asleep is a fact the overnight gates act on, so it is a field she
+        # sets rather than a word the next reader has to find in her prose. Absent from an
+        # update it carries forward, so sleep persists across ticks without being
+        # re-asserted -- and stays absent entirely on records written before it existed,
+        # which is what lets a pre-upgrade replay still compare equal.
+        if 'asleep' in data:state['asleep']=bool(data['asleep'])
+        elif previous and 'asleep' in previous['state']:state['asleep']=bool(previous['state']['asleep'])
         narrative=text(data.get('text'),'episode text',1600)
         import companion_day
         parent=previous
@@ -126,8 +133,10 @@ def update(c,data,now=None):
         legacy_retry=(previous and previous['id']==ident and 'started_at' not in previous['state']
                       and not any(key in data for key in companion_day.schema_fields()))
         if not legacy_retry:
+            import companion_sleep
             state.update(companion_day.evolve(data,state,parent,
-                         dt.datetime.fromisoformat(previous['recorded_at']) if previous and previous['id']==ident else now))
+                         dt.datetime.fromisoformat(previous['recorded_at']) if previous and previous['id']==ident else now,
+                         asleep=companion_sleep.asleep(c,now)))
         # Replay uses the original parent; care and acquisitions commit in the same
         # append as presence, so a rejected/racing write cannot wash or buy anything.
         if companion_lifestyle.enabled(c) and (not previous or previous['id']!=ident or 'lifestyle' in previous['state']):

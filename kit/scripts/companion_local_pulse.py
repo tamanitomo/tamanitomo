@@ -110,7 +110,8 @@ def pulse(c,base_url,model,slot=1,now=None,apply=True,phase="pulse",
         if choice.get('finish_reason')!='stop':raise ValueError('Local pulse response was incomplete')
         data=json.loads(choice['message']['content'])
         candidate={**previous['state'],**{key:data[key] for key in ('activity','location') if key in data}}
-        candidate.update(day.evolve(data,candidate,previous,now))
+        import companion_sleep
+        candidate.update(day.evolve(data,candidate,previous,now,asleep=companion_sleep.asleep(c,now)))
         try:
             day.validate_plan(data,candidate,now)
             lifestyle.evolve(c,data,data.get('outfit',[]),previous,closet,now)

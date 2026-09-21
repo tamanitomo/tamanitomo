@@ -114,7 +114,7 @@ def mapping_for(c,persona:str='warm',style:str='none',relationship:str='',
     pd,sd=p[persona],s[style]
     iv=interview or {}
     from companion_platform import python_command, terminal_python_command, terminal_command
-    commands={name.upper()+'_CMD':terminal_python_command(pathlib.Path(kit or KIT.parent)/'kit/scripts'/('companion_'+name+'.py'),'--home',c.home) for name in ('self','life','recall','peer','outreach','memory','presence','timeline','prune','loops','active','outbox','dispatch','notes','missions','checkin','portrait','voice','keepsake')}
+    commands={name.upper()+'_CMD':terminal_python_command(pathlib.Path(kit or KIT.parent)/'kit/scripts'/('companion_'+name+'.py'),'--home',c.home) for name in ('self','life','recall','peer','outreach','memory','presence','timeline','prune','loops','active','outbox','dispatch','notes','missions','checkin','portrait','voice','keepsake','sleep')}
     commands['DOCTOR_CMD']=terminal_python_command(pathlib.Path(kit or KIT.parent)/'bin/companion','--home',c.home,'doctor')
     commands['HOOK_TERMINAL_CMD']=terminal_python_command(c.home/'hooks/companion-context.py')
     commands['ROTATE_CMD']=terminal_python_command(pathlib.Path(kit or KIT.parent)/'kit/scripts/companion_rotate.py')

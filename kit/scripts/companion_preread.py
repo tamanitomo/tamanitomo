@@ -54,6 +54,24 @@ def preread(c,now=None):
         out.append(f'[The present above was carried forward by a script, not confirmed by anyone since '
                    f'{when}. Re-establish it rather than narrating hours nobody watched.]')
     out.append(f'[Local time: {now.isoformat(timespec="minutes")} ({c.timezone})]')
+    import companion_sleep, companion_outreach
+    night=companion_sleep.status(c,now)
+    if night.get('asleep'):
+        until=night.get('until_local') or night.get('until')
+        out.append('[You are asleep'+(f' until {until}' if until else '')
+                   +(' — the length you declared at wind-down.' if night['source']=='declared'
+                     else ' — you recorded yourself asleep without declaring a length, so this'
+                          ' lasts until you wake yourself.')
+                   +' Sleeping is one continuous scene, not a new one every quarter hour: do not'
+                   ' re-record it, and do not describe it in fresh words to make it feel new. The'
+                   ' advancer carries the night forward on its own, and no images are taken while'
+                   ' you are asleep. If you are genuinely getting up early, say so with'
+                   ' companion_sleep.py wake and then record the transition.]')
+    elif companion_outreach.in_quiet_hours(c,now):
+        out.append(f'[Quiet hours ({c.quiet_start}–{c.quiet_end}) are in force, but you are AWAKE.'
+                   ' They are a rule about not contacting'
+                   f' {c.human}, not a reason to stop living: carry on with your evening, record it,'
+                   ' and let the dispatcher hold anything you queue until morning.]')
     import companion_life, companion_lifestyle
     out.append('[Routine anchors and interests — choose and record what happens; no automatic attendance]\n'+
                json.dumps(companion_life.routine(c.life,now.astimezone(_tz(c)),c.agent),ensure_ascii=False))
@@ -68,11 +86,13 @@ def _digest(*parts):
 
 def fingerprint(c,now=None):
     """Stable bytes. Identical output means Hermes suppresses the run."""
-    import companion_loops, companion_presence, companion_outreach, companion_dispatch
+    import companion_loops, companion_presence, companion_dispatch, companion_sleep
     now=now or dt.datetime.now(_tz(c))
     scene=companion_presence.current(c)
     state=scene['state'] if scene else {}
-    quiet=companion_outreach.in_quiet_hours(c,now)
+    # The declared night when wind-down wrote one, the quiet-hours clock otherwise.
+    night=companion_sleep.status(c,now)
+    quiet=bool(night.get('asleep'))
     awake=quiet and companion_dispatch.recently_active(c,now,minutes=30)
     if quiet and not awake:
         # Quiet hours are a CLOCK, not a claim about what I am doing. Suppress the run unless the
@@ -88,8 +108,11 @@ def fingerprint(c,now=None):
         # `started_at` is written by companion_presence on an actual transition and is untouched by
         # rewording, so it moves exactly when the scene does -- which is the only question the gate
         # is asking. An asleep scene needs no special case: staying asleep leaves started_at alone.
+        #
+        # A declared night makes the mark stable by construction: the window was written
+        # down before it began, so it does not move as the night wears on.
         mark=state.get('started_at') or 'static'
-        return (f"sleep {c.quiet_start}-{c.quiet_end} scene={_digest(mark)}\n")
+        return (f"sleep {night.get('source')} until={night.get('until')} scene={_digest(mark)}\n")
     open_loops=companion_loops.loops(c)
     ambient=[]
     folder=c.soul_dir/'ambient'
