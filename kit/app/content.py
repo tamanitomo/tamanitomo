@@ -32,6 +32,41 @@ def resolve(c,relative):
     if not path.is_relative_to(root) or not path.is_file() or path.suffix.lower() not in KINDS:raise ValueError('Content file not found')
     return path
 
+def with_etags(c,variants):
+    """Each variant, carrying the etag of its own file.
+
+    Switching variants in the viewer repoints the item at a different picture, so
+    without this the delete that follows sent the new path with the old picture's
+    etag and was refused as "the file changed" -- every time, for every variant.
+    """
+    folder=c.data/'image-timeline/images'
+    out=[]
+    for v in variants:
+        if not isinstance(v,dict) or not v.get('filename'):continue
+        row=dict(v)
+        try:
+            stat=(folder/v['filename']).stat()
+            row['etag']=str(stat.st_mtime_ns)+':'+str(stat.st_size)
+            row['path']='image-timeline/images/'+v['filename']
+        except OSError:
+            row['etag']=None
+            row['path']='image-timeline/images/'+v['filename']
+        out.append(row)
+    return out
+
+
+def forget_timeline_image(c,relative):
+    """Take a deleted timeline image out of the capture that still advertises it.
+
+    The capture id is not the image's stem: a variant is `<id>_v2.png`, so deriving
+    the record from the stem looked for `<id>_v2.json` and silently found nothing,
+    leaving the picture gone from disk and still listed in the moment.
+    """
+    if not relative.startswith('image-timeline/images/'):return
+    import companion_timeline as timeline
+    timeline.forget_image(c,Path(relative).name)
+
+
 def deletable(relative):
     return not relative.startswith(('soul/','knowledge/','environment/')) and (Path(relative).suffix.lower() in {k for k,v in KINDS.items() if v in ('image','audio','video')} or relative.startswith('creations/'))
 
@@ -130,7 +165,7 @@ def catalog(c,limit=1500,before=None,kind='',q='',day='',collection='all',conten
                 scene=capture.get('scene',{});state=scene.get('state',{})
                 row.update(at=scene.get('recorded_at') or row['at'],title=state.get('activity') or row['title'],mood=state.get('mood',''),
                            capture_id=capture.get('id'),capture=capture.get('id'),
-                           variants=capture.get('variants',[]),
+                           variants=with_etags(c,capture.get('variants',[])),
                            primary_filename=capture.get('primary_filename',capture.get('filename')),
                            prompts=capture.get('prompts') or row.get('prompts'),
                            active_prompt_type=capture.get('active_prompt_type') or row.get('active_prompt_type'))
@@ -235,21 +270,18 @@ def register(app,load):
     def delete_content(payload:dict):
         c=load();relative=payload.get('path','');p=resolve(c,relative)
         if not deletable(relative):raise ValueError('This document is protected; use its dedicated editor')
-        stat=p.stat()
-        if payload.get('etag')!=str(stat.st_mtime_ns)+':'+str(stat.st_size):raise ValueError('The file changed; refresh before deleting')
-        # Delete only the chosen file and its own metadata, never another album copy.
-        p.unlink()
-        review.sidecar(p).unlink(missing_ok=True)
-        if relative.startswith('creations/image-studio/'):
-            p.with_suffix('.json').unlink(missing_ok=True)
-        if relative.startswith('image-timeline/images/'):
-            import companion_timeline as timeline
-            record=c.data/'image-timeline/captures'/(p.stem+'.json')
-            if not record.is_symlink() and record.is_file():
-                row=review.read_json(record);row.update(status='deleted',filename=None)
-                from companion_platform import atomic_write
-                atomic_write(record,json.dumps(row,indent=2))
-                timeline.render_gallery(c)
+        # A record can outlive its file -- that is exactly the state a half-finished
+        # delete leaves behind -- so a missing file is something to finish tidying
+        # rather than an error to refuse.
+        if p.is_file():
+            stat=p.stat()
+            if payload.get('etag')!=str(stat.st_mtime_ns)+':'+str(stat.st_size):raise ValueError('The file changed; refresh before deleting')
+            # Delete only the chosen file and its own metadata, never another album copy.
+            p.unlink()
+            review.sidecar(p).unlink(missing_ok=True)
+            if relative.startswith('creations/image-studio/'):
+                p.with_suffix('.json').unlink(missing_ok=True)
+        forget_timeline_image(c,relative)
         return {'deleted':True,'path':relative}
     @app.get('/api/content')
     def list_content(limit:int=1500,before:str|None=None,kind:str='',q:str='',day:str='',collection:str='all'):return catalog(load(),limit,before,kind,q,day,collection)
@@ -296,26 +328,21 @@ def register(app,load):
         for entry in items:
             relative=entry.get('path','');p=resolve(c,relative)
             if not deletable(relative):raise ValueError(f'Protected file cannot be deleted: {relative}')
-            stat=p.stat()
-            if entry.get('etag')!=str(stat.st_mtime_ns)+':'+str(stat.st_size):raise ValueError(f'A file changed since you selected it. Refresh before deleting.')
+            # A file already gone is a record still to tidy, not a reason to refuse
+            # the whole batch and leave the rest selected.
+            if p.is_file():
+                stat=p.stat()
+                if entry.get('etag')!=str(stat.st_mtime_ns)+':'+str(stat.st_size):raise ValueError(f'A file changed since you selected it. Refresh before deleting.')
             resolved.append((relative,p))
         count=0
         for relative,p in resolved:
-            p.unlink()
-            review.sidecar(p).unlink(missing_ok=True)
-            if relative.startswith('creations/image-studio/'):
-                p.with_suffix('.json').unlink(missing_ok=True)
-            if relative.startswith('image-timeline/images/'):
-                import companion_timeline as timeline
-                record=c.data/'image-timeline/captures'/(p.stem+'.json')
-                if not record.is_symlink() and record.is_file():
-                    row=review.read_json(record);row.update(status='deleted',filename=None)
-                    from companion_platform import atomic_write
-                    atomic_write(record,json.dumps(row,indent=2))
+            if p.is_file():
+                p.unlink()
+                review.sidecar(p).unlink(missing_ok=True)
+                if relative.startswith('creations/image-studio/'):
+                    p.with_suffix('.json').unlink(missing_ok=True)
+            forget_timeline_image(c,relative)
             count+=1
-        if any(r.startswith('image-timeline/images/') for r,_ in resolved):
-            import companion_timeline as timeline
-            timeline.render_gallery(c)
         return {'deleted':True,'count':count}
     @app.get('/api/content/text')
     def text_content(path:str):

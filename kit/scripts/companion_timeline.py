@@ -267,6 +267,51 @@ def prepare(c,now=None):
     return {'ready':True,'capture_id':ident,'scene':scene,'image_style_guidance':style['soul'],'instruction':'Generate one image with the configured Hermes image provider, matching this saved scene and the SOUL visual identity. Import the actual returned local file or HTTPS URL with save. Do not send it to the user.'}
 
 
+def owning_capture(filename):
+    """The capture id a managed image belongs to.
+
+    A variant is stored as `<capture id>_v2.png`, so its own stem is not the id of
+    anything. Deriving the record name from the file's stem looked right and found
+    `<id>_v2.json`, which never exists -- so deleting a variant removed the picture
+    and left the capture still advertising it.
+    """
+    stem=pathlib.Path(str(filename or '')).stem
+    ident=stem.split('_',1)[0]
+    return ident if ID.fullmatch(ident) else ''
+
+
+def forget_image(c,filename,now=None):
+    """Take one managed image out of its capture, after the file itself is gone.
+
+    Removing the primary of a capture that still has other renders promotes one of
+    them rather than retiring the moment: the picture was deleted, not the memory.
+    Only when nothing is left does the capture become `deleted`.
+    """
+    ident=owning_capture(filename)
+    if not ident:return {'updated':False,'reason':'not a managed timeline image'}
+    path=capture_path(c,ident)
+    if path.is_symlink() or not path.is_file():return {'updated':False,'reason':'no capture for this image'}
+    with file_lock(root(c)/'.lock'):
+        row=json.loads(path.read_text(encoding='utf-8'))
+        variants=[v for v in (row.get('variants') or []) if isinstance(v,dict) and v.get('filename')]
+        remaining=[v for v in variants if v['filename']!=filename]
+        # A capture with no variant list at all is its own single image.
+        if not variants and row.get('filename')==filename:remaining=[]
+        row['variants']=remaining
+        if row.get('filename')==filename or row.get('primary_filename')==filename:
+            promoted=remaining[0]['filename'] if remaining else None
+            row['filename']=promoted
+            row['primary_filename']=promoted
+            if promoted:
+                for v in remaining:v['selected']=(v['filename']==promoted)
+        if not row.get('filename'):row.update(status='deleted',filename=None,primary_filename=None)
+        atomic_write(path,json.dumps(row,ensure_ascii=False,indent=2))
+    try:render_gallery(c)
+    except (OSError,ValueError):pass
+    return {'updated':True,'capture':ident,'status':row.get('status'),'primary':row.get('filename'),
+            'remaining':[v['filename'] for v in row.get('variants',[])]}
+
+
 def capture_path(c,ident):
     if not ID.fullmatch(ident):raise ValueError('Invalid capture id')
     return root(c)/'captures'/(ident+'.json')

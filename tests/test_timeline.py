@@ -147,3 +147,75 @@ class TimelineTests(unittest.TestCase):
         saved=timeline.save(self.c,ident,str(self.image),'test-provider',self.now,prompts=prompts)
         self.assertEqual(saved['prompts'],prompts)
 
+
+
+class DeletingImagesLeavesNoGhostsTests(unittest.TestCase):
+    """A deleted picture has to leave the moment that was advertising it.
+
+    A variant is stored as `<capture id>_v2.png`, so its own stem is the id of
+    nothing. Deriving the capture record from that stem looked for `<id>_v2.json`,
+    found nothing, and said nothing -- so the file went and the capture carried on
+    listing it. The variant switcher kept offering a picture that was gone, and
+    trying to delete it again failed on the missing file.
+    """
+
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
+        self.folder=pathlib.Path(self.tmp.name)
+        self.c=cc.Companion(hermes_root=self.folder/'home',vault=self.folder/'vault',
+                            image_timeline=True,image_style='realistic')
+        self.now=dt.datetime(2026,9,21,12,2,tzinfo=dt.timezone.utc)
+        presence.update_wardrobe(self.c,[{'id':'tee','description':'green tee','use':'everyday'}])
+        presence.update(self.c,{'previous_id':None,'outfit':['tee'],'location':'kitchen',
+                                'activity':'lunch','mood':'cheerful','text':'Lunch.'},self.now)
+        self.ident=timeline.prepare(self.c,self.now)['capture_id']
+        first=self.folder/'first.png';Image.new('RGB',(8,8),'red').save(first)
+        timeline.save(self.c,self.ident,str(first),'provider-one',self.now)
+        second=self.folder/'second.png';Image.new('RGB',(8,8),'blue').save(second)
+        timeline.add_variant(self.c,self.ident,str(second),'provider-two',now=self.now)
+        self.images=timeline.root(self.c)/'images'
+
+    def row(self):
+        return json.loads(timeline.capture_path(self.c,self.ident).read_text())
+
+    def names(self):
+        return [v['filename'] for v in self.row().get('variants',[])]
+
+    def test_a_variant_belongs_to_the_capture_its_name_starts_with(self):
+        self.assertEqual(timeline.owning_capture(f'{self.ident}_v2.png'),self.ident)
+        self.assertEqual(timeline.owning_capture(f'{self.ident}.png'),self.ident)
+        self.assertEqual(timeline.owning_capture('not-a-managed-name.png'),'')
+
+    def test_deleting_a_variant_takes_it_out_of_the_moment(self):
+        variant=f'{self.ident}_v2.png'
+        self.assertIn(variant,self.names())
+        (self.images/variant).unlink()
+        timeline.forget_image(self.c,variant)
+        self.assertNotIn(variant,self.names(),'the capture still advertises a deleted picture')
+        self.assertEqual(self.row()['status'],'saved','one lost variant is not a lost moment')
+
+    def test_deleting_the_primary_promotes_a_survivor_rather_than_retiring_the_moment(self):
+        primary=f'{self.ident}.png'
+        (self.images/primary).unlink()
+        timeline.forget_image(self.c,primary)
+        row=self.row()
+        self.assertEqual(row['status'],'saved')
+        self.assertEqual(row['filename'],f'{self.ident}_v2.png')
+        self.assertEqual(row['primary_filename'],f'{self.ident}_v2.png')
+
+    def test_the_moment_retires_only_when_nothing_is_left(self):
+        for name in (f'{self.ident}.png',f'{self.ident}_v2.png'):
+            (self.images/name).unlink()
+            timeline.forget_image(self.c,name)
+        row=self.row()
+        self.assertEqual(row['status'],'deleted')
+        self.assertIsNone(row['filename'])
+        self.assertEqual(row['variants'],[])
+
+    def test_tidying_a_record_whose_file_is_already_gone_is_not_an_error(self):
+        """The state a half-finished delete leaves behind has to be recoverable."""
+        variant=f'{self.ident}_v2.png'
+        (self.images/variant).unlink()
+        timeline.forget_image(self.c,variant)
+        self.assertEqual(timeline.forget_image(self.c,variant)['updated'],True)
+        self.assertNotIn(variant,self.names())

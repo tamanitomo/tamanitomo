@@ -1304,6 +1304,9 @@ function renderViewerPhoto(){
           if(!v)return;
           item.url=`/media/timeline/${v.filename}`;
           item.path=`image-timeline/images/${v.filename}`;
+          // The etag belongs to the file, so it has to move with the path. Leaving
+          // the original's behind made every delete of a variant fail as a conflict.
+          item.etag=v.etag||null;
           item.generation=v.provider;
           item.rating=v.rating||'safe';
           item.blur=Boolean(v.blur);

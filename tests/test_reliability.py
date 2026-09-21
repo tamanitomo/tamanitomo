@@ -275,3 +275,32 @@ class NoticeStripAndRetryLayoutTests(unittest.TestCase):
         post_at = handler.index('post(`/timeline/')
         self.assertLess(close_at, post_at, 'the dialog must close before the request starts')
         self.assertIn('.catch(', handler, 'a failed render has to reach the toast')
+
+
+class DeletingAVariantReachesTheRightFileTests(unittest.TestCase):
+    """Switching variants repoints the viewer at a different picture.
+
+    The delete that followed sent the new path with the previous picture's etag, so
+    the server refused it as a conflict every single time -- which is why deleting
+    a variant appeared to do nothing at all, and left nothing behind to show for it.
+    """
+
+    def source(self, name):
+        return (Path(__file__).resolve().parents[1] / "kit/app/static" / name).read_text(encoding="utf-8")
+
+    def test_the_viewer_moves_the_etag_with_the_path(self):
+        js = self.source('product.js')
+        handler = js.split("for(const btn of variantsBar.querySelectorAll('[data-variant-fn]')){")[1][:700]
+        self.assertIn('item.path=', handler)
+        self.assertIn('item.etag=', handler, 'the path moved but the etag did not')
+
+    def test_the_server_gives_every_variant_its_own_etag(self):
+        content = (Path(__file__).resolve().parents[1] / 'kit/app/content.py').read_text(encoding='utf-8')
+        self.assertIn('def with_etags', content)
+        self.assertIn('variants=with_etags(', content)
+
+    def test_a_deleted_timeline_image_is_taken_out_of_its_capture(self):
+        content = (Path(__file__).resolve().parents[1] / 'kit/app/content.py').read_text(encoding='utf-8')
+        self.assertIn('forget_timeline_image', content)
+        # The capture id is not the image stem; that assumption was the whole bug.
+        self.assertNotIn("(p.stem+'.json')", content)
