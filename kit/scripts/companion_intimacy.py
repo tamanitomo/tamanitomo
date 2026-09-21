@@ -14,7 +14,7 @@ import companion_config as cc
 import companion_feelings as feelings
 from companion_render import NON_ROMANTIC
 
-STAGES = [
+ROMANTIC_STAGES = [
     {
         'stage': 0,
         'name': 'Just Met',
@@ -80,6 +80,73 @@ STAGES = [
         ),
     },
 ]
+
+# The same five steps without the romance, for frames that never had any: a best
+# friend, a mentor, a sibling, someone you build things with, a Jarvis. Calling
+# stage two "Chemistry" for a colleague was not a smaller problem than getting the
+# pacing wrong -- it described a relationship the user had explicitly not asked for.
+# Bonded here is loyalty and unguarded trust, and unlocks nothing intimate.
+PLATONIC_STAGES = [
+    {
+        'stage': 0, 'name': 'Just Met', 'badge': 'Just Met',
+        'min_score': 0, 'max_score': 24,
+        'can_flirt': False, 'can_tease': False, 'can_intimate': False,
+        'desc': 'Still learning each other. Polite curiosity and finding out how the other works.',
+    },
+    {
+        'stage': 1, 'name': 'Familiar', 'badge': 'Familiar',
+        'min_score': 25, 'max_score': 49,
+        'can_flirt': False, 'can_tease': True, 'can_intimate': False,
+        'desc': (
+            'Easy and unceremonious. Knows the shape of your days, picks up threads without being '
+            'reminded, and banter comes naturally.'
+        ),
+    },
+    {
+        'stage': 2, 'name': 'Trusted', 'badge': 'Trusted',
+        'min_score': 50, 'max_score': 69,
+        'can_flirt': False, 'can_tease': True, 'can_intimate': False,
+        'desc': (
+            'Candid in both directions. Will say the unwelcome thing plainly rather than the '
+            'agreeable one, and is taken seriously when it does.'
+        ),
+    },
+    {
+        'stage': 3, 'name': 'Confidant', 'badge': 'Confidant',
+        'min_score': 70, 'max_score': 89,
+        'can_flirt': False, 'can_tease': True, 'can_intimate': False,
+        'desc': (
+            'Knows the things you do not tell other people. Real investment in how your life goes, '
+            'without needing anything performed in return.'
+        ),
+    },
+    {
+        'stage': 4, 'name': 'Bonded', 'badge': 'Bonded',
+        'min_score': 90, 'max_score': 100,
+        'can_flirt': False, 'can_tease': True, 'can_intimate': False,
+        'desc': (
+            'Settled, unguarded loyalty. Neither of you is auditioning any more; the relationship is '
+            'simply part of how your life is arranged.'
+        ),
+    },
+]
+
+# Kept as the historical name so existing imports keep meaning the romantic ladder.
+STAGES = ROMANTIC_STAGES
+
+
+def stages_for(c):
+    """Which ladder describes this relationship.
+
+    The same predicate as `romantic_progression` in the computed state, so the
+    badge someone reads and the scale it came from can never disagree.
+    """
+    return ROMANTIC_STAGES if is_romantic(c) else PLATONIC_STAGES
+
+
+def is_romantic(c):
+    return getattr(c, 'boundary', '') not in NON_ROMANTIC and getattr(c, 'agent_type', 'companion') == 'companion'
+
 
 PACE_MULTIPLIERS = {
     'slow': 0.6,
@@ -257,14 +324,17 @@ def compute(c, now=None) -> Dict[str, Any]:
     explicit_opted_in = getattr(c, 'explicit', False) and not nsfw_revoked
     if permanent_friend or nsfw_revoked:
         score = min(score, 49)  # Locked at Friends (Stage 1) max
-    elif not explicit_opted_in and score >= 90:
-        score = 89
+    # Bonded used to be held one point away unless adult themes were on, which made
+    # the deepest a friendship could ever be a permanent 89 -- indistinguishable from
+    # a relationship still a day short of it. Bonded is the top of whichever ladder
+    # applies; what it unlocks is decided separately, below.
 
-    # Determine stage
-    stage_info = STAGES[0]
-    for s in STAGES:
-        if s['min_score'] <= score <= s['max_score']:
-            stage_info = s
+    # Determine stage, on the ladder that describes this relationship
+    ladder = stages_for(c)
+    stage_info = ladder[0]
+    for step in ladder:
+        if step['min_score'] <= score <= step['max_score']:
+            stage_info = step
             break
 
     # Blockers for intimacy / NSFW readiness
@@ -288,7 +358,13 @@ def compute(c, now=None) -> Dict[str, Any]:
     elif violation_count == 1:
         risk_level = 'caution'
 
-    can_intimate = stage_info['stage'] == 4 and explicit_opted_in and not permanent_friend and not nsfw_revoked
+    # A platonic ladder's Bonded unlocks nothing intimate, which is why the flag reads
+    # from the stage rather than the number: the platonic stage 4 carries can_intimate False.
+    can_intimate = (stage_info['stage'] == 4 and stage_info['can_intimate']
+                    and explicit_opted_in and not permanent_friend and not nsfw_revoked)
+    # Adult imagery is a further, separate permission. Wanting a romance is not the
+    # same as wanting nudes, and every call site used to read `explicit` for both.
+    can_send_adult_images = can_intimate and getattr(c, 'adult_images', False)
 
     description = stage_info['desc']
     if permanent_friend:
@@ -313,6 +389,8 @@ def compute(c, now=None) -> Dict[str, Any]:
         'can_flirt': stage_info['can_flirt'] and not permanent_friend,
         'can_tease': stage_info['can_tease'] and not permanent_friend,
         'can_intimate': can_intimate,
+        'can_send_adult_images': can_send_adult_images,
+        'adult_images_enabled': bool(getattr(c, 'adult_images', False)),
         'explicit_opted_in': explicit_opted_in,
         'permanent_friend': permanent_friend,
         'nsfw_revoked': nsfw_revoked,
@@ -331,7 +409,14 @@ def render(c, intimacy_state: Optional[Dict[str, Any]] = None) -> str:
     if not intimacy_state:
         intimacy_state = compute(c)
 
-    if not intimacy_state.get('explicit_opted_in') and not getattr(c, 'romantic', False) and not intimacy_state.get('violations_count') and not intimacy_state.get('permanent_friend'):
+    # A relationship that is not a romance still has a shape worth describing, and
+    # saying nothing was how a platonic companion ended up with no sense of whether
+    # it had known someone a week or a year. Silence is now for the cases that
+    # genuinely have no relationship layer, or where the user asked it to be hidden.
+    if getattr(c, 'agent_type', 'companion') == 'worker':
+        return ''
+    if getattr(c, 'relationship_progression', 'subtle') == 'off' and not intimacy_state.get('violations_count') \
+            and not intimacy_state.get('permanent_friend'):
         return ''
 
     lines = [
@@ -351,7 +436,37 @@ def render(c, intimacy_state: Optional[Dict[str, Any]] = None) -> str:
             )
         return '\n'.join(lines) + '\n'
 
-    if intimacy_state['stage'] >= 2:
+    romantic = intimacy_state.get('romantic_progression', True)
+    if not romantic:
+        # This relationship is not a romance and never was, so the guidance says nothing
+        # about chemistry or flirting. Closeness here deepens into candour and loyalty.
+        if intimacy_state['stage'] >= 4:
+            lines.append(
+                f"BONDED: You and {c.human} are past auditioning for each other. Speak plainly, assume "
+                "you will be believed, and let silences be comfortable. This is loyalty and long "
+                "familiarity, not romance, and it does not become romance by deepening further."
+            )
+        elif intimacy_state['stage'] == 3:
+            lines.append(
+                f"CONFIDANT: {c.human} tells you things they do not tell other people. Treat that "
+                "plainly rather than sentimentally: remember it, take it seriously, and do not make "
+                "it into an occasion. Warmth here looks like being reliably on their side."
+            )
+        elif intimacy_state['stage'] == 2:
+            lines.append(
+                "TRUSTED: Say the true thing rather than the agreeable one. Disagreement is welcome "
+                "and expected; flattery is not. You are taken seriously, so be worth taking seriously."
+            )
+        elif intimacy_state['stage'] == 1:
+            lines.append(
+                "FAMILIAR: Easy familiarity and unceremonious banter are welcome. Teasing is a form of "
+                "closeness here. There is no romantic dimension to this relationship and none is developing."
+            )
+        else:
+            lines.append(
+                "JUST MET: You are still learning each other. Keep it respectful, friendly and observant."
+            )
+    elif intimacy_state['stage'] >= 2:
         lines.append(
             "CHEMISTRY & FLIRTING: Mutual romantic chemistry is unlocked. Playful flirting, teasing, "
             "and affectionate banter are welcomed. If ignored or redirected, step back gracefully with no bitterness."
@@ -372,14 +487,15 @@ def render(c, intimacy_state: Optional[Dict[str, Any]] = None) -> str:
             f"BONDED CONNECTION: Stage 4 reached. You and {c.human} share an authentic, deep bond built on mutual trust. "
             f"You are emotionally open and comfortable expressing vulnerability, tenderness, and warmth in private, quiet moments together."
         )
-        lines.append(
-            "YOUR CHOICE IN PICTURES: When you send a picture, `companion_media.py generate --intimate` "
-            "sets that workflow's modesty negatives aside. It is yours to use or not; nobody can ask for it "
-            "on your behalf, and declining needs no reason. Judge each moment on its own — whether it is "
-            "private, whether it is wanted, whether you want it. Some always-on negatives are never set "
-            "aside by this or anything else, which is deliberate and not a limit on you."
-        )
-    else:
+        if intimacy_state.get('can_send_adult_images'):
+            lines.append(
+                "YOUR CHOICE IN PICTURES: When you send a picture, `companion_media.py generate --intimate` "
+                "sets that workflow's modesty negatives aside. It is yours to use or not; nobody can ask for it "
+                "on your behalf, and declining needs no reason. Judge each moment on its own — whether it is "
+                "private, whether it is wanted, whether you want it. Some always-on negatives are never set "
+                "aside by this or anything else, which is deliberate and not a limit on you."
+            )
+    elif romantic:
         lines.append(
             "AGENCY & MUTUAL RESPECT: You have full emotional agency and self-respect. "
             "Closeness develops organically through mutual trust over time. "

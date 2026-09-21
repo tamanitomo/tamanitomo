@@ -434,14 +434,14 @@ def build(home=None,token='',state_dir=None):
                 'agent_type':c.agent_type,'relationship_progression':c.relationship_progression,
                 'relationship_pace':c.relationship_pace,'peer_interaction':c.peer_interaction,
                 'image_style':c.image_style,'image_styles':{k:v['label'] for k,v in render.load_styles().items()},
-                'explicit':c.explicit,
+                'explicit':c.explicit,'adult_images':c.adult_images,
                 'integrity_lockout':False,'integrity_warning':None,
                 'intimacy':intimacy,'remote_pin':c.remote_pin}
 
     ALLOWED={'quiet_start','quiet_end','outreach','outreach_per_day','adaptive_quiet',
              'location','sensors','autonomy_windows','share_people','timeline_budget_gb',
              'content_permissions','image_timeline','image_interval_minutes','bars','relationship_progression',
-             'relationship_pace','peer_interaction','image_style','explicit','remote_pin'}
+             'relationship_pace','peer_interaction','image_style','explicit','adult_images','remote_pin'}
 
     @app.post('/api/settings')
     def set_settings(payload:dict):
@@ -456,6 +456,10 @@ def build(home=None,token='',state_dir=None):
             payload.pop('explicit')
         elif payload.get('explicit') is True and companion_integrity.is_nsfw_revoked(c):
             raise HTTPException(400, 'Adult themes were permanently turned off for this companion and cannot be re-enabled.')
+        # Romance is the prerequisite, so switching it off takes adult imagery with it
+        # rather than leaving a permission behind that nothing can act on.
+        if payload.get('explicit') is False or companion_integrity.is_nsfw_revoked(c):
+            payload['adult_images']=False
         adult_confirmed=payload.pop('adult_confirmed',False)
         if payload.get('explicit') is True and not c.explicit and adult_confirmed is not True:
             raise HTTPException(400,'Confirm that both you and the companion are adults before enabling adult themes')

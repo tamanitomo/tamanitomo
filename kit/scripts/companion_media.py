@@ -339,7 +339,7 @@ def generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:N
     scanner still rates and records it; the safety floor still applies; and
     `compile` refuses the whole thing unless the closeness gate is open.
     """
-    if intimate or getattr(c,'explicit',False):allow_nsfw=True
+    if intimate or getattr(c,'adult_images_allowed',False):allow_nsfw=True
     try:return _generate(c,preset_id,category,overrides,report,allow_nsfw,draft,intimate)
     except ImageHeld as held:
         # 'unknown' is the detector's uncertain band, and it earns the same one clothed retry as

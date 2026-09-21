@@ -378,6 +378,12 @@ const settingsPanels=[
   </div>
 
   <h3 class="section-subheading" style="margin-top:16px;margin-bottom:6px">What stays blurred</h3>
+  <p class="dim small" style="margin-top:0">${s.adult_images
+    ? 'Adult images are allowed for this companion, so the check <strong>sorts and labels</strong> rather than blocks: '
+      + 'a picture meant to be explicit is delivered as it was made, not regenerated with clothes put back on. '
+      + 'It still gets a rating, and the blur settings below still decide whether you see it covered first.'
+    : 'Adult images are off for this companion, so anything the check rates sensitive is held rather than sent. '
+      + 'Allowing them is under Companion \u2192 Relationship.'}</p>
   <div class="contact-settings">
     <div class="contact-row">
       <label class="switch-container compact-toggle" data-toggle-row title="Open one to reveal it">
@@ -426,7 +432,7 @@ const settingsPanels=[
 
 {group:'Companion',id:'relationship',title:'Relationship',
  blurb:'How closeness grows — locked by default',
- keywords:'relationship pace progression intimacy romance milestones meters peer',
+ keywords:'relationship pace progression intimacy romance milestones meters peer nsfw adult images nudity',
  async render(host){
   const s=await api('/settings');
   const net=await api('/network').catch(()=>({remote_pin_configured:false}));
@@ -442,6 +448,7 @@ const settingsPanels=[
       <div><dt>Progression</dt><dd>${esc(labels.progression[s.relationship_progression]||s.relationship_progression)}</dd></div>
       <div><dt>Pace</dt><dd>${esc(labels.pace[s.relationship_pace]||s.relationship_pace)}</dd></div>
       <div><dt>Intimacy &amp; romance</dt><dd>${s.explicit?'Romantic connection enabled':'Friendly / platonic only'}</dd></div>
+      <div><dt>Adult images</dt><dd>${s.explicit?(s.adult_images?'Allowed':'Not allowed'):'Not allowed (needs romance)'}</dd></div>
       <div><dt>Other companions</dt><dd>${s.peer_interaction?'May interact':'Kept apart'}</dd></div>
       <div><dt>Connection meters</dt><dd>${s.bars?'Shown':'Hidden'}</dd></div>
     </dl>
@@ -479,6 +486,19 @@ const settingsPanels=[
       </div>
     </div>
     <div class="contact-row">
+      <label class="contact-label">Adult images:</label>
+      <div class="contact-controls">
+        <label class="switch-container compact-toggle" data-toggle-row>
+          <input type="checkbox" id="adult-images" ${s.adult_images?'checked':''} ${s.explicit?'':'disabled'}>
+          <span class="switch-slider" aria-hidden="true"></span>
+          <span class="switch-label">Allow nudity in the pictures they send</span>
+        </label>
+        <span class="dim small" style="margin-left:4px">${s.explicit
+          ? 'Separate from romance. A romantic companion sends nothing explicit unless this is on.'
+          : 'Turn on Romance first.'}</span>
+      </div>
+    </div>
+    <div class="contact-row">
       <label class="contact-label" for="peer-interaction">Companions:</label>
       <div class="contact-controls">
         <select id="peer-interaction">${options([['true','May interact with each other'],['false','Kept apart']],String(s.peer_interaction))}</select>
@@ -497,6 +517,12 @@ const settingsPanels=[
   </div>
   ${settingsFooter('Save relationship settings')}`;
   wireToggles(host);
+  const romance=host.querySelector('#adult-themes'),adultImages=host.querySelector('#adult-images');
+  romance.onchange=()=>{
+    const on=romance.value==='true';
+    adultImages.disabled=!on;
+    if(!on)adultImages.checked=false;
+  };
   wireSave(host,async()=>{
     const wantsAdult=host.querySelector('#adult-themes').value==='true';
     const payload={
@@ -504,13 +530,18 @@ const settingsPanels=[
       relationship_pace:host.querySelector('#pace').value,
       peer_interaction:host.querySelector('#peer-interaction').value==='true',
       bars:host.querySelector('#bars').checked,
-      explicit:wantsAdult};
+      explicit:wantsAdult,
+      // Romance is the prerequisite, so this can never be sent on its own.
+      adult_images:wantsAdult&&host.querySelector('#adult-images').checked};
     if(wantsAdult&&!s.explicit){
       if(!confirm('Enable romantic and adult themes? Confirm that you and this companion are both represented as adults.'))
         throw Error('Not changed.');
       payload.adult_confirmed=true;
     }
     if(!wantsAdult&&s.explicit&&!confirm('Turning romance off is permanent for this companion. It cannot be re-enabled. Continue?'))
+      throw Error('Not changed.');
+    if(payload.adult_images&&!s.adult_images&&
+       !confirm('Allow nudity in the pictures they send? The safety check will then label these pictures rather than hold them back.'))
       throw Error('Not changed.');
     return saveSettings(payload);
   });

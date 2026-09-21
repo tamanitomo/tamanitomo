@@ -175,6 +175,11 @@ class Companion:
     bars:bool=True
     relationship_progression:str='subtle'
     relationship_pace:str='natural'
+    # Whether adult imagery is permitted, which is a separate question from whether
+    # the relationship is romantic at all. Someone can want a romance and no nudity;
+    # folding the two together left no way to say so. Romance is required but never
+    # sufficient: this must be switched on deliberately, on its own.
+    adult_images:bool=False
     # The day this relationship began, as YYYY-MM-DD. Closeness is earned over days
     # spent together, and without an anchor that count reaches back through every
     # conversation the underlying assistant ever had -- so a companion installed onto
@@ -201,6 +206,9 @@ class Companion:
             except (TypeError,ValueError):
                 raise ValueError('relationship_started must be a date as YYYY-MM-DD, or empty')
         if not isinstance(self.peer_interaction,bool):raise ValueError('peer_interaction must be true or false')
+        if not isinstance(self.adult_images,bool):raise ValueError('adult_images must be true or false')
+        if self.adult_images and not self.explicit:
+            raise ValueError('Adult images require a romantic relationship; enable romance first')
         if not isinstance(self.explicit,bool):raise ValueError('explicit must be true or false')
         if self.explicit:
             from companion_render import NON_ROMANTIC
@@ -341,6 +349,16 @@ class Companion:
 
     @property
     def is_root(self)->bool:return not self.profile
+
+    @property
+    def adult_images_allowed(self)->bool:
+        """Whether adult imagery may be produced or delivered for this companion.
+
+        One place answers this, because the question used to be answered by reading
+        `explicit` at four separate call sites -- which meant every romantic
+        companion was also an adult-image companion, with nothing to say otherwise.
+        """
+        return bool(self.explicit and self.adult_images)
 
     @property
     def soul(self)->pathlib.Path:

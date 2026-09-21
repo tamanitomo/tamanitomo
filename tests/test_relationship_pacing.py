@@ -116,22 +116,23 @@ class PacingTests(unittest.TestCase):
         """A companion that is a stranger for a fortnight is no fun either."""
         self.assertEqual(self.score_after(4)['stage_name'], 'Friends')
 
-    def test_bonded_stays_shut_without_the_adult_opt_in(self):
-        """Bonded is the stage that unlocks intimate content, so it is gated.
+    def test_bonded_is_reachable_without_adult_themes(self):
+        """Bonded is the top of the relationship, not a door to adult content.
 
-        Worth pinning because the cap lands one point short of the threshold: a
-        companion without the opt-in sits at 89 forever, and that reads exactly
-        like a relationship still a day away from bonding rather than one that
-        has been held at a ceiling since day fifty-six.
+        It used to be held at 89 unless adult themes were on, so the deepest a
+        friendship could ever be was one point short -- indistinguishable from a
+        relationship still a day away from it. What Bonded unlocks is decided
+        separately, and for a companion without the opt-in it unlocks nothing.
         """
-        for days in (56, 120, 400):
+        for days in (56, 120):
             self.setUp()
             self.c.explicit = False
             self.c.save()
             state = self.score_after(days)
-            self.assertEqual(state['score'], 89, f'{days} days')
-            self.assertEqual(state['stage_name'], 'Intimacy')
+            self.assertGreaterEqual(state['score'], BONDED, f'{days} days')
+            self.assertEqual(state['stage_name'], 'Bonded')
             self.assertFalse(state['can_intimate'])
+            self.assertFalse(state['can_send_adult_images'])
 
     def test_pace_moves_the_target_in_the_direction_it_says(self):
         def days_to_bond(pace):
@@ -188,3 +189,107 @@ class TrustSetsTheRateNotTheCeilingTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class PlatonicLadderTests(unittest.TestCase):
+    """A relationship that is not a romance should not be described as one.
+
+    Calling stage two "Chemistry" for a mentor, a sibling or a Jarvis was not a
+    cosmetic problem: it named a relationship the user had explicitly not chosen,
+    and then wrote that name into the companion's own prompt.
+    """
+
+    def build(self, boundary='best-friend', agent_type='companion', explicit=False):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        base = pathlib.Path(tmp.name)
+        c = cc.Companion(agent='Jarvis', human='Alex', profile='j',
+                         hermes_root=base / 'hermes', vault=base / 'vault',
+                         boundary=boundary, agent_type=agent_type, explicit=explicit)
+        c.home.mkdir(parents=True); c.life.mkdir(parents=True); c.save()
+        return c
+
+    def at(self, c, days):
+        end = dt.date(2026, 9, 20)
+        db = c.home / 'state.db'
+        with contextlib.closing(sqlite3.connect(db)) as con, con:
+            con.executescript(
+                'CREATE TABLE sessions(id TEXT PRIMARY KEY,profile_name TEXT,source TEXT,'
+                'started_at REAL,title TEXT);'
+                'CREATE TABLE messages(session_id TEXT,role TEXT,content TEXT,timestamp REAL,'
+                '_compressed_summary INTEGER,active INTEGER,compacted INTEGER);')
+            con.execute("INSERT INTO sessions VALUES ('s0','j','cli',100,'t')")
+            con.executemany('INSERT INTO messages VALUES (?,?,?,?,0,1,0)',
+                            [('s0', 'user', 'hi',
+                              dt.datetime.combine(end - dt.timedelta(days=n), dt.time(12), UTC).timestamp())
+                             for n in range(days)])
+        return intimacy.compute(c, dt.datetime.combine(end, dt.time(18), UTC))
+
+    def test_a_platonic_frame_never_reaches_chemistry_or_intimacy(self):
+        names = [self.at(self.build(), d)['stage_name'] for d in (1, 20, 30, 45, 56)]
+        self.assertNotIn('Chemistry', names)
+        self.assertNotIn('Intimacy', names)
+        self.assertEqual(names, ['Just Met', 'Familiar', 'Trusted', 'Confidant', 'Bonded'])
+
+    def test_a_platonic_frame_can_be_bonded_and_it_unlocks_nothing(self):
+        state = self.at(self.build(), 56)
+        self.assertEqual(state['stage_name'], 'Bonded')
+        self.assertFalse(state['can_flirt'], 'a best friend does not start flirting at stage four')
+        self.assertFalse(state['can_intimate'])
+        self.assertFalse(state['can_send_adult_images'])
+
+    def test_a_romantic_frame_keeps_the_romantic_ladder(self):
+        c = self.build(boundary='girlfriend', explicit=True)
+        self.assertEqual(self.at(c, 45)['stage_name'], 'Intimacy')
+
+    def test_a_colleague_is_platonic_whatever_its_frame_says(self):
+        c = self.build(boundary='girlfriend', agent_type='colleague')
+        self.assertEqual(self.at(c, 45)['stage_name'], 'Confidant')
+
+    def test_the_guidance_given_to_a_platonic_companion_mentions_no_romance(self):
+        c = self.build()
+        bonded = intimacy.render(c, self.at(c, 56))
+        self.assertTrue(bonded.strip(), 'a platonic relationship still needs describing')
+        self.assertIn('BONDED', bonded.upper())
+        confidant = intimacy.render(self.build(), self.at(self.build(), 45))
+        self.assertIn('CONFIDANT', confidant.upper())
+        for text in (bonded, confidant):
+            for word in ('flirt', 'chemistry', 'intimate'):
+                self.assertNotIn(word, text.lower(), word)
+        # "not romance" is allowed to appear; "romantic chemistry" is not.
+        self.assertNotIn('romantic', bonded.lower())
+
+
+class AdultImagesAreTheirOwnPermissionTests(unittest.TestCase):
+    """Wanting a romance is not the same as wanting nudes.
+
+    Four call sites read `explicit` to decide whether adult imagery was allowed,
+    so every romantic companion was also cleared for it with no way to say
+    otherwise -- and a user with two companions could not want it from one.
+    """
+
+    def build(self, explicit=True, adult_images=False):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        base = pathlib.Path(tmp.name)
+        c = cc.Companion(agent='Nova', human='Alex', profile='n',
+                         hermes_root=base / 'hermes', vault=base / 'vault',
+                         boundary='girlfriend', explicit=explicit, adult_images=adult_images)
+        c.home.mkdir(parents=True); c.life.mkdir(parents=True); c.save()
+        return c
+
+    def test_romance_alone_does_not_permit_adult_images(self):
+        self.assertFalse(self.build(explicit=True, adult_images=False).adult_images_allowed)
+
+    def test_both_switches_permit_them(self):
+        self.assertTrue(self.build(explicit=True, adult_images=True).adult_images_allowed)
+
+    def test_adult_images_cannot_be_set_without_romance(self):
+        with self.assertRaises(ValueError):
+            self.build(explicit=False, adult_images=True)
+
+    def test_two_companions_can_differ(self):
+        """The case that motivated this: romance with both, nudes from one."""
+        modest, willing = self.build(adult_images=False), self.build(adult_images=True)
+        self.assertFalse(modest.adult_images_allowed)
+        self.assertTrue(willing.adult_images_allowed)

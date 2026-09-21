@@ -63,7 +63,10 @@ def inspect(c,path,prompt,allow_nsfw=False):
         # Treating it as permanently unsendable made mildly suggestive images harder to deliver
         # than explicit ones, which score >= 0.5 and are releasable with allow_nsfw. An uncertain
         # image is released only when adult content was intentional; the default still holds it.
-        explicit_mode=getattr(c,'explicit',False)
+        # Adult imagery is its own permission, not a side effect of the relationship
+        # being romantic. Reading `explicit` here meant every romantic companion was
+        # also cleared for nudes, with no way to want the one without the other.
+        explicit_mode=getattr(c,'adult_images_allowed',False)
         passed=rating=='safe' or (rating in ('nsfw','unknown') and (allow_nsfw or explicit_mode))
         result.update(status='passed' if passed else 'held',allow_nsfw=allow_nsfw or explicit_mode,sha256=digest)
         write_metadata(path,{'rating':rating,'review':result})
@@ -71,7 +74,7 @@ def inspect(c,path,prompt,allow_nsfw=False):
     result=hermes_bridge(c,'review',{'path':str(path),'prompt':prompt,'provider':prefs['review_provider'],'model':prefs['review_model']})
     if not isinstance(result,dict) or not all(isinstance(result.get(k),bool) for k in ('matches_request','nsfw')):raise ValueError('Image reviewer returned no valid decision')
     if hashlib.sha256(path.read_bytes()).hexdigest()!=digest:raise ValueError('Image changed during review')
-    explicit_mode=getattr(c,'explicit',False)
+    explicit_mode=getattr(c,'adult_images_allowed',False)
     passed=result['matches_request'] and (allow_nsfw or explicit_mode or not result['nsfw'])
     result={k:v for k,v in result.items() if k in ('matches_request','nsfw','reason','provider','model')}
     result.update(status='passed' if passed else 'held',allow_nsfw=allow_nsfw or explicit_mode,sha256=digest)
@@ -87,6 +90,6 @@ def ensure_delivery(c,path,prompt):
     if decision.get('status')=='passed' and (not local or decision.get('provider')=='local-nsfw') and decision.get('sha256')==hashlib.sha256(path.read_bytes()).hexdigest():return
     # A previously held image never becomes approved merely by entering the queue.
     if decision.get('status')=='held':raise ValueError('Image review held this image; regenerate or inspect it before sending')
-    allow_nsfw=getattr(c,'explicit',False)
+    allow_nsfw=getattr(c,'adult_images_allowed',False)
     decision=inspect(c,path,prompt,allow_nsfw)
     if decision['status']!='passed':raise ValueError('Image review held this image: '+str(decision.get('reason','request mismatch'))[:300])
