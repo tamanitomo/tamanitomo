@@ -109,20 +109,47 @@ def dates(c,now):
 
 # ---- things to circle back on -------------------------------------------
 def care(c,now):
-    """`YYYY-MM-DD | topic | what to do` — how a companion remembers to ask again."""
-    path=c.data/'care.md'
-    if not path.exists():
-        return None,(f'no follow-ups file yet — write one at {path}, one per line as '
-                     f'"YYYY-MM-DD | topic | what to do about it"')
+    """What is due to be circled back on.
+
+    This used to read one hand-written file and nothing else, so it was switched
+    on, wired up and completely inert for anyone who had never been told to
+    create it -- which is everyone. Circling back on the thing you said you would
+    check on is not an optional extra, so it now reads the store the companion
+    already writes to by herself: an open loop with a `follow_up_at` that has
+    arrived is exactly this, and she records those without being asked.
+
+    `care.md` stays as an optional place for a person to add their own, in
+    `YYYY-MM-DD | topic | what to do about it` lines.
+    """
     due=[]
-    for raw in path.read_text(encoding='utf-8').splitlines():
-        line=raw.strip()
-        if not line or line.startswith('#'):continue
-        parts=[p.strip() for p in line.split('|')]
-        if len(parts)<3:continue
-        try:when=dt.date.fromisoformat(parts[0])
-        except ValueError:continue
-        if when<=now.date():due.append(f'{parts[1]} — {parts[2]} (due {parts[0]})')
+    try:
+        import companion_loops
+        for row in companion_loops.loops(c):
+            if row.get('status')=='closed':continue
+            # Stored resolved, as an ISO timestamp; the parser above is for the
+            # loose forms ("+2d", "this_evening") accepted when one is recorded.
+            raw=str(row.get('follow_up_at') or '').strip()
+            if not raw:continue
+            try:when=dt.datetime.fromisoformat(raw)
+            except ValueError:continue
+            if when.tzinfo is None:when=when.replace(tzinfo=now.tzinfo)
+            if when>now:continue
+            title=(row.get('title') or '').strip()
+            if not title:continue
+            gentle=(row.get('gentle_use') or '').strip()
+            due.append(f'{title}{" — "+gentle if gentle else ""} (since {when.date().isoformat()})')
+    except Exception:
+        pass    # A loop store that will not read is not a reason to lose care.md.
+    path=c.data/'care.md'
+    if path.exists():
+        for raw in path.read_text(encoding='utf-8').splitlines():
+            line=raw.strip()
+            if not line or line.startswith('#'):continue
+            parts=[p.strip() for p in line.split('|')]
+            if len(parts)<3:continue
+            try:when=dt.date.fromisoformat(parts[0])
+            except ValueError:continue
+            if when<=now.date():due.append(f'{parts[1]} — {parts[2]} (due {parts[0]})')
     if not due:return None,'nothing due'
     return ('Worth circling back to. These are yours to raise naturally, when it fits, '
             'not a list to read out:\n'+'\n'.join(f'- {item}' for item in due),{'count':len(due)})

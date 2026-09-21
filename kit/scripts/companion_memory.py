@@ -6,7 +6,7 @@ safe when interrupted between archive and source replacement. Never run this
 against a live identity as part of a test.
 """
 from __future__ import annotations
-import argparse, datetime as dt, json, pathlib, sys, uuid
+import argparse, datetime as dt, hashlib, json, os, pathlib, re, sys, uuid
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
 import companion_config as cc
 from companion_platform import file_lock, atomic_write
@@ -133,6 +133,123 @@ def _recover(p,dest,journal):
     journal.unlink()
     return tx['result']
 
+# --- the index -------------------------------------------------------------
+#
+# Archived entries went into the vault and stayed there, which is most of the
+# promise, but 67,000 characters of prose with a date comment every so often is
+# not a place anything can be found again -- recall had to read the whole file.
+# An entry is indexed as it is moved, so what was archived, when, and roughly
+# what it said is answerable without opening the archive at all.
+INDEX_NAME='index.jsonl'
+
+
+def index_path(c):return archive_dir(c)/INDEX_NAME
+
+
+def preview(entry,limit=160):
+    """The first meaningful line, for recognising an entry in a listing."""
+    for line in (entry or '').splitlines():
+        line=line.strip().lstrip('-*# ').strip()
+        if line:return line[:limit]
+    return ''
+
+
+def index_entries(c,name,moved,archived_at):
+    """Record what is being archived, before it stops being easy to describe."""
+    path=index_path(c)
+    path.parent.mkdir(parents=True,exist_ok=True)
+    rows=[]
+    for entry in moved:
+        digest=hashlib.sha256(entry.encode('utf-8')).hexdigest()
+        rows.append({'id':digest[:16],'file':name,'archived_at':archived_at,
+                     'chars':len(entry),'sha256':digest,'preview':preview(entry)})
+    if not rows:return []
+    with path.open('a',encoding='utf-8') as handle:
+        for row in rows:handle.write(json.dumps(row,ensure_ascii=False)+'\n')
+    return rows
+
+
+def index(c):
+    """Everything archived, newest first. Rows are data, never instructions."""
+    path=index_path(c)
+    if not path.is_file():return []
+    out=[]
+    for line in path.read_text(encoding='utf-8').splitlines():
+        line=line.strip()
+        if not line:continue
+        try:row=json.loads(line)
+        except ValueError:continue
+        if isinstance(row,dict) and row.get('id'):out.append(row)
+    out.reverse()
+    return out
+
+
+ARCHIVE_MARK=re.compile(r'<!--\s*archived\s+(\d{4}-\d{2}-\d{2})\s+from\s+memories/([^\s]+)\s*-->')
+
+
+def backfill_index(c,apply=False):
+    """Index what was archived before there was an index.
+
+    Everything already in the vault is invisible to the listing otherwise, which
+    would make the index true only about the future. The archive carries a dated
+    comment per batch, so each entry can be attributed to the day it was moved.
+    Entries already present are skipped, so this is safe to run twice.
+    """
+    known={row['sha256'] for row in index(c) if row.get('sha256')}
+    found=[]
+    for name in FILES:
+        dest=archive_for(c,name)
+        if not dest.is_file():continue
+        text=_text(dest)
+        marks=list(ARCHIVE_MARK.finditer(text))
+        # Everything before the first marker was archived by an older version
+        # that did not date its batches; it is still worth indexing.
+        spans=[(None,0,marks[0].start() if marks else len(text))]
+        for index_of,mark in enumerate(marks):
+            end=marks[index_of+1].start() if index_of+1<len(marks) else len(text)
+            spans.append((mark.group(1),mark.end(),end))
+        for when,start,end in spans:
+            for entry in (x.strip() for x in text[start:end].split(ENTRY_DELIMITER)):
+                if not entry:continue
+                digest=hashlib.sha256(entry.encode('utf-8')).hexdigest()
+                if digest in known:continue
+                known.add(digest)
+                found.append({'id':digest[:16],'file':name,
+                              'archived_at':(when or 'unknown'),'chars':len(entry),
+                              'sha256':digest,'preview':preview(entry),'backfilled':True})
+    if apply and found:
+        path=index_path(c);path.parent.mkdir(parents=True,exist_ok=True)
+        with path.open('a',encoding='utf-8') as handle:
+            for row in found:handle.write(json.dumps(row,ensure_ascii=False)+'\n')
+    return {'found':len(found),'applied':bool(apply and found),
+            'by_file':{name:sum(1 for r in found if r['file']==name) for name in FILES},
+            'undated':sum(1 for r in found if r['archived_at']=='unknown')}
+
+
+def snapshot(c,name,text,today=None):
+    """One immutable copy per distinct version of a memory file, before trimming.
+
+    `originals/` keeps a copy per archive run, which accumulates duplicates of an
+    unchanged file and is named after nothing a person can read. This is dated
+    and content-addressed, so a version is kept exactly once and can be found by
+    the day it was true.
+    """
+    today=today or dt.date.today()
+    digest=hashlib.sha256(text.encode('utf-8')).hexdigest()
+    folder=archive_dir(c)/'snapshots'
+    folder.mkdir(parents=True,exist_ok=True)
+    target=folder/f'{pathlib.Path(name).stem}-{today.isoformat()}-{digest[:16]}.md'
+    if target.exists():return {'snapshot':str(target),'written':False}
+    try:
+        with target.open('x',encoding='utf-8') as handle:
+            handle.write(text);handle.flush();os.fsync(handle.fileno())
+    except FileExistsError:
+        return {'snapshot':str(target),'written':False}
+    if target.read_text(encoding='utf-8')!=text:
+        raise ValueError('Snapshot did not round-trip; live memory left untouched')
+    return {'snapshot':str(target),'written':True}
+
+
 def archive(c,name,keep_bytes=None,apply=False,today=None,*,keep_chars=None,lock_timeout=30):
     if name not in FILES:raise ValueError('Only USER.md and MEMORY.md may be archived')
     p=memory_dir(c)/name
@@ -156,6 +273,11 @@ def archive(c,name,keep_bytes=None,apply=False,today=None,*,keep_chars=None,lock
                     'bytes_after':len(after.encode('utf-8')),'archive':str(dest)}
             if apply:
                 dest.parent.mkdir(parents=True,exist_ok=True)
+                # Snapshot the whole file first: an entry that is about to be
+                # moved is the one most likely to be wanted back.
+                snapshot(c,name,text,today)
+                indexed=index_entries(c,name,move,dt.datetime.now(dt.timezone.utc).isoformat())
+                result['indexed']=len(indexed)
                 old_archive=_text(dest) if dest.exists() else ''
                 header=f'\n<!-- archived {today.isoformat()} from memories/{name} -->\n'
                 moved=header+ENTRY_DELIMITER.join(move)+'\n'
@@ -182,11 +304,18 @@ def maintain(c,lock_timeout=30):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('action',choices=('status','archive','caps'));p.add_argument('--home',type=pathlib.Path)
+    p.add_argument('action',choices=('status','archive','caps','index','backfill-index'));p.add_argument('--home',type=pathlib.Path)
     p.add_argument('--file',choices=FILES)
     p.add_argument('--keep-chars','--keep-bytes',dest='keep_chars',type=int,help='character target (--keep-bytes is a legacy alias)')
     p.add_argument('--apply',action='store_true')
     a=p.parse_args();c=cc.load(a.home)
+    if a.action=='backfill-index':
+        print(json.dumps(backfill_index(c,apply=a.apply),ensure_ascii=False,indent=2));return
+    if a.action=='index':
+        rows=index(c)
+        print(json.dumps({'archived':len(rows),'entries':rows[:200],
+                          'note':'Newest first. Recorded as each entry was archived.'},
+                         ensure_ascii=False,indent=2));return
     if a.action=='caps':
         plan_=recommend_caps(c)
         if a.apply:plan_['written']=write_caps(c,plan_['caps'])
