@@ -1,10 +1,10 @@
-Tamanitomo 2.4.1 fixes deleting a photo, and makes a render say how far along it is.
+Tamanitomo 2.5.0 separates the pictures your companion makes from the pictures of her day.
 
-Deleting a photo did not delete it. Every picture is saved in two places at once, and the library correctly shows the two as one photo — but deleting it removed only one of them, reported success, and left the other on disk, so the picture came straight back on the next refresh. Deleting a photo now removes the photo. Copies you deliberately kept in an album are still left alone, exactly as the confirmation says.
+A picture she made because you asked her for one — show me your favourite animal at the zoo — is something she created, and it belongs in Creations. A picture from the capture routine is a look at what she is doing while you are not talking, and it belongs to the timeline and to whatever albums you keep it in. They are different things, and until now they were not treated differently: every automatic capture was written into Creations as well, filed as her work, and left a second byte-identical file behind for the library to reconcile back into one photo.
 
-Pressing Generate on a new version of a moment gave no sign that anything was happening. It now goes through the same status toast as every other long job, which follows you around the site, and carries a wheel that fills as the render progresses — a real step count where the provider reports one, and a turning ring where it does not. If it is waiting behind something else, it says so rather than sitting silent.
+That duplication is also what broke deleting. A photo shown once was two files, and deleting it removed one of them — which is why the picture came back on the next refresh. Both halves are fixed: a capture is now rendered out of sight and handed straight to the timeline, so there is one file, in one place, for one photo.
 
-A blurred picture stays blurred. The strip of versions under a photo showed every one of them in the clear beneath the blurred picture above it, and picking a version took the blur off — which made it impossible to choose one, or delete it, without first being shown the thing you were trying not to look at. Versions in the strip are blurred like anything else now, and choosing one no longer reveals it. A version that nobody has reviewed yet is treated as unreviewed rather than assumed safe, including a version that has only just been made.
+A capture withheld for review is the exception, and it still appears in Creations where you can find it. Renders abandoned partway are cleared rather than kept.
 
 ### Install
 

@@ -350,7 +350,7 @@ class ImageHeld(ValueError):
         super().__init__(message);self.path=path;self.rating=rating
 
 
-def generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:None,allow_nsfw=False,draft=None,intimate=False):
+def generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:None,allow_nsfw=False,draft=None,intimate=False,purpose='creation'):
     """Render an image, optionally as an intimate one the companion has chosen.
 
     `intimate` sets the preset's modesty negatives aside and, because such a
@@ -360,7 +360,8 @@ def generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:N
     `compile` refuses the whole thing unless the closeness gate is open.
     """
     if intimate or getattr(c,'adult_images_allowed',False):allow_nsfw=True
-    try:return _generate(c,preset_id,category,overrides,report,allow_nsfw,draft,intimate)
+    if purpose not in PURPOSES:raise ValueError('A render is either a creation or a capture')
+    try:return _generate(c,preset_id,category,overrides,report,allow_nsfw,draft,intimate,purpose)
     except ImageHeld as held:
         # 'unknown' is the detector's uncertain band, and it earns the same one clothed retry as
         # a definite flag: without it an ambiguous image had no route to delivery at all.
@@ -375,7 +376,7 @@ def generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:N
             'No exposed breasts, genitals, buttocks, or sexual activity. Preserve the requested subject count, setting and activity.')
         review.write_metadata(held.path,{'replacement_status':'retrying'})
         try:
-            replacement=_generate(c,preset_id,category,retry,report,False,draft,False)
+            replacement=_generate(c,preset_id,category,retry,report,False,draft,False,purpose)
             target=Path(replacement['path']);meta=review.metadata(target)
             if meta.get('rating')!='safe' or meta.get('review',{}).get('status')!='passed':
                 raise ValueError('Replacement did not pass scanning')
@@ -388,6 +389,61 @@ def generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:N
         review.write_metadata(target,{'replaces':str(held.path.relative_to(c.data))})
         replacement['replaced_nsfw']=True
         return replacement
+
+
+# Where a render lands, and why it is a question at all.
+#
+# Everything used to be written into Creations, and the timeline then copied what
+# it needed into its own folder, so every automatic capture existed twice: once as
+# something the companion had made, and once as a moment from her day. They are
+# not the same thing. A picture she made because you asked her for one -- show me
+# your favourite animal at the zoo -- is a creation. A picture from the capture
+# routine is a look at what she is doing, which belongs to the timeline and to
+# whatever albums you put it in, and has no business in Creations at all.
+#
+# It also made deleting one a mess: two byte-identical files, grouped into one
+# photo, of which a delete removed whichever the grouping happened to name first.
+PURPOSES = ('creation', 'capture')
+SCRATCH = '.rendering'
+
+
+def scratch_dir(c):
+    """Where a capture is rendered before the timeline takes ownership of it.
+
+    A dot folder, so the library never walks it: an in-flight render is not yet a
+    photo, and a discarded one never becomes one.
+    """
+    return c.data/'image-timeline'/SCRATCH
+
+
+def discard_scratch(path):
+    """Drop a scratch render and everything written beside it."""
+    import companion_media_review as review
+    path=Path(path)
+    if path.parent.name!=SCRATCH:return False
+    for victim in (path,review.sidecar(path),path.with_suffix('.json')):
+        try:victim.unlink()
+        except OSError:pass
+    return True
+
+
+def prune_scratch(c,now=None,max_age_hours=6):
+    """Clear renders abandoned by an interrupted capture.
+
+    Nothing here is owed to anyone: a scratch file the timeline never took is a
+    render that failed on its way somewhere, and keeping it would be hoarding
+    pictures in a folder built precisely so that nobody sees them.
+    """
+    folder=scratch_dir(c)
+    if not folder.is_dir():return 0
+    cutoff=(now or time.time())-max_age_hours*3600
+    removed=0
+    for entry in folder.iterdir():
+        try:
+            if entry.is_file() and entry.stat().st_mtime<cutoff:
+                entry.unlink();removed+=1
+        except OSError:pass
+    return removed
 
 
 def _comfy_progress(base,client_id,ident,report):
@@ -431,7 +487,27 @@ def _comfy_progress(base,client_id,ident,report):
     return thread
 
 
-def _generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:None,allow_nsfw=False,draft=None,intimate=False):
+def _surface_held(c,path):
+    """Move a held capture into Creations so Photos can still show it.
+
+    Everything else about a capture is deliberately out of sight, but a picture
+    withheld for review is exactly the one a person has to be able to find.
+    """
+    import companion_media_review as review
+    path=Path(path)
+    if path.parent.name!=SCRATCH:return path
+    folder=c.data/'creations'/'image-studio';folder.mkdir(parents=True,exist_ok=True)
+    target=folder/path.name
+    try:
+        os.replace(path,target)
+        for extra in (review.sidecar(path),path.with_suffix('.json')):
+            if extra.is_file():os.replace(extra,folder/extra.name)
+    except OSError:
+        return path
+    return target
+
+
+def _generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:None,allow_nsfw=False,draft=None,intimate=False,purpose='creation'):
     result=compile(c,preset_id,category,overrides,draft,intimate);p=result['preset'];base=endpoint(p['endpoint']) if p['provider']!='hermes' else ''
     provider_prompt=result['prompt'] if p['provider']=='comfyui' else result['structured_prompt']
     report('Generating with '+p['name'])
@@ -530,7 +606,14 @@ def _generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:
     with Image.open(io.BytesIO(raw)) as image:
         image.verify();ext={'PNG':'.png','JPEG':'.jpg','WEBP':'.webp'}.get(image.format)
     if not ext:raise ValueError('Image must be PNG, JPEG or WebP')
-    folder=c.data/'creations'/'image-studio';folder.mkdir(parents=True,exist_ok=True)
+    # A capture is rendered out of sight and handed straight to the timeline; only
+    # a creation is something the companion made, and only that belongs in Creations.
+    if purpose=='capture':
+        prune_scratch(c)
+        folder=scratch_dir(c)
+    else:
+        folder=c.data/'creations'/'image-studio'
+    folder.mkdir(parents=True,exist_ok=True)
     ident=uuid.uuid4().hex;path=folder/(ident+ext);path.write_bytes(raw)
     active_type='tags' if p['provider']=='comfyui' else 'structured'
     atomic_write(folder/(ident+'.json'),json.dumps({'prompt':provider_prompt,'prompts':result['prompts'],'active_prompt_type':active_type,'parts':result['parts'],'preset':p['name'],'seed':result['seed']},indent=2))
@@ -543,7 +626,12 @@ def _generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:
         except Exception:
             review.write_metadata(path,{'review':{'status':'unavailable'}})
             raise ValueError('Image saved for inspection in Photos, but review is unavailable. Do not send it; check the reviewer in Media preferences.')
-        if decision['status']!='passed':raise ImageHeld('Image held for inspection in Photos; do not send it. '+str(decision.get('reason','It did not match the intended image.'))[:400],path,review.metadata(path)['rating'])
+        if decision['status']!='passed':
+            # Held images are the one case where a capture is kept. The scratch
+            # folder is deliberately invisible, so leaving it there would quietly
+            # bin the very picture somebody has to look at and decide about.
+            path=_surface_held(c,path)
+            raise ImageHeld('Image held for inspection in Photos; do not send it. '+str(decision.get('reason','It did not match the intended image.'))[:400],path,review.metadata(path)['rating'])
     meta=review.metadata(path)
     return {'path':str(path),'file':path.name,'provider':generation,'prompt':provider_prompt,
             'prompts':result['prompts'],'active_prompt_type':active_type,'seed':result['seed'],

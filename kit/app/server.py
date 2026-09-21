@@ -330,8 +330,12 @@ def build(home=None,token='',state_dir=None):
         # goes through the same operation queue as every other long job now, so
         # the toast reports it wherever you happen to be.
         def run(rt,companion,report):
-            generated=media.generate(companion,preset['id'],'portrait',overrides,report)
-            updated=tl.add_variant(companion,capture,generated['path'],generated['provider'],prompts=generated.get('prompts'))
+            # Another version of a moment is still that moment, not a new creation.
+            generated=media.generate(companion,preset['id'],'portrait',overrides,report,purpose='capture')
+            try:
+                updated=tl.add_variant(companion,capture,generated['path'],generated['provider'],prompts=generated.get('prompts'))
+            finally:
+                media.discard_scratch(generated['path'])
             variant=updated.get('variants',[])[-1] if updated.get('variants') else None
             if variant:
                 from .content import with_etags

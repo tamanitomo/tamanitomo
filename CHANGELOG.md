@@ -1,3 +1,12 @@
+## 2.5.0 — Creations and captures are different things (2026-09-21)
+
+- Render an automatic capture out of sight and hand it straight to the timeline, instead of writing it into Creations and copying what the timeline needed; a moment from the companion's day was being filed as something she made.
+- Leave one file per photo, which is what made deleting one work: the duplicate copy was why a deleted picture reappeared.
+- Treat another version of an existing moment as part of that moment rather than a new creation.
+- Keep a capture held for review in Creations, where it can still be found and decided about.
+- Clear renders abandoned partway rather than keeping them in a folder built so that nobody sees them.
+- Default a render to a creation, so nothing becomes a capture by omission.
+
 ## 2.4.1 — Deleting, and knowing a render is running (2026-09-21)
 
 - Delete every saved copy of a photo rather than whichever one the grouping named first; the other copy survived, so the picture reappeared and delete looked broken while reporting success.

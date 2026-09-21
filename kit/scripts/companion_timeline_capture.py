@@ -34,8 +34,15 @@ def capture(c,now=None):
         # Saying so lifts the modesty negatives; leaving them on is what put clothes
         # back into the shower.
         intimate=timeline.is_private(claimed['scene']['state'])
-        generated=media.generate(c,preset,'portrait',overrides,intimate=intimate)
-        saved=timeline.save(c,ident,generated['path'],generated['provider'],now,prompts=generated.get('prompts'))
+        # A capture is a look at what she is doing, not something she made, so it
+        # is rendered out of sight and the timeline becomes its only home. It used
+        # to land in Creations as well, which filed every automatic moment as her
+        # work and left two identical files behind for the library to reconcile.
+        generated=media.generate(c,preset,'portrait',overrides,intimate=intimate,purpose='capture')
+        try:
+            saved=timeline.save(c,ident,generated['path'],generated['provider'],now,prompts=generated.get('prompts'))
+        finally:
+            media.discard_scratch(generated['path'])
         return {'status':saved['status'],'capture_id':ident,
                 'path':str(timeline.root(c)/'images'/saved['filename']),
                 'provider':saved['provider'],'sha256':saved['sha256']}
