@@ -544,13 +544,15 @@ async function expectedDay(day){
 }
 function scheduleHtml(schedule){
   const anchors=(schedule&&schedule.anchors)||[];
+  const ideas=(schedule&&schedule.ideas)||[];
+  const chosen=ideas.length?`<p class="dim small schedule-chose">She chose: ${ideas.map(i=>`<span class="pill schedule-tag">${esc(i.title)}</span>`).join(' ')}</p>`:'';
   if(!anchors.length){
-    return `<p class="dim small" style="margin:8px 0 0">${schedule&&schedule.configured===false
+    return chosen+`<p class="dim small" style="margin:8px 0 0">${schedule&&schedule.configured===false
       ?'No daily routine has been set up for this companion yet.'
       :'Nothing planned for this day.'}</p>`;
   }
   const intended=schedule.source==='intended';
-  return `
+  return `${chosen}
     <p class="dim small" style="margin:10px 0 6px">${intended
       ?'What she intends to do this day.'
       :'The usual shape of this day. Plans, not commitments.'}</p>

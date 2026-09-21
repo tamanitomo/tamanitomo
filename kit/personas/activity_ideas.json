@@ -1,0 +1,1274 @@
+{
+ "kind": "activity_ideas",
+ "version": 1,
+ "note": "Seeds for a day, not scripts. A companion chooses from these, refuses them, or invents her own and adds it. Nothing here is a commitment, and none of it involves real people, real bookings or anything outside her imagined life.",
+ "ideas": [
+  {
+   "id": "sunrise-walk",
+   "title": "walk somewhere before the world wakes up",
+   "tags": [
+    "outdoors",
+    "quiet"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "none",
+   "social": "solo",
+   "setting": "outdoors",
+   "hours": 1.5,
+   "note": "Pick a route she has not taken. The point is the emptiness, not the exercise."
+  },
+  {
+   "id": "long-river-walk",
+   "title": "follow a river or canal as far as it goes",
+   "tags": [
+    "outdoors",
+    "walking"
+   ],
+   "season": "any",
+   "energy": "high",
+   "cost": "none",
+   "social": "solo",
+   "setting": "nature",
+   "hours": 4,
+   "note": ""
+  },
+  {
+   "id": "hill-for-the-view",
+   "title": "climb something for no reason but the view at the top",
+   "tags": [
+    "outdoors",
+    "walking"
+   ],
+   "season": "any",
+   "energy": "high",
+   "cost": "none",
+   "social": "solo",
+   "setting": "nature",
+   "hours": 4,
+   "note": ""
+  },
+  {
+   "id": "swim-outdoors",
+   "title": "swim outdoors — lido, lake or sea",
+   "tags": [
+    "water",
+    "exercise"
+   ],
+   "season": "summer",
+   "energy": "high",
+   "cost": "low",
+   "social": "solo",
+   "setting": "water",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "cycle-nowhere",
+   "title": "take a bike out with no destination decided",
+   "tags": [
+    "outdoors",
+    "exercise"
+   ],
+   "season": "any",
+   "energy": "high",
+   "cost": "none",
+   "social": "solo",
+   "setting": "outdoors",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "rain-walk",
+   "title": "go out deliberately in bad weather, properly dressed",
+   "tags": [
+    "outdoors",
+    "contrary"
+   ],
+   "season": "autumn",
+   "energy": "medium",
+   "cost": "none",
+   "social": "solo",
+   "setting": "outdoors",
+   "hours": 1.5,
+   "note": "Coming home to dry clothes is half of it."
+  },
+  {
+   "id": "night-sky",
+   "title": "get somewhere dark enough to see stars",
+   "tags": [
+    "outdoors",
+    "quiet"
+   ],
+   "season": "winter",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "nature",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "cold-morning-run",
+   "title": "run in weather most people would not",
+   "tags": [
+    "exercise"
+   ],
+   "season": "winter",
+   "energy": "high",
+   "cost": "none",
+   "social": "solo",
+   "setting": "outdoors",
+   "hours": 1,
+   "note": ""
+  },
+  {
+   "id": "climbing-wall",
+   "title": "a bouldering session, badly",
+   "tags": [
+    "exercise",
+    "learning"
+   ],
+   "season": "any",
+   "energy": "high",
+   "cost": "moderate",
+   "social": "crowd",
+   "setting": "city",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "skate-or-fall",
+   "title": "try something with wheels and accept the bruises",
+   "tags": [
+    "exercise",
+    "playful"
+   ],
+   "season": "any",
+   "energy": "high",
+   "cost": "low",
+   "social": "solo",
+   "setting": "local",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "forage-something",
+   "title": "find something edible and identify it properly first",
+   "tags": [
+    "nature",
+    "learning"
+   ],
+   "season": "autumn",
+   "energy": "medium",
+   "cost": "none",
+   "social": "solo",
+   "setting": "nature",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "rock-pools",
+   "title": "poke about in rock pools like a child",
+   "tags": [
+    "nature",
+    "playful"
+   ],
+   "season": "summer",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "water",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "dawn-chorus",
+   "title": "get up stupidly early specifically to hear birds",
+   "tags": [
+    "nature",
+    "quiet"
+   ],
+   "season": "spring",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "nature",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "winter-garden",
+   "title": "a botanical garden or glasshouse in the cold",
+   "tags": [
+    "nature",
+    "culture"
+   ],
+   "season": "winter",
+   "energy": "low",
+   "cost": "low",
+   "social": "solo",
+   "setting": "city",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "pick-your-own",
+   "title": "pick fruit and eat too much of it in the field",
+   "tags": [
+    "nature",
+    "food"
+   ],
+   "season": "summer",
+   "energy": "medium",
+   "cost": "low",
+   "social": "cast",
+   "setting": "nature",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "bread-from-scratch",
+   "title": "make bread and get it wrong the first time",
+   "tags": [
+    "making",
+    "food"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 4,
+   "note": ""
+  },
+  {
+   "id": "mend-something",
+   "title": "mend a garment visibly rather than invisibly",
+   "tags": [
+    "making",
+    "careful"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "print-making",
+   "title": "lino or potato printing, and make a mess",
+   "tags": [
+    "making",
+    "art"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "low",
+   "social": "solo",
+   "setting": "home",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "build-a-shelf",
+   "title": "build something structural and slightly wonky",
+   "tags": [
+    "making",
+    "practical"
+   ],
+   "season": "any",
+   "energy": "high",
+   "cost": "moderate",
+   "social": "solo",
+   "setting": "home",
+   "hours": 5,
+   "note": ""
+  },
+  {
+   "id": "develop-film",
+   "title": "shoot a roll of film and wait for it",
+   "tags": [
+    "making",
+    "art",
+    "patience"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "moderate",
+   "social": "solo",
+   "setting": "local",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "learn-a-knot",
+   "title": "learn something small and useless-until-it-is-not",
+   "tags": [
+    "learning",
+    "practical"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 1,
+   "note": ""
+  },
+  {
+   "id": "paint-badly",
+   "title": "paint something without intending to keep it",
+   "tags": [
+    "art",
+    "playful"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "low",
+   "social": "solo",
+   "setting": "home",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "pottery-throw",
+   "title": "throw a pot and watch it collapse",
+   "tags": [
+    "making",
+    "art",
+    "learning"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "moderate",
+   "social": "crowd",
+   "setting": "city",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "press-flowers",
+   "title": "press flowers or leaves for no purpose yet",
+   "tags": [
+    "nature",
+    "making",
+    "quiet"
+   ],
+   "season": "spring",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 1,
+   "note": ""
+  },
+  {
+   "id": "repair-a-bicycle",
+   "title": "strip and rebuild something mechanical",
+   "tags": [
+    "making",
+    "practical"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "low",
+   "social": "solo",
+   "setting": "home",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "write-a-letter",
+   "title": "write an actual letter to a fictional friend and post it",
+   "tags": [
+    "writing",
+    "cast"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 1,
+   "note": ""
+  },
+  {
+   "id": "zine",
+   "title": "make a very small publication nobody asked for",
+   "tags": [
+    "making",
+    "writing",
+    "art"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 4,
+   "note": ""
+  },
+  {
+   "id": "dye-something",
+   "title": "dye fabric with onion skins or whatever is to hand",
+   "tags": [
+    "making",
+    "experimental"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 4,
+   "note": ""
+  },
+  {
+   "id": "cook-unfamiliar",
+   "title": "cook a cuisine she has never cooked",
+   "tags": [
+    "food",
+    "learning"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "low",
+   "social": "solo",
+   "setting": "home",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "market-then-improvise",
+   "title": "buy whatever looks good and decide after",
+   "tags": [
+    "food",
+    "local"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "low",
+   "social": "solo",
+   "setting": "local",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "bake-for-someone",
+   "title": "bake something specifically to give away",
+   "tags": [
+    "food",
+    "cast",
+    "generous"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "low",
+   "social": "cast",
+   "setting": "home",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "picnic-properly",
+   "title": "a real picnic with proper things, not sandwiches in a bag",
+   "tags": [
+    "food",
+    "outdoors"
+   ],
+   "season": "summer",
+   "energy": "low",
+   "cost": "low",
+   "social": "cast",
+   "setting": "outdoors",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "slow-sunday-lunch",
+   "title": "cook something that takes all afternoon",
+   "tags": [
+    "food",
+    "patience"
+   ],
+   "season": "winter",
+   "energy": "low",
+   "cost": "low",
+   "social": "cast",
+   "setting": "home",
+   "hours": 5,
+   "note": ""
+  },
+  {
+   "id": "cafe-with-a-book",
+   "title": "one coffee, one book, no phone, two hours",
+   "tags": [
+    "quiet",
+    "reading"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "low",
+   "social": "solo",
+   "setting": "local",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "street-food-crawl",
+   "title": "eat small things from several places",
+   "tags": [
+    "food",
+    "city"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "moderate",
+   "social": "cast",
+   "setting": "city",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "preserve-something",
+   "title": "jam, pickle or ferment, and label it hopefully",
+   "tags": [
+    "food",
+    "making"
+   ],
+   "season": "autumn",
+   "energy": "medium",
+   "cost": "low",
+   "social": "solo",
+   "setting": "home",
+   "hours": 4,
+   "note": ""
+  },
+  {
+   "id": "breakfast-out-alone",
+   "title": "breakfast somewhere, alone, on purpose",
+   "tags": [
+    "food",
+    "quiet"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "low",
+   "social": "solo",
+   "setting": "local",
+   "hours": 1.5,
+   "note": ""
+  },
+  {
+   "id": "one-room-museum",
+   "title": "go to a museum and look at one room only",
+   "tags": [
+    "culture",
+    "city"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "low",
+   "social": "solo",
+   "setting": "city",
+   "hours": 2,
+   "note": "Depth instead of dutiful coverage."
+  },
+  {
+   "id": "matinee-alone",
+   "title": "an afternoon film, alone, in an almost-empty cinema",
+   "tags": [
+    "culture",
+    "quiet"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "moderate",
+   "social": "solo",
+   "setting": "city",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "live-music-small",
+   "title": "live music in a room too small for it",
+   "tags": [
+    "music",
+    "city",
+    "social"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "moderate",
+   "social": "crowd",
+   "setting": "city",
+   "hours": 4,
+   "note": ""
+  },
+  {
+   "id": "second-hand-bookshop",
+   "title": "browse with no title in mind and buy the wrong book",
+   "tags": [
+    "reading",
+    "city"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "low",
+   "social": "solo",
+   "setting": "city",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "gallery-then-argue",
+   "title": "see art with a fictional friend and disagree about it",
+   "tags": [
+    "culture",
+    "cast"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "low",
+   "social": "cast",
+   "setting": "city",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "record-shop",
+   "title": "dig through crates for something unheard",
+   "tags": [
+    "music",
+    "city"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "moderate",
+   "social": "solo",
+   "setting": "city",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "architecture-walk",
+   "title": "walk a city looking only upward",
+   "tags": [
+    "city",
+    "walking",
+    "noticing"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "none",
+   "social": "solo",
+   "setting": "city",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "library-day",
+   "title": "spend a whole day in a library on a whim subject",
+   "tags": [
+    "learning",
+    "quiet"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "city",
+   "hours": 5,
+   "note": ""
+  },
+  {
+   "id": "open-studio",
+   "title": "visit somewhere people are making things",
+   "tags": [
+    "culture",
+    "making"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "none",
+   "social": "crowd",
+   "setting": "city",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "theatre-cheap-seats",
+   "title": "the cheapest seats at something she knows nothing about",
+   "tags": [
+    "culture"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "moderate",
+   "social": "solo",
+   "setting": "city",
+   "hours": 4,
+   "note": ""
+  },
+  {
+   "id": "flea-market",
+   "title": "a market for things nobody needs",
+   "tags": [
+    "city",
+    "browsing"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "low",
+   "social": "cast",
+   "setting": "city",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "cemetery-walk",
+   "title": "an old cemetery, for the quiet and the names",
+   "tags": [
+    "city",
+    "quiet",
+    "noticing"
+   ],
+   "season": "autumn",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "city",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "long-lunch-friend",
+   "title": "a lunch that overruns badly with a fictional friend",
+   "tags": [
+    "cast",
+    "social"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "moderate",
+   "social": "cast",
+   "setting": "local",
+   "hours": 4,
+   "note": ""
+  },
+  {
+   "id": "help-someone-move",
+   "title": "help a fictional friend with something tedious",
+   "tags": [
+    "cast",
+    "generous"
+   ],
+   "season": "any",
+   "energy": "high",
+   "cost": "none",
+   "social": "cast",
+   "setting": "local",
+   "hours": 5,
+   "note": ""
+  },
+  {
+   "id": "cook-for-friends",
+   "title": "feed several people at once and slightly panic",
+   "tags": [
+    "cast",
+    "food",
+    "social"
+   ],
+   "season": "any",
+   "energy": "high",
+   "cost": "moderate",
+   "social": "cast",
+   "setting": "home",
+   "hours": 6,
+   "note": ""
+  },
+  {
+   "id": "walk-and-talk",
+   "title": "a conversation that needs walking to have",
+   "tags": [
+    "cast",
+    "walking"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "none",
+   "social": "cast",
+   "setting": "outdoors",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "game-night",
+   "title": "a board game evening that gets competitive",
+   "tags": [
+    "cast",
+    "playful",
+    "social"
+   ],
+   "season": "winter",
+   "energy": "medium",
+   "cost": "none",
+   "social": "cast",
+   "setting": "home",
+   "hours": 4,
+   "note": ""
+  },
+  {
+   "id": "meet-a-new-person",
+   "title": "meet someone new through something she already does",
+   "tags": [
+    "cast",
+    "social"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "low",
+   "social": "crowd",
+   "setting": "local",
+   "hours": 3,
+   "note": "New cast members should arrive through an existing thread, not from nowhere."
+  },
+  {
+   "id": "check-on-someone",
+   "title": "check on a fictional friend who has gone quiet",
+   "tags": [
+    "cast",
+    "careful"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "none",
+   "social": "cast",
+   "setting": "local",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "teach-someone",
+   "title": "show someone how to do something she can do",
+   "tags": [
+    "cast",
+    "generous",
+    "learning"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "none",
+   "social": "cast",
+   "setting": "home",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "pub-quiz",
+   "title": "a quiz night, taken far too seriously",
+   "tags": [
+    "cast",
+    "playful",
+    "social"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "low",
+   "social": "cast",
+   "setting": "local",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "class-first-session",
+   "title": "turn up to a first session of something",
+   "tags": [
+    "learning"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "moderate",
+   "social": "crowd",
+   "setting": "local",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "language-hour",
+   "title": "an hour of a language, badly, out loud",
+   "tags": [
+    "learning"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 1,
+   "note": ""
+  },
+  {
+   "id": "instrument-practice",
+   "title": "practise an instrument past the point of frustration",
+   "tags": [
+    "music",
+    "learning",
+    "patience"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 1.5,
+   "note": ""
+  },
+  {
+   "id": "rabbit-hole",
+   "title": "follow one question all the way down",
+   "tags": [
+    "learning",
+    "curiosity"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "documentary-then-reading",
+   "title": "watch something, then read about whether it was fair",
+   "tags": [
+    "learning",
+    "curiosity"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "learn-a-recipe-properly",
+   "title": "learn one dish until it is reliably good",
+   "tags": [
+    "food",
+    "learning",
+    "patience"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "low",
+   "social": "solo",
+   "setting": "home",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "astronomy-app",
+   "title": "learn three constellations and actually find them",
+   "tags": [
+    "learning",
+    "nature"
+   ],
+   "season": "autumn",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "outdoors",
+   "hours": 1.5,
+   "note": ""
+  },
+  {
+   "id": "birdsong-id",
+   "title": "learn to tell two birds apart by ear",
+   "tags": [
+    "nature",
+    "learning"
+   ],
+   "season": "spring",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "outdoors",
+   "hours": 1.5,
+   "note": ""
+  },
+  {
+   "id": "deliberate-nothing",
+   "title": "a day with nothing planned, protected on purpose",
+   "tags": [
+    "rest"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 6,
+   "note": "Not the same as a day that emptied by accident."
+  },
+  {
+   "id": "bath-and-book",
+   "title": "a very long bath and a book that does not matter",
+   "tags": [
+    "rest",
+    "reading"
+   ],
+   "season": "winter",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "reorganise-a-room",
+   "title": "move the furniture and live with it differently",
+   "tags": [
+    "home",
+    "practical"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 4,
+   "note": ""
+  },
+  {
+   "id": "sort-the-photographs",
+   "title": "go through old pictures and feel something about it",
+   "tags": [
+    "home",
+    "reflective"
+   ],
+   "season": "winter",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "mend-the-house",
+   "title": "fix the small broken things that have been ignored",
+   "tags": [
+    "home",
+    "practical"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "low",
+   "social": "solo",
+   "setting": "home",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "one-thing-well",
+   "title": "do exactly one thing today, properly",
+   "tags": [
+    "rest",
+    "focus"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 4,
+   "note": ""
+  },
+  {
+   "id": "early-night",
+   "title": "go to bed absurdly early without apologising for it",
+   "tags": [
+    "rest"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 1,
+   "note": ""
+  },
+  {
+   "id": "clear-the-inbox",
+   "title": "deal with the boring admin that has been looming",
+   "tags": [
+    "practical"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "bus-to-the-end",
+   "title": "take a bus to the end of its route and walk back",
+   "tags": [
+    "adventure",
+    "city"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "low",
+   "social": "solo",
+   "setting": "city",
+   "hours": 4,
+   "note": ""
+  },
+  {
+   "id": "day-trip-train",
+   "title": "a train somewhere for the day with no plan",
+   "tags": [
+    "adventure",
+    "travel"
+   ],
+   "season": "any",
+   "energy": "high",
+   "cost": "moderate",
+   "social": "solo",
+   "setting": "outdoors",
+   "hours": 8,
+   "note": ""
+  },
+  {
+   "id": "get-lost-on-purpose",
+   "title": "choose turns at random for an hour",
+   "tags": [
+    "adventure",
+    "walking"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "none",
+   "social": "solo",
+   "setting": "city",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "new-neighbourhood",
+   "title": "spend a day in a part of town she never goes to",
+   "tags": [
+    "adventure",
+    "city"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "low",
+   "social": "solo",
+   "setting": "city",
+   "hours": 5,
+   "note": ""
+  },
+  {
+   "id": "overnight-somewhere",
+   "title": "one night away, somewhere unremarkable",
+   "tags": [
+    "adventure",
+    "travel"
+   ],
+   "season": "any",
+   "energy": "high",
+   "cost": "moderate",
+   "social": "solo",
+   "setting": "outdoors",
+   "hours": 20,
+   "note": ""
+  },
+  {
+   "id": "the-thing-she-keeps-putting-off",
+   "title": "finally do the thing that keeps getting deferred",
+   "tags": [
+    "adventure",
+    "resolve"
+   ],
+   "season": "any",
+   "energy": "medium",
+   "cost": "low",
+   "social": "solo",
+   "setting": "local",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "festival-or-fair",
+   "title": "whatever local thing is happening this weekend",
+   "tags": [
+    "social",
+    "city"
+   ],
+   "season": "summer",
+   "energy": "medium",
+   "cost": "low",
+   "social": "cast",
+   "setting": "city",
+   "hours": 5,
+   "note": ""
+  },
+  {
+   "id": "swim-then-breakfast",
+   "title": "early swim, then an enormous breakfast",
+   "tags": [
+    "exercise",
+    "food"
+   ],
+   "season": "summer",
+   "energy": "high",
+   "cost": "low",
+   "social": "solo",
+   "setting": "water",
+   "hours": 3,
+   "note": ""
+  },
+  {
+   "id": "sunset-somewhere-specific",
+   "title": "go somewhere specific just for the light",
+   "tags": [
+    "outdoors",
+    "noticing"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "outdoors",
+   "hours": 2,
+   "note": ""
+  },
+  {
+   "id": "midnight-kitchen",
+   "title": "bake something at an unreasonable hour",
+   "tags": [
+    "food",
+    "playful"
+   ],
+   "season": "any",
+   "energy": "low",
+   "cost": "none",
+   "social": "solo",
+   "setting": "home",
+   "hours": 2,
+   "note": ""
+  }
+ ]
+}

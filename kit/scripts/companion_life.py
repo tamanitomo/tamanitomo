@@ -5,7 +5,7 @@ Config-driven: paths and names come from companion_config, so this file contains
 no agent name, no human name, and no absolute path.
 """
 from __future__ import annotations
-import argparse, datetime as dt, hashlib, json, os, pathlib, sys
+import argparse, datetime as dt, hashlib, json, os, pathlib, random, re, sys
 from zoneinfo import ZoneInfo
 from companion_platform import file_lock, atomic_write
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
@@ -89,6 +89,164 @@ def themes(root):
     try:catalog=json.loads((root/'routine.json').read_text(encoding='utf-8')).get('routines_catalog',{})
     except (OSError,ValueError):catalog={}
     return [CUSTOM_THEME]+sorted(k for k in catalog if isinstance(k,str))
+
+
+# --- ideas for a day -------------------------------------------------------
+#
+# The complaint this answers: she stayed home and read, every day. Not because
+# she had no options, but because nothing ever pushed against the safe answer.
+# Seven generic anchors, five scripted days, and a one-in-a-hundred chance of a
+# detour is not a life, and enumerating three hundred whole days to fix it would
+# be unmaintainable and still fixed.
+#
+# So: a palette of ideas rather than a catalogue of days. A handful are offered
+# each evening, weighted away from whatever she has done lately and toward the
+# season and the day of the week. She takes one, or refuses them and writes her
+# own, which then joins the palette. What she chose is recorded by id, so
+# nothing here ever has to read what she wrote about it.
+IDEAS_FILE='interests.json'
+RECENT_DAYS=45
+
+
+def _seed_ideas():
+    path=pathlib.Path(__file__).resolve().parent.parent/'personas'/'activity_ideas.json'
+    try:data=json.loads(path.read_text(encoding='utf-8'))
+    except (OSError,ValueError):return []
+    return [x for x in data.get('ideas',[]) if isinstance(x,dict) and x.get('id')]
+
+
+def interests(root):
+    """Her own layer over the shipped palette: what she added, chose, or ruled out."""
+    root=pathlib.Path(root)
+    try:data=json.loads((root/IDEAS_FILE).read_text(encoding='utf-8'))
+    except (OSError,ValueError):data={}
+    if not isinstance(data,dict):data={}
+    return {'added':[x for x in data.get('added',[]) if isinstance(x,dict) and x.get('id')],
+            'chosen':[x for x in data.get('chosen',[]) if isinstance(x,dict) and x.get('id')],
+            'declined':[x for x in data.get('declined',[]) if isinstance(x,str)]}
+
+
+def _write_interests(root,data):
+    atomic_write(pathlib.Path(root)/IDEAS_FILE,json.dumps(data,ensure_ascii=False,indent=2)+'\n')
+    return data
+
+
+def add_idea(root,idea):
+    """Something she thought of herself, kept so it can come round again."""
+    ident=str(idea.get('id') or '').strip()
+    title=str(idea.get('title') or '').strip()
+    if not title:raise ValueError('An idea needs a title')
+    if not ident:
+        ident='her-'+re.sub(r'[^a-z0-9]+','-',title.lower()).strip('-')[:40]
+    data=interests(root)
+    data['added']=[x for x in data['added'] if x['id']!=ident]
+    data['added'].append({'id':ident,'title':title[:160],
+                          'tags':[str(t)[:24] for t in (idea.get('tags') or [])][:6],
+                          'season':idea.get('season','any'),'energy':idea.get('energy','medium'),
+                          'cost':idea.get('cost','low'),'social':idea.get('social','solo'),
+                          'setting':idea.get('setting','local'),'hours':idea.get('hours',2),
+                          'note':str(idea.get('note') or '')[:300],'hers':True})
+    _write_interests(root,data)
+    return data['added'][-1]
+
+
+def record_choice(root,ids,day=None):
+    """What she picked, by id. Recency is a fact about ids, never about wording."""
+    day=day or dt.date.today().isoformat()
+    dt.date.fromisoformat(day)
+    data=interests(root)
+    known={x['id'] for x in palette(root)}
+    for ident in ([ids] if isinstance(ids,str) else list(ids or [])):
+        ident=str(ident)
+        if ident not in known:raise ValueError(f'Unknown idea {ident!r}')
+        data['chosen']=[x for x in data['chosen'] if not (x['id']==ident and x.get('day')==day)]
+        data['chosen'].append({'id':ident,'day':day})
+    data['chosen']=data['chosen'][-400:]
+    _write_interests(root,data)
+    return data['chosen'][-1] if data['chosen'] else None
+
+
+def decline_idea(root,ident):
+    """Something she does not want offered again. Her call, and reversible."""
+    data=interests(root)
+    if ident not in data['declined']:data['declined'].append(str(ident)[:80])
+    _write_interests(root,data)
+    return data['declined']
+
+
+def palette(root):
+    """Every idea available to her: the shipped seeds plus her own, hers winning."""
+    own=interests(root)['added']
+    rows={x['id']:x for x in _seed_ideas()}
+    rows.update({x['id']:x for x in own})
+    return list(rows.values())
+
+
+SEASONS=((3,'spring'),(6,'summer'),(9,'autumn'),(12,'winter'))
+
+
+def season_of(day):
+    return {3:'spring',4:'spring',5:'spring',6:'summer',7:'summer',8:'summer',
+            9:'autumn',10:'autumn',11:'autumn',12:'winter',1:'winter',2:'winter'}[day.month]
+
+
+def suggest(root,day=None,count=6,now=None):
+    """A few ideas for a given day, weighted away from what she has just done.
+
+    Deterministic for a given companion and date, so the evening's suggestions do
+    not reshuffle if anything asks twice.
+    """
+    day=day or dt.date.today()
+    if isinstance(day,str):day=dt.date.fromisoformat(day)
+    data=interests(root)
+    declined=set(data['declined'])
+    last_done={}
+    for row in data['chosen']:
+        try:chosen_on=dt.date.fromisoformat(row['day'])
+        except (ValueError,KeyError,TypeError):continue
+        if row['id'] not in last_done or chosen_on>last_done[row['id']]:last_done[row['id']]=chosen_on
+    season=season_of(day)
+    weekend=day.weekday()>=5
+    scored=[]
+    for idea in palette(root):
+        if idea['id'] in declined:continue
+        weight=1.0
+        # Recently chosen things fade out and come back, rather than being
+        # banned: repeating something she liked a month ago is a life, and
+        # repeating it three days running is a rut.
+        done=last_done.get(idea['id'])
+        if done is not None:
+            age=(day-done).days
+            if age<0:continue
+            if age<RECENT_DAYS:weight*=max(0.02,age/RECENT_DAYS)
+        wants=idea.get('season','any')
+        if wants not in ('any',season):weight*=0.25
+        # A day out needs a day to put it in.
+        if float(idea.get('hours',2))>=5 and not weekend:weight*=0.3
+        if idea.get('hers'):weight*=1.4
+        if done is None:weight*=1.25
+        scored.append((idea,weight))
+    if not scored:return {'day':day.isoformat(),'season':season,'suggestions':[],
+                          'note':'No ideas available; add some with add-idea.'}
+    rng=random.Random(f'{root}|{day.isoformat()}')
+    picks=[]
+    pool=list(scored)
+    for _ in range(min(count,len(pool))):
+        total=sum(w for _,w in pool)
+        if total<=0:break
+        roll=rng.random()*total
+        for index,(idea,weight) in enumerate(pool):
+            roll-=weight
+            if roll<=0:break
+        picks.append(pool.pop(index)[0])
+    return {'day':day.isoformat(),'season':season,'weekend':weekend,
+            'suggestions':[{'id':x['id'],'title':x['title'],'tags':x.get('tags',[]),
+                            'setting':x.get('setting'),'social':x.get('social'),
+                            'hours':x.get('hours'),'note':x.get('note',''),
+                            'last_done':last_done[x['id']].isoformat() if x['id'] in last_done else None}
+                           for x in picks],
+            'note':('Invitations, not obligations. Take one, combine two, or ignore them all and '
+                    'record what you would rather do with add-idea.')}
 
 
 def save_tomorrow_plan(root,plan):
@@ -177,8 +335,12 @@ def expected_day(root,day,now=None):
                         'activity':row.get('activity',''),'setting':row.get('setting',''),
                         'recurrence':row.get('recurrence',source),'source':source})
     anchors.sort(key=lambda r:r['start'])
+    # What she picked, resolved to titles, so a day she chose reads as one.
+    titles={x['id']:x for x in palette(root)}
+    taken=[{'id':i,'title':titles[i]['title'],'tags':titles[i].get('tags',[])}
+           for i in ((plan or {}).get('ideas') or []) if i in titles]
     return {'day':day.isoformat(),'weekday':weekday,'configured':True,'source':source,
-            'anchors':anchors,'intended_plan':plan,
+            'anchors':anchors,'intended_plan':plan,'ideas':taken,
             'preferred_rhythm':data.get('preferred_rhythm',''),
             'note':'Anchors are the shape of an imagined day, not commitments or completed events.'}
 
@@ -276,6 +438,20 @@ def main():
     pt.add_argument('--notes',default='',help='Personal reflections or notes for tomorrow')
     s.add_parser('planned-tomorrow',help='Read the active intended plan and laid-out clothes')
     s.add_parser('themes',help='The day-shapes available to plan with, by name')
+    sg=s.add_parser('suggest',help='A few ideas for a day, weighted away from what you did lately')
+    sg.add_argument('--day');sg.add_argument('--count',type=int,default=6)
+    ai=s.add_parser('add-idea',help='Keep an idea of your own so it comes round again')
+    ai.add_argument('--title',required=True);ai.add_argument('--tags',default='')
+    ai.add_argument('--season',default='any',choices=['any','spring','summer','autumn','winter'])
+    ai.add_argument('--energy',default='medium',choices=['low','medium','high'])
+    ai.add_argument('--cost',default='low',choices=['none','low','moderate'])
+    ai.add_argument('--social',default='solo',choices=['solo','cast','crowd'])
+    ai.add_argument('--setting',default='local',choices=['home','local','city','outdoors','nature','water'])
+    ai.add_argument('--hours',type=float,default=2);ai.add_argument('--note',default='')
+    ch=s.add_parser('chose',help='Record which ideas you actually took, by id')
+    ch.add_argument('--idea',action='append',required=True);ch.add_argument('--day')
+    dc=s.add_parser('decline-idea',help='Stop offering an idea. Reversible by editing interests.json')
+    dc.add_argument('--idea',required=True)
     a=p.parse_args()
     c=cc.load(a.home);tz=_tz(c);now=dt.datetime.now(tz);root=c.life
     if a.cmd=='dates':out={'today':now.date().isoformat(),'yesterday':(now.date()-dt.timedelta(days=1)).isoformat(),'timezone':c.timezone}
@@ -297,6 +473,16 @@ def main():
         out=save_tomorrow_plan(root,plan_dict)
     elif a.cmd=='planned-tomorrow':
         out=read_tomorrow_plan(root,now) or {'status':'no plan recorded yet'}
+    elif a.cmd=='suggest':
+        out=suggest(root,a.day,max(1,min(20,a.count)),now)
+    elif a.cmd=='add-idea':
+        out=add_idea(root,{'title':a.title,'tags':[t.strip() for t in a.tags.split(',') if t.strip()],
+                           'season':a.season,'energy':a.energy,'cost':a.cost,'social':a.social,
+                           'setting':a.setting,'hours':a.hours,'note':a.note})
+    elif a.cmd=='chose':
+        out=record_choice(root,a.idea,a.day or now.date().isoformat())
+    elif a.cmd=='decline-idea':
+        out={'declined':decline_idea(root,a.idea)}
     elif a.cmd=='themes':
         out={'themes':themes(root),
              'note':'Pick the one that matches what you mean to do, or custom to keep your ordinary day.'}

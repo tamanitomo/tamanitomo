@@ -1,3 +1,13 @@
+## 2.8.0 — Something to want, and the model you chose (2026-09-21)
+
+- Add a palette of 84 activity ideas, tagged by season, setting, company, energy and length, as seeds for a day rather than scripts for one.
+- Offer a handful each evening, weighted away from what was recently chosen and toward the season and whether the day has room, and deterministic per day so the offer does not reshuffle.
+- Let the companion add ideas of her own, which join the palette and are favoured afterwards, and decline ones she never wants offered again.
+- Record what she chose by id, so recency never involves reading back what she wrote about it.
+- Show the ideas she chose for a day alongside its schedule.
+- Resolve a background worker's model from the companion's own `models.<tier>` configuration instead of from whatever endpoint the job was written with.
+- Reach providers Hermes holds the session for, through a text bridge, so a worker is no longer limited to endpoints with a URL and a bearer token.
+
 ## 2.7.0 — A companion plans her day (2026-09-21)
 
 - Ask the companion at wind-down what she means to do tomorrow: one sentence, a day-shape chosen by name, and the clothes she sets out. Nothing had looked past the end of the day, so she had a rhythm and no intentions.

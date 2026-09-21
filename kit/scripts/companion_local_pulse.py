@@ -23,6 +23,7 @@ import companion_preread as preread
 import companion_day as day
 import companion_lifestyle as lifestyle
 import companion_life
+import companion_worker_model as worker
 
 
 def schema(wardrobe,care_enabled=False,themes=None):
@@ -42,8 +43,9 @@ def schema(wardrobe,care_enabled=False,themes=None):
         fields['tomorrow']={'anyOf':[{'type':'object','properties':{
             'intent':text(300),
             'theme':{'type':'string','enum':list(themes)},
+            'ideas':{'type':'array','maxItems':4,'items':{'type':'string','minLength':1,'maxLength':80}},
             'outfit':{'type':'array','maxItems':20,'items':{'type':'string','minLength':1,'maxLength':80}}},
-            'required':['intent','theme','outfit'],'additionalProperties':False},{'type':'null'}]}
+            'required':['intent','theme','ideas','outfit'],'additionalProperties':False},{'type':'null'}]}
     if care_enabled:
         fields.update(lifestyle.schema_fields())
         # New acquisitions are validated atomically against the same update.
@@ -69,11 +71,17 @@ def lay_out(chosen,closet):
     return out
 
 
-def pulse(c,base_url,model,slot=1,now=None,apply=True,phase="pulse",
-          allow_remote=False,api_key_env=''):
+def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
+          allow_remote=False,api_key_env='',tier='loops'):
     if phase not in ('pulse','morning','winddown'):raise ValueError('Unknown presence phase')
-    # Loopback unless this job was explicitly told otherwise.
-    companion_endpoint.verify(base_url,allow_remote,'Local pulse')
+    # Her own configured model by default. An explicit endpoint still wins, so a
+    # job that genuinely wants a particular local server can still say so.
+    if base_url:
+        route={'provider':'','model':model,'base_url':base_url,'reasoning_effort':'','direct':True}
+        companion_endpoint.verify(base_url,allow_remote,'Local pulse')
+    else:
+        route=worker.resolve(c,tier)
+        model=route['model']
     now=now or dt.datetime.now(ZoneInfo(c.timezone))
     previous=presence.current(c)
     if not previous:raise ValueError('Initialize companion presence before enabling the local pulse')
@@ -115,6 +123,22 @@ def pulse(c,base_url,model,slot=1,now=None,apply=True,phase="pulse",
         # The end of a day is the only moment anything looks past it. Without this
         # she has a rhythm and no intentions: the same seven anchors every day,
         # and nothing she did today shaping tomorrow.
+        offered=companion_life.suggest(c.life,(now.date()+dt.timedelta(days=1)),6,now)
+        if offered['suggestions']:
+            user+=('\nIDEAS FOR TOMORROW ('+offered['season']+
+                   (', a weekend' if offered.get('weekend') else ', a weekday')+
+                   ') — invitations, weighted away from what you have done lately:\n'+
+                   '\n'.join(f"  {x['id']}: {x['title']}"+
+                             (f" [{x['setting']}, {x['social']}, ~{x['hours']}h]")+
+                             (f" — {x['note']}" if x.get('note') else '')+
+                             (f" (last done {x['last_done']})" if x.get('last_done') else '')
+                             for x in offered['suggestions'])+
+                   '\nTake one, combine two, or ignore them entirely and do something of your own. '
+                   'Put the ids of any you took in `tomorrow.ideas`, and leave it empty if none of '
+                   'them is what you want. Wanting an ordinary day is a real answer. `theme` is a '
+                   'different thing from an idea: it is the overall shape of the day, chosen from '
+                   'the listed day-shape names, and "custom" is correct whenever an idea does not '
+                   'match one of them.')
         user+=('\nTOMORROW: set `tomorrow` to what you actually mean to do, or null if you mean '
                'nothing in particular -- an ordinary day is a real answer and is better than '
                'inventing an outing. `intent` is one sentence in your own words. `theme` must be '
@@ -139,16 +163,12 @@ def pulse(c,base_url,model,slot=1,now=None,apply=True,phase="pulse",
                                 'strict':True,'schema':schema(closet,lifestyle.enabled(c),
                                                               companion_life.themes(c.life) if phase=='winddown' else None)}}}
     for attempt in range(2):
-        request=urllib.request.Request(base_url.rstrip('/')+'/chat/completions',
-                  data=json.dumps(companion_endpoint.shape(payload,base_url)).encode(),
-                  headers=companion_endpoint.headers(api_key_env))
-        with urllib.request.urlopen(request,timeout=300) as response:reply=json.load(response)
-        if not companion_endpoint.confirm_thinking(reply,base_url):
+        reply=worker.complete(c,payload,route,api_key_env,allow_remote,timeout=300,what='Local pulse')
+        if not reply.get('reasoned'):
             print('warning: model returned no reasoning; routine and wardrobe rules are easy to miss without it',
                   file=sys.stderr)
-        choice=reply['choices'][0]
-        if choice.get('finish_reason')!='stop':raise ValueError('Local pulse response was incomplete')
-        data=json.loads(choice['message']['content'])
+        if reply.get('finish_reason') not in ('stop',None):raise ValueError('Local pulse response was incomplete')
+        data=json.loads(reply['content'])
         candidate={**previous['state'],**{key:data[key] for key in ('activity','location') if key in data}}
         import companion_sleep
         candidate.update(day.evolve(data,candidate,previous,now,asleep=companion_sleep.asleep(c,now)))
@@ -157,7 +177,7 @@ def pulse(c,base_url,model,slot=1,now=None,apply=True,phase="pulse",
             lifestyle.evolve(c,data,data.get('outfit',[]),previous,closet,now)
         except ValueError as exc:
             if attempt:raise
-            payload['messages'] += [{'role':'assistant','content':choice['message']['content']},{'role':'user','content':
+            payload['messages'] += [{'role':'assistant','content':reply['content']},{'role':'user','content':
                 'The proposed record was NOT saved. '+str(exc)+' Return the full corrected JSON record for the same checkpoint.'}]
             continue
         break
@@ -165,7 +185,8 @@ def pulse(c,base_url,model,slot=1,now=None,apply=True,phase="pulse",
     data.pop('id',None)
     data['previous_id']=previous['id']
     if phase_id:data['id']=phase_id
-    if not apply:return {'status':'preview','record':data,'planning_attempts':attempt+1,'usage':reply.get('usage')}
+    if not apply:return {'status':'preview','record':data,'planning_attempts':attempt+1,'usage':reply.get('usage'),
+                         'model':route['model'],'provider':route['provider'] or route['base_url']}
     result=presence.update(c,data,now)
     if phase=='winddown' and isinstance(data.get('tomorrow'),dict):
         # What she means to do tomorrow, as she states it.
@@ -181,20 +202,39 @@ def pulse(c,base_url,model,slot=1,now=None,apply=True,phase="pulse",
         # `save_tomorrow_plan` refuses a theme she did not choose from her own
         # catalog, which is the only use wording gets here: to be rejected.
         plan=data['tomorrow']
+        target=(now.date()+dt.timedelta(days=1)).isoformat()
+        taken=[str(i) for i in (plan.get('ideas') or [])]
+        # A theme is one of her day-shapes; an idea is a thing to do. A provider
+        # that will not enforce an enum hands back whichever it thought of, and
+        # losing the whole evening's plan over a mixed-up field would be a worse
+        # answer than the safe one: custom keeps her ordinary anchors and records
+        # the intention, which is true either way.
+        theme=plan.get('theme') or companion_life.CUSTOM_THEME
+        if theme not in companion_life.themes(c.life):
+            print(f'note: {theme!r} is not one of her day-shapes; recording the plan as custom',
+                  file=sys.stderr)
+            theme=companion_life.CUSTOM_THEME
         companion_life.save_tomorrow_plan(c.life,{
-            'date':(now.date()+dt.timedelta(days=1)).isoformat(),'created_at':now.isoformat(),
-            'intent':plan.get('intent',''),
+            'date':target,'created_at':now.isoformat(),
+            'intent':plan.get('intent',''),'ideas':taken,
             'laid_out_outfit':lay_out(plan.get('outfit'),closet),
-            'theme':plan.get('theme') or companion_life.CUSTOM_THEME,'source':'pulse_winddown'})
+            'theme':theme,'source':'pulse_winddown'})
+        # Recorded by id, so what she has done lately is a fact rather than
+        # something read back out of her own descriptions of it.
+        try:companion_life.record_choice(c.life,taken,target)
+        except ValueError:pass  # An id she invented is not a reason to lose the plan.
     return {'status':'recorded','written':result.get('written',True),
-            'previous_id':previous['id'],'planning_attempts':attempt+1,'usage':reply.get('usage')}
+            'previous_id':previous['id'],'planning_attempts':attempt+1,'usage':reply.get('usage'),
+            'model':route['model'],'provider':route['provider'] or route['base_url']}
 
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--home',type=pathlib.Path)
-    parser.add_argument('--base-url',required=True)
-    parser.add_argument('--model',required=True)
+    parser.add_argument('--base-url',default='',help='Override the configured model with a specific endpoint')
+    parser.add_argument('--model',default='')
+    parser.add_argument('--tier',default='loops',choices=worker.TIERS,
+                        help="Which of the companion's configured models to use")
     parser.add_argument('--slot',type=int,default=1)
     parser.add_argument('--preview',action='store_true')
     parser.add_argument('--phase',choices=['pulse','morning','winddown'],default='pulse')
@@ -202,7 +242,7 @@ def main():
     args=parser.parse_args()
     print(json.dumps(pulse(cc.load(args.home),args.base_url,args.model,args.slot,
                            apply=not args.preview,phase=args.phase,
-                           allow_remote=args.allow_remote,api_key_env=args.api_key_env),
+                           allow_remote=args.allow_remote,api_key_env=args.api_key_env,tier=args.tier),
                      ensure_ascii=False,indent=2))
 
 
