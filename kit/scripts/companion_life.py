@@ -75,8 +75,43 @@ def history_digest(root,day,offset=0,tz=None):
             'detail':'These are shortened excerpts, not a new summary or evidence of human exchanges. '
                      'For a full episode use history --day '+day+' --offset <its offset> --limit 1.'}
 
-def save_tomorrow_plan(root,plan):
+CUSTOM_THEME='custom'
+
+
+def themes(root):
+    """The day-shapes this companion actually has, plus the open one.
+
+    A theme is not a label on a plan: it replaces the whole day's anchors with a
+    scripted set, so a wrong one rewrites her day. The valid names are hers, not
+    a constant, which is why they are read rather than assumed.
+    """
     root=pathlib.Path(root)
+    try:catalog=json.loads((root/'routine.json').read_text(encoding='utf-8')).get('routines_catalog',{})
+    except (OSError,ValueError):catalog={}
+    return [CUSTOM_THEME]+sorted(k for k in catalog if isinstance(k,str))
+
+
+def save_tomorrow_plan(root,plan):
+    """Record what she means to do tomorrow.
+
+    The theme has to be a name she chose from her own catalog. It used to be
+    guessed from the wording of her intention by substring -- 'beach' in the
+    sentence meant a beach day -- which read "I would rather not go to the beach"
+    as a beach day, "an interest" as a rest day (it contains "rest"), and a
+    workshop as a shopping trip. Wording may refuse a plan and ask for a better
+    one; it may never decide what the plan is.
+    """
+    root=pathlib.Path(root)
+    plan=dict(plan)
+    intent=plan.get('intent')
+    if not isinstance(intent,str) or not intent.strip():
+        raise ValueError('An intended day needs an intent written as a sentence')
+    plan['intent']=intent.strip()[:300]
+    theme=plan.get('theme') or CUSTOM_THEME
+    known=themes(root)
+    if theme not in known:
+        raise ValueError(f'Unknown theme {theme!r}. Choose one of: '+', '.join(known))
+    plan['theme']=theme
     path=root/'tomorrow.json'
     atomic_write(path,json.dumps(plan,ensure_ascii=False,indent=2)+'\n')
     return plan
@@ -235,10 +270,12 @@ def main():
     pt=s.add_parser('plan-tomorrow',help='Author intended routine and lay out clothes for tomorrow')
     pt.add_argument('--intent',required=True,help='Loose intention for tomorrow')
     pt.add_argument('--outfit',help='Comma-separated clothing IDs to lay out for tomorrow')
-    pt.add_argument('--theme',default='custom',help='Theme or routine archetype name (or custom)')
+    pt.add_argument('--theme',default=CUSTOM_THEME,
+                    help='One of her routine archetypes, or custom. Names are listed by `themes`.')
     pt.add_argument('--anchors-file',type=pathlib.Path,help='Optional JSON file with custom anchors list')
     pt.add_argument('--notes',default='',help='Personal reflections or notes for tomorrow')
     s.add_parser('planned-tomorrow',help='Read the active intended plan and laid-out clothes')
+    s.add_parser('themes',help='The day-shapes available to plan with, by name')
     a=p.parse_args()
     c=cc.load(a.home);tz=_tz(c);now=dt.datetime.now(tz);root=c.life
     if a.cmd=='dates':out={'today':now.date().isoformat(),'yesterday':(now.date()-dt.timedelta(days=1)).isoformat(),'timezone':c.timezone}
@@ -260,6 +297,9 @@ def main():
         out=save_tomorrow_plan(root,plan_dict)
     elif a.cmd=='planned-tomorrow':
         out=read_tomorrow_plan(root,now) or {'status':'no plan recorded yet'}
+    elif a.cmd=='themes':
+        out={'themes':themes(root),
+             'note':'Pick the one that matches what you mean to do, or custom to keep your ordinary day.'}
     elif a.cmd=='tick':
         from companion_presence import current
         out={'current_state':current(c),'routine':routine(root,now,c.agent),'recent_episodes':read_events(root,limit=4,tz=tz),

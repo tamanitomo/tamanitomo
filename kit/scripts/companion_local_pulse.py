@@ -22,9 +22,10 @@ import companion_presence as presence
 import companion_preread as preread
 import companion_day as day
 import companion_lifestyle as lifestyle
+import companion_life
 
 
-def schema(wardrobe,care_enabled=False):
+def schema(wardrobe,care_enabled=False,themes=None):
     def text(limit):return {'type':'string','minLength':1,'maxLength':limit}
     fields={key:text(limit) for key,limit in [('location',240),('activity',120),
              ('mood',240),('private_stance',300),('text',1600),('transition',500)]}
@@ -33,11 +34,39 @@ def schema(wardrobe,care_enabled=False):
     for key,limit in [('care',10),('wants',5)]:
         fields[key]={'type':'array','maxItems':limit,'items':text(160)}
     fields.update(day.schema_fields())
+    # Tomorrow is stated, never inferred. The theme is an enum of the day-shapes
+    # this companion actually has, so the only themes she can pick are ones that
+    # exist -- and picking one is a decision she makes, not one read out of her
+    # sentence afterwards.
+    if themes:
+        fields['tomorrow']={'anyOf':[{'type':'object','properties':{
+            'intent':text(300),
+            'theme':{'type':'string','enum':list(themes)},
+            'outfit':{'type':'array','maxItems':20,'items':{'type':'string','minLength':1,'maxLength':80}}},
+            'required':['intent','theme','outfit'],'additionalProperties':False},{'type':'null'}]}
     if care_enabled:
         fields.update(lifestyle.schema_fields())
         # New acquisitions are validated atomically against the same update.
         fields['outfit']['items']={'type':'string','minLength':1,'maxLength':80}
     return {'type':'object','properties':fields,'required':list(fields),'additionalProperties':False}
+
+
+def lay_out(chosen,closet):
+    """The clothes she sets out for tomorrow, minus what she sleeps in.
+
+    Nightwear used to be excluded by looking for "pajama" or "sleep" anywhere in
+    the stringified item, which is a guess about wording dressed up as a rule.
+    The wardrobe has carried a `category` enum all along, and `sleep` is one of
+    its values, so the question has an answer that does not involve reading
+    anything.
+    """
+    nightwear={item['id'] for item in (closet or []) if isinstance(item,dict)
+               and item.get('category')=='sleep' and item.get('id')}
+    out=[]
+    for item in (chosen or []):
+        ident=item.get('id') if isinstance(item,dict) else str(item)
+        if ident and ident not in nightwear and ident not in out:out.append(ident)
+    return out
 
 
 def pulse(c,base_url,model,slot=1,now=None,apply=True,phase="pulse",
@@ -73,7 +102,7 @@ def pulse(c,base_url,model,slot=1,now=None,apply=True,phase="pulse",
     if lifestyle.enabled(c):
         # A life checkpoint needs current facts, not a second copy of an old
         # autonomy diary that anchors a small model to yesterday's scene.
-        import companion_active, companion_life
+        import companion_active
         user=(companion_active.build(c,now)+'\nRoutine anchors:\n'+
               json.dumps(companion_life.routine(c.life,now,c.agent),ensure_ascii=False)+
               '\n'+lifestyle.render(c,now,previous)+
@@ -82,6 +111,16 @@ def pulse(c,base_url,model,slot=1,now=None,apply=True,phase="pulse",
         user=(preread.preread(c,now)+'\nCurrent record (previous_id is supplied by code):\n'
               +json.dumps(previous,ensure_ascii=False)+'\nAvailable wardrobe:\n'
               +json.dumps(closet,ensure_ascii=False))
+    if phase=='winddown':
+        # The end of a day is the only moment anything looks past it. Without this
+        # she has a rhythm and no intentions: the same seven anchors every day,
+        # and nothing she did today shaping tomorrow.
+        user+=('\nTOMORROW: set `tomorrow` to what you actually mean to do, or null if you mean '
+               'nothing in particular -- an ordinary day is a real answer and is better than '
+               'inventing an outing. `intent` is one sentence in your own words. `theme` must be '
+               'one of the listed names: pick the shape the day should take, or "custom" to keep '
+               'your ordinary anchors while still recording the intention. `outfit` is the clothes '
+               'you set out tonight, by id; leave out what you are sleeping in.')
     user+=f'\nCHECKPOINT TO WRITE NOW: {phase}, local time {now.isoformat()}. The current record above is historical input. Reconsider its activity, time references, lighting and ongoing appliances against the elapsed time. Write this checkpoint, not another copy of the old scene.'
     roll=((abs(hash((now.date().isoformat(),c.agent)))%100)+1)
     if roll==1:
@@ -97,7 +136,8 @@ def pulse(c,base_url,model,slot=1,now=None,apply=True,phase="pulse",
     payload={'model':model,'messages':[{'role':'system','content':system},{'role':'user','content':user}],
              'max_tokens':3600,'reasoning_effort':'low','reasoning_budget_tokens':1024,'chat_template_kwargs':{'enable_thinking':True},'temperature':0.6,'id_slot':slot,'cache_prompt':True,
              'response_format':{'type':'json_schema','json_schema':{'name':'presence',
-                                'strict':True,'schema':schema(closet,lifestyle.enabled(c))}}}
+                                'strict':True,'schema':schema(closet,lifestyle.enabled(c),
+                                                              companion_life.themes(c.life) if phase=='winddown' else None)}}}
     for attempt in range(2):
         request=urllib.request.Request(base_url.rstrip('/')+'/chat/completions',
                   data=json.dumps(companion_endpoint.shape(payload,base_url)).encode(),
@@ -127,22 +167,25 @@ def pulse(c,base_url,model,slot=1,now=None,apply=True,phase="pulse",
     if phase_id:data['id']=phase_id
     if not apply:return {'status':'preview','record':data,'planning_attempts':attempt+1,'usage':reply.get('usage')}
     result=presence.update(c,data,now)
-    if phase=='winddown' and data.get('next'):
-        import companion_life
-        target_date=(now.date()+dt.timedelta(days=1)).isoformat()
-        text_lower=data.get('next','').lower()
-        theme='custom'
-        if 'beach' in text_lower or 'swim' in text_lower:theme='beach_day'
-        elif 'ramen' in text_lower or 'library' in text_lower:theme='library_and_ramen'
-        elif 'shop' in text_lower or 'surprise' in text_lower:theme='shopping_and_surprise'
-        elif 'studio' in text_lower or 'creative' in text_lower or 'paint' in text_lower or 'photo' in text_lower:theme='creative_studio'
-        elif 'rest' in text_lower or 'slow' in text_lower or 'relax' in text_lower:theme='slow_rest_day'
-        clean_clothes=[item['id'] if isinstance(item,dict) else str(item) for item in data.get('outfit',[]) if 'pajama' not in str(item).lower() and 'sleep' not in str(item).lower()]
+    if phase=='winddown' and isinstance(data.get('tomorrow'),dict):
+        # What she means to do tomorrow, as she states it.
+        #
+        # This used to be inferred: the theme was guessed by looking for words in
+        # the sentence, so "I would rather not go to the beach" filed a beach day,
+        # "an interest" filed a rest day because the word contains "rest", and a
+        # workshop filed a shopping trip. A theme is not a label -- it replaces
+        # the whole day's anchors -- so a wrong guess rewrote her day. It also
+        # read `next` as a string when the schema has made it an object for some
+        # time, so the moment there was anything to plan it raised instead.
+        #
+        # `save_tomorrow_plan` refuses a theme she did not choose from her own
+        # catalog, which is the only use wording gets here: to be rejected.
+        plan=data['tomorrow']
         companion_life.save_tomorrow_plan(c.life,{
-            'date':target_date,'created_at':now.isoformat(),
-            'intent':data['next'],'laid_out_outfit':clean_clothes,
-            'theme':theme,'source':'pulse_winddown'
-        })
+            'date':(now.date()+dt.timedelta(days=1)).isoformat(),'created_at':now.isoformat(),
+            'intent':plan.get('intent',''),
+            'laid_out_outfit':lay_out(plan.get('outfit'),closet),
+            'theme':plan.get('theme') or companion_life.CUSTOM_THEME,'source':'pulse_winddown'})
     return {'status':'recorded','written':result.get('written',True),
             'previous_id':previous['id'],'planning_attempts':attempt+1,'usage':reply.get('usage')}
 

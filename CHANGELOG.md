@@ -1,3 +1,12 @@
+## 2.7.0 — A companion plans her day (2026-09-21)
+
+- Ask the companion at wind-down what she means to do tomorrow: one sentence, a day-shape chosen by name, and the clothes she sets out. Nothing had looked past the end of the day, so she had a rhythm and no intentions.
+- Take the day-shape from a field she sets rather than from words found in her sentence. The guess read a refusal as an acceptance, "an interest" as a rest day because the word contains "rest", and a workshop as a shopping trip -- and a shape replaces the whole day, so a wrong one rewrote it.
+- Refuse a day-shape the companion does not have, naming the ones she does, instead of storing it and silently ignoring it later.
+- Read the stated intention as the object the schema has produced for some time; reading it as text raised as soon as there was anything to plan.
+- Choose the clothes laid out for tomorrow by the wardrobe's own category rather than by searching their names for "pyjama" or "sleep".
+- Add `companion_life.py themes` and validate `plan-tomorrow --theme` against it.
+
 ## 2.6.0 — Her day, and your chosen face (2026-09-21)
 
 - Show the companion's expected day on the calendar: daily anchors, the weekly ones belonging to that weekday, and what she intends instead on a day she has planned. A full imagined week previously showed as an empty month.

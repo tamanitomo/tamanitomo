@@ -1,14 +1,12 @@
-Tamanitomo 2.6.0 shows you her day, and shows you the face you picked.
+Tamanitomo 2.7.0 lets a companion plan her day, and stops the app guessing what she meant.
 
-**Her expected day is on the calendar.** A companion has a whole imagined week — when she wakes, when she eats, her Tuesday class, whatever she intends to do instead tomorrow — and none of it was anywhere you could look. The calendar only knew about events somebody had typed in, so a full week read as an empty month. Pick any day and you can now see the shape she expects it to have, which is the thing to read before asking her what she is up to on Thursday. These are plans, not commitments, and they are shown as such.
+Until now a companion had a rhythm but no intentions. Her routine is a template — the same anchors every day, written once and never changed — and nothing she did today shaped tomorrow. There was a planning step, but it never ran: at the end of the day she was asked to record how the day ended and how long she meant to sleep, and never what she wanted to do next.
 
-**The visual style you chose is now actually used.** Quality was the one part of an image prompt with no fallback, so unless a preset happened to spell out a style in its own words, no style direction was sent at all — and a model given no style renders a photograph. A companion set to a drawn style quietly came back photorealistic. The style you picked is now the default for every render; a preset that names its own still wins.
+She is now asked, once, as her day closes. What comes back is one sentence in her own words, the shape she wants the day to take, and the clothes she sets out tonight. Pick any day on the calendar and you can see what she intends, in place of the usual pattern.
 
-**The profile photo is the face on the home screen.** Setting one changed nothing there, because the home screen simply showed the newest picture in the library. It now shows the photo you chose, straight away rather than after a reload.
+**The shape of the day is now hers to choose.** It used to be worked out by looking for words in the sentence she had written — and it was wrong in every direction. "I would rather not go to the beach" was filed as a beach day, because nothing was looking for the "not". "An interest" was filed as a rest day, because the word *interest* contains the word *rest*. A woodworking workshop was filed as a shopping trip. This matters more than a mislabel: the shape replaces her whole day, so a wrong guess quietly rewrote it. She now picks from the day-shapes she actually has, by name, and a name that is not one of them is refused rather than guessed at.
 
-**A blurred picture is never used as that face.** One would be picked and then blurred in place, which is not the same thing — the home screen is the one view nobody chose to open, so a picture that has to be hidden does not belong on it.
-
-Today is also worked out in your companion's timezone rather than in UTC, so the calendar stops highlighting tomorrow halfway through the evening.
+**The clothes she sets out** are chosen by what the wardrobe records them as, not by whether their name happens to contain the word pyjama — which both kept nightwear called something else and threw away day clothes that mentioned it.
 
 ### Install
 
