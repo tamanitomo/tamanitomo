@@ -108,7 +108,9 @@
       "optional": "image_timeline",
       "types": [
         "companion"
-      ]
+      ],
+      "monitor": true,
+      "monitor_module": "companion_timeline"
     },
     {
       "key": "timeline_cleanup",

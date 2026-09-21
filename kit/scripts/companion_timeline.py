@@ -201,6 +201,16 @@ def bounds(now):
 def prepare(c,now=None):
     now=now or now_utc();prune(c,now)
     if not c.image_timeline:return {'ready':False,'reason':'Image timeline is off'}
+    # Nobody photographs themselves asleep, and a night of it is thirty near-identical
+    # dark rooms in the gallery. The sleep window is declared at wind-down precisely so
+    # this is a fact on disk rather than a judgement call the model makes at 03:00.
+    import companion_sleep
+    night=companion_sleep.status(c,now)
+    if night.get('asleep'):
+        until=night.get('until_local') or night.get('until')
+        return {'ready':False,'asleep':night,
+                'reason':('Asleep'+(f' until {until}' if until else '')
+                          +'; no timeline images while asleep. The night resumes on its own.')}
     scene=current(c)
     now=now.astimezone(dt.timezone.utc)
     seconds=c.image_interval_minutes*60
@@ -220,6 +230,10 @@ def prepare(c,now=None):
         recent=[row for row in captures if row.get('status') in ('saved','pending') and
                 now-timestamp(row['created_at'])<dt.timedelta(minutes=c.image_interval_minutes)]
         if recent:return {'ready':False,'reason':'Waiting for the photo interval'}
+        # The interval is a ceiling on how often a photo may be taken, not a quota to
+        # fill. Without this, a quiet hour of the same scene became four near-identical
+        # pictures, and each one cost a generation call to produce something already in
+        # the gallery. A photograph is worth taking when there is something new in it.
         saved=[row for row in captures if row.get('status')=='saved']
         latest=max(saved,key=lambda row:row['created_at'],default=None)
         if (latest and latest.get('image_style')==c.image_style
@@ -343,10 +357,35 @@ def share(c,body,ident=None,reason='',priority='normal',ttl_hours=6,now=None):
     return outbox.queue(c,entry,now)
 
 
+def fingerprint(c,now=None):
+    """Stable bytes describing whether a photo is warranted. Identical means no run.
+
+    `prepare` already refuses to claim a picture of an unchanged scene — but it runs
+    INSIDE the job, so the model had already been invoked to be told no. Every quiet
+    quarter hour, and every hour of the night, cost a call that could only decline.
+    Hermes hashes this instead and skips the run outright, so a scene that has not
+    moved costs nothing at all.
+    """
+    now=now or now_utc()
+    if not c.image_timeline:return 'timeline off\n'
+    import companion_sleep
+    night=companion_sleep.status(c,now)
+    if night.get('asleep'):return f"asleep {night.get('source')} until={night.get('until','-')}\n"
+    scene=current(c)
+    if not scene:return 'no scene\n'
+    from companion_day import visual_key
+    state=scene['state']
+    # The same question prepare asks, in the same order: is this moment already
+    # photographed? Only the visible fields belong here -- mood and private stance
+    # change a sentence, not a picture.
+    return (f"style {c.image_style} scene {visual_key(state)} "
+            f"confirmed {bool(state.get('confirmed',True))}\n")
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--home',type=pathlib.Path)
     sub=parser.add_subparsers(dest='action',required=True)
-    for action in ('prepare','prune','status','latest'):sub.add_parser(action)
+    for action in ('prepare','prune','status','latest','fingerprint'):sub.add_parser(action)
     p=sub.add_parser('save');p.add_argument('--id',required=True);p.add_argument('--source',required=True);p.add_argument('--provider',required=True)
     p=sub.add_parser('fail');p.add_argument('--id',required=True);p.add_argument('--reason',required=True)
     p=sub.add_parser('keep',help='copy a capture into an album; the original stays')
@@ -360,6 +399,8 @@ def main():
     sh.add_argument('--reason',default='',help='reason for sharing')
     sh.add_argument('--priority',choices=['normal','high'],default='normal')
     args=parser.parse_args();c=cc.load(args.home)
+    if args.action=='fingerprint':
+        sys.stdout.write(fingerprint(c));return
     if args.action=='prepare':out=prepare(c)
     elif args.action=='prune':out=prune(c)
     elif args.action=='save':out=save(c,args.id,args.source,args.provider)
