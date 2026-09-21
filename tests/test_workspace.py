@@ -1,6 +1,7 @@
 """Workspace contracts: isolation, credentials, notes, jobs and recoverable actions."""
 import concurrent.futures
 import contextlib
+import datetime as dt
 import hashlib
 import json
 import os
@@ -387,6 +388,22 @@ class WorkspaceTests(unittest.TestCase):
         self.assertIn('SUMMARY:Dinner with Alex',res.text)
         self.assertIn('DTSTART;VALUE=DATE:20260920',res.text)
         self.assertIn('END:VCALENDAR',res.text)
+
+    def test_overview_exposes_timed_commitments_for_calendar(self):
+        from companion_life import record
+        record(self.c.life,'Getting ready.','getting ready','in_progress',
+               dt.datetime(2026,9,20,14,32,tzinfo=dt.timezone(dt.timedelta(hours=-4))),
+               'solo-swim',self.c.agent,self.c.human,state={
+                   'location':'home','activity':'getting ready','outfit':[],
+                   'mood':'rested','commitments':[{
+                       'id':'solo-swim-20260920','title':'Solo swim and quiet evening',
+                       'starts_at':'2026-09-20T15:00:00-04:00',
+                       'ends_at':'2026-09-20T19:00:00-04:00','status':'planned',
+                       'reason':'Chosen activity'}]})
+        overview=self.get('/api/overview').json()
+        self.assertEqual(overview['commitments'][0]['id'],'solo-swim-20260920')
+        self.assertIn('calendarEvents',
+                      (ROOT/'kit/app/static/product.js').read_text())
 
     def test_shared_session_database_never_returns_another_profile(self):
         db=self.root/'state.db'
