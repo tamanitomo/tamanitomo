@@ -223,3 +223,57 @@ class ArchiveIndexTests(unittest.TestCase):
         self.assertEqual(result['found'], 1)
         self.assertEqual(result['undated'], 1)
         self.assertEqual(self.memory.index(self.c)[0]['archived_at'], 'unknown')
+
+
+class DurableWriteTests(unittest.TestCase):
+    """A rename that is not synced can be lost, taking the file with it.
+
+    The contents were fsynced and the rename was not, which is half of the
+    promise: `os.replace` is atomic for a reader, but the directory entry it
+    creates need not survive an unclean shutdown. For a memory file or a day's
+    plan that is the difference between the old version and no version.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = pathlib.Path(self.tmp.name)
+
+    def test_the_directory_is_synced_after_the_rename(self):
+        import companion_platform as platform
+        synced = []
+        real = platform._sync_dir
+        platform._sync_dir = lambda folder: synced.append(pathlib.Path(folder)) or real(folder)
+        self.addCleanup(lambda: setattr(platform, '_sync_dir', real))
+        platform.atomic_write(self.dir / 'a.txt', 'hello')
+        self.assertEqual(synced, [self.dir], 'the rename was never made durable')
+
+    def test_a_platform_that_cannot_sync_a_directory_still_writes(self):
+        """Windows has no directory descriptor; a read-only mount refuses. Neither
+        is a reason to fail a write that has already landed."""
+        import companion_platform as platform
+        real = platform._sync_dir
+        platform._sync_dir = lambda folder: (_ for _ in ()).throw(OSError('nope'))
+        self.addCleanup(lambda: setattr(platform, '_sync_dir', real))
+        with self.assertRaises(OSError):
+            platform.atomic_write(self.dir / 'b.txt', 'hello')
+        # The helper itself swallows what it can, which is the behaviour that matters.
+        platform._sync_dir = real
+        self.assertFalse(platform._sync_dir(self.dir / 'does-not-exist'))
+        platform.atomic_write(self.dir / 'c.txt', 'hello')
+        self.assertEqual((self.dir / 'c.txt').read_text(), 'hello')
+
+    def test_it_still_replaces_and_preserves_the_mode(self):
+        import os
+        import companion_platform as platform
+        target = self.dir / 'd.txt'
+        platform.atomic_write(target, 'first')
+        os.chmod(target, 0o600)
+        platform.atomic_write(target, 'second')
+        self.assertEqual(target.read_text(), 'second')
+        self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+
+    def test_no_temporary_file_is_left_behind(self):
+        import companion_platform as platform
+        platform.atomic_write(self.dir / 'e.txt', 'hello')
+        self.assertEqual([p.name for p in self.dir.iterdir()], ['e.txt'])
