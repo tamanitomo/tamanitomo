@@ -90,6 +90,33 @@ INFERENCE_PRESETS=[
 # Recommendations describe the work, not a vendor SKU. Provider catalogues
 # change and account access differs; the UI pairs this advice with the live
 # model dropdown so a person can choose something they actually have.
+# Three questions a person should be able to answer about a background job:
+# does it call a model at all, what does it put in the prompt, and where does
+# that prompt go. The jobs list answered none of them -- every job showed a
+# provider, including the seven that never contact one, which reads as though
+# something is being sent when nothing is.
+SENSITIVITY={
+ 'none':{'label':'No model, ever',
+         'blurb':'These never contact a provider. They move files, send messages that were '
+                 'already written, and keep the ledgers tidy. Nothing they touch leaves the machine.',
+         'advice':'Nothing to decide here. A provider setting on one of these is cosmetic.',
+         'order':0},
+ 'routine':{'label':'Uses a model, nothing private',
+            'blurb':'These call a model, but what they send is mechanical or outward-facing '
+                    'rather than the companion\'s inner life.',
+            'advice':'A hosted model is a reasonable choice. Use a local one if you would rather '
+                     'nothing at all left the machine.',
+            'order':1},
+ 'sensitive':{'label':'Uses a model, sends private material',
+              'blurb':'These put the companion\'s inner life -- her SOUL file, her recorded mood '
+                      'and private stance, her appearance -- or your own words into a prompt. '
+                      'Whatever answers them reads that.',
+              'advice':'A local model on this machine is the safest option, because nothing '
+                       'leaves it. A hosted provider is a real choice with real convenience; '
+                       'make it deliberately, and prefer one whose terms you have actually read.',
+              'order':2},
+}
+
 CONTINUITY_RECOMMENDATIONS={
  'pulse':('Fast, reliable tool-use model','low','Preserve the present without overthinking every 15-minute tick.'),
  'autonomy':('Strong general model with tool use','medium','Planning and follow-through benefit from some reasoning.'),
@@ -1212,7 +1239,8 @@ def register(app, select, load, operations):
             if spec:
                 key=spec.get('key','');advice=CONTINUITY_RECOMMENDATIONS.get(key)
                 out.update(companion_job=True,job_key=key,tier=spec.get('tier'),
-                           expected_no_agent=bool(spec.get('no_agent')))
+                           expected_no_agent=bool(spec.get('no_agent')),
+                           sensitivity=spec.get('sensitivity','routine'),sends=spec.get('sends',''))
                 if advice:
                     out['recommendation']={'model_role':advice[0],'reasoning_effort':advice[1],'why':advice[2]}
                 script_name=str(row.get('script') or '')
@@ -1228,7 +1256,18 @@ def register(app, select, load, operations):
             out['prompt_chars']=len(prompt)
             out['last_error']=hr.redact(str(row.get('last_error') or ''))[:600] or None
             rows.append(out)
-        return {'timezone':companion.timezone,'jobs':rows,'usage':hr.job_usage(companion,rows)}
+        for row in rows:
+            # A job the manifest does not know is still a job that runs. Say what
+            # can be said -- whether it calls a model -- rather than nothing.
+            row.setdefault('sensitivity','none' if row.get('no_agent') else 'routine')
+            row.setdefault('sends','')
+            # A provider on a job that never calls one is noise that reads as data leaving.
+            row['provider_matters']=row['sensitivity']!='none'
+        groups=[{'key':k,**v,'jobs':[r['id'] for r in rows if r.get('sensitivity')==k]}
+                for k,v in sorted(SENSITIVITY.items(),key=lambda kv:kv[1]['order'])]
+        return {'timezone':companion.timezone,'jobs':rows,'usage':hr.job_usage(companion,rows),
+                'sensitivity':groups,
+                'local_endpoint':bool((companion.models or {}).get('loops',{}).get('base_url'))}
 
 
     # `hermes cron edit` can set a job's model, provider and reasoning effort, but

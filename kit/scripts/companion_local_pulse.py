@@ -44,8 +44,9 @@ def schema(wardrobe,care_enabled=False,themes=None):
             'intent':text(300),
             'theme':{'type':'string','enum':list(themes)},
             'ideas':{'type':'array','maxItems':4,'items':{'type':'string','minLength':1,'maxLength':80}},
+            'people':{'type':'array','maxItems':3,'items':{'type':'string','minLength':1,'maxLength':80}},
             'outfit':{'type':'array','maxItems':20,'items':{'type':'string','minLength':1,'maxLength':80}}},
-            'required':['intent','theme','ideas','outfit'],'additionalProperties':False},{'type':'null'}]}
+            'required':['intent','theme','ideas','people','outfit'],'additionalProperties':False},{'type':'null'}]}
     if care_enabled:
         fields.update(lifestyle.schema_fields())
         # New acquisitions are validated atomically against the same update.
@@ -139,6 +140,16 @@ def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
                    'different thing from an idea: it is the overall shape of the day, chosen from '
                    'the listed day-shape names, and "custom" is correct whenever an idea does not '
                    'match one of them.')
+        due=companion_life.people_due(c.life,(now.date()+dt.timedelta(days=1)),3)
+        if due:
+            user+=('\nPEOPLE — who you have not seen in a while. Seeing someone is a real way to '
+                   'spend a day, and a friendship that never recurs is not one:\n'+
+                   '\n'.join(f"  {p['id']}: {p['name']}, {p['relation']}"+
+                             (f" — usually {p['cadence']}"+
+                              (f", last seen {p['last_seen']}" if p.get('last_seen') else ', not seen yet')+
+                              (f". You tend to: {', '.join(p['together'][:3])}" if p.get('together') else ''))
+                             for p in due)+
+                   '\nPut the ids of anyone you plan to see in `tomorrow.people`, or leave it empty.')
         user+=('\nTOMORROW: set `tomorrow` to what you actually mean to do, or null if you mean '
                'nothing in particular -- an ordinary day is a real answer and is better than '
                'inventing an outing. `intent` is one sentence in your own words. `theme` must be '
@@ -204,6 +215,7 @@ def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
         plan=data['tomorrow']
         target=(now.date()+dt.timedelta(days=1)).isoformat()
         taken=[str(i) for i in (plan.get('ideas') or [])]
+        seeing=[str(i) for i in (plan.get('people') or [])]
         # A theme is one of her day-shapes; an idea is a thing to do. A provider
         # that will not enforce an enum hands back whichever it thought of, and
         # losing the whole evening's plan over a mixed-up field would be a worse
@@ -216,13 +228,16 @@ def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
             theme=companion_life.CUSTOM_THEME
         companion_life.save_tomorrow_plan(c.life,{
             'date':target,'created_at':now.isoformat(),
-            'intent':plan.get('intent',''),'ideas':taken,
+            'intent':plan.get('intent',''),'ideas':taken,'people':seeing,
             'laid_out_outfit':lay_out(plan.get('outfit'),closet),
             'theme':theme,'source':'pulse_winddown'})
         # Recorded by id, so what she has done lately is a fact rather than
         # something read back out of her own descriptions of it.
         try:companion_life.record_choice(c.life,taken,target)
         except ValueError:pass  # An id she invented is not a reason to lose the plan.
+        for who in seeing:
+            try:companion_life.saw_person(c.life,who,target)
+            except ValueError:pass
     return {'status':'recorded','written':result.get('written',True),
             'previous_id':previous['id'],'planning_attempts':attempt+1,'usage':reply.get('usage'),
             'model':route['model'],'provider':route['provider'] or route['base_url']}

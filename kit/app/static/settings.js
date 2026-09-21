@@ -905,6 +905,26 @@ async function wireAvailableModel(providerField,modelField,urlField,{primary=fal
    Both are editable here. There is deliberately no token budget field: Hermes
    has no such setting per job, so prompt size is shown instead — that is what
    the job actually sends on every run. */
+// Three questions worth being able to answer about a background job: does it
+// call a model at all, what does it put in the prompt, and where does that go.
+// The list answered none of them, and showed a provider even on the seven jobs
+// that never contact one -- which reads as though something is being sent.
+function sensitiveSummary(jobs,data){
+  const sensitive=jobs.filter(j=>j.sensitivity==='sensitive'&&j.enabled);
+  if(!sensitive.length)return '';
+  const where=new Map();
+  for(const j of sensitive){
+    const name=j.base_url?j.base_url:(j.provider||'the profile default provider');
+    where.set(name,(where.get(name)||0)+1);
+  }
+  const local=name=>/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/i.test(name);
+  const offMachine=[...where.keys()].filter(n=>!local(n));
+  return `<div class="notice-strip sensitivity-summary">
+    <p><strong>${sensitive.length} scheduled job${sensitive.length===1?'':'s'} send private material to a model.</strong></p>
+    <p class="dim small">${[...where.entries()].map(([n,c])=>`${c}\u00d7 ${esc(n)}${local(n)?' (this machine)':''}`).join(' · ')}.
+    ${offMachine.length?'Her SOUL file, recorded mood and private stance, and your own words, leave this machine to be answered.':'Nothing leaves this machine.'}</p>
+  </div>`;
+}
 async function renderJobsPanel(host){
   const data=await api('/jobs');
   profileTimezone=data.timezone;
@@ -936,6 +956,7 @@ async function renderJobsPanel(host){
     <button data-filter="error"><span>Last run failed</span><strong>${failed}</strong></button>
   </div>
   ${noModel?`<p class="dim small">${noModel} model-backed job${noModel===1?' has':'s have'} no model of their own and follow the profile default.</p>`:''}
+  ${sensitiveSummary(jobs,data)}
   <details class="card routing-card" id="job-routing">
     <summary><strong>Move every job to another provider</strong>
       <small class="dim">Model, provider and endpoint together, across all ${jobs.filter(j=>!j.no_agent).length} model-backed jobs</small></summary>
@@ -980,11 +1001,12 @@ async function renderJobsPanel(host){
     const state=host.querySelector('#job-filter').value;
     const rows=jobs.filter(j=>(!q||(j.name||'').toLowerCase().includes(q))&&
       (state==='all'||state==='active'&&j.enabled||state==='paused'&&!j.enabled||state==='error'&&j.last_status==='error'));
-    host.querySelector('#job-list').innerHTML=rows.length?rows.map(j=>`
+    const groups=(data.sensitivity||[]).filter(g=>rows.some(j=>j.sensitivity===g.key));
+    const card=j=>`
       <details class="job-row${j.last_status==='error'?' is-failing':''}" data-job-id="${esc(j.id)}">
         <summary>
           <span class="job-name"><strong>${esc(j.name||j.id)}</strong>
-            <small class="dim">${j.no_agent?'Runs a script · no model':esc(j.model||'Profile default model')} · <code data-schedule-label>${esc(scheduleLabel(schedule(j)))}</code></small></span>
+            <small class="dim">${j.no_agent?'Runs a script · never contacts a model':esc(j.model||'Profile default model')} · <code data-schedule-label>${esc(scheduleLabel(schedule(j)))}</code></small></span>
           <span class="job-state">${statusPill(j)}${j.enabled?'':'<span class="pill">Paused</span>'}</span>
         </summary>
         <div class="job-body">
@@ -994,6 +1016,7 @@ async function renderJobsPanel(host){
             <div><dt>Prompt size</dt><dd>${j.no_agent?'—':Number(j.prompt_chars||0).toLocaleString()+' characters sent each run'}</dd></div>
             ${j.no_agent?'<div><dt>Model tokens</dt><dd>None · script only</dd></div>':[['Last run','last_run'],['Last hour','hour'],['Last 24 hours','day'],['Last 7 days','week']].map(([label,key])=>`<div><dt>${label} tokens</dt><dd>${tokens(usage.jobs?.[j.id]?.[key])}</dd></div>`).join('')}
             <div><dt>Delivers to</dt><dd>${esc(j.deliver||'—')}</dd></div>
+            ${j.sends?`<div><dt>Sends</dt><dd>${esc(j.sends)}</dd></div>`:''}
           </dl>
           ${j.last_error?`<div class="notice-strip"><p><strong>Last error</strong></p><pre class="command-block">${esc(j.last_error)}</pre></div>`:''}
           ${j.recommendation?`<div class="notice-strip"><p><strong>Recommended: ${esc(j.recommendation.model_role)} · ${esc(j.recommendation.reasoning_effort)} reasoning</strong></p><p class="dim small">${esc(j.recommendation.why)} <button type="button" class="link-button small" data-recommend-effort="${esc(j.recommendation.reasoning_effort)}">Use recommended effort</button></p></div>`:''}
@@ -1015,7 +1038,18 @@ async function renderJobsPanel(host){
             <span class="dim small" data-job-status="${esc(j.id)}" role="status"></span>
           </div>
         </div>
-      </details>`).join(''):empty('health','No matching jobs','Nothing here matches that search or filter.');
+      </details>`;
+    host.querySelector('#job-list').innerHTML=rows.length?groups.map(g=>{
+      const mine=rows.filter(j=>j.sensitivity===g.key);
+      if(!mine.length)return '';
+      return `<section class="job-group job-group-${esc(g.key)}">
+        <div class="job-group-head">
+          <h3>${esc(g.label)} <span class="pill">${mine.length}</span></h3>
+          <p class="dim small">${esc(g.blurb)}</p>
+          <p class="dim small job-group-advice"><strong>Safest:</strong> ${esc(g.advice)}</p>
+        </div>
+        ${mine.map(card).join('')}
+      </section>`;}).join(''):empty('health','No matching jobs','Nothing here matches that search or filter.');
 
     /* A row builds its picker the first time it is opened, not for all 29 at
        once, and rebuilds it when the provider or endpoint underneath changes. */

@@ -15,7 +15,14 @@ FILES=('USER.md','MEMORY.md')
 ENTRY_DELIMITER='\n§\n'  # tools.memory_tool_store.ENTRY_DELIMITER, Hermes 0.21.1
 WARN_AT=.80
 ARCHIVE_TO=.60
-DEFAULT_CAPS={'USER.md':1375,'MEMORY.md':2200}
+# What to assume when Hermes' own config says nothing. Hermes ships 1,375 and
+# 2,200 characters, and inheriting those silently was how a companion ended up
+# able to remember about five hundred tokens about the person she talks to every
+# day, while another profile on the same machine held twenty-six times that. A
+# missing setting should not quietly mean the smallest possible memory.
+DEFAULT_CAPS={'USER.md':36_000,'MEMORY.md':50_000}
+# What Hermes itself would have used, kept so the audit can say what was avoided.
+HERMES_CAPS={'USER.md':1375,'MEMORY.md':2200}
 
 def memory_dir(c):return pathlib.Path(c.home)/'memories'
 def archive_dir(c):return pathlib.Path(c.soul_dir)/'memory-archive'

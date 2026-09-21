@@ -451,6 +451,11 @@ class MemoryPressureTests(unittest.TestCase):
         self.c=cc.Companion(agent='Nova',human='Alex',hermes_root=root/'h',vault=root/'v',
                             timezone='UTC',context_tokens=8192)
         self.dir=mem.memory_dir(self.c);self.dir.mkdir(parents=True)
+        # Pin the caps these tests were written against. They used to come from
+        # the library default, so raising that default silently stopped the
+        # pressure they exist to create -- a test should say what it is testing.
+        (self.c.home/'config.yaml').write_text(
+            'memory:\n  memory_char_limit: 2200\n  user_char_limit: 1375\n',encoding='utf-8')
 
     def fill(self,name,n):
         (self.dir/name).write_text(mem.ENTRY_DELIMITER.join(

@@ -2643,3 +2643,15 @@ body[data-page="chat"] main{padding:0}
 .schedule-tag{flex:0 0 auto;font-size:11px}
 @media(max-width:900px){.schedule-row{flex-wrap:wrap;gap:4px}.schedule-time{min-width:0}}
 .schedule-chose{margin:10px 0 0;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+
+/* Background jobs grouped by what they actually send. The list used to show a
+   provider on every job including the seven that never contact one, which reads
+   as though something is leaving the machine when nothing is. */
+.job-group{margin:0 0 26px}
+.job-group-head{margin:0 0 10px;padding:12px 14px;border:1px solid var(--edge);border-radius:10px;background:var(--surface)}
+.job-group-head h3{margin:0 0 4px;font-size:15px;font-weight:650;display:flex;align-items:center;gap:8px}
+.job-group-head p{margin:2px 0 0}
+.job-group-advice{border-top:1px solid var(--edge);margin-top:8px!important;padding-top:8px}
+.job-group-sensitive .job-group-head{border-color:var(--warn-bg);background:color-mix(in srgb,var(--warn-bg) 40%,transparent)}
+.job-group-none .job-group-head{border-color:var(--good-bg);background:color-mix(in srgb,var(--good-bg) 40%,transparent)}
+.sensitivity-summary{margin:12px 0}

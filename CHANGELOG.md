@@ -1,3 +1,12 @@
+## 2.9.0 — People, and where her private life goes (2026-09-21)
+
+- Add a recurring cast of eight fictional friends, each with a rhythm, and offer whoever has not been seen lately alongside the evening's ideas. The field has existed since the beginning and nothing ever filled it.
+- Let a companion add people she meets and drop ones she does not want; record who she saw by id, so a gap is a fact rather than something read out of her wording.
+- Group background jobs by what they send: never contacts a model, contacts one with nothing private, or sends the companion's inner life or the human's own words. Each group states the risk and the safest choice; each job states what it sends.
+- Summarise how many scheduled jobs send private material and to which provider, and stop showing a provider on jobs that never contact one.
+- Stop inheriting Hermes' 2,200 and 1,375 character memory limits when a profile's config is silent; a missing setting now means the full allowance.
+- Resolve a model's context window by name when the provider has no endpoint address, which had sized a 272,000-token model as 32,000 and starved the memory tier chosen from it.
+
 ## 2.8.0 — Something to want, and the model you chose (2026-09-21)
 
 - Add a palette of 84 activity ideas, tagged by season, setting, company, energy and length, as seeds for a day rather than scripts for one.

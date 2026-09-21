@@ -91,6 +91,118 @@ def themes(root):
     return [CUSTOM_THEME]+sorted(k for k in catalog if isinstance(k,str))
 
 
+# --- people ----------------------------------------------------------------
+#
+# `recurring_cast` has been in the routine file since the beginning, and the
+# guidance has always told a companion to "develop recurring fictional friends
+# gradually". Nothing ever wrote one, so every companion had an empty world: no
+# one to meet, no one to cook for, nothing to come back to. Ideas give her
+# things to do; a cast gives her people to do them with, which is the difference
+# between varied and alive.
+#
+# Seeded, then hers. Someone she sees weekly should be mid-conversation rather
+# than reintroduced, so a last-seen date is kept per person, by id.
+CAST_FILE='cast.json'
+
+
+def _seed_cast():
+    path=pathlib.Path(__file__).resolve().parent.parent/'personas'/'recurring_cast.json'
+    try:data=json.loads(path.read_text(encoding='utf-8'))
+    except (OSError,ValueError):return {}
+    return data
+
+
+def cast(root):
+    """Everyone in her life: the seeded people plus anyone she has added."""
+    root=pathlib.Path(root)
+    try:own=json.loads((root/CAST_FILE).read_text(encoding='utf-8'))
+    except (OSError,ValueError):own={}
+    if not isinstance(own,dict):own={}
+    people={x['id']:x for x in _seed_cast().get('cast',[]) if isinstance(x,dict) and x.get('id')}
+    for row in own.get('added',[]) or []:
+        if isinstance(row,dict) and row.get('id'):people[row['id']]={**row,'hers':True}
+    for ident in own.get('removed',[]) or []:people.pop(ident,None)
+    seen=own.get('last_seen',{}) if isinstance(own.get('last_seen'),dict) else {}
+    for ident,person in people.items():
+        person['last_seen']=seen.get(ident)
+    return list(people.values())
+
+
+def _write_cast(root,data):
+    atomic_write(pathlib.Path(root)/CAST_FILE,json.dumps(data,ensure_ascii=False,indent=2)+'\n')
+    return data
+
+
+def _cast_file(root):
+    try:data=json.loads((pathlib.Path(root)/CAST_FILE).read_text(encoding='utf-8'))
+    except (OSError,ValueError):data={}
+    if not isinstance(data,dict):data={}
+    data.setdefault('added',[]);data.setdefault('removed',[]);data.setdefault('last_seen',{})
+    return data
+
+
+def add_person(root,person):
+    """Someone she met herself. They join the cast and recur like anyone else."""
+    name=str(person.get('name') or '').strip()
+    if not name:raise ValueError('A person needs a name')
+    ident=str(person.get('id') or '').strip() or 'her-'+re.sub(r'[^a-z0-9]+','-',name.lower()).strip('-')[:32]
+    data=_cast_file(root)
+    data['added']=[x for x in data['added'] if x.get('id')!=ident]
+    data['added'].append({'id':ident,'name':name[:80],
+        'relation':str(person.get('relation') or 'friend')[:120],
+        'met':str(person.get('met') or '')[:300],
+        'traits':[str(t)[:32] for t in (person.get('traits') or [])][:6],
+        'together':[str(t)[:80] for t in (person.get('together') or [])][:6],
+        'cadence':person.get('cadence','fortnightly'),'note':str(person.get('note') or '')[:300]})
+    data['removed']=[x for x in data['removed'] if x!=ident]
+    _write_cast(root,data)
+    return data['added'][-1]
+
+
+def saw_person(root,ident,day=None):
+    """Record that she spent time with someone, so the next meeting has a gap behind it."""
+    day=day or dt.date.today().isoformat()
+    dt.date.fromisoformat(day)
+    if ident not in {p['id'] for p in cast(root)}:raise ValueError(f'Nobody called {ident!r} is in the cast')
+    data=_cast_file(root)
+    data['last_seen'][ident]=day
+    _write_cast(root,data)
+    return {'id':ident,'last_seen':day}
+
+
+def drop_person(root,ident):
+    """Take someone out of her life. Reversible by editing cast.json."""
+    data=_cast_file(root)
+    if ident not in data['removed']:data['removed'].append(str(ident)[:80])
+    data['added']=[x for x in data['added'] if x.get('id')!=ident]
+    _write_cast(root,data)
+    return {'removed':data['removed']}
+
+
+def people_due(root,day=None,count=3):
+    """Who she has not seen in a while, longest gap first.
+
+    Cadence is a rhythm rather than a rule: it decides who surfaces, never that
+    a meeting happened. Nobody is 'overdue' in a way she owes anything about.
+    """
+    day=day or dt.date.today()
+    if isinstance(day,str):day=dt.date.fromisoformat(day)
+    spacing={'weekly':7,'fortnightly':14,'monthly':30}
+    rows=[]
+    for person in cast(root):
+        want=spacing.get(person.get('cadence','fortnightly'),14)
+        seen=person.get('last_seen')
+        if seen:
+            try:gap=(day-dt.date.fromisoformat(seen)).days
+            except ValueError:gap=want*2
+        else:
+            gap=want*2   # never seen: as available as someone long overdue
+        rows.append({**person,'days_since':None if not seen else gap,'due':gap>=want,
+                     'overdue_by':max(0,gap-want)})
+    rows.sort(key=lambda r:(-r['overdue_by'],r['name']))
+    return rows[:count] if count else rows
+
+
 # --- ideas for a day -------------------------------------------------------
 #
 # The complaint this answers: she stayed home and read, every day. Not because
@@ -438,6 +550,17 @@ def main():
     pt.add_argument('--notes',default='',help='Personal reflections or notes for tomorrow')
     s.add_parser('planned-tomorrow',help='Read the active intended plan and laid-out clothes')
     s.add_parser('themes',help='The day-shapes available to plan with, by name')
+    s.add_parser('cast',help='The people in her life, and who she has not seen lately')
+    ap=s.add_parser('add-person',help='Someone she met herself, kept so they recur')
+    ap.add_argument('--name',required=True);ap.add_argument('--relation',default='friend')
+    ap.add_argument('--met',default='');ap.add_argument('--traits',default='')
+    ap.add_argument('--together',default='')
+    ap.add_argument('--cadence',default='fortnightly',choices=['weekly','fortnightly','monthly'])
+    ap.add_argument('--note',default='')
+    sp=s.add_parser('saw',help='Record spending time with someone, by id')
+    sp.add_argument('--person',required=True);sp.add_argument('--day')
+    dp=s.add_parser('drop-person',help='Take someone out of the cast')
+    dp.add_argument('--person',required=True)
     sg=s.add_parser('suggest',help='A few ideas for a day, weighted away from what you did lately')
     sg.add_argument('--day');sg.add_argument('--count',type=int,default=6)
     ai=s.add_parser('add-idea',help='Keep an idea of your own so it comes round again')
@@ -473,6 +596,17 @@ def main():
         out=save_tomorrow_plan(root,plan_dict)
     elif a.cmd=='planned-tomorrow':
         out=read_tomorrow_plan(root,now) or {'status':'no plan recorded yet'}
+    elif a.cmd=='cast':
+        out={'cast':people_due(root,now.date(),0)}
+    elif a.cmd=='add-person':
+        out=add_person(root,{'name':a.name,'relation':a.relation,'met':a.met,
+                             'traits':[t.strip() for t in a.traits.split(',') if t.strip()],
+                             'together':[t.strip() for t in a.together.split(',') if t.strip()],
+                             'cadence':a.cadence,'note':a.note})
+    elif a.cmd=='saw':
+        out=saw_person(root,a.person,a.day or now.date().isoformat())
+    elif a.cmd=='drop-person':
+        out=drop_person(root,a.person)
     elif a.cmd=='suggest':
         out=suggest(root,a.day,max(1,min(20,a.count)),now)
     elif a.cmd=='add-idea':

@@ -1,287 +1,323 @@
 {
-  "jobs": [
-    {
-      "key": "pulse",
-      "name": "{{AGENT}} companion pulse",
-      "file": "pulse.md.tmpl",
-      "expr": "*/15 * * * *",
-      "toolsets": [
-        "file",
-        "terminal"
-      ],
-      "tier": "loops",
-      "preread": true,
-      "continuity": true,
-      "monitor": true,
-      "types": [
-        "companion",
-        "colleague"
-      ]
-    },
-    {
-      "key": "autonomy",
-      "name": "{{AGENT}} autonomy loop",
-      "file": "autonomy.md.tmpl",
-      "expr": "12,42 * * * *",
-      "toolsets": [
-        "file",
-        "terminal",
-        "session_search"
-      ],
-      "tier": "loops",
-      "preread": true,
-      "continuity": true,
-      "monitor": true,
-      "types": [
-        "companion",
-        "colleague"
-      ]
-    },
-    {
-      "key": "daily",
-      "name": "{{AGENT}} daily journal and reflection",
-      "file": "daily.md.tmpl",
-      "expr": "0 4 * * *",
-      "toolsets": [
-        "file",
-        "terminal",
-        "session_search"
-      ],
-      "tier": "reflection",
-      "types": [
-        "companion",
-        "colleague"
-      ]
-    },
-    {
-      "key": "weekly",
-      "name": "{{AGENT}} weekly reflection",
-      "file": "weekly.md.tmpl",
-      "expr": "0 22 * * 0",
-      "toolsets": [
-        "file",
-        "terminal",
-        "session_search"
-      ],
-      "tier": "reflection",
-      "types": [
-        "companion",
-        "colleague"
-      ]
-    },
-    {
-      "key": "monthly",
-      "name": "{{AGENT}} monthly reflection",
-      "file": "monthly.md.tmpl",
-      "expr": "0 9 1 * *",
-      "toolsets": [
-        "file",
-        "terminal"
-      ],
-      "tier": "reflection",
-      "types": [
-        "companion",
-        "colleague"
-      ]
-    },
-    {
-      "key": "hygiene",
-      "name": "{{AGENT}} weekly hygiene",
-      "file": "hygiene.md.tmpl",
-      "expr": "30 21 * * 0",
-      "toolsets": [
-        "file",
-        "terminal"
-      ],
-      "tier": "reflection"
-    },
-    {
-      "key": "timeline",
-      "name": "{{AGENT}} image timeline",
-      "file": "timeline.md.tmpl",
-      "expr": "3-59/15 * * * *",
-      "toolsets": [
-        "file",
-        "terminal",
-        "image_gen"
-      ],
-      "optional": "image_timeline",
-      "types": [
-        "companion"
-      ],
-      "monitor": true,
-      "monitor_module": "companion_timeline"
-    },
-    {
-      "key": "timeline_cleanup",
-      "name": "{{AGENT}} image timeline cleanup",
-      "file": "timeline_cleanup.md.tmpl",
-      "expr": "8-59/15 * * * *",
-      "toolsets": [],
-      "optional": "timeline_cleanup",
-      "no_agent": true,
-      "script": {
-        "module": "companion_timeline",
-        "args": [
-          "prune"
-        ]
-      },
-      "types": [
-        "companion"
-      ]
-    },
-    {
-      "key": "present",
-      "name": "{{AGENT}} present advancer",
-      "file": "present.md.tmpl",
-      "expr": "10-59/15 * * * *",
-      "toolsets": [],
-      "no_agent": true,
-      "script": {
-        "module": "companion_presence",
-        "args": [
-          "advance"
-        ]
-      },
-      "types": [
-        "companion",
-        "colleague"
-      ]
-    },
-    {
-      "key": "watch",
-      "name": "{{AGENT}} health watch",
-      "file": "watch.md.tmpl",
-      "expr": "27 * * * *",
-      "toolsets": [],
-      "no_agent": true,
-      "script": {
-        "module": "companion_watch",
-        "args": []
-      }
-    },
-    {
-      "key": "dispatch",
-      "name": "{{AGENT}} outbox dispatcher",
-      "file": "dispatch.md.tmpl",
-      "expr": "*/5 * * * *",
-      "toolsets": [],
-      "no_agent": true,
-      "script": {
-        "module": "companion_dispatch",
-        "args": []
-      }
-    },
-    {
-      "key": "sensors",
-      "name": "{{AGENT}} senses",
-      "file": "sensors.md.tmpl",
-      "expr": "6-59/15 * * * *",
-      "toolsets": [],
-      "no_agent": true,
-      "script": {
-        "module": "companion_sensors",
-        "args": []
-      },
-      "types": [
-        "companion",
-        "colleague"
-      ]
-    },
-    {
-      "key": "wake",
-      "name": "{{AGENT}} morning",
-      "file": "wake.md.tmpl",
-      "expr": "{{WAKE_CRON}}",
-      "toolsets": [
-        "file",
-        "terminal"
-      ],
-      "tier": "loops",
-      "preread": true,
-      "continuity": true,
-      "types": [
-        "companion"
-      ]
-    },
-    {
-      "key": "winddown",
-      "name": "{{AGENT}} wind-down",
-      "file": "winddown.md.tmpl",
-      "expr": "{{WINDDOWN_CRON}}",
-      "toolsets": [
-        "file",
-        "terminal"
-      ],
-      "tier": "loops",
-      "preread": true,
-      "continuity": true,
-      "types": [
-        "companion"
-      ]
-    },
-    {
-      "key": "quiet",
-      "name": "{{AGENT}} quiet-hours drift",
-      "file": "quiet.md.tmpl",
-      "expr": "40 4 * * 1",
-      "toolsets": [],
-      "no_agent": true,
-      "script": {
-        "module": "companion_quiet",
-        "args": [
-          "--apply"
-        ]
-      },
-      "types": [
-        "companion"
-      ]
-    },
-    {
-      "key": "vault",
-      "name": "{{AGENT}} vault commit",
-      "file": "vault.md.tmpl",
-      "expr": "14,29,44,59 * * * *",
-      "toolsets": [],
-      "no_agent": true,
-      "script": {
-        "module": "companion_vault",
-        "args": [
-          "commit"
-        ]
-      }
-    },
-    {
-      "key": "window",
-      "name": "{{AGENT}} window",
-      "file": "window.md.tmpl",
-      "expr": "{{WINDOW_CRON}}",
-      "toolsets": [
-        "file",
-        "terminal",
-        "web_search"
-      ],
-      "tier": "reflection",
-      "preread": true,
-      "continuity": true
-    },
-    {
-      "key": "checkin",
-      "name": "{{AGENT}} check-in",
-      "file": "checkin.md.tmpl",
-      "expr": "5-59/10 * * * *",
-      "toolsets": [
-        "file",
-        "terminal"
-      ],
-      "tier": "loops",
-      "preread": true,
-      "monitor": true,
-      "monitor_module": "companion_checkin",
-      "types": [
-        "companion",
-        "colleague"
-      ]
-    }
-  ]
+ "jobs": [
+  {
+   "key": "pulse",
+   "name": "{{AGENT}} companion pulse",
+   "file": "pulse.md.tmpl",
+   "expr": "*/15 * * * *",
+   "toolsets": [
+    "file",
+    "terminal"
+   ],
+   "tier": "loops",
+   "preread": true,
+   "continuity": true,
+   "monitor": true,
+   "types": [
+    "companion",
+    "colleague"
+   ],
+   "sensitivity": "sensitive",
+   "sends": "Her SOUL file, wardrobe, recorded mood and private stance, every 15 minutes."
+  },
+  {
+   "key": "autonomy",
+   "name": "{{AGENT}} autonomy loop",
+   "file": "autonomy.md.tmpl",
+   "expr": "12,42 * * * *",
+   "toolsets": [
+    "file",
+    "terminal",
+    "session_search"
+   ],
+   "tier": "loops",
+   "preread": true,
+   "continuity": true,
+   "monitor": true,
+   "types": [
+    "companion",
+    "colleague"
+   ],
+   "sensitivity": "sensitive",
+   "sends": "Her current state, open loops and what she wants to do unprompted."
+  },
+  {
+   "key": "daily",
+   "name": "{{AGENT}} daily journal and reflection",
+   "file": "daily.md.tmpl",
+   "expr": "0 4 * * *",
+   "toolsets": [
+    "file",
+    "terminal",
+    "session_search"
+   ],
+   "tier": "reflection",
+   "types": [
+    "companion",
+    "colleague"
+   ],
+   "sensitivity": "sensitive",
+   "sends": "The day’s journal and conversation, deciding what is remembered."
+  },
+  {
+   "key": "weekly",
+   "name": "{{AGENT}} weekly reflection",
+   "file": "weekly.md.tmpl",
+   "expr": "0 22 * * 0",
+   "toolsets": [
+    "file",
+    "terminal",
+    "session_search"
+   ],
+   "tier": "reflection",
+   "types": [
+    "companion",
+    "colleague"
+   ],
+   "sensitivity": "sensitive",
+   "sends": "Weeks of memories and relationship patterns."
+  },
+  {
+   "key": "monthly",
+   "name": "{{AGENT}} monthly reflection",
+   "file": "monthly.md.tmpl",
+   "expr": "0 9 1 * *",
+   "toolsets": [
+    "file",
+    "terminal"
+   ],
+   "tier": "reflection",
+   "types": [
+    "companion",
+    "colleague"
+   ],
+   "sensitivity": "sensitive",
+   "sends": "Long-horizon reflection over months of history."
+  },
+  {
+   "key": "hygiene",
+   "name": "{{AGENT}} weekly hygiene",
+   "file": "hygiene.md.tmpl",
+   "expr": "30 21 * * 0",
+   "toolsets": [
+    "file",
+    "terminal"
+   ],
+   "tier": "reflection",
+   "sensitivity": "sensitive",
+   "sends": "The continuity ledgers: loops, commitments and journal entries."
+  },
+  {
+   "key": "timeline",
+   "name": "{{AGENT}} image timeline",
+   "file": "timeline.md.tmpl",
+   "expr": "3-59/15 * * * *",
+   "toolsets": [
+    "file",
+    "terminal",
+    "image_gen"
+   ],
+   "optional": "image_timeline",
+   "types": [
+    "companion"
+   ],
+   "monitor": true,
+   "monitor_module": "companion_timeline",
+   "sensitivity": "sensitive",
+   "sends": "Her appearance, wardrobe and the private detail of a recorded moment."
+  },
+  {
+   "key": "timeline_cleanup",
+   "name": "{{AGENT}} image timeline cleanup",
+   "file": "timeline_cleanup.md.tmpl",
+   "expr": "8-59/15 * * * *",
+   "toolsets": [],
+   "optional": "timeline_cleanup",
+   "no_agent": true,
+   "script": {
+    "module": "companion_timeline",
+    "args": [
+     "prune"
+    ]
+   },
+   "types": [
+    "companion"
+   ],
+   "sensitivity": "none",
+   "sends": "Deletes old image files to stay inside the budget."
+  },
+  {
+   "key": "present",
+   "name": "{{AGENT}} present advancer",
+   "file": "present.md.tmpl",
+   "expr": "10-59/15 * * * *",
+   "toolsets": [],
+   "no_agent": true,
+   "script": {
+    "module": "companion_presence",
+    "args": [
+     "advance"
+    ]
+   },
+   "types": [
+    "companion",
+    "colleague"
+   ],
+   "sensitivity": "none",
+   "sends": "Repeats the last recorded state, marked unconfirmed. Invents nothing."
+  },
+  {
+   "key": "watch",
+   "name": "{{AGENT}} health watch",
+   "file": "watch.md.tmpl",
+   "expr": "27 * * * *",
+   "toolsets": [],
+   "no_agent": true,
+   "script": {
+    "module": "companion_watch",
+    "args": []
+   },
+   "sensitivity": "none",
+   "sends": "Checks that the other jobs are still running."
+  },
+  {
+   "key": "dispatch",
+   "name": "{{AGENT}} outbox dispatcher",
+   "file": "dispatch.md.tmpl",
+   "expr": "*/5 * * * *",
+   "toolsets": [],
+   "no_agent": true,
+   "script": {
+    "module": "companion_dispatch",
+    "args": []
+   },
+   "sensitivity": "none",
+   "sends": "Sends messages already written and already queued."
+  },
+  {
+   "key": "sensors",
+   "name": "{{AGENT}} senses",
+   "file": "sensors.md.tmpl",
+   "expr": "6-59/15 * * * *",
+   "toolsets": [],
+   "no_agent": true,
+   "script": {
+    "module": "companion_sensors",
+    "args": []
+   },
+   "types": [
+    "companion",
+    "colleague"
+   ],
+   "sensitivity": "none",
+   "sends": "Reads the installed sensors into a local file."
+  },
+  {
+   "key": "wake",
+   "name": "{{AGENT}} morning",
+   "file": "wake.md.tmpl",
+   "expr": "{{WAKE_CRON}}",
+   "toolsets": [
+    "file",
+    "terminal"
+   ],
+   "tier": "loops",
+   "preread": true,
+   "continuity": true,
+   "types": [
+    "companion"
+   ],
+   "sensitivity": "sensitive",
+   "sends": "Overnight state, senses and anything queued to send."
+  },
+  {
+   "key": "winddown",
+   "name": "{{AGENT}} wind-down",
+   "file": "winddown.md.tmpl",
+   "expr": "{{WINDDOWN_CRON}}",
+   "toolsets": [
+    "file",
+    "terminal"
+   ],
+   "tier": "loops",
+   "preread": true,
+   "continuity": true,
+   "types": [
+    "companion"
+   ],
+   "sensitivity": "sensitive",
+   "sends": "How the day ended, including mood and private stance."
+  },
+  {
+   "key": "quiet",
+   "name": "{{AGENT}} quiet-hours drift",
+   "file": "quiet.md.tmpl",
+   "expr": "40 4 * * 1",
+   "toolsets": [],
+   "no_agent": true,
+   "script": {
+    "module": "companion_quiet",
+    "args": [
+     "--apply"
+    ]
+   },
+   "types": [
+    "companion"
+   ],
+   "sensitivity": "none",
+   "sends": "Moves the quiet-hours boundary on a weekly schedule."
+  },
+  {
+   "key": "vault",
+   "name": "{{AGENT}} vault commit",
+   "file": "vault.md.tmpl",
+   "expr": "14,29,44,59 * * * *",
+   "toolsets": [],
+   "no_agent": true,
+   "script": {
+    "module": "companion_vault",
+    "args": [
+     "commit"
+    ]
+   },
+   "sensitivity": "none",
+   "sends": "Commits the vault to its local git repository."
+  },
+  {
+   "key": "window",
+   "name": "{{AGENT}} window",
+   "file": "window.md.tmpl",
+   "expr": "{{WINDOW_CRON}}",
+   "toolsets": [
+    "file",
+    "terminal",
+    "web_search"
+   ],
+   "tier": "reflection",
+   "preread": true,
+   "continuity": true,
+   "sensitivity": "routine",
+   "sends": "Independent work with tools. Carries her context but is outward-facing."
+  },
+  {
+   "key": "checkin",
+   "name": "{{AGENT}} check-in",
+   "file": "checkin.md.tmpl",
+   "expr": "5-59/10 * * * *",
+   "toolsets": [
+    "file",
+    "terminal"
+   ],
+   "tier": "loops",
+   "preread": true,
+   "monitor": true,
+   "monitor_module": "companion_checkin",
+   "types": [
+    "companion",
+    "colleague"
+   ],
+   "sensitivity": "sensitive",
+   "sends": "Recent conversation — the human’s own words — turned into records."
+  }
+ ]
 }

@@ -69,7 +69,10 @@ class AdoptTests(unittest.TestCase):
         self.assertEqual((self.home/'memories/MEMORY.md').read_text(),
                          'He is allergic to shellfish.\n')
         caps=memory.caps(c)
-        self.assertGreater(caps['MEMORY.md'],memory.DEFAULT_CAPS['MEMORY.md'])
+        # Against what Hermes itself would have given this profile, which is the
+        # comparison that means anything: adoption exists to raise it.
+        self.assertGreater(caps['MEMORY.md'],memory.HERMES_CAPS['MEMORY.md'])
+        self.assertGreater(caps['USER.md'],memory.HERMES_CAPS['USER.md'])
 
     def test_adoption_installs_the_machinery_without_asking_again(self):
         self.upgrade('keep')

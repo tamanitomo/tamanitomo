@@ -512,11 +512,23 @@ def detect_context_tokens(home:pathlib.Path,hermes_root:Optional[pathlib.Path]=N
             data=yaml.safe_load((root/'context_length_cache.yaml').read_text(encoding='utf-8')) or {}
             cache.update(data.get('context_lengths') or {})
         except (OSError,Exception):continue
+    def sane(value):
+        return isinstance(value,int) and not isinstance(value,bool) and 2048<=value<=10_000_000
     if name:
         for key in (f'{name}@{base}',f'{name}@{base}/',f'{name}@{base.rstrip("/")}'):
             value=cache.get(key)
-            if isinstance(value,int) and not isinstance(value,bool) and 2048<=value<=10_000_000:
+            if sane(value):
                 return value,'Hermes context_length_cache'
+        # A provider Hermes holds the session for has no base_url to key on, so
+        # every lookup missed and the window fell back to the conservative
+        # default -- which sized a 272k model as though it were 32k, and with it
+        # the memory tier that is chosen from the window.
+        if not base:
+            matches=[v for k,v in cache.items() if k.split('@',1)[0]==name and sane(v)]
+            if matches:
+                # The smallest endpoint serving this model, since overrunning a
+                # window is a worse failure than under-using one.
+                return min(matches),'Hermes context_length_cache (model name)'
     # Read Hermes's local provider catalog without a network call on every turn.
     # Only use it for the provider's own endpoint: hosted variants may have smaller caps.
     from urllib.parse import urlparse
