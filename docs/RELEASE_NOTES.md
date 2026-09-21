@@ -1,12 +1,10 @@
-Tamanitomo 2.3.7 fixes what a companion is wearing, and how long it takes to know someone.
+Tamanitomo 2.3.8 fixes deleting a picture that shares a moment with others.
 
-What she has on is now read from the record rather than inferred from the sentence describing it. Guessing from words meant an ordinary moment in a bathroom, an afternoon in the garden, or an errand at the shops could contradict the wardrobe she was actually recorded in. Picture prompts follow the record, and a private routine is either rendered in keeping with your settings or simply not photographed.
+When a moment holds several renders, switching between them in the viewer repointed at the new picture but kept the previous one's version marker. Every delete that followed described two different files at once and was refused as a conflict, so the picture stayed and nothing said why.
 
-Relationships that were never romances are no longer described as one. A best friend, a mentor, a sibling or an assistant now grows Familiar → Trusted → Confidant rather than through language that never applied to them, and can reach Bonded like anyone else.
+Behind that, a delete that did go through could not finish: the moment was looked up from the picture's own filename, which is not the name of the moment it belongs to, so the file went and the moment carried on listing it.
 
-Closeness is also earned over days that belong to the relationship. Installed onto an assistant that had been in use for months, a companion used to begin already close to someone it had just met. A new setting under Companion → Relationship gives you finer control over what a companion may send.
-
-Elsewhere: the update notice and the photo provider picker no longer crush their own text, generating a picture variant no longer holds the page open while it renders, and a shower is judged by the bath she is in rather than by any sentence that mentions one.
+Both now go through one place. Deleting one render of a moment removes just that render, promotes another to take its place if it was the one on display, and retires the moment only when nothing is left. A record left behind by an earlier failed attempt is tidied rather than refused.
 
 ### Install
 

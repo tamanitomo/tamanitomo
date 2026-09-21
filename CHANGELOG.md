@@ -1,3 +1,9 @@
+## 2.3.8 — Deleting one picture from a moment (2026-09-21)
+
+- Carry a picture's version marker with it when switching between renders of the same moment, so deleting one is no longer refused as a conflict.
+- Resolve a deleted picture back to the moment it belongs to, remove just that render, promote another if it was the one on display, and retire the moment only when nothing remains.
+- Tidy a record whose file is already gone instead of refusing it.
+
 ## 2.3.7 — Wardrobe accuracy and relationship scales (2026-09-21)
 
 - Read a companion's wardrobe state from the record rather than inferring it from activity or location wording, which could contradict what she was recorded wearing.
