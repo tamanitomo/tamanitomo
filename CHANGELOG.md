@@ -1,3 +1,12 @@
+## 2.4.0 — A day counts for what was in it (2026-09-21)
+
+- Score each day of conversation on its own merits rather than counting any day the human spoke, so closeness reflects what was actually said.
+- Weigh how much was said, how many times, and how much of the day it spanned, each capped so no one of them can stand in for a day on its own.
+- Ignore a message repeating something already said that day, which is what made the old count farmable.
+- Charge for thin contact as well as silence, measured over a fortnight against a par of a real conversation every other day, and never charge for both at once.
+- Count days in the human's own timezone, so an evening conversation is one day rather than two half-days.
+- Keep the stage timings as they were: friendship in about four days, the deepest stage at about two months of genuine daily conversation.
+
 ## 2.3.10 — Pictures stay with their companion (2026-09-21)
 
 - Scope a moment's identifier to the companion, so two companions can no longer produce pictures with the same filename.

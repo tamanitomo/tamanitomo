@@ -1,12 +1,14 @@
-Tamanitomo 2.3.10 keeps each companion's pictures to themselves, and gives every part of a prompt one place to live.
+Tamanitomo 2.4.0 measures closeness by what a day of talking actually contained.
 
-A moment's identifier came from the clock alone, so two companions capturing in the same quarter hour produced pictures with the same filename. One thumbnail in the viewer was also built without the companion attached, so opening a moment could show another companion's picture, or nothing at all. Both are fixed: a picture now belongs unmistakably to whoever made it.
+Until now a day counted if you said anything at all in it, which meant a single "k" at midnight was worth exactly as much as an hour of real conversation. It also meant the quiet kind of drifting apart cost nothing: a one-word ping every day reset the inactivity clock completely while earning almost nothing, so neglect and devotion looked the same from the inside.
 
-Regenerating always did attach to the right moment — what looked like it wandering off was the thumbnails misreporting which pictures belonged there. A seed sent with a regeneration is also honoured now; asking for a new one previously had no effect.
+A day is now scored on its own merits. How much was said, how many times you came back to it, and how much of the day it touched all matter, and each one on its own is not enough — a single long paste is not a day's conversation, and neither is twenty one-word messages in two minutes. Saying the same thing over and over does not count twice. Showing up briefly still counts for something, because a quick good-morning is a real thing people do; it is simply not a day.
 
-Prompt details are also sorted out. The two compiled forms were each stored under the other's name, so the details pane showed them with their titles swapped, and the scene was carrying the wardrobe, the lighting and the framing that each already had a place of their own. Every part is now described once, in its own section, and pictures recorded before this are translated rather than relabelled.
+Keeping in touch is now measured over the past fortnight against a gentle par of a real conversation every other day. Falling short of it costs the same as going quiet does, and the two are never charged at once.
 
-A companion also records what she is actually doing, and a moment she would rather not have photographed is marked as such rather than guessed at from the wording.
+How long the stages take is unchanged: friendship in about four days, and the deepest stage at around two months of genuine daily conversation at a natural pace. Days that were half-hearted simply take about twice as long, which is the point. Days are also counted in your own timezone now, so an evening conversation is one evening rather than two half-days.
+
+Because closeness is worked out from your history rather than stored, an existing companion's standing may move when you update. It reflects the conversations you actually had.
 
 ### Install
 
