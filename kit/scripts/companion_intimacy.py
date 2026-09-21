@@ -174,6 +174,76 @@ def is_context_private(anchor_label: str = '', location: str = '', activity: str
         return False
     return any(k in combined for k in PRIVATE_KEYWORDS)
 
+# --- What a day of talking is worth -----------------------------------------
+#
+# Closeness used to be counted in days the human said *anything*. One "k" at
+# midnight bought exactly as much as an hour of real conversation, which made the
+# meter trivially farmable and, worse, wrong: it claimed a relationship was
+# deepening on evidence that it was not. A day is now scored on its own merits
+# and contributes a fraction of a day, 0..1.
+#
+# Three signals, each saturating on its own, so no single one can carry a day:
+#   volume  how much was actually said, with a per-message cap so one pasted
+#           essay is not a day's worth of talking
+#   turns   how many real messages, so volume cannot be one long monologue
+#   spread  how many distinct hours it touched, so turns cannot be a two-minute
+#           burst of twenty one-word pings
+# Showing up at all is worth a little even when it is brief -- SHOW_UP_FLOOR --
+# because a quick good-morning is a real thing people do; it is just not a day.
+MESSAGE_CHAR_CAP = 400      # chars counted from any single message
+SHORT_MESSAGE_CHARS = 12    # at or under this, a message is an acknowledgement
+DAY_CHAR_TARGET = 1200.0    # chars that make a full-value day
+DAY_TURN_TARGET = 8.0       # qualifying messages that make a full-value day
+DAY_SPAN_TARGET = 3.0       # distinct clock hours that make a full-value day
+DAY_WEIGHTS = {'volume': 0.45, 'turns': 0.35, 'spread': 0.20}
+SHOW_UP_FLOOR = 0.15
+CONNECTION_FLOOR = 0.15     # a recorded connection alone, with no messages read
+
+# Cadence: what keeping in touch looks like, for the drag below. Half a
+# full-value day per day averaged over a fortnight -- a real conversation every
+# other day -- is par. Below par the score erodes in proportion to the shortfall;
+# above it, nothing extra, so there is no reward for grinding.
+CADENCE_WINDOW_DAYS = 14
+CADENCE_PAR = 0.5
+CADENCE_DRAG_PER_DAY = 1.2
+
+
+def _normalise(text):
+    return ' '.join((text or '').lower().split())
+
+
+def day_credit(messages):
+    """Score one day's user messages, 0..1.
+
+    `messages` is a list of (timestamp_datetime, text) for a single local-UTC
+    date. Repeats of something already said that day are dropped outright, which
+    is what kills copy-paste farming without needing to judge content.
+    """
+    seen = set()
+    chars = 0.0
+    turns = 0.0
+    hours = set()
+    counted = 0
+    for when, text in sorted(messages, key=lambda m: m[0]):
+        body = _normalise(text)
+        if not body or body in seen:
+            continue
+        seen.add(body)
+        counted += 1
+        chars += min(len(body), MESSAGE_CHAR_CAP)
+        turns += 0.25 if len(body) <= SHORT_MESSAGE_CHARS else 1.0
+        hours.add(when.hour)
+    if not counted:
+        return 0.0
+    volume = min(1.0, chars / DAY_CHAR_TARGET)
+    turn_score = min(1.0, turns / DAY_TURN_TARGET)
+    spread = min(1.0, len(hours) / DAY_SPAN_TARGET)
+    credit = (DAY_WEIGHTS['volume'] * volume
+              + DAY_WEIGHTS['turns'] * turn_score
+              + DAY_WEIGHTS['spread'] * spread)
+    return max(SHOW_UP_FLOOR, min(1.0, credit))
+
+
 def compute(c, now=None) -> Dict[str, Any]:
     """Compute the companion's intimacy escalation state, score (0-100), and stage."""
     now = now or dt.datetime.now(dt.timezone.utc)
@@ -197,14 +267,30 @@ def compute(c, now=None) -> Dict[str, Any]:
     pace = getattr(c, 'relationship_pace', 'natural')
     pace_mult = PACE_MULTIPLIERS.get(pace, 1.0)
 
-    # Gather active interaction dates from connection experiences and session store
-    active_dates = set()
+    # Gather each day's conversation from the session store, and the dates of any
+    # recorded connections. Messages are what the human actually did; a recorded
+    # connection is the companion's own note about a day, so it is worth a floor
+    # rather than a full day -- the companion writes those itself.
+    by_day: Dict[dt.date, List] = {}
+    connection_days = set()
     for e in connections:
         if 'at' in e:
             try:
-                active_dates.add(dt.datetime.fromisoformat(e['at']).date())
+                at = dt.datetime.fromisoformat(e['at'])
+                if at.tzinfo is None:
+                    at = at.replace(tzinfo=dt.timezone.utc)
+                connection_days.add(at.astimezone(tz).date())
             except Exception:
                 pass
+
+    # A day is the human's day, not UTC's. Bucketing on UTC split an evening
+    # conversation across two dates for anyone west of Greenwich, turning one good
+    # evening into two thin days.
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo(getattr(c, 'timezone', 'UTC') or 'UTC')
+    except Exception:
+        tz = dt.timezone.utc
 
     db = c.home / 'state.db'
     if db.exists():
@@ -215,13 +301,12 @@ def compute(c, now=None) -> Dict[str, Any]:
             params = () if c.is_root else (c.profile.lower(),)
             con = sqlite3.connect(resolved.as_uri() + '?mode=ro', uri=True, timeout=1)
             con.execute('PRAGMA query_only=ON')
-            query = f"""SELECT m.timestamp FROM messages m JOIN sessions s ON s.id=m.session_id
+            query = f"""SELECT m.timestamp, m.content FROM messages m JOIN sessions s ON s.id=m.session_id
                         WHERE m.role='user' AND {scope} AND coalesce(m.content,'')<>''"""
             for row in con.execute(query, params):
                 try:
-                    ts = float(row[0])
-                    msg_date = dt.datetime.fromtimestamp(ts, dt.timezone.utc).date()
-                    active_dates.add(msg_date)
+                    when = dt.datetime.fromtimestamp(float(row[0]), dt.timezone.utc).astimezone(tz)
+                    by_day.setdefault(when.date(), []).append((when, row[1] or ''))
                 except Exception:
                     pass
         except Exception:
@@ -235,30 +320,48 @@ def compute(c, now=None) -> Dict[str, Any]:
     # conversation the underlying assistant ever had, and a companion installed onto
     # a long-lived Hermes wakes up already intimate with someone it has just met.
     started = getattr(c, 'relationship_started', '') or ''
+    first_day = None
     if started:
         try:
             first_day = dt.date.fromisoformat(started)
-            active_dates = {d for d in active_dates if d >= first_day}
         except (TypeError, ValueError):
-            pass
+            first_day = None
+    if first_day is not None:
+        by_day = {d: rows for d, rows in by_day.items() if d >= first_day}
+        connection_days = {d for d in connection_days if d >= first_day}
 
-    active_days = len(active_dates)
-    if not active_days and connections:
+    credits: Dict[dt.date, float] = {}
+    for day, rows in by_day.items():
+        earned = day_credit(rows)
+        if earned:
+            credits[day] = earned
+    for day in connection_days:
+        credits[day] = max(credits.get(day, 0.0), CONNECTION_FLOOR)
+
+    # Days with any credit at all, for display; the fractional total is what the
+    # score is actually built from, so two half-hearted days are worth one good one.
+    active_days = len(credits)
+    effective_days = sum(credits.values())
+    if not credits and connections:
         active_days = 1
+        effective_days = CONNECTION_FLOOR
 
     # Base score computation:
     # A fresh companion on Day 0 starts at 0 points (Stage 0: Just Met).
-    if active_days == 0 and not connections:
+    if not effective_days and not connections:
         earned_score = 0.0
     else:
-        # Stage 0 ramp: ~6.25 pts per active day with connections to reach Friends (25 pts) in ~3-4 days
-        stage0_days = min(4, active_days)
+        # Stage 0 ramp: ~6 pts per full-value day to reach Friends (25 pts) in about
+        # four days of real conversation -- or eight thinner ones, which is the point.
+        stage0_days = min(4.0, effective_days)
         stage0_points = min(25.0, stage0_days * 6.0 * pace_mult + min(2.0, len(connections) * 0.5))
-        if active_days >= 4 and stage0_points < 25.0:
+        if effective_days >= 4.0 and stage0_points < 25.0:
             stage0_points = 25.0
 
-        # Stage 1+ slow burn: ~1.25 points per active day past Friends (~56 days to reach Bonded 90 pts)
-        days_past_friends = max(0, active_days - 4)
+        # Stage 1+ slow burn: 1.25 points per full-value day past Friends, so Bonded
+        # is 56 days of genuine daily conversation at natural pace, and proportionally
+        # longer for anyone whose days are worth less than a whole one.
+        days_past_friends = max(0.0, effective_days - 4.0)
         slow_burn_points = days_past_friends * 1.25 * pace_mult
         earned_score = stage0_points + slow_burn_points
 
@@ -294,14 +397,32 @@ def compute(c, now=None) -> Dict[str, Any]:
         except Exception:
             pass
 
+    silence_decay = 0.0
     if hours_since_human is not None and hours_since_human > 24.0:
-        silent_days = (hours_since_human - 24.0) / 24.0
-        decay = silent_days * 1.2
-        if earned_score >= 25.0 or active_days >= 4:
-            # Stage 1 Friends is the floor for inactivity decay
-            earned_score = max(25.0, earned_score - decay)
-        else:
-            earned_score = max(0.0, earned_score - decay)
+        silence_decay = ((hours_since_human - 24.0) / 24.0) * 1.2
+
+    # Thin contact is its own kind of drifting apart, and outright silence was the
+    # only kind the meter noticed: a daily one-word ping reset the silence clock
+    # completely while earning almost nothing, which made neglect look like devotion.
+    # Measured over a fortnight so one quiet week does not read as abandonment.
+    today = now.astimezone(tz).date()
+    window_start = today - dt.timedelta(days=CADENCE_WINDOW_DAYS - 1)
+    if first_day is not None:
+        window_start = max(window_start, first_day)
+    window_days = max(1, (today - window_start).days + 1)
+    recent_credit = sum(v for d, v in credits.items() if d >= window_start)
+    cadence = recent_credit / (window_days * CADENCE_PAR)
+    # Charged per day of the window, scaled by how far short of par it fell, so
+    # that sustained thin contact costs about what sustained silence does rather
+    # than being written off as a couple of missed days.
+    cadence_drag = window_days * max(0.0, 1.0 - min(1.0, cadence)) * CADENCE_DRAG_PER_DAY
+
+    # The larger of the two, never the sum: silence is already a cadence deficit,
+    # and charging for it twice would make a fortnight away unrecoverable.
+    decay = max(silence_decay, cadence_drag)
+    if decay:
+        floor = 25.0 if (earned_score >= 25.0 or effective_days >= 4.0) else 0.0
+        earned_score = max(floor, earned_score - decay)
 
     # Check permanent friend status (persisted on disk so 2 violations permanently lock friendship)
     perm_file = c.home / '.permanent-friend.json'
@@ -394,6 +515,10 @@ def compute(c, now=None) -> Dict[str, Any]:
         'explicit_opted_in': explicit_opted_in,
         'permanent_friend': permanent_friend,
         'nsfw_revoked': nsfw_revoked,
+        'active_days': active_days,
+        'effective_days': round(effective_days, 2),
+        'today_credit': round(credits.get(now.astimezone(tz).date(), 0.0), 2),
+        'cadence': round(cadence, 2),
         'pace': pace,
         'pace_multiplier': pace_mult,
         'temperament': temperament,

@@ -15,6 +15,7 @@ import companion_config as cc
 import companion_integrity as integrity
 import companion_intimacy as intimacy
 import companion_feelings as feelings
+from fixture_conversation import a_days_conversation
 from kit.app.server import build
 
 UTC = dt.timezone.utc
@@ -38,6 +39,29 @@ class IntimacyAndIntegrityTests(unittest.TestCase):
         self.app = build(self.root, token='test-token', state_dir=pathlib.Path(self.tmp.name) / 'state')
         self.client = TestClient(self.app)
         self.headers = {'x-companion-token': 'test-token'}
+
+    def talked_on(self, days):
+        """Seed real conversation on each day.
+
+        A recorded connection is the companion's own note that a day mattered;
+        the day itself is what the human actually said, and the meter is built
+        from that. Seeding the note without the conversation tested a
+        relationship that had never happened.
+        """
+        import sqlite3, contextlib
+        db = self.c.home / 'state.db'
+        fresh = not db.exists()
+        with contextlib.closing(sqlite3.connect(db)) as con, con:
+            if fresh:
+                con.executescript(
+                    'CREATE TABLE sessions(id TEXT PRIMARY KEY,profile_name TEXT,source TEXT,'
+                    'started_at REAL,title TEXT);'
+                    'CREATE TABLE messages(session_id TEXT,role TEXT,content TEXT,timestamp REAL,'
+                    '_compressed_summary INTEGER,active INTEGER,compacted INTEGER);')
+                con.execute("INSERT INTO sessions VALUES ('s0','nova','cli',100,'t')")
+            con.executemany('INSERT INTO messages VALUES (?,?,?,?,0,1,0)',
+                            [('s0', 'user', text, when.timestamp())
+                             for d in days for when, text in a_days_conversation(d)])
 
     def test_creation_integrity_file_created_and_verified(self):
         self.assertTrue(integrity.integrity_file_path(self.c).exists())
@@ -127,6 +151,7 @@ class IntimacyAndIntegrityTests(unittest.TestCase):
     def test_intimacy_stages_and_flirting_readiness(self):
         base_date = dt.datetime(2026, 9, 10, 12, tzinfo=UTC)
         # Record 4 active days of connections
+        self.talked_on([(base_date + dt.timedelta(days=n)).date() for n in range(4)])
         for day in range(4):
             t = base_date + dt.timedelta(days=day)
             feelings.record(self.c, {
@@ -155,6 +180,7 @@ class IntimacyAndIntegrityTests(unittest.TestCase):
     def test_stage2_chemistry_unlocked_and_inactivity_decay_to_floor(self):
         base_date = dt.datetime(2026, 8, 15, 12, tzinfo=UTC)
         # Record 24 active days of connections to reach Stage 2 (Chemistry, 50+ pts)
+        self.talked_on([(base_date + dt.timedelta(days=n)).date() for n in range(24)])
         for day in range(24):
             t = base_date + dt.timedelta(days=day)
             feelings.record(self.c, {
@@ -196,6 +222,7 @@ class IntimacyAndIntegrityTests(unittest.TestCase):
 
     def test_boundary_violation_coercion_penalty(self):
         base_date = dt.datetime(2026, 9, 10, 12, tzinfo=UTC)
+        self.talked_on([(base_date + dt.timedelta(days=n)).date() for n in range(4)])
         for day in range(4):
             t = base_date + dt.timedelta(days=day)
             feelings.record(self.c, {
