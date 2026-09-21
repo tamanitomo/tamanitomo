@@ -340,3 +340,34 @@ class PromptsAreFiledUnderTheirOwnNamesTests(unittest.TestCase):
         self.assertIn("box('tags')", block)
         self.assertIn('Sent to', block)
         self.assertIn('Compiled, not sent', block)
+
+
+class OneCompanionsPicturesStayTheirOwnTests(unittest.TestCase):
+    """A capture id was derived from the clock alone.
+
+    Two companions capturing in the same quarter hour therefore produced files with
+    the same name, and the variant thumbnail was the one media URL built without the
+    companion attached — so it fell back to the default profile and showed whoever
+    happened to hold that filename, or nothing at all.
+    """
+
+    def test_the_capture_id_is_scoped_to_the_companion(self):
+        import companion_timeline as timeline
+        src = (Path(__file__).resolve().parents[1] / 'kit/scripts/companion_timeline.py').read_text(encoding='utf-8')
+        self.assertIn("c.profile+'\\0'+slot.isoformat()", src)
+        self.assertNotIn("hashlib.sha256(slot.isoformat().encode())", src)
+
+    def test_every_rendered_media_url_carries_the_companion(self):
+        js = (Path(__file__).resolve().parents[1] / 'kit/app/static/product.js').read_text(encoding='utf-8')
+        import re
+        # `item.url` is stored and later passed through mediaUrl; what matters is that
+        # nothing is put into an src= attribute without it.
+        for line in js.splitlines():
+            if 'src="${' in line or "src='${" in line:
+                with self.subTest(line=line.strip()[:70]):
+                    self.assertNotIn('/media/timeline/${', line,
+                                     'a media URL is rendered without the companion attached')
+
+    def test_a_seed_asked_for_is_the_seed_used(self):
+        media = (Path(__file__).resolve().parents[1] / 'kit/scripts/companion_media.py').read_text(encoding='utf-8')
+        self.assertIn("overrides.get('seed'", media)

@@ -1315,7 +1315,11 @@ function renderViewerPhoto(){
           <div class="viewer-variants-list">
             ${variants.map((v,vIdx)=>{
               const active=v.filename===currentFilename;
-              const thumbUrl=`/media/timeline/${v.filename}`;
+              // Every other media URL goes through mediaUrl, which carries the
+              // companion it belongs to. This one did not, so it fell back to the
+              // default profile: a thumbnail of whoever happens to hold that
+              // filename, or nothing at all when only this companion has it.
+              const thumbUrl=mediaUrl(`/media/timeline/${v.filename}`);
               return `<button class="viewer-variant-thumb ${active?'is-active':''}" data-variant-fn="${esc(v.filename)}" title="${esc(v.provider||'Variant '+(vIdx+1))}">
                 <img src="${thumbUrl}" alt="Variant ${vIdx+1}" loading="lazy">
                 <span class="variant-idx">#${vIdx+1}</span>

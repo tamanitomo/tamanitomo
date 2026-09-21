@@ -241,7 +241,10 @@ def prepare(c,now=None):
     from companion_render import load_styles
     style=load_styles().get(c.image_style)
     if not style or c.image_style in ('none','unset'):return {'ready':False,'reason':'Choose a timeline image style first'}
-    ident=hashlib.sha256(slot.isoformat().encode()).hexdigest()[:24]
+    # The id is what names the file on disk, so deriving it from the clock alone gave
+    # every companion capturing in the same quarter hour the same filename. Scoping it
+    # keeps two companions' pictures from ever being the same picture by name.
+    ident=hashlib.sha256((c.profile+'\0'+slot.isoformat()).encode()).hexdigest()[:24]
     path=root(c)/'captures'/(ident+'.json')
     with file_lock(root(c)/'.lock'):
         if path.exists():return {'ready':False,'reason':'This interval has already been claimed','capture':json.loads(path.read_text(encoding='utf-8'))}

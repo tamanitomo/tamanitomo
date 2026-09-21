@@ -296,7 +296,12 @@ def compile(c,preset_id='',category='portrait',overrides=None,draft=None,intimat
                    ' wearing now and overrides it.')
     structured=preamble+'\n\n'+\
         '\n\n'.join(f'{labels[k]}:\n{parts[k].strip()}' for k in PARTS if parts.get(k,'').strip())
-    seed=p.get('seed',-1)
+    # A seed asked for at the call site is the point of asking: "generate with a new
+    # random seed" had no effect, because only the PARTS keys were read out of the
+    # overrides and a preset that pins a seed then returned the same picture forever.
+    seed=overrides.get('seed',p.get('seed',-1))
+    try:seed=int(seed)
+    except (TypeError,ValueError):seed=-1
     if seed==-1:seed=int.from_bytes(os.urandom(6),'big')
     # The gate is checked here rather than at each caller, because this is the
     # one function every render passes through.
