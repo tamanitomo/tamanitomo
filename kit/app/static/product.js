@@ -753,16 +753,12 @@ workspaceHandlers.now=async()=>{
   }
 
   $('now').innerHTML=`
-  ${updateInfo?.has_update?`<div class="notice-strip" style="border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent)">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;width:100%">
-      <div>
-        <p style="margin:0"><strong>Tamanitomo v${esc(updateInfo.latest_version)}</strong> is available. (Installed: v${esc(updateInfo.version)})</p>
-        <p class="dim small" style="margin:2px 0 0 0">Your companions’ memories, journals, and vault remain completely untouched.</p>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="act small" data-settings-panel="updates">See what’s new &amp; update</button>
-      </div>
+  ${updateInfo?.has_update?`<div class="notice-strip update-strip">
+    <div class="update-strip-text">
+      <p><strong>Tamanitomo v${esc(updateInfo.latest_version)}</strong> is available. (Installed: v${esc(updateInfo.version)})</p>
+      <p class="dim small">Your companions’ memories, journals, and vault remain completely untouched.</p>
     </div>
+    <button class="act small" data-settings-panel="updates">See what’s new &amp; update</button>
   </div>`:''}
 
   <div class="presence-sanctuary">
@@ -1355,14 +1351,14 @@ async function openRetryProviderDialog(item){
       </div>
       <div style="margin-bottom:14px">
         <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">Select Provider Preset</label>
-        <div class="provider-preset-list" style="display:flex;flex-direction:column;gap:8px">
+        <div class="provider-preset-list">
           ${presets.map((p,idx)=>`
-            <label class="provider-preset-option" style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;cursor:pointer">
+            <label class="provider-preset-option">
               <input type="radio" name="retry-preset" value="${esc(p.id)}" ${idx===0?'checked':''}>
-              <div style="flex:1">
-                <div style="font-weight:600;font-size:13px">${esc(p.name)}</div>
-                <div style="font-size:11px;color:var(--dim,#94a3b8)">Engine: ${esc(p.provider||'custom')} ${p.model?'· Model: '+esc(p.model):''}</div>
-              </div>
+              <span class="provider-preset-detail">
+                <span class="provider-preset-name">${esc(p.name)}</span>
+                <span class="provider-preset-engine">Engine: ${esc(p.provider||'custom')}${p.model?' · Model: '+esc(p.model):''}</span>
+              </span>
             </label>
           `).join('')}
         </div>
@@ -1380,22 +1376,20 @@ async function openRetryProviderDialog(item){
   `;
   dialog('Try with Another Provider',bodyHtml);
   $('retry-modal-cancel').onclick=()=>$('product-dialog').close();
-  $('retry-modal-submit').onclick=async()=>{
+  $('retry-modal-submit').onclick=()=>{
     const selectedInput=document.querySelector('input[name="retry-preset"]:checked');
     if(!selectedInput)return;
-    const presetId=selectedInput.value;
-    const newSeed=$('retry-new-seed').checked;
-    const submitBtn=$('retry-modal-submit');
-    const statusEl=$('retry-status-msg');
-    submitBtn.disabled=true;
-    submitBtn.textContent='Generating…';
-    statusEl.style.display='none';
-    try{
-      const payload={preset_id:presetId};
-      if(newSeed)payload.seed=Math.floor(Math.random()*1000000000);
-      const res=await post(`/timeline/${captureId}/rerender`,payload);
-      $('product-dialog').close();
-      notice('New variant generated for this moment!');
+    const payload={preset_id:selectedInput.value};
+    if($('retry-new-seed').checked)payload.seed=Math.floor(Math.random()*1000000000);
+
+    // Generation takes as long as it takes. Awaiting it behind an open modal meant
+    // the page was held hostage by a picture nobody had to wait for -- and when the
+    // provider failed, the only place that said so was a dialog the user was stuck
+    // in. It runs on its own now and reports back through the usual toast.
+    $('product-dialog').close();
+    notice('Generating a new variant… you can carry on; this will finish on its own.');
+
+    post(`/timeline/${captureId}/rerender`,payload).then(res=>{
       if(res.capture?.variants){
         item.variants=res.capture.variants;
       }else if(res.variant){
@@ -1409,14 +1403,14 @@ async function openRetryProviderDialog(item){
         item.rating=res.variant.rating||'safe';
         item.blur=Boolean(res.variant.blur);
       }
-      renderViewerPhoto();
+      notice('New variant ready for this moment.');
+      // Only redraw the viewer if it is still open; a render finishing after the
+      // user moved on must not drag them back to the picture they left.
+      if($('photo-viewer')?.open)renderViewerPhoto();
       if(current==='photos')render('photos');
-    }catch(err){
-      submitBtn.disabled=false;
-      submitBtn.textContent='Generate Variant';
-      statusEl.textContent='Generation failed: '+err.message;
-      statusEl.style.display='block';
-    }
+    }).catch(err=>{
+      notice('Could not generate a variant: '+(err&&err.message?err.message:'the provider gave no image'),true);
+    });
   };
 }
 async function openContent(item,items=null,index=0){

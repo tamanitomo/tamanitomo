@@ -2553,3 +2553,57 @@ body[data-page="chat"] main{padding:0}
 .prompt-text{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:11.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word;color:#cbd5e1;margin:0}
 .provider-preset-option:hover{background:rgba(255,255,255,0.06)!important;border-color:rgba(255,255,255,0.2)!important}
 
+
+/* The update notice and the provider picker both used to lay out as a bare flex
+   row. A flex child's min-width is `auto`, so neither the sentence nor the button
+   could shrink past its own content -- they simply crushed each other, and on a
+   narrow window the version text wrapped one character to a line. Both now give
+   the prose a flex basis it may shrink from, and keep the control at its natural
+   size beside it. */
+.update-strip{
+  border-left-color:var(--warn);
+  background:color-mix(in srgb,var(--warn) 8%,transparent);
+  flex-wrap:wrap;
+  align-items:center;
+}
+.update-strip-text{flex:1 1 300px;min-width:0}
+.update-strip-text p{margin:0}
+.update-strip-text p+p{margin-top:3px}
+.update-strip .act{flex:0 0 auto;white-space:nowrap}
+@media(max-width:560px){
+  .update-strip .act{width:100%}
+}
+
+.provider-preset-list{display:flex;flex-direction:column;gap:8px}
+.provider-preset-option{
+  display:flex;align-items:center;gap:12px;padding:10px 12px;cursor:pointer;
+  border-radius:8px;
+  background:color-mix(in srgb,var(--ink) 3%,transparent);
+  border:1px solid var(--edge);
+}
+.provider-preset-option:hover{background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.provider-preset-option:has(input:checked){
+  border-color:var(--accent-line);
+  background:color-mix(in srgb,var(--accent) 14%,transparent);
+}
+/* Without this the radio is a flex item like any other: it stretches, and the
+   name and engine beside it lose the room they needed. */
+.provider-preset-option input[type=radio]{flex:0 0 auto;width:16px;height:16px;margin:0}
+.provider-preset-detail{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
+.provider-preset-name{font-weight:600;font-size:13px;color:var(--ink)}
+.provider-preset-engine{font-size:11.5px;color:var(--dim);overflow-wrap:anywhere}
+
+/* `.notice-strip` is a flex ROW, which is right for a one-line strip with a button
+   on the end. Panels that put a heading, a paragraph, release notes and an action
+   bar inside one were handing each block to the row as a separate column, so every
+   one of them was crushed into a sliver and read a word per line. This keeps the
+   strip's framing and lays its contents out as the blocks they are. */
+.notice-strip.notice-stack{
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  justify-content:flex-start;
+  gap:0;
+}
+.notice-strip.notice-stack>p{margin:0}
+.notice-strip.notice-stack>p+p{margin-top:4px}

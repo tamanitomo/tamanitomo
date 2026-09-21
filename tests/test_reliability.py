@@ -234,3 +234,44 @@ class ReliabilityTests(unittest.TestCase):
         subprocess.run([node, str(Path(__file__).with_name('test_onboarding_ui.js')),
                         ','.join(catalog.BOUNDARIES), ','.join(sorted(known_answer_keys()))],
                        check=True)
+
+
+class NoticeStripAndRetryLayoutTests(unittest.TestCase):
+    """Layout faults that only show up on a real screen, pinned as source facts.
+
+    `.notice-strip` is a flex ROW. That suits a one-line strip with a button on the
+    end, and ruins any panel that puts a heading, a paragraph, release notes and an
+    action bar inside one -- each block becomes its own crushed column, and the
+    update notice read one word per line down a sliver on the left.
+    """
+
+    def source(self, name):
+        return (Path(__file__).resolve().parents[1] / "kit/app/static" / name).read_text(encoding="utf-8")
+
+    def test_multi_block_notices_opt_out_of_the_flex_row(self):
+        css = self.source('product.css')
+        self.assertIn('.notice-strip.notice-stack', css)
+        self.assertIn('flex-direction:column', css.split('.notice-strip.notice-stack')[1][:200])
+        settings = self.source('settings.js')
+        # Both branches of the Updates panel hold block content.
+        self.assertEqual(settings.count('notice-strip notice-stack'), 2)
+
+    def test_the_provider_radio_cannot_stretch(self):
+        """A bare radio in a flex row is a flex item like any other, so it grew and
+        squeezed the provider name beside it into nothing."""
+        css = self.source('product.css')
+        rule = css.split('.provider-preset-option input[type=radio]')[1][:120]
+        self.assertIn('flex:0 0 auto', rule)
+        self.assertIn('.provider-preset-detail', css)
+        self.assertIn('min-width:0', css.split('.provider-preset-detail')[1][:160])
+
+    def test_generating_a_variant_does_not_hold_the_page(self):
+        """The dialog used to await the render, so a slow provider pinned the user
+        to a modal and a failed one reported only inside it."""
+        js = self.source('product.js')
+        handler = js.split("$('retry-modal-submit').onclick=")[1].split('\n  };')[0]
+        self.assertNotIn('await post(', handler, 'the render is awaited behind the modal again')
+        close_at = handler.index("$('product-dialog').close()")
+        post_at = handler.index('post(`/timeline/')
+        self.assertLess(close_at, post_at, 'the dialog must close before the request starts')
+        self.assertIn('.catch(', handler, 'a failed render has to reach the toast')

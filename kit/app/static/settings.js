@@ -629,7 +629,7 @@ const settingsPanels=[
     <div><dt>Installed</dt><dd>v${esc(d.version)}</dd></div>
     <div><dt>Latest released</dt><dd>${d.latest_version?'v'+esc(d.latest_version):'Not checked'}</dd></div>
   </dl>
-  ${d.has_update?`<div class="notice-strip" style="border-left-color:var(--accent);margin-top:16px">
+  ${d.has_update?`<div class="notice-strip notice-stack" style="border-left-color:var(--accent);margin-top:16px">
     <p><strong>Tamanitomo v${esc(d.latest_version)} is available.</strong></p>
     <p class="dim small" style="margin-top:4px">This will update the Tamanitomo application. Your companion’s memories, emotions, journals, and vault will remain completely untouched.</p>
     <section class="update-release-notes" aria-labelledby="update-release-notes-title">
@@ -640,7 +640,7 @@ const settingsPanels=[
       <button class="act update-primary-action" id="btn-inapp-update"><span aria-hidden="true">⚡</span><span>Update to v${esc(d.latest_version)} now</span></button>
       ${d.release_url?`<a class="link-button" href="${esc(d.release_url)}" target="_blank" rel="noopener">Open release page →</a>`:''}
     </div>
-  </div>`:`<div class="notice-strip" style="margin-top:16px">
+  </div>`:`<div class="notice-strip notice-stack" style="margin-top:16px">
     <p class="dim" style="margin:0">${d.error?esc(d.error):d.latest_version?'You have the latest stable release.':'No update check is available yet.'} Installed: v${esc(d.version)}.</p>
     <div style="margin-top:10px">
       <button class="quiet" id="btn-check-updates">🔄 Check for updates</button>
