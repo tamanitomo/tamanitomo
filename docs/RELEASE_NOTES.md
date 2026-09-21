@@ -1,10 +1,8 @@
-Tamanitomo 2.3.8 fixes deleting a picture that shares a moment with others.
+Tamanitomo 2.3.9 fixes the prompt details shown against a picture.
 
-When a moment holds several renders, switching between them in the viewer repointed at the new picture but kept the previous one's version marker. Every delete that followed described two different files at once and was refused as a conflict, so the picture stayed and nothing said why.
+A picture is compiled into two forms — one written as labelled sections, one as a comma-separated list — and each was stored under the other's name. The details pane therefore showed them with their titles swapped, plainly visible to anyone who read a word of either. Pictures taken before this are translated rather than relabelled, so an older one no longer shows its prompts reversed.
 
-Behind that, a delete that did go through could not finish: the moment was looked up from the picture's own filename, which is not the name of the moment it belongs to, so the file went and the moment carried on listing it.
-
-Both now go through one place. Deleting one render of a moment removes just that render, promotes another to take its place if it was the one on display, and retires the moment only when nothing is left. A record left behind by an earlier failed attempt is tidied rather than refused.
+Both forms describe the same scene, so showing them open beside each other repeated every wardrobe and activity line twice. The form that was actually sent now leads, named for what it is and marked with the provider it went to, and the other is folded away.
 
 ### Install
 

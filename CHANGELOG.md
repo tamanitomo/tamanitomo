@@ -1,3 +1,9 @@
+## 2.3.9 — Prompt details (2026-09-21)
+
+- Store each compiled prompt under its own name; the details pane had been showing the two forms with their titles swapped.
+- Translate pictures recorded under the previous names instead of relabelling them, so older pictures read correctly too.
+- Show the form that was actually sent, with the other folded away, rather than printing the same scene twice.
+
 ## 2.3.8 — Deleting one picture from a moment (2026-09-21)
 
 - Carry a picture's version marker with it when switching between renders of the same moment, so deleting one is no longer refused as a conflict.
