@@ -1,3 +1,12 @@
+## 2.3.10 — Pictures stay with their companion (2026-09-21)
+
+- Scope a moment's identifier to the companion, so two companions can no longer produce pictures with the same filename.
+- Attach the companion to the variant thumbnail, which was the one media link built without it and could show another companion's picture.
+- Honour a seed sent with a regeneration; asking for a new one previously had no effect.
+- Store each compiled prompt under its own name, and translate pictures recorded under the previous names.
+- Give the wardrobe, lighting and framing one place each instead of repeating them inside the scene.
+- Record what is actually being done, and mark a moment as private rather than inferring it from wording.
+
 ## 2.3.9 — Prompt details (2026-09-21)
 
 - Store each compiled prompt under its own name; the details pane had been showing the two forms with their titles swapped.
