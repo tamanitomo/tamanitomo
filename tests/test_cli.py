@@ -797,7 +797,12 @@ class SettingsTests(unittest.TestCase):
             now=dt.datetime(2026,3,15,12,0,tzinfo=ZoneInfo(c.timezone))
             # 5 nights of activity just after 23:00
             messages=[dt.datetime(2026,3,day,23,15,tzinfo=ZoneInfo(c.timezone)) for day in range(1,6)]
-            plan=quiet.apply(c,now=now,messages=messages)
+            # apply() runs in-process, so unlike run() it inherits this process's
+            # environment -- without the shim it reaches for a real `hermes` on PATH,
+            # which a developer machine has and a clean checkout does not.
+            with patch.dict(os.environ,{
+                    'COMPANION_HERMES_COMMAND':json.dumps([sys.executable,str(ROOT/'tests/fake_hermes.py')])}):
+                plan=quiet.apply(c,now=now,messages=messages)
             self.assertTrue(plan.get('applied'))
             self.assertEqual(plan.get('quiet_start'),'23:30')
             schedules={j['name']:j.get('schedule',{}).get('expr') for j in json.loads((home/'cron/jobs.json').read_text())['jobs']}
