@@ -18,7 +18,22 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - name: Validate release version
         run: test "$GITHUB_REF_NAME" = "v$(cat VERSION)"
-      - run: python -m pytest -q
+      - name: Run tests
+        run: |
+          set -o pipefail
+          python -m pytest -q 2>&1 | tee /tmp/pytest.log && exit 0
+          {
+            echo "### pytest failed on the runner"
+            echo ""
+            echo "This suite passes on a clean checkout locally, so a failure here is"
+            echo "usually environmental. The tail is reproduced so it can be read without"
+            echo "downloading the log."
+            echo ""
+            echo '```'
+            tail -80 /tmp/pytest.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
       - name: Check browser scripts
         run: node tests/test_updates_ui.js
       - name: Build official asset
