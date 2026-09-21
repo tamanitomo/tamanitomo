@@ -22,17 +22,16 @@ jobs:
         run: |
           set -o pipefail
           python -m pytest -q 2>&1 | tee /tmp/pytest.log && exit 0
-          {
-            echo "### pytest failed on the runner"
-            echo ""
-            echo "This suite passes on a clean checkout locally, so a failure here is"
-            echo "usually environmental. The tail is reproduced so it can be read without"
-            echo "downloading the log."
-            echo ""
-            echo '```'
-            tail -80 /tmp/pytest.log
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          python - <<'PY'
+          import pathlib
+          log = pathlib.Path('/tmp/pytest.log').read_text(errors='replace')
+          # Annotations are the only part of a failed run readable without a token,
+          # so the failure has to travel as one. Newlines are escaped per the
+          # workflow-command format or everything after the first is dropped.
+          tail = log[-5000:]
+          esc = tail.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print(f"::error title=pytest failed on the runner::{esc}")
+          PY
           exit 1
       - name: Check browser scripts
         run: node tests/test_updates_ui.js
