@@ -1,5 +1,4 @@
 [
-  ".github/workflows/test.yml",
   ".gitignore",
   "CHANGELOG.md",
   "LICENSE",
@@ -221,6 +220,7 @@
   "tests/test_peer.py",
   "tests/test_portrait.py",
   "tests/test_presence.py",
+  "tests/test_sleep.py",
   "tests/test_present.py",
   "tests/test_prompts.py",
   "tests/test_reliability.py",
