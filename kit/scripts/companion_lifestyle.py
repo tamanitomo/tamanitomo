@@ -8,6 +8,8 @@ import json
 from zoneinfo import ZoneInfo
 
 CATEGORIES=('day','active','sleep','underwear','outerwear','footwear')
+# Long enough for any real shower, short enough that an evening cannot be spent in one.
+MAX_BATH_MINUTES=40
 GUIDANCE='''EVERYDAY LIFE: Follow the routine anchors, including meals, getting ready, interests,
 exercise, errands and time outside. Choose specific places and enjoyable activities that fit your
 personality. These are fictional outings, never real bookings or claims about the human. Carry an
@@ -102,18 +104,28 @@ def evolve(c,data,outfit,previous,closet,now):
     if active and (choice['anchor'] not in [a['id'] for a in active] or choice['decision']=='free'):
         raise ValueError('ROUTINE: address an active anchor by its supplied id; follow it or explain a deferral')
     if not active and choice and choice['decision']!='free':raise ValueError('ROUTINE: no active anchor; use decision free and explain your chosen activity')
+    from companion_presence import undress
+    still_bathing=undress({'outfit':outfit})[0]=='bathing'
     if previous:
         before=previous['state'];same=(data.get('activity_change')=='continue' or data.get('activity')==before.get('activity'))
         elapsed_activity=(now-day.timestamp(before.get('started_at',previous['recorded_at']))).total_seconds()/60
-        act_text=(data.get('activity') or before.get('activity') or '').lower()
-        if any(w in act_text for w in ('shower','bathing','in the shower','warm shower')):
-            if elapsed_activity>40:
-                raise ValueError('A shower should not take longer than 40 minutes. Step out of the shower, dry off, and change.')
+        # A shower is a short transition, and staying in one all evening was the
+        # thing this guards against. It reads the recorded `bathing` state rather
+        # than the sentence: matching "bathing" as a substring made a long afternoon
+        # of SUNbathing fail for taking too long in a shower it was never in. It also
+        # only fires while she is STILL in the bath -- rejecting "stepping out of the
+        # shower" blocked the very transition it was asking for.
+        was_bathing=undress(before)[0]=='bathing'
+        if was_bathing and still_bathing and elapsed_activity>MAX_BATH_MINUTES:
+            raise ValueError(f'A shower should not take longer than {MAX_BATH_MINUTES} minutes. '
+                             'Step out of the shower, dry off, and change.')
         if same and before.get('duration_minutes') and elapsed_activity>=before['duration_minutes'] and not data.get('delay_reason','').strip():
             raise ValueError('ACTIVITY OVERDUE: start the next activity, or give an explicit delay_reason; extending duration_minutes alone is not a transition')
-    if any(w in (data.get('activity') or '').lower() for w in ('shower','bathing','in the shower')):
+    if still_bathing:
         dur=data.get('duration_minutes')
-        if dur and dur>40:raise ValueError('A shower should not take longer than 40 minutes. Plan a realistic shower duration.')
+        if dur and dur>MAX_BATH_MINUTES:
+            raise ValueError(f'A shower should not take longer than {MAX_BATH_MINUTES} minutes. '
+                             'Plan a realistic shower duration.')
     result=initial(previous,c);result['routine_choice']=choice;result['delay_reason']=data.get('delay_reason','');result.setdefault('wearing_since',{});actions=data.get('care_actions',[]);additions=data.get('wardrobe_additions',[])
     from companion_presence import VIRTUAL_TOKENS
     old_ids={x['id'] for x in previous['state']['outfit'] if x['id'] not in VIRTUAL_TOKENS} if previous else set()

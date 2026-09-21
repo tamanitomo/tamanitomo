@@ -56,9 +56,11 @@ def undress(state):
     sunbathing, or shopping for a bathing suit -- and did it while the record
     plainly said what she was wearing.
     """
-    items=[i for i in (state.get('outfit') or []) if isinstance(i,dict)]
-    ids={i.get('id','') for i in items}
-    text=', '.join(i['description'] for i in items if i.get('description'))
+    # Both shapes reach this: a stored state holds {'id','description'} pairs, while a
+    # validator sees the raw id list the update was written with.
+    items=state.get('outfit') or []
+    ids={i.get('id','') if isinstance(i,dict) else str(i) for i in items}
+    text=', '.join(i['description'] for i in items if isinstance(i,dict) and i.get('description'))
     if not items:return 'undressed',''
     for token in BARE_TOKENS:
         if token in ids:return ('bathing' if token=='bathing' else 'undressed'),''

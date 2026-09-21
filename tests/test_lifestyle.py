@@ -198,12 +198,30 @@ class LifestyleTests(unittest.TestCase):
         self.assertTrue(any('professional daytime attire' in act for act in col_acts))
         self.assertTrue(any('deep work' in act for act in col_acts))
 
-    def test_shower_duration_cannot_exceed_40_minutes(self):
-        self.write(15,activity='warm shower',location='bathroom',care_actions=self.actions('shower'))
-        self.write(30,activity='warm shower',location='bathroom')
+    def test_a_shower_cannot_last_all_evening(self):
+        """Read from the recorded bathing state, not the word in the sentence."""
+        self.write(15,outfit=['bathing'],activity='warm shower',location='bathroom',
+                   care_actions=self.actions('shower'))
+        self.write(30,outfit=['bathing'],activity='warm shower',location='bathroom')
         with self.assertRaisesRegex(ValueError,'40 minutes'):
-            self.write(60,activity='warm shower',location='bathroom',
+            self.write(60,outfit=['bathing'],activity='warm shower',location='bathroom',
                        routine_choice=dict(anchor='daily-0',decision='defer',reason='still showering'))
+
+    def test_stepping_out_of_a_long_shower_is_not_blocked(self):
+        """The rule asks her to get out; rejecting the update that does exactly that
+        left the only correct move unavailable."""
+        self.write(15,outfit=['bathing'],activity='warm shower',location='bathroom',
+                   care_actions=self.actions('shower'))
+        self.write(60,outfit=['towel'],activity='stepping out of the shower',location='bathroom',
+                   routine_choice=dict(anchor='daily-0',decision='defer',reason='finished washing'))
+        self.assertEqual([i['id'] for i in p.current(self.c)['state']['outfit']],['towel'])
+
+    def test_a_long_afternoon_of_sunbathing_is_not_a_long_shower(self):
+        """'bathing' as a substring made sunbathing fail for overrunning a shower."""
+        self.write(15,activity='sunbathing on the deck',location='the back garden')
+        self.write(120,activity='sunbathing on the deck',location='the back garden',
+                   routine_choice=dict(anchor='daily-0',decision='defer',reason='enjoying the sun'))
+        self.assertIn('sunbathing',p.current(self.c)['state']['activity'])
 
     def test_partial_undress_marks_only_removed_items_dirty(self):
         p.update_wardrobe(self.c,[dict(id='top',description='cotton top',use='day',category='day',condition='clean'),
