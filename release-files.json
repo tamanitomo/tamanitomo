@@ -219,6 +219,7 @@
   "tests/test_outbox.py",
   "tests/test_peer.py",
   "tests/test_portrait.py",
+  "tests/fixture_conversation.py",
   "tests/test_relationship_pacing.py",
   "tests/test_prompt_sections.py",
   "tests/test_presence.py",
