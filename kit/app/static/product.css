@@ -12,6 +12,7 @@
      of these so the values line up in a column instead of staggering. */
   --lane-label:clamp(98px,26vw,118px);
   --presence-label:clamp(76px,22vw,96px);
+  --contact-label:clamp(100px,20vw,118px);
   /* surfaces, darkest to lightest */
   --bg:#101217;
   --panel:#191c23;
@@ -1674,6 +1675,12 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
 .photo-chip:hover{background:var(--surface-3);color:var(--ink)}
 .photo-chip[aria-selected=true]{background:color-mix(in srgb,var(--accent) 22%,transparent);border-color:var(--accent-line);color:var(--ink);font-weight:600}
 .photo-chip-icon{margin-left:auto;padding:7px 11px;font-size:15px}
+/* The two trailing icon chips are a pair, so only the first claims the gap. */
+.photo-chip-icon+.photo-chip-icon{margin-left:0}
+/* The help chip answers a question rather than filtering anything, so it sits a
+   step quieter than the controls beside it. */
+#photo-expectations{color:var(--faint);font-weight:700}
+#photo-expectations:hover{color:var(--ink)}
 
 .photo-date-marker{
   position:absolute;top:6px;left:6px;z-index:2;pointer-events:none;
@@ -2460,6 +2467,26 @@ body[data-page="chat"] main{padding:0}
 #settings .toggle-row{grid-template-columns:36px minmax(0,1fr);padding:8px;gap:8px;margin:8px 0;min-height:44px;background:transparent}
 #settings .toggle-state{display:none}
 #settings .toggle-copy small{margin-top:2px}
+
+/* Compact contact & outreach settings */
+.contact-settings{margin:18px 0 10px;display:flex;flex-direction:column;gap:12px}
+.contact-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-height:36px}
+.contact-label{flex:0 0 var(--contact-label,115px);font-weight:600;font-size:13.5px;color:var(--ink);letter-spacing:-.01em}
+.contact-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:1;min-width:0}
+.contact-controls input[type=time]{width:auto;min-width:115px;max-width:130px;padding:8px 10px;margin:0}
+.contact-controls input[type=text],.contact-controls input:not([type]){width:auto;min-width:170px;max-width:320px;padding:8px 10px;margin:0}
+.contact-controls select{width:auto;min-width:170px;max-width:280px;padding:8px 10px;margin:0}
+.contact-controls .range-sep{color:var(--dim);font-weight:600;user-select:none;flex:none}
+.daily-limit-field{display:inline-flex;align-items:center;gap:6px}
+.daily-limit-field input[type=number]{width:65px;text-align:center;padding:8px 6px;margin:0;font-variant-numeric:tabular-nums}
+.compact-toggle{margin-left:4px;padding:4px 0}
+.compact-toggle .switch-label{color:var(--ink);font-size:13px;font-weight:500}
+#settings .switch-container input:checked + .switch-slider{background:var(--accent)}
+.sensor-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px;margin-top:10px}
+@media(max-width:560px){
+  .contact-row{flex-direction:column;align-items:flex-start;gap:6px}
+  .contact-label{flex:none}
+}
 @media(max-width:1000px){#settings .panel-footer{bottom:64px}}
 #settings .voice-hero-card{display:none}
 #settings .voice-sample-chips{display:none}

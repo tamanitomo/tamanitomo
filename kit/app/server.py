@@ -226,11 +226,16 @@ def build(home=None,token='',state_dir=None):
         if not has_voice:
             setup_pending.append('voice')
 
+        state = display_scene.get('state', {}) if isinstance(display_scene, dict) else {}
+        commitments = [dict(item) for item in state.get('commitments', [])
+                       if isinstance(item, dict)]
+
         return {'agent':c.agent,'human':c.human,'type':c.agent_type,'home':str(c.home),
                 'timezone':c.timezone,'age':c.current_age(),'birthday_in':c.birthday_in(),
                 'state':display_scene,'confirmed_at':anchor['recorded_at'] if anchor else None,
                 'moods':presence.mood_history(c,40),
                 'loops':loops.loops(c),'missions':missions.missions(c,'open',now),
+                'commitments':commitments,
                 'queued':[e for e in outbox.fold(c) if e['status']=='queued'],
                 'thread':thread.read(c,now),
                 'bars':(__import__('companion_bars').compute(c,now) if c.bars else None),
@@ -262,7 +267,8 @@ def build(home=None,token='',state_dir=None):
                          'activity':state.get('activity',''),'location':state.get('location',''),
                          'mood':state.get('mood',''),
                          'outfit':', '.join(i['description'] for i in raw_outfit if isinstance(i,dict) and 'description' in i)})
-        return {'captures':rows,'albums':tl.albums(c),
+        return {'captures':rows,'albums':tl.albums(c),'agent':c.agent,
+                'interval_minutes':c.image_interval_minutes,
                 'budget_gb':c.timeline_budget_gb,'enabled':c.image_timeline,'attempts':attempts[:30]}
 
     @app.get('/api/life')

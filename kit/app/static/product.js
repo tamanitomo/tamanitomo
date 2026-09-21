@@ -527,7 +527,19 @@ function renderWardrobeCard(closet,s,stage=0){
 
 let calYear=new Date().getFullYear(),calMonth=new Date().getMonth(),selectedCalDate=null;
 
-function buildCalendarHtml(agentName,missions,prefix='cal'){
+function calendarEvents(missions,commitments=[]){
+  const missionEvents=(missions||[]).map(x=>({...x,isCommitment:false}));
+  const commitmentEvents=(commitments||[]).filter(x=>x&&x.starts_at).map(x=>({
+    ...x,
+    wanted_by:String(x.starts_at).slice(0,10),
+    detail:[x.starts_at&&x.ends_at?`${x.starts_at} – ${x.ends_at}`:'',x.reason||''].filter(Boolean).join(' · '),
+    isCommitment:true
+  }));
+  return [...missionEvents,...commitmentEvents];
+}
+
+function buildCalendarHtml(agentName,missions,commitments=[],prefix='cal'){
+  const events=calendarEvents(missions,commitments);
   const monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
   const monthTitle=`${monthNames[calMonth]} ${calYear}`;
 
@@ -544,7 +556,7 @@ function buildCalendarHtml(agentName,missions,prefix='cal'){
     const dayStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     const isToday=dayStr===todayStr;
     const isSelected=dayStr===selectedCalDate;
-    const dayMissions=missions.filter(x=>x.wanted_by===dayStr);
+    const dayMissions=events.filter(x=>x.wanted_by===dayStr);
 
     calendarCellsHtml+=`
       <div class="calendar-cell ${isToday?'is-today':''} ${isSelected?'is-selected':''}" data-${prefix}-date="${esc(dayStr)}">
@@ -555,7 +567,7 @@ function buildCalendarHtml(agentName,missions,prefix='cal'){
       </div>`;
   }
 
-  const selectedDayMissions=missions.filter(x=>x.wanted_by===selectedCalDate);
+  const selectedDayMissions=events.filter(x=>x.wanted_by===selectedCalDate);
 
   return `
   <div class="card calendar-card" id="${prefix}-card">
@@ -597,7 +609,7 @@ function buildCalendarHtml(agentName,missions,prefix='cal'){
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               <span class="pill ${x.status==='open'?'status-good':x.status==='dropped'?'status-bad':''}">${esc(x.status)}</span>
-              ${x.status==='open'?`<button class="quiet small-btn" data-${prefix}-drop="${esc(x.id)}">Drop</button>`:''}
+              ${x.status==='open'&&!x.isCommitment?`<button class="quiet small-btn" data-${prefix}-drop="${esc(x.id)}">Drop</button>`:''}
             </div>
           </div>`).join('')}
       </div>`:
@@ -613,7 +625,7 @@ function buildCalendarHtml(agentName,missions,prefix='cal'){
   </div>`;
 }
 
-function wireCalendarComponent(root,missions,agentName,refreshFn,prefix='cal'){
+function wireCalendarComponent(root,events,agentName,refreshFn,prefix='cal'){
   const prevBtn=$(prefix+'-prev'),nextBtn=$(prefix+'-next'),todayBtn=$(prefix+'-today');
   if(prevBtn)prevBtn.onclick=async()=>{
     calMonth--;
@@ -839,7 +851,7 @@ workspaceHandlers.now=async()=>{
     <div>
       <section class="home-block" data-block="calendar">
       <div class="section-heading" style="margin-top:0"><h2>Calendar</h2>${jump('loops','Planner')}</div>
-      ${buildCalendarHtml(d.agent,d.missions,'home-cal')}
+      ${buildCalendarHtml(d.agent,d.missions,d.commitments,'home-cal')}
 
       </section>
 
@@ -852,7 +864,7 @@ workspaceHandlers.now=async()=>{
 
   wireRoutes($('now'));
   if($('presence-switch'))$('presence-switch').onclick=openCompanionSwitchDialog;
-  wireCalendarComponent($('now'), d.missions, d.agent, () => render('now'), 'home-cal');
+  wireCalendarComponent($('now'), calendarEvents(d.missions,d.commitments), d.agent, () => render('now'), 'home-cal');
   if($('read-latest'))$('read-latest').onclick=()=>{if(entry?.id)selectedJournal=entry.id;showTab('journals');};
   for(const b of $('now').querySelectorAll('[data-home-file]'))b.onclick=()=>openContent(content.items[Number(b.dataset.homeFile)]);
 };
@@ -1326,6 +1338,7 @@ workspaceHandlers.photos=async()=>{
         ${collections.map(([value,label])=>`<button class="photo-chip" role="tab" data-collection="${esc(value)}"
           aria-selected="${value===photoBrowse.collection}">${esc(label)}</button>`).join('')}
         <button class="photo-chip" id="photo-select-toggle" aria-pressed="false">Select</button>
+        <button class="photo-chip photo-chip-icon" id="photo-expectations" title="Why this many photos?" aria-label="Why this many photos?">?</button>
         <button class="photo-chip photo-chip-icon" id="photo-manage-settings-btn" title="Manage photo settings" aria-label="Manage photo settings">\u2699</button>
       </div>
     </div>
@@ -1339,6 +1352,7 @@ workspaceHandlers.photos=async()=>{
       <button class="quiet viewer-btn-danger" id="sel-delete">Delete</button>
     </div>`;
   if($('photo-manage-settings-btn'))$('photo-manage-settings-btn').onclick=openPhotoSettings;
+  if($('photo-expectations'))$('photo-expectations').onclick=()=>dialog('Why this many photos?',`<p>A photo is taken when there is something new to see, not on a timer. The timeline looks every ${esc(String(tl.interval_minutes||15))} minutes and skips the slot when the scene has not visibly changed, so a quiet hour of the same activity stays one picture rather than four.</p><p>Nothing is photographed while ${esc(tl.agent||'she')} is asleep. She writes down how long she means to sleep beforehand, and the gallery picks up again when she wakes.</p><p>Quiet hours are a separate setting. They decide when she may <em>message</em> you, not whether she carries on with her day.</p>`);
   if($('photo-select-toggle'))$('photo-select-toggle').onclick=toggleSelectMode;
   if(selectMode&&$('photo-grid'))$('photo-grid').classList.add('is-select-mode');
   const draw=()=>{
@@ -1673,7 +1687,7 @@ workspaceHandlers.loops=async()=>{
     <div class="stat-item"><span>Open threads</span><strong>${loops.length}</strong></div>
   </div>
 
-  ${buildCalendarHtml(d.agent, missions, 'cal')}
+  ${buildCalendarHtml(d.agent, missions, d.commitments, 'cal')}
 
   <div class="planner-layout">
     <div class="planner-column">
@@ -1734,7 +1748,7 @@ workspaceHandlers.loops=async()=>{
     </div>
   </div>`;
 
-  wireCalendarComponent($('loops'), missions, d.agent, () => workspaceHandlers.loops(), 'cal');
+  wireCalendarComponent($('loops'), calendarEvents(missions,d.commitments), d.agent, () => workspaceHandlers.loops(), 'cal');
   if($('mwhen'))$('mwhen').value=selectedCalDate;
 
   $('madd').onclick=async()=>{
@@ -1815,14 +1829,17 @@ function appearancePanelHTML(){
   </div>
 
   <h3 class="section-subheading">Hermes runtime</h3>
-  <div style="max-width:400px">
-    <label>Environment
-      <select id="settings-installation-select">
-        <option value="existing">Existing Hermes (system host)</option>
-        <option value="managed">Kit-managed Hermes (isolated)</option>
-      </select>
-    </label>
-    <p class="dim small">Private workspace · stored locally on this machine.</p>
+  <div class="contact-settings" style="margin-top:10px">
+    <div class="contact-row">
+      <label class="contact-label" for="settings-installation-select">Environment:</label>
+      <div class="contact-controls">
+        <select id="settings-installation-select">
+          <option value="existing">Existing Hermes (system host)</option>
+          <option value="managed">Kit-managed Hermes (isolated)</option>
+        </select>
+        <span class="dim small">Private workspace · stored locally</span>
+      </div>
+    </div>
   </div>`;
 }
 function wireAppearancePanel(panel){
