@@ -86,19 +86,41 @@ class ContextWindowTests(unittest.TestCase):
             self.assertEqual(tokens, 272000)
             self.assertIn('model name', source)
 
-    def test_the_smallest_endpoint_wins_when_several_serve_it(self):
-        """Overrunning a window is a worse failure than under-using one."""
+    def window(self, cache, config='model:\n  default: big-model\n  provider: some-oauth\n'):
         import tempfile
         import companion_config as cc
         with tempfile.TemporaryDirectory() as tmp:
             home = pathlib.Path(tmp)
-            (home / 'config.yaml').write_text(
-                'model:\n  default: big-model\n  provider: some-oauth\n', encoding='utf-8')
+            (home / 'config.yaml').write_text(config, encoding='utf-8')
             (home / 'context_length_cache.yaml').write_text(
-                'context_lengths:\n'
-                '  big-model@https://a.invalid: 272000\n'
-                '  big-model@https://b.invalid: 131072\n', encoding='utf-8')
-            self.assertEqual(cc.detect_context_tokens(home, home)[0], 131072)
+                'context_lengths:\n' + ''.join(f'  {k}: {v}\n' for k, v in cache.items()),
+                encoding='utf-8')
+            return cc.detect_context_tokens(home, home)
+
+    def test_the_window_is_as_large_as_the_model_allows(self):
+        """Nothing should cap this but the person running it."""
+        tokens, _ = self.window({'big-model@https://a.invalid': 272000,
+                                 'big-model@https://b.invalid': 131072})
+        self.assertEqual(tokens, 272000)
+
+    def test_a_server_on_this_network_does_not_set_the_window_for_a_hosted_model(self):
+        """A local server is always configured with an address, and a same-named
+        model behind one may be an entirely different size."""
+        tokens, _ = self.window({'big-model@http://192.168.1.50:11434/v1': 8192,
+                                 'big-model@https://a.invalid': 272000})
+        self.assertEqual(tokens, 272000)
+        for private in ('http://127.0.0.1:11434/v1', 'http://10.0.0.4:11434/v1',
+                        'http://172.16.3.9:11434/v1', 'http://localhost:11434/v1'):
+            with self.subTest(endpoint=private):
+                tokens, source = self.window({f'big-model@{private}': 8192})
+                self.assertNotEqual(tokens, 8192, 'a LAN server sized a hosted model')
+
+    def test_an_explicit_setting_is_the_only_thing_that_caps_it(self):
+        tokens, source = self.window(
+            {'big-model@https://a.invalid': 272000},
+            config='model:\n  default: big-model\n  provider: some-oauth\n  context_length: 65536\n')
+        self.assertEqual(tokens, 65536)
+        self.assertIn('config.yaml', source)
 
 
 if __name__ == '__main__':

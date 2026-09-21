@@ -1,3 +1,10 @@
+## 2.9.1 — Uncapped windows, and the call you could not see (2026-09-21)
+
+- Take the largest window a model is measured at rather than the smallest, so nothing caps the context but an explicit `context_length`.
+- Ignore endpoints on the local network when sizing a model reached through a hosted provider; a same-named local model may be a different size entirely.
+- Show the second model call a pre-read job makes, and which setting governs it, instead of showing only the job's own model.
+- Stop describing an unrecognised job as sending nothing private, which was an assertion about a prompt the app had not read.
+
 ## 2.9.0 — People, and where her private life goes (2026-09-21)
 
 - Add a recurring cast of eight fictional friends, each with a rhythm, and offer whoever has not been seen lately alongside the evening's ideas. The field has existed since the beginning and nothing ever filled it.

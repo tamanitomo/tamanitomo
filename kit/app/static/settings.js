@@ -1017,6 +1017,7 @@ async function renderJobsPanel(host){
             ${j.no_agent?'<div><dt>Model tokens</dt><dd>None · script only</dd></div>':[['Last run','last_run'],['Last hour','hour'],['Last 24 hours','day'],['Last 7 days','week']].map(([label,key])=>`<div><dt>${label} tokens</dt><dd>${tokens(usage.jobs?.[j.id]?.[key])}</dd></div>`).join('')}
             <div><dt>Delivers to</dt><dd>${esc(j.deliver||'—')}</dd></div>
             ${j.sends?`<div><dt>Sends</dt><dd>${esc(j.sends)}</dd></div>`:''}
+            ${j.second_call?`<div><dt>Also calls</dt><dd>${esc(j.second_call.model)} via ${esc(j.second_call.provider)}${j.second_call.reasoning_effort?' · '+esc(j.second_call.reasoning_effort)+' reasoning':''}<br><small class="dim">${esc(j.second_call.why)} Set by <code>${esc(j.second_call.setting)}</code>, not by the model chosen below.</small></dd></div>`:''}
           </dl>
           ${j.last_error?`<div class="notice-strip"><p><strong>Last error</strong></p><pre class="command-block">${esc(j.last_error)}</pre></div>`:''}
           ${j.recommendation?`<div class="notice-strip"><p><strong>Recommended: ${esc(j.recommendation.model_role)} · ${esc(j.recommendation.reasoning_effort)} reasoning</strong></p><p class="dim small">${esc(j.recommendation.why)} <button type="button" class="link-button small" data-recommend-effort="${esc(j.recommendation.reasoning_effort)}">Use recommended effort</button></p></div>`:''}

@@ -1256,11 +1256,32 @@ def register(app, select, load, operations):
             out['prompt_chars']=len(prompt)
             out['last_error']=hr.redact(str(row.get('last_error') or ''))[:600] or None
             rows.append(out)
+        # A pre-read script runs before the agent turn and calls a model of its
+        # own, resolved from the companion's model tiers rather than from the
+        # job row. So one job makes two model calls with two different settings,
+        # and this page only ever showed one of them -- changing a job's model
+        # here left the call that actually writes her presence untouched.
+        preread=None
+        try:
+            import companion_worker_model as worker
+            preread=worker.resolve(companion,'loops')
+        except Exception:preread=None
         for row in rows:
             # A job the manifest does not know is still a job that runs. Say what
-            # can be said -- whether it calls a model -- rather than nothing.
-            row.setdefault('sensitivity','none' if row.get('no_agent') else 'routine')
+            # can be said -- whether it calls a model -- rather than asserting
+            # that nothing private is in a prompt nobody here has read.
+            if 'sensitivity' not in row:
+                row['sensitivity']='none' if row.get('no_agent') else 'routine'
+                row['sends']=('' if row.get('no_agent') else
+                              'Not one of the companion\u2019s own jobs. What it sends depends on '
+                              'the prompt it was given; read it below.')
             row.setdefault('sends','')
+            script=str(row.get('script') or '')
+            if preread and script.startswith('companion-local-') and not row.get('no_agent'):
+                row['second_call']={'why':'Its pre-read writes her presence before the agent turn.',
+                                    'setting':'models.loops','provider':preread['provider'],
+                                    'model':preread['model'],
+                                    'reasoning_effort':preread['reasoning_effort']}
             # A provider on a job that never calls one is noise that reads as data leaving.
             row['provider_matters']=row['sensitivity']!='none'
         groups=[{'key':k,**v,'jobs':[r['id'] for r in rows if r.get('sensitivity')==k]}

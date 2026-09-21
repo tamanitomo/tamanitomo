@@ -105,9 +105,12 @@ class SuggestionTests(unittest.TestCase):
         pool = {x['id']: x for x in life.palette(self.root)}
         self.assertIn('her-sit-on-the-pier-and-watch-the-boats', pool)
         self.assertTrue(pool['her-sit-on-the-pier-and-watch-the-boats']['hers'])
-        found = any('her-sit-on-the-pier-and-watch-the-boats' in self.ids(f'2026-09-{n:02d}', 8)
-                    for n in range(10, 25))
-        self.assertTrue(found, "her own idea is never offered back to her")
+        # The sampler is seeded per companion, and a temporary directory is a
+        # different companion every run -- so this asks across a wide enough
+        # span to be a statement about the weighting rather than about one draw.
+        appearances = sum('her-sit-on-the-pier-and-watch-the-boats' in self.ids(f'2026-{m:02d}-{n:02d}', 12)
+                          for m in (9, 10) for n in range(1, 29))
+        self.assertGreater(appearances, 0, "her own idea is never offered back to her")
 
     def test_an_idea_needs_something_to_call_it(self):
         with self.assertRaises(ValueError):

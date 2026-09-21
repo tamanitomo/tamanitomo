@@ -15,6 +15,7 @@ from __future__ import annotations
 import dataclasses, json, os, pathlib
 from typing import Optional
 from companion_platform import default_home, atomic_write
+import re
 
 CONFIG_NAME='companion.json'
 DEFAULT_CONTEXT_TOKENS=32768
@@ -523,12 +524,26 @@ def detect_context_tokens(home:pathlib.Path,hermes_root:Optional[pathlib.Path]=N
         # every lookup missed and the window fell back to the conservative
         # default -- which sized a 272k model as though it were 32k, and with it
         # the memory tier that is chosen from the window.
+        #
+        # The window should be whatever the model actually allows; only the
+        # person running it should cap that, and `model.context_length` above is
+        # where they do. So take the largest measured window for this model --
+        # but only from endpoints that are not on this network, because a local
+        # server is always configured with an address and a same-named model
+        # behind a hosted one may be an entirely different size.
         if not base:
-            matches=[v for k,v in cache.items() if k.split('@',1)[0]==name and sane(v)]
-            if matches:
-                # The smallest endpoint serving this model, since overrunning a
-                # window is a worse failure than under-using one.
-                return min(matches),'Hermes context_length_cache (model name)'
+            from urllib.parse import urlsplit as _split
+            hosted=[]
+            for key,value in cache.items():
+                model_part,_,endpoint=key.partition('@')
+                if model_part!=name or not sane(value):continue
+                host=(_split(endpoint).hostname or '').lower()
+                if not host or host in ('localhost','::1') or host.startswith(('127.','10.','192.168.')) \
+                        or re.match(r'172\.(1[6-9]|2\d|3[01])\.',host):
+                    continue
+                hosted.append(value)
+            if hosted:
+                return max(hosted),'Hermes context_length_cache (model name)'
     # Read Hermes's local provider catalog without a network call on every turn.
     # Only use it for the provider's own endpoint: hosted variants may have smaller caps.
     from urllib.parse import urlparse
