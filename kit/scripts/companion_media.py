@@ -256,6 +256,20 @@ def template():
         '11':{'class_type':'SaveImage','inputs':{'images':['10',0],'filename_prefix':'Companion'}}},
       'mappings':{'prompt':['4','text'],'negative':['5','text'],'width':['7','width'],'height':['7','height'],'seed':['9','seed'],'steps':['9','steps'],'cfg':['9','cfg']}}
 
+# Two of the style entries are statements about the companion rather than
+# instructions for rendering one: "none" says there is no visual identity at all,
+# and "unset" is an editing note to the author. Neither is something to hand an
+# image model as a description of how the picture should look.
+NON_VISUAL_STYLES = {'', 'none', 'unset'}
+
+
+def visual_style(c):
+    """The chosen style, when it is one an image model can actually be given."""
+    if getattr(c, 'image_style', '') in NON_VISUAL_STYLES:return ''
+    import companion_portrait as portrait
+    return portrait.style_block(c)
+
+
 def compile(c,preset_id='',category='portrait',overrides=None,draft=None,intimate=False):
     import companion_portrait as portrait
     data=effective(c)
@@ -272,6 +286,13 @@ def compile(c,preset_id='',category='portrait',overrides=None,draft=None,intimat
     # line that already contains the wardrobe and lighting sitting next to it.
     recorded=portrait.recorded_parts(c)
     parts['identity']=(parts.get('identity') or recorded['identity']) if p.get('include_identity',True) else ''
+    # Quality is the visual style, and its home is the style chosen for the
+    # companion. It had no fallback at all, so a preset that did not spell one out
+    # sent no style direction whatsoever -- and a hosted model handed no style
+    # renders a photograph. A companion set to a drawn style quietly came back
+    # photorealistic, and the only one that did not had the words hand-written
+    # into its preset. A preset that names a quality still wins.
+    if not parts.get('quality'):parts['quality']=visual_style(c)
     for key in ('scene','wardrobe','feeling','lighting','camera'):
         if not parts.get(key):parts[key]=recorded.get(key,'')
     overrides=overrides or {}

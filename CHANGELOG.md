@@ -1,3 +1,13 @@
+## 2.6.0 — Her day, and your chosen face (2026-09-21)
+
+- Show the companion's expected day on the calendar: daily anchors, the weekly ones belonging to that weekday, and what she intends instead on a day she has planned. A full imagined week previously showed as an empty month.
+- Add `GET /api/schedule`, which answers for any day asked for rather than only for right now.
+- Fall back to the companion's chosen visual style for a render's quality, which had no fallback at all; a drawn style sent no style direction and came back photorealistic.
+- Keep the two style entries that describe a companion rather than a picture out of image prompts.
+- Show the chosen profile photo on the home screen, which had been showing the newest picture in the library instead, and redraw it as soon as one is chosen.
+- Never use a blurred or sensitive picture as the home screen face; one was used and blurred in place.
+- Work out today in the companion's timezone, so the calendar stops highlighting tomorrow through the evening.
+
 ## 2.5.0 — Creations and captures are different things (2026-09-21)
 
 - Render an automatic capture out of sight and hand it straight to the timeline, instead of writing it into Creations and copying what the timeline needed; a moment from the companion's day was being filed as something she made.

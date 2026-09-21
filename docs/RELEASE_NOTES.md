@@ -1,10 +1,14 @@
-Tamanitomo 2.5.0 separates the pictures your companion makes from the pictures of her day.
+Tamanitomo 2.6.0 shows you her day, and shows you the face you picked.
 
-A picture she made because you asked her for one — show me your favourite animal at the zoo — is something she created, and it belongs in Creations. A picture from the capture routine is a look at what she is doing while you are not talking, and it belongs to the timeline and to whatever albums you keep it in. They are different things, and until now they were not treated differently: every automatic capture was written into Creations as well, filed as her work, and left a second byte-identical file behind for the library to reconcile back into one photo.
+**Her expected day is on the calendar.** A companion has a whole imagined week — when she wakes, when she eats, her Tuesday class, whatever she intends to do instead tomorrow — and none of it was anywhere you could look. The calendar only knew about events somebody had typed in, so a full week read as an empty month. Pick any day and you can now see the shape she expects it to have, which is the thing to read before asking her what she is up to on Thursday. These are plans, not commitments, and they are shown as such.
 
-That duplication is also what broke deleting. A photo shown once was two files, and deleting it removed one of them — which is why the picture came back on the next refresh. Both halves are fixed: a capture is now rendered out of sight and handed straight to the timeline, so there is one file, in one place, for one photo.
+**The visual style you chose is now actually used.** Quality was the one part of an image prompt with no fallback, so unless a preset happened to spell out a style in its own words, no style direction was sent at all — and a model given no style renders a photograph. A companion set to a drawn style quietly came back photorealistic. The style you picked is now the default for every render; a preset that names its own still wins.
 
-A capture withheld for review is the exception, and it still appears in Creations where you can find it. Renders abandoned partway are cleared rather than kept.
+**The profile photo is the face on the home screen.** Setting one changed nothing there, because the home screen simply showed the newest picture in the library. It now shows the photo you chose, straight away rather than after a reload.
+
+**A blurred picture is never used as that face.** One would be picked and then blurred in place, which is not the same thing — the home screen is the one view nobody chose to open, so a picture that has to be hidden does not belong on it.
+
+Today is also worked out in your companion's timezone rather than in UTC, so the calendar stops highlighting tomorrow halfway through the evening.
 
 ### Install
 

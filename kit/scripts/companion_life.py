@@ -96,6 +96,58 @@ def read_tomorrow_plan(root,now=None):
         return data
     except (ValueError,OSError):return None
 
+def expected_day(root,day,now=None):
+    """The shape the companion expects a given day to have.
+
+    `routine` answers "what is she doing right now", which is what the prompt
+    needs and no use at all for looking a week ahead. This answers the question a
+    person actually asks of a calendar -- what does her Thursday look like -- so
+    there is something to talk to her about before it happens.
+
+    Nothing here is a commitment or a completed event. These are the anchors of an
+    imagined life: recurring daily ones, the weekly ones that belong to that
+    weekday, and, when the day is the one it was written for, whatever she
+    actually intends to do instead.
+    """
+    root=pathlib.Path(root)
+    try:data=json.loads((root/'routine.json').read_text(encoding='utf-8'))
+    except (FileNotFoundError,ValueError):
+        return {'day':day.isoformat(),'configured':False,'anchors':[],'intended_plan':None}
+    if data.get('kind')!='imagined_routine':raise ValueError('routine must be imagined_routine')
+    weekday=('monday','tuesday','wednesday','thursday','friday','saturday','sunday')[day.weekday()]
+
+    plan=read_tomorrow_plan(root,now)
+    if plan and plan.get('date') and plan['date']!=day.isoformat():plan=None
+    catalog=data.get('routines_catalog',{})
+    source='routine'
+    if plan and plan.get('anchors'):
+        rows=[dict(x) for x in plan['anchors'] if isinstance(x,dict)];source='intended'
+    elif plan and plan.get('theme') in catalog:
+        rows=[dict(x) for x in catalog[plan['theme']].get('anchors',[]) if isinstance(x,dict)];source='intended'
+    else:
+        rows=[dict(x,recurrence='weekly') for x in data.get('weekly',[])
+              if isinstance(x,dict) and x.get('day')==weekday]
+        rows+=[dict(x,recurrence='daily') for x in data.get('daily',[]) if isinstance(x,dict)]
+
+    anchors=[]
+    for index,row in enumerate(rows):
+        start,end=str(row.get('start','')),str(row.get('end',''))
+        try:
+            dt.time.fromisoformat(start);dt.time.fromisoformat(end)
+        except (ValueError,TypeError):
+            # A hand-edited line missing a time is skipped rather than allowed to
+            # take the whole day's schedule down with it.
+            continue
+        anchors.append({'id':row.get('id') or f'{source}-{index}','start':start,'end':end,
+                        'activity':row.get('activity',''),'setting':row.get('setting',''),
+                        'recurrence':row.get('recurrence',source),'source':source})
+    anchors.sort(key=lambda r:r['start'])
+    return {'day':day.isoformat(),'weekday':weekday,'configured':True,'source':source,
+            'anchors':anchors,'intended_plan':plan,
+            'preferred_rhythm':data.get('preferred_rhythm',''),
+            'note':'Anchors are the shape of an imagined day, not commitments or completed events.'}
+
+
 def routine(root,now,agent='the companion'):
     root=pathlib.Path(root)
     try:data=json.loads((root/'routine.json').read_text(encoding='utf-8'))

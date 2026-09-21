@@ -276,6 +276,26 @@ def build(home=None,token='',state_dir=None):
                 'interval_minutes':c.image_interval_minutes,
                 'budget_gb':c.timeline_budget_gb,'enabled':c.image_timeline,'attempts':attempts[:30]}
 
+    @app.get('/api/schedule')
+    def schedule(day:str=''):
+        """What the companion expects a given day to look like.
+
+        The calendar only ever knew about events somebody had entered, so a
+        companion with a full imagined week showed an empty month -- and there was
+        nowhere to look before asking her about her plans.
+        """
+        import datetime as _dt
+        from zoneinfo import ZoneInfo
+        import companion_life as life
+        c=load()
+        try:tz=ZoneInfo(c.timezone or 'UTC')
+        except Exception:tz=_dt.timezone.utc
+        now=_dt.datetime.now(tz)
+        try:target=_dt.date.fromisoformat(day) if day else now.date()
+        except ValueError:raise HTTPException(400,'Use a YYYY-MM-DD date')
+        try:return life.expected_day(c.life,target,now)
+        except ValueError as exc:raise HTTPException(400,str(exc))
+
     @app.get('/api/life')
     def life():
         import companion_presence as presence

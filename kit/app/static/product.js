@@ -525,8 +525,47 @@ function renderWardrobeCard(closet,s,stage=0){
   return html;
 }
 
+// Her today, not Greenwich's. Deriving it from toISOString meant that after
+// about seven in the evening in New York the calendar highlighted tomorrow and
+// opened on it, so "Today" was the wrong day for the rest of every evening.
+const companionToday=()=>dayKey(new Date())||new Date().toISOString().slice(0,10);
 let calYear=new Date().getFullYear(),calMonth=new Date().getMonth(),selectedCalDate=null;
 
+let scheduleCache={};
+// Her expected day, alongside the events somebody entered. The calendar knew
+// only about commitments and tasks, so a companion with a full imagined week
+// showed an empty month -- and there was nowhere to look before asking her what
+// she was up to on Thursday.
+async function expectedDay(day){
+  if(scheduleCache[day])return scheduleCache[day];
+  try{scheduleCache[day]=await api('/schedule?day='+encodeURIComponent(day));}
+  catch(err){scheduleCache[day]={anchors:[],configured:false};}
+  return scheduleCache[day];
+}
+function scheduleHtml(schedule){
+  const anchors=(schedule&&schedule.anchors)||[];
+  if(!anchors.length){
+    return `<p class="dim small" style="margin:8px 0 0">${schedule&&schedule.configured===false
+      ?'No daily routine has been set up for this companion yet.'
+      :'Nothing planned for this day.'}</p>`;
+  }
+  const intended=schedule.source==='intended';
+  return `
+    <p class="dim small" style="margin:10px 0 6px">${intended
+      ?'What she intends to do this day.'
+      :'The usual shape of this day. Plans, not commitments.'}</p>
+    <ol class="schedule-list">
+      ${anchors.map(a=>`
+        <li class="schedule-row${a.recurrence==='weekly'?' is-weekly':''}">
+          <span class="schedule-time">${esc(a.start)}–${esc(a.end)}</span>
+          <span class="schedule-what">
+            <strong>${esc(a.activity||'Unnamed')}</strong>
+            ${a.setting?`<span class="dim small"> · ${esc(a.setting)}</span>`:''}
+          </span>
+          ${a.recurrence==='weekly'?'<span class="pill schedule-tag">weekly</span>':''}
+        </li>`).join('')}
+    </ol>`;
+}
 function calendarEvents(missions,commitments=[]){
   const missionEvents=(missions||[]).map(x=>({...x,isCommitment:false}));
   const commitmentEvents=(commitments||[]).filter(x=>x&&x.starts_at).map(x=>({
@@ -545,7 +584,7 @@ function buildCalendarHtml(agentName,missions,commitments=[],prefix='cal'){
 
   const firstDayIndex=new Date(calYear,calMonth,1).getDay();
   const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
-  const todayStr=new Date().toISOString().slice(0,10);
+  const todayStr=companionToday();
   selectedCalDate=selectedCalDate||todayStr;
 
   let calendarCellsHtml='';
@@ -615,6 +654,10 @@ function buildCalendarHtml(agentName,missions,commitments=[],prefix='cal'){
       </div>`:
       '<p class="dim small" style="margin:8px 0 0">No events or commitments on this date.</p>'
       }
+      <div class="schedule-block" id="${prefix}-schedule">
+        <div class="schedule-heading"><strong>Her expected day</strong></div>
+        <p class="dim small" style="margin:6px 0 0">Loading…</p>
+      </div>
       <div class="cal-add-event-box" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--edge)">
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <input id="${prefix}-new-title" placeholder="Add event for this day…" style="flex:1;min-width:180px;padding:8px 12px;font-size:13px">
@@ -627,6 +670,19 @@ function buildCalendarHtml(agentName,missions,commitments=[],prefix='cal'){
 
 function wireCalendarComponent(root,events,agentName,refreshFn,prefix='cal'){
   const prevBtn=$(prefix+'-prev'),nextBtn=$(prefix+'-next'),todayBtn=$(prefix+'-today');
+  // Filled in after the day's schedule arrives, so choosing a day never waits on
+  // a request before it highlights.
+  const scheduleBox=$(prefix+'-schedule');
+  if(scheduleBox){
+    const day=selectedCalDate;
+    expectedDay(day).then(schedule=>{
+      // A slower answer for a day the user has already moved on from must not
+      // overwrite the one they are looking at now.
+      if(selectedCalDate!==day)return;
+      const box=$(prefix+'-schedule');
+      if(box)box.innerHTML=`<div class="schedule-heading"><strong>Her expected day</strong></div>`+scheduleHtml(schedule);
+    });
+  }
   if(prevBtn)prevBtn.onclick=async()=>{
     calMonth--;
     if(calMonth<0){calMonth=11;calYear--;}
@@ -638,9 +694,9 @@ function wireCalendarComponent(root,events,agentName,refreshFn,prefix='cal'){
     await refreshFn();
   };
   if(todayBtn)todayBtn.onclick=async()=>{
-    calYear=new Date().getFullYear();
-    calMonth=new Date().getMonth();
-    selectedCalDate=new Date().toISOString().slice(0,10);
+    const today=companionToday();
+    calYear=Number(today.slice(0,4));calMonth=Number(today.slice(5,7))-1;
+    selectedCalDate=today;
     await refreshFn();
   };
   for(const cell of root.querySelectorAll(`[data-${prefix}-date]`)){
@@ -731,7 +787,18 @@ workspaceHandlers.now=async()=>{
   setReviewBanner(d.problems.length,updateInfo);
 
   const s=d.state?.state;
-  const photo=content.items.find(x=>x.kind==='image');
+  // The face on the home screen is the profile photo when one has been set --
+  // which is what setting one is for, and it previously changed nothing here,
+  // because this simply took the newest image in the library instead.
+  //
+  // Failing that, the newest picture that is actually fit to be shown. A blurred
+  // one was used and then blurred in place, which is not the same thing: the home
+  // screen is the one view nobody chose to open, so a picture that has to be
+  // hidden does not belong on it at all.
+  const shownPhoto=content.items.find(x=>x.kind==='image'&&!x.blur&&x.rating!=='nsfw');
+  const photo=portraitStored
+    ?{url:'/media/portrait?v='+portraitVersion,title:d.agent,blur:false,rating:'safe'}
+    :shownPhoto;
   const entry=journal.entries[0];
   const stage=Number(emotions?.intimacy?.stage??d.intimacy?.stage??0);
   const wearingPieces=filterWardrobeItems(closet?.wearing||[],stage);
@@ -766,7 +833,7 @@ workspaceHandlers.now=async()=>{
       <div class="presence-grid-container">
         <div class="presence-avatar-column">
           <div class="presence-avatar-frame-tall">
-            ${photo?`<img class="presence-avatar-img-tall" ${mediaPrivacy(photo)} src="${mediaUrl(photo.url)}" alt="${esc(d.agent)}">`:`<div class="presence-avatar-placeholder-tall">${esc(d.agent.slice(0,1))}</div>`}
+            ${photo?`<img class="presence-avatar-img-tall" src="${mediaUrl(photo.url)}" alt="${esc(d.agent)}">`:`<div class="presence-avatar-placeholder-tall">${esc(d.agent.slice(0,1))}</div>`}
             <span class="presence-pulse-dot" title="Active presence"></span>
           </div>
         </div>
@@ -1288,7 +1355,10 @@ function renderViewerPhoto(){
   if($('viewer-btn-profile'))$('viewer-btn-profile').onclick=async()=>{
     const item=viewerItems[viewerIndex];if(!item)return;
     if(!confirm('Set this image as the companion\'s profile photo?'))return;
-    try{await post('/portrait/from-content',{path:item.path});portraitVersion=Date.now();portraitStored=true;notice('Profile photo updated');if(current==='photos')render('photos');}catch(err){notice('Failed: '+err.message);}
+    // The home screen shows the profile photo, so setting one has to redraw it;
+    // only the photo library was refreshed, and the face you had just chosen did
+    // not appear anywhere until the next full reload.
+    try{await post('/portrait/from-content',{path:item.path});portraitVersion=Date.now();portraitStored=true;notice('Profile photo updated');if(current==='photos'||current==='now')render(current);}catch(err){notice('Failed: '+err.message);}
   };
   if($('viewer-btn-delete')){
     $('viewer-btn-delete').onclick=async()=>{
