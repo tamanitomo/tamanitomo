@@ -1,3 +1,13 @@
+## 2.3.7 — Wardrobe accuracy and relationship scales (2026-09-21)
+
+- Read a companion's wardrobe state from the record rather than inferring it from activity or location wording, which could contradict what she was recorded wearing.
+- Keep picture prompts and their constraints consistent, so a private routine is rendered in keeping with your settings or not captured at all.
+- Give non-romantic companions their own closeness scale, and allow any companion to reach the final stage.
+- Earn closeness from days that belong to the relationship instead of the whole message history.
+- Add a finer control under Companion → Relationship for what a companion may send.
+- Judge shower duration by the recorded bathing state rather than by any activity that mentions one.
+- Stop the update notice and photo provider picker from crushing their own text, and let picture variants render without holding the page.
+
 ## 2.3.6 — Photo fixes, moment variations, and daily routine transitions (2026-09-21)
 
 - Photo fixes: accurately honor wardrobe states and contextual prompt compilation for private routines and bathing, eliminating conflicting outerwear prompts.
