@@ -2608,11 +2608,7 @@ body[data-page="chat"] main{padding:0}
 .notice-strip.notice-stack>p{margin:0}
 .notice-strip.notice-stack>p+p{margin-top:4px}
 
-/* The folded-away prompt is a reference, not a second thing to read. */
-.prompt-alt{margin-top:8px;border-top:1px solid var(--edge);padding-top:8px}
-.prompt-alt>summary{cursor:pointer;font-size:12.5px;color:var(--dim);list-style:none}
-.prompt-alt>summary::-webkit-details-marker{display:none}
-.prompt-alt>summary::before{content:'▸ ';display:inline-block;transition:transform .15s}
-.prompt-alt[open]>summary::before{content:'▾ '}
-.prompt-alt>summary:hover{color:var(--ink)}
-.prompt-alt .prompt-text{margin-top:8px}
+/* Both prompts stay visible; the one that was sent is the one that stands out. */
+.viewer-prompts-block{display:flex;flex-direction:column;gap:10px}
+.viewer-prompts-block .prompt-box:not(.is-active){opacity:.72}
+.viewer-prompts-block .prompt-box:not(.is-active):hover{opacity:1}

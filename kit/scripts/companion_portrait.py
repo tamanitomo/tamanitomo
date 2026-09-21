@@ -140,19 +140,42 @@ def feeling_text(state):
     return ', '.join(values)
 
 
-def prompt_parts(c,record=None):
-    from companion_presence import current
+# Visual fields that have a box of their own. Anything else in `visual` describes
+# what she is doing, so it belongs with the scene.
+OWN_BOX={'lighting':'lighting','framing':'camera'}
+
+
+def recorded_parts(c,record=None):
+    """The recorded moment, split into the boxes a workflow actually has.
+
+    `scene_block` joins everything into one line because a single-prompt workflow
+    has nowhere else to put it. A workflow with separate conditioning wants the
+    outfit in wardrobe and the light in lighting, so the scene is left holding only
+    what it is: where she is and what she is doing.
+
+    One function does the splitting. Two of them meant the recorded path handed a
+    whole joined line to the scene box and then set wardrobe, lighting and framing
+    again beside it, so the same clothes were described twice and the framing three
+    times -- once as its own box, once inside the scene, and once in the tag list.
+    """
+    from companion_presence import current,undress
     scene=record if record is not None else current(c)
     state=(scene or {}).get('state',{}) if scene else {}
-    from companion_presence import undress
     _kind,outfit=undress(state)
     visual=state.get('visual') or {}
     location=state.get('location','')
-    where=', '.join(p for p in (state.get('activity',''),location) if p)
-    feeling=feeling_text(state)
-    return {'identity':identity_block(c),'scene':where,'wardrobe':outfit,'feeling':feeling,
+    action=[state.get('activity',''),location]
+    action+= [f'{key}: {value}' for key,value in visual.items() if value and key not in OWN_BOX]
+    return {'identity':identity_block(c),
+            'scene':', '.join(p for p in action if p),
+            'wardrobe':outfit,
+            'feeling':feeling_text(state),
             'lighting':visual.get('lighting') or lighting_guess(c,location),
             'camera':visual.get('framing') or ''}
+
+
+def prompt_parts(c,record=None):
+    return recorded_parts(c,record)
 
 
 def undressed_render_allowed(c):
@@ -169,17 +192,13 @@ def undressed_render_allowed(c):
 
 
 def recorded_overrides(c,record=None):
-    scene,record=scene_block(c,record)
-    if not scene:raise ValueError('No recorded scene to photograph')
-    state=record.get('state') or {}
-    from companion_presence import undress
-    _kind,outfit=undress(state)
-    visual=state.get('visual') or {}
-    feeling=feeling_text(state)
-    overrides={'scene':scene,'wardrobe':outfit,'feeling':feeling}
-    if visual.get('framing'):overrides['camera']=visual['framing']
-    if visual.get('lighting'):overrides['lighting']=visual['lighting']
-    return overrides
+    from companion_presence import current
+    record=record if record is not None else current(c)
+    if not record or not (record.get('state') or {}).get('activity'):
+        raise ValueError('No recorded scene to photograph')
+    parts=recorded_parts(c,record)
+    # Identity is the preset's or the profile's business, not the moment's.
+    return {k:v for k,v in parts.items() if k!='identity' and v}
 
 def style_block(c):
     from companion_render import load_styles

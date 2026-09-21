@@ -1197,22 +1197,15 @@ function populateViewerInfo(item){
   let promptsHtml='';
   const prompts=normalisePrompts(item);
   if(prompts){
-    // The two entries are the same scene in two formats, so showing both open side
-    // by side repeated every wardrobe and activity line twice. The one that was
-    // actually sent leads; the other is available but folded away.
-    const activeKey=prompts.active;
-    const other=activeKey==='structured'?'tags':'structured';
+    // Both stay open and side by side: seeing what the two workflows were actually
+    // given, next to each other, is the point of showing them at all.
     const label={structured:'Structured (sections)',tags:'Tags (comma-separated)'};
-    promptsHtml=`<div><div class="info-field-label">Prompt sent</div>
-      <div class="viewer-prompts-block">
-        <div class="prompt-box is-active">
-          <div class="prompt-box-header"><strong>${esc(label[activeKey])}</strong>
-            <span class="pill status-good">Sent to ${esc(item.generation||'the provider')}</span></div>
-          <pre class="prompt-text">${esc(prompts[activeKey]||'None recorded')}</pre>
-        </div>
-        ${prompts[other]?`<details class="prompt-alt"><summary>Also compiled: ${esc(label[other])}</summary>
-          <pre class="prompt-text">${esc(prompts[other])}</pre></details>`:''}
-      </div></div>`;
+    const box=key=>prompts[key]?`<div class="prompt-box ${prompts.active===key?'is-active':''}">
+        <div class="prompt-box-header"><strong>${esc(label[key])}</strong>
+          ${prompts.active===key?`<span class="pill status-good">Sent to ${esc(item.generation||'the provider')}</span>`:'<span class="pill">Compiled, not sent</span>'}</div>
+        <pre class="prompt-text">${esc(prompts[key])}</pre></div>`:'';
+    promptsHtml=`<div><div class="info-field-label">Prompts</div>
+      <div class="viewer-prompts-block">${box('structured')}${box('tags')}</div></div>`;
   }else if(item.prompt){
     promptsHtml=`<div><div class="info-field-label">Prompt</div><div class="info-field-value"><pre class="prompt-text">${esc(item.prompt)}</pre></div></div>`;
   }

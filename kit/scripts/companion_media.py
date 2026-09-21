@@ -268,9 +268,12 @@ def compile(c,preset_id='',category='portrait',overrides=None,draft=None,intimat
         preset=next((p for p in data['presets'] if p['id']==ident),None)
     if not preset:raise ValueError('Choose and save an image preset first')
     p=copy.deepcopy(preset);parts=dict(p.get('parts',{}))
-    parts['identity']=(parts.get('identity') or portrait.identity_block(c)) if p.get('include_identity',True) else ''
-    scene,_=portrait.scene_block(c)
-    parts['scene']=parts.get('scene') or scene
+    # Default every box from the same split, so the scene box is not handed a joined
+    # line that already contains the wardrobe and lighting sitting next to it.
+    recorded=portrait.recorded_parts(c)
+    parts['identity']=(parts.get('identity') or recorded['identity']) if p.get('include_identity',True) else ''
+    for key in ('scene','wardrobe','feeling','lighting','camera'):
+        if not parts.get(key):parts[key]=recorded.get(key,'')
     overrides=overrides or {}
     for k in PARTS:
         if k in overrides:parts[k]=str(overrides[k])
@@ -283,7 +286,15 @@ def compile(c,preset_id='',category='portrait',overrides=None,draft=None,intimat
     labels={'quality':'VISUAL QUALITY','identity':'IDENTITY — KEEP CONSISTENT',
             'wardrobe':'WARDROBE — SHOW EXACTLY','scene':'SCENE AND ACTION',
             'feeling':'EMOTIONAL TONE','lighting':'LIGHTING','camera':'CAMERA AND FRAMING'}
-    structured='Create one coherent image. Treat every section below as a separate visual constraint.\n\n'+\
+    preamble='Create one coherent image. Treat every section below as a separate visual constraint.'
+    # An appearance description often mentions what someone usually wears, which then
+    # argues with the wardrobe recorded for this particular moment. Rather than
+    # guessing which sentences of someone's own description are about clothes, say
+    # plainly which section wins.
+    if parts.get('identity','').strip() and parts.get('wardrobe','').strip():
+        preamble+=(' Where IDENTITY mentions clothing in general, WARDROBE is what she is'
+                   ' wearing now and overrides it.')
+    structured=preamble+'\n\n'+\
         '\n\n'.join(f'{labels[k]}:\n{parts[k].strip()}' for k in PARTS if parts.get(k,'').strip())
     seed=p.get('seed',-1)
     if seed==-1:seed=int.from_bytes(os.urandom(6),'big')

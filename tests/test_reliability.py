@@ -331,9 +331,12 @@ class PromptsAreFiledUnderTheirOwnNamesTests(unittest.TestCase):
         self.assertIn("p.prose!==undefined", fn)
         self.assertIn("'tags'", fn)
 
-    def test_the_viewer_does_not_print_the_same_scene_twice(self):
-        """Two open boxes repeated every wardrobe and activity line."""
+    def test_both_prompts_stay_visible_side_by_side(self):
+        """Seeing what each workflow was actually given, next to the other, is the
+        point of showing them at all; only the sent one is marked as sent."""
         js = (Path(__file__).resolve().parents[1] / 'kit/app/static/product.js').read_text(encoding='utf-8')
         block = js.split("let promptsHtml='';")[1].split("$('viewer-info-body')")[0]
-        self.assertIn('prompt-alt', block, 'the second prompt should be folded away')
-        self.assertEqual(block.count('prompt-box'), 2, 'only one prompt box should be rendered open')
+        self.assertIn("box('structured')", block)
+        self.assertIn("box('tags')", block)
+        self.assertIn('Sent to', block)
+        self.assertIn('Compiled, not sent', block)
