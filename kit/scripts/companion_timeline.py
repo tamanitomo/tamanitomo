@@ -224,6 +224,17 @@ def prepare(c,now=None):
                 'reason':('Asleep'+(f' until {until}' if until else '')
                           +'; no timeline images while asleep. The night resumes on its own.')}
     scene=current(c)
+    # A recorded undressed moment can only be photographed honestly or not at all.
+    # Without the permissions for the first, the second is the answer -- and saying
+    # so here costs nothing, where letting the job find out costs a model call.
+    if scene:
+        from companion_presence import undress
+        kind,_=undress(scene['state'])
+        if kind in ('undressed','bathing'):
+            from companion_portrait import undressed_render_allowed
+            allowed,why=undressed_render_allowed(c)
+            if not allowed:
+                return {'ready':False,'reason':f'A private moment ({why}); no photo of this one.'}
     now=now.astimezone(dt.timezone.utc)
     seconds=c.image_interval_minutes*60
     slot=dt.datetime.fromtimestamp(int(now.timestamp())//seconds*seconds,tz=dt.timezone.utc)
@@ -470,6 +481,11 @@ def fingerprint(c,now=None):
     # The same question prepare asks, in the same order: is this moment already
     # photographed? Only the visible fields belong here -- mood and private stance
     # change a sentence, not a picture.
+    from companion_presence import undress
+    kind,_=undress(state)
+    if kind in ('undressed','bathing'):
+        from companion_portrait import undressed_render_allowed
+        if not undressed_render_allowed(c)[0]:return 'private moment\n'
     return (f"style {c.image_style} scene {visual_key(state)} "
             f"confirmed {bool(state.get('confirmed',True))}\n")
 

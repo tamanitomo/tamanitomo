@@ -29,7 +29,14 @@ def capture(c,now=None):
             raise ValueError('Choose a saved Image Studio portrait preset before automatic capture')
         # Freeze the claimed scene even if a concurrent pulse advances presence.
         overrides=portrait.recorded_overrides(c,record=claimed['scene'])
-        generated=media.generate(c,preset,'portrait',overrides)
+        # `prepare` has already refused this moment unless it may be rendered as what
+        # it is, so reaching here with an undressed scene means the permissions hold.
+        # Saying so lifts the modesty negatives; leaving them on is what put clothes
+        # back into the shower.
+        from companion_presence import undress
+        kind,_=undress(claimed['scene']['state'])
+        intimate=kind in ('undressed','bathing')
+        generated=media.generate(c,preset,'portrait',overrides,intimate=intimate)
         saved=timeline.save(c,ident,generated['path'],generated['provider'],now,prompts=generated.get('prompts'))
         return {'status':saved['status'],'capture_id':ident,
                 'path':str(timeline.root(c)/'images'/saved['filename']),

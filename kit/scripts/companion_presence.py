@@ -15,6 +15,67 @@ from companion_platform import atomic_write, file_lock
 from companion_life import read_events, record
 
 
+# Not-dressed is a state the record carries, not something a later reader infers.
+# These ids stand in for wardrobe items so "she is in the shower" survives as data
+# instead of having to be guessed from the sentence describing the scene.
+VIRTUAL_TOKENS={'nude':'undressed','undressed':'undressed',
+                'bathing':'in the bath/shower','towel':'wrapped in a bath towel'}
+# The ones that mean nothing is being worn, as opposed to very little.
+BARE_TOKENS=('nude','undressed','bathing')
+
+
+# Somewhere she could be seen. Matched on whole words against the LOCATION only:
+# `intimacy.PUBLIC_KEYWORDS` was built to judge whether a moment is private enough
+# for intimate media, and borrowing it here read "homework" as work, "making lunch"
+# as lunch out and "texting friends" as company -- so changing in her own bedroom
+# was refused. What she is doing does not move her; where she is does.
+PUBLIC_PLACES={'office','library','park','street','pavement','sidewalk','cafe','restaurant',
+  'mall','shop','store','market','supermarket','grocery','gym','pool','beach','bus','train',
+  'station','airport','museum','cinema','theatre','bar','pub','clinic','hospital','school',
+  'campus','workplace','salon','studio','church','stadium'}
+# A room of one's own beats any word that follows it: a home office is still home.
+PRIVATE_PLACES=('home','house','apartment','flat','bedroom','bathroom','ensuite','my room')
+# Places where being undressed is the point rather than an exposure.
+UNDRESSED_ACTIVITIES=('swim','pool','beach','sunbath','changing room','fitting room')
+
+
+def in_public(location,activity=''):
+    """Whether she is somewhere she could be seen, for wardrobe rules."""
+    import re
+    loc=(location or '').lower()
+    if any(marker in loc for marker in PRIVATE_PLACES):return False
+    if any(word in (activity or '').lower() for word in UNDRESSED_ACTIVITIES):return False
+    return bool(set(re.findall(r'[a-z]+',loc)) & PUBLIC_PLACES)
+
+
+def undress(state):
+    """What the record says she has on: ('undressed'|'bathing'|'towel'|None, text).
+
+    Read from outfit ids, never from prose. Sniffing `activity` and `location` for
+    "bath" stripped the clothes off anyone brushing their teeth in the bathroom,
+    sunbathing, or shopping for a bathing suit -- and did it while the record
+    plainly said what she was wearing.
+    """
+    items=[i for i in (state.get('outfit') or []) if isinstance(i,dict)]
+    ids={i.get('id','') for i in items}
+    text=', '.join(i['description'] for i in items if i.get('description'))
+    if not items:return 'undressed',''
+    for token in BARE_TOKENS:
+        if token in ids:return ('bathing' if token=='bathing' else 'undressed'),''
+    if 'towel' in ids:return 'towel',text
+    return None,text
+
+
+def wardrobe_clause(text):
+    """`wearing X`, unless the description already reads as its own phrase.
+
+    Without this the towel produced "wearing wrapped in a bath towel" in the
+    prompt sent to the image model.
+    """
+    if not text:return ''
+    return text if text.split()[0] in ('wrapped','in','wearing','dressed','covered') else 'wearing '+text
+
+
 def events(c):
     for path in sorted((c.life/'episodes').glob('????-??-??.jsonl'),reverse=True):
         for row in reversed(read_events(c.life,path.stem,limit=0)):
@@ -98,15 +159,12 @@ def update(c,data,now=None):
         outfit=data.get('outfit')
         if not isinstance(outfit,list) or len(outfit)>20:raise ValueError('outfit must list at most 20 wardrobe item IDs')
         if len(set(outfit))!=len(outfit):raise ValueError('Duplicate outfit item')
-        VIRTUAL_TOKENS={'nude':'undressed','undressed':'undressed','bathing':'in the bath/shower','towel':'wrapped in a bath towel'}
         for item in outfit:
             if item not in closet and item not in VIRTUAL_TOKENS:raise ValueError('Add new items to the wardrobe before wearing them')
-        loc=text(data.get('location'),'location',240).lower()
-        act=text(data.get('activity'),'activity',120).lower()
-        import companion_intimacy as intimacy
-        is_public=any(k in f"{loc} {act}" for k in intimacy.PUBLIC_KEYWORDS)
+        loc=text(data.get('location'),'location',240)
+        act=text(data.get('activity'),'activity',120)
         is_undressed_state=not outfit or all(i in VIRTUAL_TOKENS or closet.get(i,{}).get('category')=='underwear' for i in outfit)
-        if is_public and is_undressed_state and 'towel' not in outfit and not any(w in act for w in ('swim','pool','beach','sunbath')):
+        if is_undressed_state and 'towel' not in outfit and in_public(loc,act):
             raise ValueError('Changing or undressed states require a private setting; dress in daytime or active clothes before going out')
         care=data.get('care',[])
         if not isinstance(care,list) or len(care)>10:raise ValueError('care must be a short list of actual routine transitions')

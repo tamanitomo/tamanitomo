@@ -242,6 +242,7 @@
   "tests/test_voice_chat.py",
   "tests/test_wardrobe.py",
   "tests/test_workflows.py",
+  "tests/test_wardrobe_state.py",
   "tests/test_workspace.py",
   "tools/build_release.py",
   "uninstall-termux.sh",

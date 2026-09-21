@@ -115,7 +115,7 @@ def evolve(c,data,outfit,previous,closet,now):
         dur=data.get('duration_minutes')
         if dur and dur>40:raise ValueError('A shower should not take longer than 40 minutes. Plan a realistic shower duration.')
     result=initial(previous,c);result['routine_choice']=choice;result['delay_reason']=data.get('delay_reason','');result.setdefault('wearing_since',{});actions=data.get('care_actions',[]);additions=data.get('wardrobe_additions',[])
-    VIRTUAL_TOKENS={'nude','undressed','bathing','towel'}
+    from companion_presence import VIRTUAL_TOKENS
     old_ids={x['id'] for x in previous['state']['outfit'] if x['id'] not in VIRTUAL_TOKENS} if previous else set()
     new_raw={x['id'] if isinstance(x,dict) else x for x in outfit}
     new_ids={x for x in new_raw if x not in VIRTUAL_TOKENS}
@@ -166,9 +166,8 @@ def evolve(c,data,outfit,previous,closet,now):
         for i in entering:
             status=result['clothes'].get(i,'clean')
             if status in ('dirty','washing'):raise ValueError(f'CARE: {i} needs completed laundry before re-wearing')
-    loc=(data.get('location') or '').lower()
-    import companion_intimacy as intimacy
-    if any(k in loc for k in intimacy.PUBLIC_KEYWORDS):
+    from companion_presence import in_public
+    if in_public(data.get('location') or '',data.get('activity') or ''):
         if any(known.get(i,{}).get('category')=='sleep' for i in new_ids):
             raise ValueError('Change out of pajamas into clean daytime or active clothes before leaving the house.')
     for i in old_ids-new_ids:

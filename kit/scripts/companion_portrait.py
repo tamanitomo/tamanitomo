@@ -79,24 +79,17 @@ def scene_block(c,record=None):
     scene=record if record is not None else current(c)
     if not scene:return '',None
     state=scene['state']
-    outfit_items=state.get('outfit',[])
-    outfit_ids={item.get('id','') if isinstance(item,dict) else str(item) for item in outfit_items}
-    act=(state.get('activity') or '').lower()
-    loc=(state.get('location') or '').lower()
-    is_bathing=any(w in act or w in loc for w in ('shower','bath','bathing'))
-    is_undressed=(not outfit_items) or any(i in ('nude','undressed','bathing') for i in outfit_ids)
-    is_towel='towel' in outfit_ids
-    if is_bathing or is_undressed:outfit=''
-    elif is_towel:outfit='wrapped in a bath towel'
-    else:outfit=', '.join(item['description'] for item in outfit_items if isinstance(item,dict) and item.get('description'))
+    from companion_presence import undress
+    _kind,outfit=undress(state)
     # Locations get recorded however they were written — "the kitchen" wants an
     # "in", "in the car on the highway" already has one.
     place=state.get('location','')
     if place and not re.match(r'(in|on|at|by|near|inside|outside|under|beside)\b',place.strip(),re.I):
         place='in '+place
+    from companion_presence import wardrobe_clause
     parts=[state.get('activity',''),place]
-    if outfit:parts.append(f'wearing {outfit}')
-    elif is_towel:parts.append('wrapped in a bath towel')
+    clause=wardrobe_clause(outfit)
+    if clause:parts.append(clause)
     visual=state.get('visual') or {}
     parts.extend(f'{key}: {value}' for key,value in visual.items() if value)
     return ', '.join(p for p in parts if p),scene
@@ -151,16 +144,8 @@ def prompt_parts(c,record=None):
     from companion_presence import current
     scene=record if record is not None else current(c)
     state=(scene or {}).get('state',{}) if scene else {}
-    outfit_items=state.get('outfit',[])
-    outfit_ids={item.get('id','') if isinstance(item,dict) else str(item) for item in outfit_items}
-    act=(state.get('activity') or '').lower()
-    loc=(state.get('location') or '').lower()
-    is_bathing=any(w in act or w in loc for w in ('shower','bath','bathing'))
-    is_undressed=(not outfit_items) or any(i in ('nude','undressed','bathing') for i in outfit_ids)
-    is_towel='towel' in outfit_ids
-    if is_bathing or is_undressed:outfit=''
-    elif is_towel:outfit='wrapped in a bath towel'
-    else:outfit=', '.join(item['description'] for item in outfit_items if isinstance(item,dict) and item.get('description'))
+    from companion_presence import undress
+    _kind,outfit=undress(state)
     visual=state.get('visual') or {}
     location=state.get('location','')
     where=', '.join(p for p in (state.get('activity',''),location) if p)
@@ -170,21 +155,26 @@ def prompt_parts(c,record=None):
             'camera':visual.get('framing') or ''}
 
 
+def undressed_render_allowed(c):
+    """Whether a recorded undressed moment may be photographed as one.
+
+    Two permissions, both required: the user's adult-images switch, and the
+    closeness gate `companion_media` already owns. Returns (allowed, why not).
+    """
+    if not getattr(c,'adult_images_allowed',False):
+        return False,'adult images are switched off for this companion'
+    import companion_media as media
+    allowed,blockers=media.intimacy_gate(c)
+    return allowed,('' if allowed else (' '.join(blockers)[:200] or 'closeness has not reached that point'))
+
+
 def recorded_overrides(c,record=None):
     scene,record=scene_block(c,record)
     if not scene:raise ValueError('No recorded scene to photograph')
     state=record.get('state') or {}
-    outfit_items=state.get('outfit',[])
-    outfit_ids={item.get('id','') if isinstance(item,dict) else str(item) for item in outfit_items}
-    act=(state.get('activity') or '').lower()
-    loc=(state.get('location') or '').lower()
-    is_bathing=any(w in act or w in loc for w in ('shower','bath','bathing'))
-    is_undressed=(not outfit_items) or any(i in ('nude','undressed','bathing') for i in outfit_ids)
-    is_towel='towel' in outfit_ids
-    if is_bathing or is_undressed:outfit=''
-    elif is_towel:outfit='wrapped in a bath towel'
-    else:outfit=', '.join(item['description'] for item in outfit_items if isinstance(item,dict) and item.get('description'))
-    visual=record['state'].get('visual') or {}
+    from companion_presence import undress
+    _kind,outfit=undress(state)
+    visual=state.get('visual') or {}
     feeling=feeling_text(state)
     overrides={'scene':scene,'wardrobe':outfit,'feeling':feeling}
     if visual.get('framing'):overrides['camera']=visual['framing']
@@ -267,9 +257,21 @@ def main():
     elif a.cmd=='generate':
         import companion_media as media
         overrides={'scene':a.scene} if a.scene else None
+        intimate=bool(getattr(a,'intimate',False))
         if a.recorded:
             overrides=recorded_overrides(c)
-        out=media.generate(c,a.preset,a.category,overrides,allow_nsfw=a.allow_nsfw)
+            # A recorded bath is only photographable as one. Leaving the wardrobe
+            # blank while the modesty negatives still forbid bare skin asks the model
+            # for a contradiction, and it resolves it by putting clothes back on --
+            # which is the whole complaint. Either the negatives lift, or no photo.
+            from companion_presence import current,undress
+            kind,_=undress((current(c) or {}).get('state',{}))
+            if kind in ('undressed','bathing'):
+                allowed,why=undressed_render_allowed(c)
+                if not allowed:
+                    raise ValueError('This moment is a private one and cannot be photographed: '+why)
+                intimate=True
+        out=media.generate(c,a.preset,a.category,overrides,allow_nsfw=a.allow_nsfw,intimate=intimate)
     elif a.cmd=='review':
         import companion_media_review as review
         out=review.inspect(c,pathlib.Path(a.source),a.scene,a.allow_nsfw)

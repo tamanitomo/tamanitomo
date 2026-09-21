@@ -30,9 +30,10 @@ class CaptureTests(unittest.TestCase):
         self.image=self.root/'generated.png';Image.new('RGB',(16,16),'green').save(self.image)
 
     def test_capture_freezes_scene_and_duplicate_tick_never_generates_twice(self):
-        def generate(c,preset,category,overrides):
+        def generate(c,preset,category,overrides,intimate=False,**kw):
             self.assertIn('making lunch',overrides['scene'])
             self.assertEqual(overrides['wardrobe'],'green tee')
+            self.assertFalse(intimate,'an ordinary lunch is not an intimate render')
             old=presence.current(c)
             presence.update(c,{**self.state,'previous_id':old['id'],'id':'later',
                                'activity':'washing dishes','transition':'Finished lunch.'},
@@ -60,24 +61,44 @@ class CaptureTests(unittest.TestCase):
             self.assertEqual(worker.capture(self.c,self.now)['status'],'skipped')
             self.assertEqual(gen.call_count,1)
 
-    def test_capture_persists_dual_prompts_and_omits_outerwear_when_bathing(self):
+    def bathing(self):
         import companion_portrait as pt
         curr=presence.current(self.c)
-        bathing_state={'id':'bathing-state','previous_id':curr['id'],'outfit':['bathing'],'location':'bathroom',
-                       'activity':'under a warm shower','mood':'relaxed','text':'Showering.',
-                       'transition':'Stepping into the bathroom for a shower.'}
-        presence.update(self.c,bathing_state,self.now+dt.timedelta(minutes=30))
-        overrides=pt.recorded_overrides(self.c)
-        self.assertNotIn('green tee',overrides.get('wardrobe',''))
+        presence.update(self.c,{'id':'bathing-state','previous_id':curr['id'],'outfit':['bathing'],
+                                'location':'bathroom','activity':'under a warm shower','mood':'relaxed',
+                                'text':'Showering.','transition':'Stepping into the bathroom for a shower.'},
+                        self.now+dt.timedelta(minutes=30))
+        return pt.recorded_overrides(self.c)
 
-        def generate(c,preset,category,overrides):
+    def test_a_recorded_bath_never_wears_the_outfit_it_took_off(self):
+        self.assertNotIn('green tee',self.bathing().get('wardrobe',''))
+
+    def test_a_private_moment_is_not_photographed_without_the_permissions(self):
+        """Blanking the wardrobe while the modesty negatives still forbid bare skin
+        asks the model for a contradiction, and it answers by dressing her again --
+        which was the original complaint. Without the permissions, no photo."""
+        self.bathing()
+        with patch.object(worker.media,'effective',return_value={'default_preset':'saved'}), \
+             patch.object(worker.media,'generate') as gen:
+            self.assertEqual(worker.capture(self.c,self.now+dt.timedelta(minutes=30))['status'],'skipped')
+            gen.assert_not_called()
+
+    def test_with_the_permissions_it_renders_as_what_it_is(self):
+        """Adult images on and the closeness gate open: the modesty negatives lift
+        and the render is asked for honestly rather than fought with."""
+        self.bathing()
+        seen={}
+        def generate(c,preset,category,overrides,allow_nsfw=False,intimate=False,**kw):
+            seen['intimate']=intimate
             return {'path':str(self.image),'provider':'dual-prompt-generator',
                     'prompts':{'prose':'warm steam in bathroom','structured':'steamy bathroom, natural light'}}
-
-        with patch.object(worker.media,'effective',return_value={'default_preset':'saved'}), \
+        import companion_portrait as pt
+        with patch.object(pt,'undressed_render_allowed',return_value=(True,'')), \
+             patch.object(worker.media,'effective',return_value={'default_preset':'saved'}), \
              patch.object(worker.media,'generate',side_effect=generate):
             result=worker.capture(self.c,self.now+dt.timedelta(minutes=30))
             self.assertEqual(result['status'],'saved')
+            self.assertTrue(seen['intimate'],'the modesty negatives were left on, so the model was asked to both undress and not')
             row=json.loads(timeline.capture_path(self.c,result['capture_id']).read_text())
             self.assertEqual(row['prompts'],{'prose':'warm steam in bathroom','structured':'steamy bathroom, natural light'})
 
