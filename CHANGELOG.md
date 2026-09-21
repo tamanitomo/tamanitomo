@@ -1,3 +1,17 @@
+## 2.3.6 — Photo fixes, moment variations, and daily routine transitions (2026-09-21)
+
+- Photo fixes: accurately honor wardrobe states and contextual prompt compilation for private routines and bathing, eliminating conflicting outerwear prompts.
+- Multi-provider moment variations: retry any captured moment with another configured image provider while keeping the companion's scene, activity, wardrobe, and identity locked.
+- Lightbox variant switcher: inspect multiple renders for a single moment and select "Use this photo for this moment" to update primary timeline and gallery cards without modifying profile portraits.
+- Dual prompt inspection: view both prose narrative and structured prompts in the photo details viewer.
+- Daily routine hygiene: cap shower durations to 40 minutes, track removed clothing items into laundry care, and enforce daytime attire before leaving home.
+
+## 2.3.5 — Overnight sleep cadence and quiet hours separation (2026-09-20)
+
+- Separate sleeping state from quiet-hours outreach rules so scheduled lifecycles remain consistent overnight.
+- Gate photographic capture on scene changes rather than time intervals during rest.
+- Group daily rhythm settings into companion preferences and reflect commitments on the calendar.
+
 ## 2.3.4 — Reliable pulse-to-image handoff (2026-09-19)
 
 - Teach companion pulses the smallest valid recovery when clothing-care timing rules conflict with a full bedtime transition, preventing stale state from needlessly starving image timeline captures.

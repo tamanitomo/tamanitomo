@@ -96,16 +96,30 @@ def update(c,data,now=None):
             companion_day._validate(data.get('wardrobe_additions',[]),companion_day_schema,'wardrobe_additions')
             closet.update({item['id']:item for item in data.get('wardrobe_additions',[])})
         outfit=data.get('outfit')
-        if not isinstance(outfit,list) or not outfit or len(outfit)>20:raise ValueError('outfit must list 1–20 wardrobe item IDs')
+        if not isinstance(outfit,list) or len(outfit)>20:raise ValueError('outfit must list at most 20 wardrobe item IDs')
         if len(set(outfit))!=len(outfit):raise ValueError('Duplicate outfit item')
-        if any(item not in closet for item in outfit):raise ValueError('Add new items to the wardrobe before wearing them')
+        VIRTUAL_TOKENS={'nude':'undressed','undressed':'undressed','bathing':'in the bath/shower','towel':'wrapped in a bath towel'}
+        for item in outfit:
+            if item not in closet and item not in VIRTUAL_TOKENS:raise ValueError('Add new items to the wardrobe before wearing them')
+        loc=text(data.get('location'),'location',240).lower()
+        act=text(data.get('activity'),'activity',120).lower()
+        import companion_intimacy as intimacy
+        is_public=any(k in f"{loc} {act}" for k in intimacy.PUBLIC_KEYWORDS)
+        is_undressed_state=not outfit or all(i in VIRTUAL_TOKENS or closet.get(i,{}).get('category')=='underwear' for i in outfit)
+        if is_public and is_undressed_state and 'towel' not in outfit and not any(w in act for w in ('swim','pool','beach','sunbath')):
+            raise ValueError('Changing or undressed states require a private setting; dress in daytime or active clothes before going out')
         care=data.get('care',[])
         if not isinstance(care,list) or len(care)>10:raise ValueError('care must be a short list of actual routine transitions')
         wants=data.get('wants',[])
         if not isinstance(wants,list) or len(wants)>5:raise ValueError('wants must be a list of at most 5 short things she is after right now')
+        outfit_entries=[
+            {'id':key,'description':closet[key]['description']} if key in closet
+            else {'id':key,'description':VIRTUAL_TOKENS[key]}
+            for key in outfit
+        ]
         state={'location':text(data.get('location'),'location',240),
                'activity':text(data.get('activity'),'activity',120),
-               'outfit':[{'id':key,'description':closet[key]['description']} for key in outfit],
+               'outfit':outfit_entries,
                'mood':text(data.get('mood'),'mood',240),
                'wants':[text(item,'want',160) for item in wants],
                # Hers, not a line to say out loud. It exists so the same feeling

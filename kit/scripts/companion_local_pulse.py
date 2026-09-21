@@ -28,8 +28,8 @@ def schema(wardrobe,care_enabled=False):
     def text(limit):return {'type':'string','minLength':1,'maxLength':limit}
     fields={key:text(limit) for key,limit in [('location',240),('activity',120),
              ('mood',240),('private_stance',300),('text',1600),('transition',500)]}
-    fields['outfit']={'type':'array','minItems':1,'maxItems':20,
-                      'items':{'type':'string','enum':[item['id'] for item in wardrobe]}}
+    fields['outfit']={'type':'array','minItems':0,'maxItems':20,
+                      'items':{'type':'string','enum':[item['id'] for item in wardrobe]+['nude','undressed','bathing','towel']}}
     for key,limit in [('care',10),('wants',5)]:
         fields[key]={'type':'array','maxItems':limit,'items':text(160)}
     fields.update(day.schema_fields())

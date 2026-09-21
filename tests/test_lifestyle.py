@@ -198,5 +198,47 @@ class LifestyleTests(unittest.TestCase):
         self.assertTrue(any('professional daytime attire' in act for act in col_acts))
         self.assertTrue(any('deep work' in act for act in col_acts))
 
+    def test_shower_duration_cannot_exceed_40_minutes(self):
+        self.write(15,activity='warm shower',location='bathroom',care_actions=self.actions('shower'))
+        self.write(30,activity='warm shower',location='bathroom')
+        with self.assertRaisesRegex(ValueError,'40 minutes'):
+            self.write(60,activity='warm shower',location='bathroom',
+                       routine_choice=dict(anchor='daily-0',decision='defer',reason='still showering'))
+
+    def test_partial_undress_marks_only_removed_items_dirty(self):
+        p.update_wardrobe(self.c,[dict(id='top',description='cotton top',use='day',category='day',condition='clean'),
+                                  dict(id='bottom',description='linen pants',use='day',category='day',condition='clean'),
+                                  dict(id='undies',description='cotton underwear',use='underwear',category='underwear',condition='clean')])
+        self.write(15,outfit=['top','bottom','undies'],location='home',care_actions=self.actions('brush_teeth'))
+        state=p.current(self.c)['state']
+        self.assertEqual(state['lifestyle']['clothes']['top'],'wearing')
+        self.assertEqual(state['lifestyle']['clothes']['undies'],'wearing')
+        self.write(30,outfit=['undies'],location='bedroom',activity='lounging in room')
+        new_state=p.current(self.c)['state']
+        self.assertEqual(new_state['lifestyle']['clothes']['top'],'dirty')
+        self.assertEqual(new_state['lifestyle']['clothes']['bottom'],'dirty')
+        self.assertEqual(new_state['lifestyle']['clothes']['undies'],'wearing')
+
+    def test_complete_undress_or_nude_in_private_is_allowed(self):
+        self.write(15,outfit=[],location='bathroom',activity='soaking in tub')
+        self.assertEqual(p.current(self.c)['state']['outfit'],[])
+        self.write(30,outfit=['nude'],location='bedroom',activity='resting in bed')
+        self.assertEqual([i['id'] for i in p.current(self.c)['state']['outfit']],['nude'])
+
+    def test_undressed_or_underwear_only_in_public_is_blocked(self):
+        p.update_wardrobe(self.c,[dict(id='undies',description='cotton underwear',use='underwear',category='underwear',condition='clean')])
+        with self.assertRaisesRegex(ValueError,'private setting|going out'):
+            self.write(15,outfit=[],location='city park',activity='walking')
+        with self.assertRaisesRegex(ValueError,'private setting|going out'):
+            self.write(15,outfit=['undies'],location='coffee shop',activity='sitting at cafe')
+
+    def test_sleepwear_morning_lounging_at_home_allowed_but_public_blocked(self):
+        self.write(15,outfit=['pj'],location='home',care_actions=self.actions('brush_teeth','shower'))
+        # Lounging at home next morning in pajamas is allowed
+        self.write(12*60,outfit=['pj'],location='kitchen',activity='morning coffee')
+        # Leaving house in pajamas is blocked
+        with self.assertRaisesRegex(ValueError,'pajamas|sleepwear|private setting|going out'):
+            self.write(12*60+15,outfit=['pj'],location='public library',activity='studying')
+
 
 if __name__=='__main__':unittest.main()

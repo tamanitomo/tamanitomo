@@ -79,7 +79,16 @@ def scene_block(c,record=None):
     scene=record if record is not None else current(c)
     if not scene:return '',None
     state=scene['state']
-    outfit=', '.join(item['description'] for item in state.get('outfit',[]))
+    outfit_items=state.get('outfit',[])
+    outfit_ids={item.get('id','') if isinstance(item,dict) else str(item) for item in outfit_items}
+    act=(state.get('activity') or '').lower()
+    loc=(state.get('location') or '').lower()
+    is_bathing=any(w in act or w in loc for w in ('shower','bath','bathing'))
+    is_undressed=(not outfit_items) or any(i in ('nude','undressed','bathing') for i in outfit_ids)
+    is_towel='towel' in outfit_ids
+    if is_bathing or is_undressed:outfit=''
+    elif is_towel:outfit='wrapped in a bath towel'
+    else:outfit=', '.join(item['description'] for item in outfit_items if isinstance(item,dict) and item.get('description'))
     # Locations get recorded however they were written — "the kitchen" wants an
     # "in", "in the car on the highway" already has one.
     place=state.get('location','')
@@ -87,6 +96,7 @@ def scene_block(c,record=None):
         place='in '+place
     parts=[state.get('activity',''),place]
     if outfit:parts.append(f'wearing {outfit}')
+    elif is_towel:parts.append('wrapped in a bath towel')
     visual=state.get('visual') or {}
     parts.extend(f'{key}: {value}' for key,value in visual.items() if value)
     return ', '.join(p for p in parts if p),scene
@@ -138,17 +148,19 @@ def feeling_text(state):
 
 
 def prompt_parts(c,record=None):
-    """The recorded moment, split into the boxes a workflow actually has.
-
-    `scene_block` joins everything into one line because a single-prompt
-    workflow has nowhere else to put it. A workflow with separate conditioning
-    wants the outfit in wardrobe and the light in lighting, so the scene is left
-    holding only what it is: where she is and what she is doing.
-    """
     from companion_presence import current
     scene=record if record is not None else current(c)
     state=(scene or {}).get('state',{}) if scene else {}
-    outfit=', '.join(item['description'] for item in state.get('outfit',[]) if item.get('description'))
+    outfit_items=state.get('outfit',[])
+    outfit_ids={item.get('id','') if isinstance(item,dict) else str(item) for item in outfit_items}
+    act=(state.get('activity') or '').lower()
+    loc=(state.get('location') or '').lower()
+    is_bathing=any(w in act or w in loc for w in ('shower','bath','bathing'))
+    is_undressed=(not outfit_items) or any(i in ('nude','undressed','bathing') for i in outfit_ids)
+    is_towel='towel' in outfit_ids
+    if is_bathing or is_undressed:outfit=''
+    elif is_towel:outfit='wrapped in a bath towel'
+    else:outfit=', '.join(item['description'] for item in outfit_items if isinstance(item,dict) and item.get('description'))
     visual=state.get('visual') or {}
     location=state.get('location','')
     where=', '.join(p for p in (state.get('activity',''),location) if p)
@@ -161,11 +173,18 @@ def prompt_parts(c,record=None):
 def recorded_overrides(c,record=None):
     scene,record=scene_block(c,record)
     if not scene:raise ValueError('No recorded scene to photograph')
-    # Multi-encoder workflows have a dedicated wardrobe conditioning node.
-    # Replace the preset's old outfit with the actual one instead of blanking it.
-    outfit=', '.join(item['description'] for item in record['state'].get('outfit',[]))
-    visual=record['state'].get('visual') or {}
     state=record.get('state') or {}
+    outfit_items=state.get('outfit',[])
+    outfit_ids={item.get('id','') if isinstance(item,dict) else str(item) for item in outfit_items}
+    act=(state.get('activity') or '').lower()
+    loc=(state.get('location') or '').lower()
+    is_bathing=any(w in act or w in loc for w in ('shower','bath','bathing'))
+    is_undressed=(not outfit_items) or any(i in ('nude','undressed','bathing') for i in outfit_ids)
+    is_towel='towel' in outfit_ids
+    if is_bathing or is_undressed:outfit=''
+    elif is_towel:outfit='wrapped in a bath towel'
+    else:outfit=', '.join(item['description'] for item in outfit_items if isinstance(item,dict) and item.get('description'))
+    visual=record['state'].get('visual') or {}
     feeling=feeling_text(state)
     overrides={'scene':scene,'wardrobe':outfit,'feeling':feeling}
     if visual.get('framing'):overrides['camera']=visual['framing']

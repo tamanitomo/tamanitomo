@@ -27,7 +27,7 @@ RECENT=10
 MAX_BYTES=32*1024*1024
 ALBUM_NAME=re.compile(r'^[A-Za-z0-9][A-Za-z0-9 _-]{0,60}$')
 ID=re.compile(r'^[a-f0-9]{24}$')
-IMAGE=re.compile(r'^[a-f0-9]{24}\.(png|jpg|webp)$')
+IMAGE=re.compile(r'^[a-f0-9]{24}(?:_[a-zA-Z0-9_-]{1,32})?\.(png|jpg|webp)$')
 
 def now_utc():return dt.datetime.now(dt.timezone.utc)
 def root(c):return c.data/'image-timeline'
@@ -65,15 +65,23 @@ def render_gallery(c):
 
 
 def _size(c,row):
-    name=row.get('filename','')
-    if not name:return 0
-    try:return (root(c)/'images'/name).stat().st_size
-    except OSError:return 0
+    names=set()
+    if row.get('filename'):names.add(row['filename'])
+    for v in row.get('variants',[]):
+        if isinstance(v,dict) and v.get('filename'):names.add(v['filename'])
+    total=0
+    for name in names:
+        try:total+=(root(c)/'images'/name).stat().st_size
+        except OSError:pass
+    return total
 
 def _drop(c,path,row):
-    name=row.get('filename','')
-    if name:
-        if not IMAGE.fullmatch(name) or not name.startswith(row['id']+'.'):
+    names=set()
+    if row.get('filename'):names.add(row['filename'])
+    for v in row.get('variants',[]):
+        if isinstance(v,dict) and v.get('filename'):names.add(v['filename'])
+    for name in names:
+        if not IMAGE.fullmatch(name) or (not name.startswith(row['id']+'.') and not name.startswith(row['id']+'_')):
             raise ValueError('Unsafe managed image name')
         # Unlinking a symlink removes only the link, never its target.
         image=root(c)/'images'/name
@@ -89,9 +97,13 @@ def _prune(c,now):
     # removed. Corrupt metadata that is currently inside the budget is still
     # corrupt metadata, and finding it later is finding it too late.
     for _,row in rows:
-        name=row.get('filename','')
-        if name and (not IMAGE.fullmatch(name) or not name.startswith(row['id']+'.')):
-            raise ValueError('Unsafe managed image name')
+        names=set()
+        if row.get('filename'):names.add(row['filename'])
+        for v in row.get('variants',[]):
+            if isinstance(v,dict) and v.get('filename'):names.add(v['filename'])
+        for name in names:
+            if not IMAGE.fullmatch(name) or (not name.startswith(row['id']+'.') and not name.startswith(row['id']+'_')):
+                raise ValueError('Unsafe managed image name')
     # A pending capture that never landed is a failure, not a file to keep
     # waiting for.
     for path,row in rows:
@@ -267,7 +279,7 @@ def load_image(source):
     return data,ext
 
 
-def save(c,ident,source,provider,now=None):
+def save(c,ident,source,provider,now=None,prompts=None):
     now=now or now_utc();prune(c,now)
     if not c.image_timeline:raise ValueError('Image timeline is off')
     path=capture_path(c,ident)
@@ -290,6 +302,7 @@ def save(c,ident,source,provider,now=None):
         from companion_media_review import metadata,write_metadata
         meta=metadata(pathlib.Path(source)) if not str(source).startswith(('http:','https:')) and pathlib.Path(source).is_file() else {}
         if meta.get('generation')=='Generation source not recorded':meta.pop('generation')
+        if prompts and 'prompts' not in meta:meta['prompts']=prompts
         write_metadata(folder/name,{'generation':provider,**meta})
         from companion_media_review import preferences,inspect
         if preferences(c)['review_provider']=='local-nsfw':
@@ -297,7 +310,86 @@ def save(c,ident,source,provider,now=None):
             if decision.get('provider')!='local-nsfw' or decision.get('sha256')!=hashlib.sha256(data).hexdigest():
                 try:inspect(c,folder/name,'Local timeline capture')
                 except ValueError:pass  # Keep the local capture; unavailable scans remain unknown and blurred.
+        meta_updated=metadata(folder/name)
+        rating=meta_updated.get('review',{}).get('rating',meta_updated.get('rating','safe'))
+        blur=meta_updated.get('review',{}).get('blur',meta_updated.get('blur',False))
+        v_entry={'filename':name,'provider':provider,'created_at':now.isoformat(),'rating':rating}
+        if blur:v_entry['blur']=True
+        row['primary_filename']=name
+        row['variants']=[v_entry]
+        p_data=prompts or meta_updated.get('prompts')
+        if p_data:row['prompts']=p_data
+        if meta_updated.get('active_prompt_type'):row['active_prompt_type']=meta_updated['active_prompt_type']
         row.update(status='saved',saved_at=now.isoformat(),provider=provider,sha256=hashlib.sha256(data).hexdigest())
+        atomic_write(path,json.dumps(row,ensure_ascii=False,indent=2));render_gallery(c)
+    return row
+
+
+def add_variant(c,ident,source,provider,prompts=None,now=None):
+    now=now or now_utc();prune(c,now)
+    path=capture_path(c,ident)
+    with file_lock(root(c)/'.lock'):
+        if not path.exists():raise ValueError('Capture not found')
+        row=json.loads(path.read_text(encoding='utf-8'))
+        if row.get('status')!='saved':raise ValueError('Can only add variant to a saved capture')
+        if not isinstance(provider,str) or not provider.strip() or len(provider)>200:raise ValueError('Record the actual provider/model name')
+        data,ext=load_image(source)
+        variants=row.get('variants') or []
+        if not variants and row.get('filename'):
+            variants=[{'filename':row['filename'],'provider':row.get('provider',''),'created_at':row.get('saved_at') or row.get('created_at'),'rating':'safe'}]
+        suffix_idx=len(variants)+1
+        name=f"{ident}_v{suffix_idx}.{ext}"
+        folder=root(c)/'images';folder.mkdir(parents=True,exist_ok=True)
+        fd,temp=tempfile.mkstemp(prefix='.capture-',dir=folder)
+        try:
+            with os.fdopen(fd,'wb') as out:out.write(data);out.flush();os.fsync(out.fileno())
+            os.replace(temp,folder/name)
+        finally:
+            if os.path.exists(temp):os.unlink(temp)
+        from companion_media_review import metadata,write_metadata
+        meta=metadata(pathlib.Path(source)) if not str(source).startswith(('http:','https:')) and pathlib.Path(source).is_file() else {}
+        if meta.get('generation')=='Generation source not recorded':meta.pop('generation')
+        if prompts and 'prompts' not in meta:meta['prompts']=prompts
+        write_metadata(folder/name,{'generation':provider,**meta})
+        from companion_media_review import preferences,inspect
+        if preferences(c)['review_provider']=='local-nsfw':
+            decision=meta.get('review',{})
+            if decision.get('provider')!='local-nsfw' or decision.get('sha256')!=hashlib.sha256(data).hexdigest():
+                try:inspect(c,folder/name,'Timeline capture variant')
+                except ValueError:pass
+        meta_updated=metadata(folder/name)
+        rating=meta_updated.get('review',{}).get('rating',meta_updated.get('rating','safe'))
+        blur=meta_updated.get('review',{}).get('blur',meta_updated.get('blur',False))
+        v_entry={'filename':name,'provider':provider,'created_at':now.isoformat(),'rating':rating}
+        if blur:v_entry['blur']=True
+        variants.append(v_entry)
+        row['variants']=variants
+        atomic_write(path,json.dumps(row,ensure_ascii=False,indent=2));render_gallery(c)
+    return row
+
+
+def select_variant(c,ident,filename):
+    path=capture_path(c,ident)
+    with file_lock(root(c)/'.lock'):
+        if not path.exists():raise ValueError('Capture not found')
+        row=json.loads(path.read_text(encoding='utf-8'))
+        if row.get('status')!='saved':raise ValueError('Capture is not saved')
+        if not IMAGE.fullmatch(filename) or (not filename.startswith(ident+'.') and not filename.startswith(ident+'_')):
+            raise ValueError('Invalid variant filename for this capture')
+        variants=row.get('variants',[])
+        valid_filenames=[v['filename'] for v in variants if isinstance(v,dict) and v.get('filename')]
+        if row.get('filename') and row['filename'] not in valid_filenames:
+            valid_filenames.append(row['filename'])
+        if filename not in valid_filenames:
+            raise ValueError('Filename is not a recorded variant for this capture')
+        if not (root(c)/'images'/filename).is_file():
+            raise ValueError('Variant image file does not exist on disk')
+        row['filename']=filename
+        row['primary_filename']=filename
+        for v in variants:
+            if isinstance(v,dict) and v.get('filename')==filename and v.get('provider'):
+                row['provider']=v['provider']
+                break
         atomic_write(path,json.dumps(row,ensure_ascii=False,indent=2));render_gallery(c)
     return row
 
@@ -393,6 +485,10 @@ def main():
     p=sub.add_parser('album-add',help='put any image file into an album')
     p.add_argument('--source',required=True);p.add_argument('--album',default='Favorites')
     sub.add_parser('albums')
+    p=sub.add_parser('add-variant',help='add an alternative render variant to a saved capture')
+    p.add_argument('--id',required=True);p.add_argument('--source',required=True);p.add_argument('--provider',required=True)
+    p=sub.add_parser('select-variant',help='select the active variant for a capture')
+    p.add_argument('--id',required=True);p.add_argument('--filename',required=True)
     sh=sub.add_parser('share',help='queue a timeline photo to share with the human')
     sh.add_argument('--body',required=True,help='message to accompany the photo')
     sh.add_argument('--id',help='specific capture id (default: latest)')
@@ -404,6 +500,8 @@ def main():
     if args.action=='prepare':out=prepare(c)
     elif args.action=='prune':out=prune(c)
     elif args.action=='save':out=save(c,args.id,args.source,args.provider)
+    elif args.action=='add-variant':out=add_variant(c,args.id,args.source,args.provider)
+    elif args.action=='select-variant':out=select_variant(c,args.id,args.filename)
     elif args.action=='fail':out=fail(c,args.id,args.reason)
     elif args.action=='keep':out=favorite(c,args.id,args.album)
     elif args.action=='album-add':out=add_to_album(c,args.source,args.album)

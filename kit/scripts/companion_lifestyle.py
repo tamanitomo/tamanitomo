@@ -105,11 +105,20 @@ def evolve(c,data,outfit,previous,closet,now):
     if previous:
         before=previous['state'];same=(data.get('activity_change')=='continue' or data.get('activity')==before.get('activity'))
         elapsed_activity=(now-day.timestamp(before.get('started_at',previous['recorded_at']))).total_seconds()/60
+        act_text=(data.get('activity') or before.get('activity') or '').lower()
+        if any(w in act_text for w in ('shower','bathing','in the shower','warm shower')):
+            if elapsed_activity>40:
+                raise ValueError('A shower should not take longer than 40 minutes. Step out of the shower, dry off, and change.')
         if same and before.get('duration_minutes') and elapsed_activity>=before['duration_minutes'] and not data.get('delay_reason','').strip():
             raise ValueError('ACTIVITY OVERDUE: start the next activity, or give an explicit delay_reason; extending duration_minutes alone is not a transition')
+    if any(w in (data.get('activity') or '').lower() for w in ('shower','bathing','in the shower')):
+        dur=data.get('duration_minutes')
+        if dur and dur>40:raise ValueError('A shower should not take longer than 40 minutes. Plan a realistic shower duration.')
     result=initial(previous,c);result['routine_choice']=choice;result['delay_reason']=data.get('delay_reason','');result.setdefault('wearing_since',{});actions=data.get('care_actions',[]);additions=data.get('wardrobe_additions',[])
-    old_ids={x['id'] for x in previous['state']['outfit']} if previous else set()
-    new_ids={x['id'] if isinstance(x,dict) else x for x in outfit}
+    VIRTUAL_TOKENS={'nude','undressed','bathing','towel'}
+    old_ids={x['id'] for x in previous['state']['outfit'] if x['id'] not in VIRTUAL_TOKENS} if previous else set()
+    new_raw={x['id'] if isinstance(x,dict) else x for x in outfit}
+    new_ids={x for x in new_raw if x not in VIRTUAL_TOKENS}
     known={x['id']:x for x in (closet.values() if isinstance(closet,dict) else closet)}
     if len({x['id'] for x in additions})!=len(additions):raise ValueError('Duplicate wardrobe addition')
     for item in additions:
@@ -157,6 +166,11 @@ def evolve(c,data,outfit,previous,closet,now):
         for i in entering:
             status=result['clothes'].get(i,'clean')
             if status in ('dirty','washing'):raise ValueError(f'CARE: {i} needs completed laundry before re-wearing')
+    loc=(data.get('location') or '').lower()
+    import companion_intimacy as intimacy
+    if any(k in loc for k in intimacy.PUBLIC_KEYWORDS):
+        if any(known.get(i,{}).get('category')=='sleep' for i in new_ids):
+            raise ValueError('Change out of pajamas into clean daytime or active clothes before leaving the house.')
     for i in old_ids-new_ids:
         if result['clothes'].get(i)!='washing':result['clothes'][i]='clean' if known.get(i,{}).get('category')=='footwear' else 'dirty'
     for i in old_ids-new_ids:result['wearing_since'].pop(i,None)

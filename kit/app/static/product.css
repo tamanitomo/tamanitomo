@@ -2534,3 +2534,22 @@ body[data-page="chat"] main{padding:0}
 .photo-selection-bar .viewer-btn-danger{color:#ef4444;border-color:rgba(239,68,68,0.3)}
 .photo-selection-bar .viewer-btn-danger:hover{background:rgba(239,68,68,0.15)}
 @media(max-width:900px){.photo-selection-bar{bottom:80px;left:8px;right:8px;transform:none;justify-content:center;flex-wrap:wrap;gap:8px;padding:8px 12px}}
+
+/* ── Photo variants & dual prompt inspection ───────────────────────── */
+.viewer-variants-bar{flex:none;min-height:76px;background:rgba(12,13,18,0.92);border-top:1px solid rgba(255,255,255,0.08);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);padding:10px 24px;display:flex;align-items:center;justify-content:center;z-index:20}
+.viewer-variants-inner{display:flex;align-items:center;gap:18px;max-width:100%;overflow-x:auto;padding:2px 0}
+.viewer-variants-list{display:flex;align-items:center;gap:10px}
+.viewer-variant-thumb{position:relative;width:52px;height:52px;border-radius:8px;border:2px solid rgba(255,255,255,0.15);padding:0;background:#090a0f;overflow:hidden;cursor:pointer;transition:all .15s ease;flex:none}
+.viewer-variant-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.viewer-variant-thumb .variant-idx{position:absolute;bottom:2px;right:2px;font-size:10px;font-weight:700;background:rgba(0,0,0,0.75);color:#fff;padding:1px 4px;border-radius:3px}
+.viewer-variant-thumb:hover{border-color:rgba(255,255,255,0.5);transform:scale(1.05)}
+.viewer-variant-thumb.is-active{border-color:var(--accent,#818cf8);box-shadow:0 0 12px rgba(129,140,248,0.5)}
+.viewer-variants-actions{display:flex;align-items:center;gap:10px;white-space:nowrap}
+.photo-variant-badge{position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.75);color:#e2e8f0;font-size:11px;font-weight:600;padding:2px 8px;border-radius:12px;border:1px solid rgba(255,255,255,0.2);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:4;pointer-events:none}
+.viewer-prompts-block{display:flex;flex-direction:column;gap:10px}
+.prompt-box{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px 14px}
+.prompt-box.is-active{border-color:rgba(129,140,248,0.45);background:rgba(129,140,248,0.06)}
+.prompt-box-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:12px}
+.prompt-text{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:11.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word;color:#cbd5e1;margin:0}
+.provider-preset-option:hover{background:rgba(255,255,255,0.06)!important;border-color:rgba(255,255,255,0.2)!important}
+

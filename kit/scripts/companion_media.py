@@ -305,6 +305,7 @@ def compile(c,preset_id='',category='portrait',overrides=None,draft=None,intimat
     reference=portrait.portrait_path(c)
     if p.get('requires_reference') and not reference.is_file():raise ValueError('Add a reference portrait before using this image-to-image preset')
     return {'preset':p,'parts':parts,'prompt':prompt,'structured_prompt':structured,
+            'prose_prompt':structured,'prompts':{'prose':structured,'structured':prompt},
             'negative':values['negative'],'seed':seed,
             'intimate':bool(intimate),'workflow':workflow,
             'reference_image':str(reference) if reference.is_file() and p['provider']=='comfyui' and p.get('mappings',{}).get('reference_image') else None}
@@ -338,7 +339,7 @@ def generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:N
     scanner still rates and records it; the safety floor still applies; and
     `compile` refuses the whole thing unless the closeness gate is open.
     """
-    if intimate:allow_nsfw=True
+    if intimate or getattr(c,'explicit',False):allow_nsfw=True
     try:return _generate(c,preset_id,category,overrides,report,allow_nsfw,draft,intimate)
     except ImageHeld as held:
         # 'unknown' is the detector's uncertain band, and it earns the same one clothed retry as
@@ -457,10 +458,11 @@ def _generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:
     if not ext:raise ValueError('Image must be PNG, JPEG or WebP')
     folder=c.data/'creations'/'image-studio';folder.mkdir(parents=True,exist_ok=True)
     ident=uuid.uuid4().hex;path=folder/(ident+ext);path.write_bytes(raw)
-    atomic_write(folder/(ident+'.json'),json.dumps({'prompt':provider_prompt,'parts':result['parts'],'preset':p['name'],'seed':result['seed']},indent=2))
+    active_type='structured' if p['provider']=='comfyui' else 'prose'
+    atomic_write(folder/(ident+'.json'),json.dumps({'prompt':provider_prompt,'prompts':result['prompts'],'active_prompt_type':active_type,'parts':result['parts'],'preset':p['name'],'seed':result['seed']},indent=2))
     import companion_media_review as review
     generation=('ComfyUI' if p['provider']=='comfyui' else 'Mistral' if p['provider']=='mistral' else p.get('hermes_provider') or p['provider'])+' · '+p['name']
-    review.write_metadata(path,{'generation':generation,'preset_id':p['id'],'seed':result['seed']})
+    review.write_metadata(path,{'generation':generation,'preset_id':p['id'],'seed':result['seed'],'rendered_with':generation,'active_prompt_type':active_type,'prompts':result['prompts']})
     if review.preferences(c)['review_before_delivery']:
         report('Reviewing the actual image before releasing it for delivery')
         try:decision=review.inspect(c,path,provider_prompt,allow_nsfw)
@@ -469,7 +471,8 @@ def _generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:
             raise ValueError('Image saved for inspection in Photos, but review is unavailable. Do not send it; check the reviewer in Media preferences.')
         if decision['status']!='passed':raise ImageHeld('Image held for inspection in Photos; do not send it. '+str(decision.get('reason','It did not match the intended image.'))[:400],path,review.metadata(path)['rating'])
     meta=review.metadata(path)
-    return {'path':str(path),'file':path.name,'provider':generation,'prompt':provider_prompt,'seed':result['seed'],
+    return {'path':str(path),'file':path.name,'provider':generation,'prompt':provider_prompt,
+            'prompts':result['prompts'],'active_prompt_type':active_type,'seed':result['seed'],
             'rating':meta['rating'],'blur':review.should_blur(review.preferences(c),meta),'review':meta.get('review')}
 
 

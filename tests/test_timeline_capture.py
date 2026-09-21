@@ -60,5 +60,26 @@ class CaptureTests(unittest.TestCase):
             self.assertEqual(worker.capture(self.c,self.now)['status'],'skipped')
             self.assertEqual(gen.call_count,1)
 
+    def test_capture_persists_dual_prompts_and_omits_outerwear_when_bathing(self):
+        import companion_portrait as pt
+        curr=presence.current(self.c)
+        bathing_state={'id':'bathing-state','previous_id':curr['id'],'outfit':['bathing'],'location':'bathroom',
+                       'activity':'under a warm shower','mood':'relaxed','text':'Showering.',
+                       'transition':'Stepping into the bathroom for a shower.'}
+        presence.update(self.c,bathing_state,self.now+dt.timedelta(minutes=30))
+        overrides=pt.recorded_overrides(self.c)
+        self.assertNotIn('green tee',overrides.get('wardrobe',''))
+
+        def generate(c,preset,category,overrides):
+            return {'path':str(self.image),'provider':'dual-prompt-generator',
+                    'prompts':{'prose':'warm steam in bathroom','structured':'steamy bathroom, natural light'}}
+
+        with patch.object(worker.media,'effective',return_value={'default_preset':'saved'}), \
+             patch.object(worker.media,'generate',side_effect=generate):
+            result=worker.capture(self.c,self.now+dt.timedelta(minutes=30))
+            self.assertEqual(result['status'],'saved')
+            row=json.loads(timeline.capture_path(self.c,result['capture_id']).read_text())
+            self.assertEqual(row['prompts'],{'prose':'warm steam in bathroom','structured':'steamy bathroom, natural light'})
+
 
 if __name__=='__main__':unittest.main()

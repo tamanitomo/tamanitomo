@@ -117,3 +117,33 @@ class TimelineTests(unittest.TestCase):
         self.assertEqual(queued[0]['content'],'image')
         self.assertEqual(queued[0]['body'],'Look at what I am doing today!')
         self.assertEqual(queued[0]['media_path'],latest_info['path'])
+
+    def test_variants_add_and_select(self):
+        capture=timeline.prepare(self.c,self.now)
+        ident=capture['capture_id']
+        saved=timeline.save(self.c,ident,str(self.image),'provider-1',self.now)
+        self.assertEqual(len(saved['variants']),1)
+        self.assertEqual(saved['primary_filename'],saved['filename'])
+
+        image2=self.folder/'provider2.png'
+        Image.new('RGB',(16,16),'blue').save(image2)
+        with_variant=timeline.add_variant(self.c,ident,str(image2),'provider-2',now=self.now)
+        self.assertEqual(len(with_variant['variants']),2)
+        v2_fn=with_variant['variants'][1]['filename']
+        self.assertTrue(v2_fn.startswith(ident+'_v2.'))
+        self.assertTrue((timeline.root(self.c)/'images'/v2_fn).is_file())
+        # Primary is still original
+        self.assertEqual(with_variant['primary_filename'],saved['filename'])
+
+        selected=timeline.select_variant(self.c,ident,v2_fn)
+        self.assertEqual(selected['filename'],v2_fn)
+        self.assertEqual(selected['primary_filename'],v2_fn)
+        self.assertEqual(selected['provider'],'provider-2')
+
+    def test_save_persists_prompts(self):
+        capture=timeline.prepare(self.c,self.now)
+        ident=capture['capture_id']
+        prompts={'prose':'Sam in a garden with warm light','structured':'1girl, garden, sunlight'}
+        saved=timeline.save(self.c,ident,str(self.image),'test-provider',self.now,prompts=prompts)
+        self.assertEqual(saved['prompts'],prompts)
+

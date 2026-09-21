@@ -112,6 +112,50 @@ class ContentTests(unittest.TestCase):
         self.assertEqual(result['entries'],[])
         self.assertTrue(result['warnings'])
 
+    def test_timeline_rerender_and_select_variant(self):
+        from PIL import Image
+        import companion_presence as presence
+        import companion_timeline as timeline
+        import companion_media as media
+        from unittest.mock import patch
+        import datetime as dt
+        now=dt.datetime(2026,9,14,12,0,tzinfo=dt.timezone.utc)
+        presence.update_wardrobe(self.c,[{'id':'tee','description':'simple tee','use':'day'}])
+        presence.update(self.c,{'previous_id':None,'outfit':['tee'],'location':'garden','activity':'gardening','mood':'peaceful','text':'In the garden.'},now)
+        self.c.image_timeline=True
+        self.c.image_style='realistic'
+        self.c.save()
+        capture=timeline.prepare(self.c,now)
+        self.assertTrue(capture['ready'])
+        cid=capture['capture_id']
+        img1=self.c.data/'img1.png';Image.new('RGB',(16,16),'green').save(img1)
+        timeline.save(self.c,cid,str(img1),'initial-provider',now)
+
+        media.save(self.c,{'version':1,'presets':[{'id':'p-alt','name':'Alt Engine','provider':'hermes','category':'portrait','active':True}],'default_preset':'p-alt'},media.revision(self.c))
+
+        img2=self.c.data/'img2.png';Image.new('RGB',(16,16),'red').save(img2)
+        with patch.object(media,'generate',return_value={'path':str(img2),'provider':'Alt Engine · Hermes'}):
+            res=self.client.post(f'/api/timeline/{cid}/rerender',headers=self.headers,json={'preset_id':'p-alt'})
+            self.assertEqual(res.status_code,200,res.text)
+            data=res.json()
+            self.assertEqual(data['status'],'saved')
+            self.assertEqual(len(data['capture']['variants']),2)
+            var_fn=data['variant']['filename']
+            self.assertTrue(var_fn.startswith(cid+'_v2.'))
+
+            res_sel=self.client.post(f'/api/timeline/{cid}/select-variant',headers=self.headers,json={'filename':var_fn})
+            self.assertEqual(res_sel.status_code,200,res_sel.text)
+            self.assertEqual(res_sel.json()['filename'],var_fn)
+            self.assertEqual(res_sel.json()['primary_filename'],var_fn)
+
+            res_tl=self.client.get('/api/timeline',headers=self.headers)
+            self.assertEqual(res_tl.status_code,200)
+            captures=res_tl.json()['captures']
+            c_row=next(r for r in captures if r['id']==cid)
+            self.assertEqual(c_row['filename'],var_fn)
+            self.assertEqual(c_row['primary_filename'],var_fn)
+            self.assertEqual(len(c_row['variants']),2)
+
 if __name__=='__main__':unittest.main()
 
 class JournalArchiveTests(unittest.TestCase):

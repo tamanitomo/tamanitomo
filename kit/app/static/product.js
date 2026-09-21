@@ -1,5 +1,5 @@
 function mediaPrivacy(item){return item.blur?'class="concealed-media" title="Sensitive or unreviewed image · open details to reveal"':'';}
-const paths={now:'M3 11 12 3l9 8v10h-6v-7H9v7H3Z',chat:'M4 4h16v12H9l-5 4Z',timeline:'M6 3v18M10 5h10M10 12h7M10 19h10',photos:'M3 4h18v16H3ZM3 16l5-5 5 5 3-3 5 5M16 8h.01',journals:'M5 3h14v18H5ZM8 7h8M8 11h8M8 15h5',creations:'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z',relationship:'M12 20S2 14 2 8a5 5 0 0 1 10-1 5 5 0 0 1 10 1c0 6-10 12-10 12Z',loops:'M4 5h16v16H4ZM8 2v6M16 2v6M4 11h16',knows:'M12 3v18M12 6C7 1 2 5 3 10c-3 5 2 10 9 8M12 6c5-5 10-1 9 4 3 5-2 10-9 8',vault:'M3 6h7l2 3h9v12H3Z',identity:'M8 7a4 4 0 1 0 8 0 4 4 0 1 0-8 0M4 21v-3c0-6 16-6 16 0v3',settings:'M4 7h16M4 17h16M8 4v6M16 14v6','local-models':'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Zm5 3h6v6H9V9Zm-5 2h2m-2 4h2m14-4h2m-2 4h2m-9-11v2m4-2v2m-4 14v2m4-2v2',environment:'M12 2v4M12 18v4M2 12h4M18 12h4M5 5l3 3M16 16l3 3M19 5l-3 3M8 16l-3 3M7 12a5 5 0 1 0 10 0 5 5 0 1 0-10 0',health:'M2 12h5l3-8 4 16 3-8h5',roster:'M8 8a3 3 0 1 0 6 0 3 3 0 1 0-6 0M3 21v-3c0-5 14-5 14 0v3M17 5c5 0 5 6 0 6M20 15c2 1 2 3 2 6',search:'M10 3a7 7 0 1 0 0 14 7 7 0 1 0 0-14M16 16l5 5',download:'M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',album:'M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16l-8-4-8 4V5Z',shield_alert:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Zm0-14v4m0 4h.01',shield_check:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Zm-2-10 2 2 4-4',info:'M12 16v-4m0-4h.01M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z',trash:'M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',close:'M18 6 6 18M6 6l12 12',chevron_left:'M15 18l-6-6 6-6',chevron_right:'M9 18l6-6-6-6',arrow_left:'M19 12H5m7 7-7-7 7-7',arrow_right:'M5 12h14m-7-7 7 7-7 7',voice:'M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Zm5 9a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z','image-studio':'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z',more:'M5 12h.01M12 12h.01M19 12h.01',pin:'M12 17v5M9 3h6l-1 7 3 3v2H7v-2l3-3-1-7Z',select:'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',profile:'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8M16 3l2 2 4-4'};
+const paths={now:'M3 11 12 3l9 8v10h-6v-7H9v7H3Z',chat:'M4 4h16v12H9l-5 4Z',timeline:'M6 3v18M10 5h10M10 12h7M10 19h10',photos:'M3 4h18v16H3ZM3 16l5-5 5 5 3-3 5 5M16 8h.01',journals:'M5 3h14v18H5ZM8 7h8M8 11h8M8 15h5',creations:'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z',relationship:'M12 20S2 14 2 8a5 5 0 0 1 10-1 5 5 0 0 1 10 1c0 6-10 12-10 12Z',loops:'M4 5h16v16H4ZM8 2v6M16 2v6M4 11h16',knows:'M12 3v18M12 6C7 1 2 5 3 10c-3 5 2 10 9 8M12 6c5-5 10-1 9 4 3 5-2 10-9 8',vault:'M3 6h7l2 3h9v12H3Z',identity:'M8 7a4 4 0 1 0 8 0 4 4 0 1 0-8 0M4 21v-3c0-6 16-6 16 0v3',settings:'M4 7h16M4 17h16M8 4v6M16 14v6','local-models':'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Zm5 3h6v6H9V9Zm-5 2h2m-2 4h2m14-4h2m-2 4h2m-9-11v2m4-2v2m-4 14v2m4-2v2',environment:'M12 2v4M12 18v4M2 12h4M18 12h4M5 5l3 3M16 16l3 3M19 5l-3 3M8 16l-3 3M7 12a5 5 0 1 0 10 0 5 5 0 1 0-10 0',health:'M2 12h5l3-8 4 16 3-8h5',roster:'M8 8a3 3 0 1 0 6 0 3 3 0 1 0-6 0M3 21v-3c0-5 14-5 14 0v3M17 5c5 0 5 6 0 6M20 15c2 1 2 3 2 6',search:'M10 3a7 7 0 1 0 0 14 7 7 0 1 0 0-14M16 16l5 5',download:'M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',album:'M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16l-8-4-8 4V5Z',shield_alert:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Zm0-14v4m0 4h.01',shield_check:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Zm-2-10 2 2 4-4',info:'M12 16v-4m0-4h.01M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z',trash:'M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',close:'M18 6 6 18M6 6l12 12',chevron_left:'M15 18l-6-6 6-6',chevron_right:'M9 18l6-6-6-6',arrow_left:'M19 12H5m7 7-7-7 7-7',arrow_right:'M5 12h14m-7-7 7 7-7 7',voice:'M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Zm5 9a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z','image-studio':'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z',more:'M5 12h.01M12 12h.01M19 12h.01',pin:'M12 17v5M9 3h6l-1 7 3 3v2H7v-2l3-3-1-7Z',select:'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',profile:'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8M16 3l2 2 4-4',sync:'M4 4v5h.582m15.356 2A8.001 8.001 0 0 0 4.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 0 1-15.357-2m15.357 2H15'};
 const icon=name=>`<svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="${paths[name]||paths.creations}"/></svg>`;
 const tabLabel=id=>({chat:'Chat',photos:'Photos',journals:'Journal',now:'Home'}[id])||(TABS.find(t=>t[0]===id)?.[1])||({'image-studio':'Image studio','voice':'Voice studio','local-models':'Local models','companion-edit':'Edit companion'}[id])||id;
 /* ---------------------------------------------------------------- navigation
@@ -1158,6 +1158,7 @@ function closePhotoViewer(){
   document.body.style.overflow='';
   $('viewer-album-popover').hidden=true;
   $('viewer-info-pane').hidden=true;
+  if($('viewer-variants-bar'))$('viewer-variants-bar').hidden=true;
   $('viewer-img').src='';
 }
 function navigateViewer(dir){
@@ -1175,7 +1176,14 @@ function toggleViewerInfo(){
 function populateViewerInfo(item){
   if(!item)return;
   const copies=(item.copies||[]).map(c=>esc(c.source+(c.path?' ('+c.path+')':''))).join('<br>')||'Original file';
-  $('viewer-info-body').innerHTML=`<div><div class="info-field-label">Title</div><div class="info-field-value">${esc(item.title||'Untitled')}</div></div><div><div class="info-field-label">Date & Time</div><div class="info-field-value">${item.at?stamp(item.at,{weekday:'long',year:'numeric',month:'long',day:'numeric'})+' · '+when(item.at):'Not recorded'}</div></div><div><div class="info-field-label">Source / Origin</div><div class="info-field-value"><span class="pill">${esc(item.generation||item.source||item.kind||'image')}</span></div></div><div><div class="info-field-label">Safety & Review</div><div class="info-field-value"><span class="pill ${item.blur||item.rating==='nsfw'?'status-warn':'status-good'}">${esc(item.rating||'unrated')}${item.blur?' · blurred':''}</span> ${esc(item.review?.status||'unreviewed')}</div></div>${item.location?`<div><div class="info-field-label">Scene Location</div><div class="info-field-value">${esc(item.location)}</div></div>`:''}${item.mood?`<div><div class="info-field-label">Mood</div><div class="info-field-value">${esc(item.mood)}</div></div>`:''}${item.outfit?`<div><div class="info-field-label">Attire</div><div class="info-field-value">${esc(item.outfit)}</div></div>`:''}<div><div class="info-field-label">File Path</div><div class="info-field-value"><code style="font-size:12px;word-break:break-all">${esc(item.path||'')}</code></div></div><div><div class="info-field-label">Collections & Copies</div><div class="info-field-value small dim">${copies}</div></div>`;
+  let promptsHtml='';
+  if(item.prompts&&(item.prompts.prose||item.prompts.structured)){
+    const active=item.active_prompt_type||(item.generation?.includes('ComfyUI')?'structured':'prose');
+    promptsHtml=`<div><div class="info-field-label">Prompts</div><div class="viewer-prompts-block"><div class="prompt-box ${active==='prose'?'is-active':''}"><div class="prompt-box-header"><strong>Prose Prompt</strong> ${active==='prose'?'<span class="pill status-good">Active / Sent</span>':''}</div><pre class="prompt-text">${esc(item.prompts.prose||'None recorded')}</pre></div><div class="prompt-box ${active==='structured'?'is-active':''}"><div class="prompt-box-header"><strong>Structured Prompt</strong> ${active==='structured'?'<span class="pill status-good">Active / Sent</span>':''}</div><pre class="prompt-text">${esc(item.prompts.structured||'None recorded')}</pre></div></div></div>`;
+  }else if(item.prompt){
+    promptsHtml=`<div><div class="info-field-label">Prompt</div><div class="info-field-value"><pre class="prompt-text">${esc(item.prompt)}</pre></div></div>`;
+  }
+  $('viewer-info-body').innerHTML=`<div><div class="info-field-label">Title</div><div class="info-field-value">${esc(item.title||'Untitled')}</div></div><div><div class="info-field-label">Date & Time</div><div class="info-field-value">${item.at?stamp(item.at,{weekday:'long',year:'numeric',month:'long',day:'numeric'})+' · '+when(item.at):'Not recorded'}</div></div><div><div class="info-field-label">Source / Origin</div><div class="info-field-value"><span class="pill">${esc(item.generation||item.source||item.kind||'image')}</span></div></div><div><div class="info-field-label">Safety & Review</div><div class="info-field-value"><span class="pill ${item.blur||item.rating==='nsfw'?'status-warn':'status-good'}">${esc(item.rating||'unrated')}${item.blur?' · blurred':''}</span> ${esc(item.review?.status||'unreviewed')}</div></div>${item.location?`<div><div class="info-field-label">Scene Location</div><div class="info-field-value">${esc(item.location)}</div></div>`:''}${item.mood?`<div><div class="info-field-label">Mood</div><div class="info-field-value">${esc(item.mood)}</div></div>`:''}${item.outfit?`<div><div class="info-field-label">Attire</div><div class="info-field-value">${esc(item.outfit)}</div></div>`:''}${promptsHtml}<div><div class="info-field-label">File Path</div><div class="info-field-value"><code style="font-size:12px;word-break:break-all">${esc(item.path||'')}</code></div></div><div><div class="info-field-label">Collections & Copies</div><div class="info-field-value small dim">${copies}</div></div>`;
 }
 async function populateAlbumChips(item){
   const chips=$('viewer-album-chips');
@@ -1224,10 +1232,12 @@ function renderViewerPhoto(){
   else{conceal.hidden=true;img.classList.remove('concealed-media');}
   const isNsfw=item.blur||item.rating==='nsfw';
   const downloadUrl=mediaUrl(item.url+'&download=true');
+  const captureId=item.capture_id||item.capture;
   $('viewer-actions').innerHTML=`
     <button class="viewer-icon-btn ${isNsfw?'is-safe':'is-warn'}" id="viewer-btn-rate" title="${isNsfw?'Mark safe':'Mark NSFW'}" aria-label="${isNsfw?'Mark safe':'Mark NSFW'}">${icon(isNsfw?'shield_check':'shield_alert')}</button>
     <button class="viewer-icon-btn" id="viewer-btn-album" title="Add copy to album" aria-label="Add copy to album">${icon('album')}</button>
     <a class="viewer-icon-btn" href="${downloadUrl}" download title="Download image" aria-label="Download image">${icon('download')}</a>
+    ${captureId?`<button class="viewer-icon-btn" id="viewer-btn-retry" title="Try another provider" aria-label="Try another provider">${icon('sync')}</button>`:''}
     <button class="viewer-icon-btn" id="viewer-btn-profile" title="Set as profile photo" aria-label="Set as profile photo">${icon('profile')}</button>
     <button class="viewer-icon-btn" id="viewer-btn-info" title="Details (i)" aria-label="Details">${icon('info')}</button>
     ${item.deletable?`<button class="viewer-icon-btn viewer-btn-danger" id="viewer-btn-delete" title="Delete photo" aria-label="Delete photo">${icon('trash')}</button>`:''}
@@ -1247,6 +1257,7 @@ function renderViewerPhoto(){
     if(!pop.hidden){pop.hidden=true;return;}
     pop.hidden=false;await populateAlbumChips(item);
   };
+  if($('viewer-btn-retry'))$('viewer-btn-retry').onclick=()=>openRetryProviderDialog(item);
   $('viewer-btn-info').onclick=()=>toggleViewerInfo();
   if($('viewer-btn-profile'))$('viewer-btn-profile').onclick=async()=>{
     const item=viewerItems[viewerIndex];if(!item)return;
@@ -1266,7 +1277,147 @@ function renderViewerPhoto(){
       }catch(err){notice('Delete failed: '+err.message);}
     };
   }
+  const variantsBar=$('viewer-variants-bar');
+  if(variantsBar){
+    const variants=item.variants||[];
+    if(captureId&&variants.length>1){
+      variantsBar.hidden=false;
+      const currentFilename=(item.url?item.url.split('/').pop().split('?')[0]:(item.filename||(item.path?item.path.split('/').pop():'')));
+      const isPrimary=(item.primary_filename&&currentFilename===item.primary_filename)||(!item.primary_filename&&currentFilename===variants[0]?.filename);
+      variantsBar.innerHTML=`
+        <div class="viewer-variants-inner">
+          <div class="viewer-variants-list">
+            ${variants.map((v,vIdx)=>{
+              const active=v.filename===currentFilename;
+              const thumbUrl=`/media/timeline/${v.filename}`;
+              return `<button class="viewer-variant-thumb ${active?'is-active':''}" data-variant-fn="${esc(v.filename)}" title="${esc(v.provider||'Variant '+(vIdx+1))}">
+                <img src="${thumbUrl}" alt="Variant ${vIdx+1}" loading="lazy">
+                <span class="variant-idx">#${vIdx+1}</span>
+              </button>`;
+            }).join('')}
+          </div>
+          <div class="viewer-variants-actions">
+            ${!isPrimary?`<button class="act small" id="viewer-btn-use-moment">Use this photo for this moment</button>`:`<span class="pill status-good small">Current moment photo</span>`}
+            <button class="quiet small" id="viewer-btn-retry-inline">Try another provider</button>
+          </div>
+        </div>`;
+      for(const btn of variantsBar.querySelectorAll('[data-variant-fn]')){
+        btn.onclick=()=>{
+          const fn=btn.dataset.variantFn;
+          const v=variants.find(x=>x.filename===fn);
+          if(!v)return;
+          item.url=`/media/timeline/${v.filename}`;
+          item.path=`image-timeline/images/${v.filename}`;
+          item.generation=v.provider;
+          item.rating=v.rating||'safe';
+          item.blur=Boolean(v.blur);
+          renderViewerPhoto();
+        };
+      }
+      if($('viewer-btn-use-moment')){
+        $('viewer-btn-use-moment').onclick=async()=>{
+          try{
+            await post(`/timeline/${captureId}/select-variant`,{filename:currentFilename});
+            item.primary_filename=currentFilename;
+            notice('Photo set as main for this moment');
+            renderViewerPhoto();
+            if(current==='photos')render('photos');
+          }catch(err){notice('Failed to select photo: '+err.message);}
+        };
+      }
+      if($('viewer-btn-retry-inline')){
+        $('viewer-btn-retry-inline').onclick=()=>openRetryProviderDialog(item);
+      }
+    }else{
+      variantsBar.hidden=true;
+    }
+  }
   if(!$('viewer-info-pane').hidden)populateViewerInfo(item);
+}
+
+async function openRetryProviderDialog(item){
+  const captureId=item.capture_id||item.capture;
+  if(!captureId){notice('This photo does not have a recorded capture to rerender.');return;}
+  let presets=[];
+  try{
+    const data=await api('/images');
+    presets=(data.settings?.presets||[]).filter(p=>p.active!==false);
+  }catch(e){notice('Could not load image presets: '+e.message);return;}
+  if(!presets.length){notice('No image presets configured in Image Studio.');return;}
+  const momentDesc=[item.title,item.location,item.outfit].filter(Boolean).join(' · ');
+  const bodyHtml=`
+    <div class="provider-retry-dialog">
+      <div style="margin-bottom:14px;padding:10px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim,#94a3b8);font-weight:600;margin-bottom:4px">🔒 Recorded Moment (Immutable)</div>
+        <div style="font-size:13px;color:#f8fafc;font-weight:500">${esc(momentDesc||'Current moment')}</div>
+        <div style="font-size:11px;color:var(--dim,#94a3b8);margin-top:2px">Timestamp: ${esc(item.at?stamp(item.at)+' · '+when(item.at):'Not recorded')}</div>
+        <div style="font-size:11px;color:var(--dim,#94a3b8);margin-top:4px;font-style:italic">Scene, wardrobe, identity, and time are strictly locked to preserve this moment.</div>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">Select Provider Preset</label>
+        <div class="provider-preset-list" style="display:flex;flex-direction:column;gap:8px">
+          ${presets.map((p,idx)=>`
+            <label class="provider-preset-option" style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;cursor:pointer">
+              <input type="radio" name="retry-preset" value="${esc(p.id)}" ${idx===0?'checked':''}>
+              <div style="flex:1">
+                <div style="font-weight:600;font-size:13px">${esc(p.name)}</div>
+                <div style="font-size:11px;color:var(--dim,#94a3b8)">Engine: ${esc(p.provider||'custom')} ${p.model?'· Model: '+esc(p.model):''}</div>
+              </div>
+            </label>
+          `).join('')}
+        </div>
+      </div>
+      <div style="margin-bottom:18px;display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="retry-new-seed" checked>
+        <label for="retry-new-seed" style="font-size:12px;cursor:pointer">Generate with new random seed</label>
+      </div>
+      <div id="retry-status-msg" class="warn small" style="margin-bottom:12px;display:none"></div>
+      <div style="display:flex;justify-content:flex-end;gap:10px">
+        <button class="quiet" id="retry-modal-cancel">Cancel</button>
+        <button class="act" id="retry-modal-submit">Generate Variant</button>
+      </div>
+    </div>
+  `;
+  dialog('Try with Another Provider',bodyHtml);
+  $('retry-modal-cancel').onclick=()=>$('product-dialog').close();
+  $('retry-modal-submit').onclick=async()=>{
+    const selectedInput=document.querySelector('input[name="retry-preset"]:checked');
+    if(!selectedInput)return;
+    const presetId=selectedInput.value;
+    const newSeed=$('retry-new-seed').checked;
+    const submitBtn=$('retry-modal-submit');
+    const statusEl=$('retry-status-msg');
+    submitBtn.disabled=true;
+    submitBtn.textContent='Generating…';
+    statusEl.style.display='none';
+    try{
+      const payload={preset_id:presetId};
+      if(newSeed)payload.seed=Math.floor(Math.random()*1000000000);
+      const res=await post(`/timeline/${captureId}/rerender`,payload);
+      $('product-dialog').close();
+      notice('New variant generated for this moment!');
+      if(res.capture?.variants){
+        item.variants=res.capture.variants;
+      }else if(res.variant){
+        if(!item.variants)item.variants=[];
+        item.variants.push(res.variant);
+      }
+      if(res.variant?.filename){
+        item.url=`/media/timeline/${res.variant.filename}`;
+        item.path=`image-timeline/images/${res.variant.filename}`;
+        item.generation=res.variant.provider;
+        item.rating=res.variant.rating||'safe';
+        item.blur=Boolean(res.variant.blur);
+      }
+      renderViewerPhoto();
+      if(current==='photos')render('photos');
+    }catch(err){
+      submitBtn.disabled=false;
+      submitBtn.textContent='Generate Variant';
+      statusEl.textContent='Generation failed: '+err.message;
+      statusEl.style.display='block';
+    }
+  };
 }
 async function openContent(item,items=null,index=0){
   if(!item)return;
@@ -1283,7 +1434,7 @@ async function openContent(item,items=null,index=0){
 }
 function photoInCollection(x,collection){return collection==='all'||(collection.startsWith('album:')?(x.copies||[x]).some(p=>p.path.startsWith('albums/'+collection.slice(6)+'/')):(x.copies||[x]).some(p=>p.source===collection));}
 function photoForCollection(x,collection){const copy=(x.copies||[]).find(p=>collection.startsWith('album:')?p.path.startsWith('albums/'+collection.slice(6)+'/'):p.source===collection);return copy?{...x,...copy}:x;}
-function mergePhotos(content,timeline){const captures=new Map(timeline.captures.map(x=>[x.image.split('/').pop(),x]));return content.items.filter(x=>x.kind==='image').map(x=>{const copy=(x.copies||[x]).find(p=>p.source==='photo session'),capture=copy?captures.get(copy.path.split('/').pop()):null;return capture?{...x,at:capture.at||x.at,title:capture.activity||x.title,mood:capture.mood,outfit:capture.outfit,capture:capture.id}:x;}).sort((a,b)=>(Date.parse(b.at)||0)-(Date.parse(a.at)||0));}
+function mergePhotos(content,timeline){const captures=new Map();for(const c of(timeline.captures||[])){if(c.image)captures.set(c.image.split('/').pop(),c);if(c.filename)captures.set(c.filename,c);for(const v of(c.variants||[])){if(v.filename)captures.set(v.filename,c);}}return content.items.filter(x=>x.kind==='image').map(x=>{const copy=(x.copies||[x]).find(p=>p.source==='photo session'),capture=copy?captures.get(copy.path.split('/').pop()):null;return capture?{...x,at:capture.at||x.at,title:capture.activity||x.title,mood:capture.mood,outfit:capture.outfit,capture:capture.id,capture_id:capture.id,variants:capture.variants||x.variants,primary_filename:capture.primary_filename||x.primary_filename,prompts:capture.prompts||x.prompts,active_prompt_type:capture.active_prompt_type||x.active_prompt_type}:x;}).sort((a,b)=>(Date.parse(b.at)||0)-(Date.parse(a.at)||0));}
 function photoDays(items){const groups=new Map();items.forEach((item,index)=>{const day=dayKey(item.at)||'unknown';if(!groups.has(day))groups.set(day,{day,items:[]});groups.get(day).items.push({item,index});});return [...groups.values()];}
 const photoBrowse={query:'',day:'',collection:'all'};
 const photoSelection=new Set();
@@ -1370,6 +1521,7 @@ workspaceHandlers.photos=async()=>{
           <div class="photo-select-check${photoSelection.has(x.content_id||x.path)?' checked':''}" aria-hidden="true"></div>
           <img ${mediaPrivacy(x)} src="${mediaUrl(x.url)}" loading="lazy" alt="${esc(x.title)}">
           ${starts?`<span class="photo-date-marker">${esc(day==='unknown'?'No date':stamp(x.at,{month:'short',day:'numeric'}))}</span>`:''}
+          ${x.variants&&x.variants.length>1?`<span class="photo-variant-badge" title="${x.variants.length} versions">${x.variants.length} versions</span>`:''}
         </div>
         <div class="photo-card-actions">
           <button class="card-action-btn ${x.blur||x.rating==='nsfw'?'is-safe':'is-warn'}" data-card-rate="${i}" title="${x.blur||x.rating==='nsfw'?'Mark safe':'Mark NSFW'}">
@@ -1387,6 +1539,23 @@ workspaceHandlers.photos=async()=>{
     if($('photo-empty-manage-settings'))$('photo-empty-manage-settings').onclick=openPhotoSettings;
     $('photo-count').textContent=`${shown.length} of ${content.total} images${content.scan_limited?' · scan limit reached; additional files remain in the Vault':''}`;
     for(const b of $('photo-grid').querySelectorAll('.photo-card')){
+      const x=shown[+b.dataset.photo];
+      if(x&&x.variants&&x.variants.length>1){
+        let hoverIdx=0,hoverTimer=null;
+        const imgEl=b.querySelector('img');
+        b.onmouseenter=()=>{
+          hoverTimer=setInterval(()=>{
+            hoverIdx=(hoverIdx+1)%x.variants.length;
+            const nextV=x.variants[hoverIdx];
+            if(nextV&&imgEl)imgEl.src=mediaUrl('/media/timeline/'+nextV.filename);
+          },1200);
+        };
+        b.onmouseleave=()=>{
+          if(hoverTimer)clearInterval(hoverTimer);
+          hoverIdx=0;
+          if(imgEl)imgEl.src=mediaUrl(x.url);
+        };
+      }
       b.onclick=e=>{
         if(e.target.closest('.photo-card-actions'))return;
         if(selectMode){const x=shown[+b.dataset.photo];togglePhotoSelected(x.content_id||x.path,b);draw();return;}

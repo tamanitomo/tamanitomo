@@ -30,7 +30,7 @@ def capture(c,now=None):
         # Freeze the claimed scene even if a concurrent pulse advances presence.
         overrides=portrait.recorded_overrides(c,record=claimed['scene'])
         generated=media.generate(c,preset,'portrait',overrides)
-        saved=timeline.save(c,ident,generated['path'],generated['provider'],now)
+        saved=timeline.save(c,ident,generated['path'],generated['provider'],now,prompts=generated.get('prompts'))
         return {'status':saved['status'],'capture_id':ident,
                 'path':str(timeline.root(c)/'images'/saved['filename']),
                 'provider':saved['provider'],'sha256':saved['sha256']}

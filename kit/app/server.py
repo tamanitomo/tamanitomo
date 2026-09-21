@@ -264,6 +264,11 @@ def build(home=None,token='',state_dir=None):
                 raw_outfit = filter_wardrobe_items(raw_outfit, stage)
             rows.append({'id':row['id'],'at':row['scene'].get('recorded_at'),
                          'image':f"/media/timeline/{row['filename']}",
+                         'filename':row['filename'],
+                         'primary_filename':row.get('primary_filename',row['filename']),
+                         'variants':row.get('variants',[]),
+                         'prompts':row.get('prompts'),
+                         'active_prompt_type':row.get('active_prompt_type'),
                          'activity':state.get('activity',''),'location':state.get('location',''),
                          'mood':state.get('mood',''),
                          'outfit':', '.join(i['description'] for i in raw_outfit if isinstance(i,dict) and 'description' in i)})
@@ -294,6 +299,49 @@ def build(home=None,token='',state_dir=None):
         import companion_timeline as tl
         try:return tl.favorite(c,capture,album)
         except ValueError as exc:raise HTTPException(400,str(exc))
+
+    @app.post('/api/timeline/{capture}/rerender')
+    def rerender_timeline(capture:str,payload:dict|None=None):
+        c=load()
+        import companion_timeline as tl, companion_media as media, companion_portrait as pt
+        path=tl.capture_path(c,capture)
+        if not path.exists():raise HTTPException(404,'Capture not found')
+        row=json.loads(path.read_text(encoding='utf-8'))
+        if row.get('status')!='saved':raise HTTPException(400,'Can only rerender a saved capture')
+        payload=payload or {}
+        preset_id=payload.get('preset_id') or payload.get('preset')
+        recipe=media.effective(c)
+        presets=media.load(c).get('presets',[])
+        preset=next((p for p in presets if p['id']==preset_id),None)
+        if not preset:
+            preset_id=recipe.get('routes',{}).get('portrait') or recipe.get('default_preset')
+            preset=next((p for p in presets if p['id']==preset_id),None)
+        if not preset:
+            raise HTTPException(400,'No valid image preset available')
+        scene=row.get('scene',{})
+        overrides=pt.recorded_overrides(c,record=scene)
+        if payload.get('seed') is not None:
+            try:overrides['seed']=int(payload['seed'])
+            except (ValueError,TypeError):pass
+        try:
+            generated=media.generate(c,preset['id'],'portrait',overrides)
+            updated=tl.add_variant(c,capture,generated['path'],generated['provider'],prompts=generated.get('prompts'))
+            variant=updated.get('variants',[])[-1] if updated.get('variants') else None
+            return {'status':'saved','capture_id':capture,'variant':variant,'capture':updated}
+        except Exception as exc:
+            raise HTTPException(400,str(exc))
+
+    @app.post('/api/timeline/{capture}/select-variant')
+    def select_timeline_variant(capture:str,payload:dict):
+        c=load()
+        import companion_timeline as tl
+        filename=payload.get('filename')
+        if not filename:raise HTTPException(400,'Filename is required')
+        try:
+            updated=tl.select_variant(c,capture,filename)
+            return {'status':'saved','capture_id':capture,'filename':updated['filename'],'primary_filename':updated['primary_filename'],'capture':updated}
+        except ValueError as exc:
+            raise HTTPException(400,str(exc))
 
     @app.get('/api/closet')
     def closet_view():

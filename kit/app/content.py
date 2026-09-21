@@ -116,13 +116,24 @@ def catalog(c,limit=1500,before=None,kind='',q='',day='',collection='all',conten
     rows=unique_images(rows)
     if kind=='image':
         import companion_timeline as timeline
-        captures={r.get('filename'):r for _,r in timeline.records(c) if r.get('status')=='saved'}
+        captures={}
+        for _,r in timeline.records(c):
+            if r.get('status')!='saved':continue
+            if r.get('filename'):captures[r['filename']]=r
+            for v in r.get('variants',[]):
+                if isinstance(v,dict) and v.get('filename'):
+                    captures[v['filename']]=r
         for row in rows:
             copy=next((x for x in row.get('copies',[row]) if x['source']=='photo session'),None)
             capture=captures.get(Path(copy['path']).name) if copy else None
             if capture:
                 scene=capture.get('scene',{});state=scene.get('state',{})
-                row.update(at=scene.get('recorded_at') or row['at'],title=state.get('activity') or row['title'],mood=state.get('mood',''))
+                row.update(at=scene.get('recorded_at') or row['at'],title=state.get('activity') or row['title'],mood=state.get('mood',''),
+                           capture_id=capture.get('id'),capture=capture.get('id'),
+                           variants=capture.get('variants',[]),
+                           primary_filename=capture.get('primary_filename',capture.get('filename')),
+                           prompts=capture.get('prompts') or row.get('prompts'),
+                           active_prompt_type=capture.get('active_prompt_type') or row.get('active_prompt_type'))
     if reference_paths is not None:
         rows=[row for row in rows if any(copy['path'] in reference_paths or str(c.data/copy['path']) in reference_paths for copy in row.get('copies',[row]))]
     if content_id:rows=[r for r in rows if r.get('content_id')==content_id]
