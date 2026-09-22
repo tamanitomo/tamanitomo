@@ -151,7 +151,17 @@ def show(c):
     return result
 
 
-def update(c,data,now=None):
+def check(c,data):
+    """Would `update` accept this record? Raises the same ValueError if not.
+
+    The pulse asks before it writes, so a model that got a field wrong is told
+    what was wrong and asked again, rather than the job dying on a rule it was
+    never shown. Validation-only: it writes nothing.
+    """
+    return update(c,data,None,dry_run=True)
+
+
+def update(c,data,now=None,dry_run=False):
     now=now or dt.datetime.now(ZoneInfo(c.timezone))
     if now.tzinfo is None:raise ValueError('Timezone required')
     if not isinstance(data,dict):raise ValueError('State must be an object')
@@ -171,6 +181,13 @@ def update(c,data,now=None):
             closet.update({item['id']:item for item in data.get('wardrobe_additions',[])})
         outfit=data.get('outfit')
         if not isinstance(outfit,list) or len(outfit)>20:raise ValueError('outfit must list at most 20 wardrobe item IDs')
+        # An item that is not a string reached `set()` and raised TypeError, which
+        # the caller's correction loop does not catch -- so a model that answered
+        # with objects instead of ids took the whole tick down with an error about
+        # hashability rather than being told what was wrong and asked again.
+        bad=[item for item in outfit if not isinstance(item,str)]
+        if bad:raise ValueError('outfit must be wardrobe item IDs as plain strings, '
+                                f'not {type(bad[0]).__name__} values')
         if len(set(outfit))!=len(outfit):raise ValueError('Duplicate outfit item')
         for item in outfit:
             if item not in closet and item not in VIRTUAL_TOKENS:raise ValueError('Add new items to the wardrobe before wearing them')
@@ -260,6 +277,8 @@ def update(c,data,now=None):
             if now<dt.datetime.fromisoformat(previous['recorded_at']):raise ValueError('Cannot move state backward in time')
             changed=before['outfit']!=state['outfit'] or before['location']!=state['location'] or before['activity']!=state['activity']
             if changed and not state['transition']:raise ValueError('Explain the outfit, location or activity transition; do not teleport')
+        # Everything above is validation; this is the only line that writes.
+        if dry_run:return {'written':False,'valid':True}
         result=record(c.life,narrative,state['activity'],'in_progress',now,ident,c.agent,c.human,state=state)
     # Outside the lock: the view is derived, so a failure to write it must not
     # cost the state that was just recorded.

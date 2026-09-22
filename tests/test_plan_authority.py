@@ -233,3 +233,228 @@ class MigrationTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class CommitmentChannelTests(unittest.TestCase):
+    """A commitment is how she says "I have promised to be somewhere".
+
+    That is a fine way to express a change and a poor place to keep one: it was a
+    second store of dated plans that nothing compared against the first. The
+    presence record is the channel now; the plan is the store.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        base = pathlib.Path(self.tmp.name)
+        self.c = cc.Companion(agent='Nova', human='Alex', profile='nova',
+                              hermes_root=base / 'hermes', vault=base / 'vault',
+                              timezone='UTC', context_mode='fixed')
+        self.c.home.mkdir(parents=True)
+        self.c.soul_dir.mkdir(parents=True)
+        self.c.life.mkdir(parents=True, exist_ok=True)
+        self.c.save()
+
+    def commitment(self, title, start, end, ident='c1', status='planned', reason=''):
+        return {'id': ident, 'title': title, 'starts_at': f'{DAY}T{start}:00+00:00',
+                'ends_at': f'{DAY}T{end}:00+00:00', 'buffer_minutes': 0,
+                'status': status, 'reason': reason}
+
+    def sync(self, *rows):
+        return plan.sync_commitments(self.c, list(rows))
+
+    def rows(self):
+        return {x['what']: x for x in (plan.read(self.c, DAY) or {'items': []})['items']}
+
+    def test_a_commitment_lands_in_the_day_it_belongs_to(self):
+        self.sync(self.commitment('haircut', '11:00', '12:00'))
+        got = self.rows()['haircut']
+        self.assertEqual(got['kind'], 'commitment')
+        self.assertEqual((got['start'], got['end']), ('11:00', '12:00'))
+        self.assertEqual(got['status'], 'planned')
+
+    def test_a_promise_displaces_a_whim_and_says_so(self):
+        plan.settle(self.c, DAY, 'a day at the coast',
+                    items=[{'what': 'the beach', 'start': '10:00', 'end': '16:00', 'kind': 'idea'}])
+        self.sync(self.commitment('haircut', '11:00', '12:00'))
+        rows = self.rows()
+        self.assertEqual(rows['haircut']['status'], 'planned')
+        self.assertEqual(rows['the beach']['status'], 'moved')
+        self.assertIn('promised', rows['the beach']['reason'])
+        self.assertIn('haircut', plan.read(self.c, DAY)['history'][-1]['change'])
+
+    def test_two_promises_at_once_is_left_for_her_to_resolve(self):
+        """Code should not pick which promise she breaks."""
+        self.sync(self.commitment('haircut', '11:00', '12:00', ident='c1'))
+        self.sync(self.commitment('the dentist', '11:30', '12:30', ident='c2'))
+        rows = self.rows()
+        self.assertEqual(rows['haircut']['status'], 'planned')
+        self.assertEqual(rows['the dentist']['status'], 'moved')
+        self.assertIn('needs resolving', rows['the dentist']['reason'])
+
+    def test_the_same_commitment_twice_updates_rather_than_duplicates(self):
+        self.sync(self.commitment('haircut', '11:00', '12:00'))
+        self.sync(self.commitment('haircut', '15:00', '16:00'))
+        rows = self.rows()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows['haircut']['start'], rows['haircut']['end']), ('15:00', '16:00'))
+
+    def test_completing_a_commitment_marks_it_done_in_the_plan(self):
+        self.sync(self.commitment('haircut', '11:00', '12:00'))
+        self.sync(self.commitment('haircut', '11:00', '12:00', status='completed'))
+        self.assertEqual(self.rows()['haircut']['status'], 'done')
+
+    def test_cancelling_one_drops_it_and_frees_the_hours(self):
+        self.sync(self.commitment('haircut', '11:00', '12:00'))
+        self.sync(self.commitment('haircut', '11:00', '12:00', status='cancelled'))
+        self.assertEqual(self.rows()['haircut']['status'], 'dropped')
+        plan.add(self.c, DAY, {'what': 'a long lunch', 'start': '11:00',
+                               'end': '13:00', 'kind': 'idea'})
+        self.assertEqual(self.rows()['a long lunch']['status'], 'planned')
+
+    def test_a_malformed_commitment_is_skipped_not_fatal(self):
+        self.sync({'id': 'x', 'title': '', 'starts_at': 'not a time'},
+                  self.commitment('haircut', '11:00', '12:00'))
+        self.assertEqual(list(self.rows()), ['haircut'])
+
+    def test_a_day_that_only_has_a_promise_still_says_what_it_is(self):
+        self.sync(self.commitment('haircut', '11:00', '12:00'))
+        self.assertTrue(plan.read(self.c, DAY)['intent'])
+
+
+class TheDayIsReadFromThePlanTests(unittest.TestCase):
+    """What the calendar shows has to be the same thing the plan says."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        base = pathlib.Path(self.tmp.name)
+        self.c = cc.Companion(agent='Nova', human='Alex', profile='nova',
+                              hermes_root=base / 'hermes', vault=base / 'vault',
+                              timezone='UTC', context_mode='fixed')
+        self.c.home.mkdir(parents=True); self.c.soul_dir.mkdir(parents=True)
+        self.c.life.mkdir(parents=True, exist_ok=True); self.c.save()
+        (self.c.life / 'routine.json').write_text(json.dumps(
+            {'kind': 'imagined_routine', 'routines_catalog': {},
+             'daily': [{'start': '12:00', 'end': '13:00', 'activity': 'lunch', 'setting': 'home'}],
+             'weekly': []}), encoding='utf-8')
+
+    def test_a_settled_plan_replaces_the_usual_shape_of_the_day(self):
+        import companion_life as life
+        plan.settle(self.c, DAY, 'a day at the coast', items=[
+            {'what': 'the beach', 'start': '10:00', 'end': '16:00', 'kind': 'idea'},
+            {'what': 'haircut', 'start': '17:00', 'end': '18:00', 'kind': 'commitment'}])
+        day = life.expected_day(self.c.life, dt.date.fromisoformat(DAY))
+        self.assertEqual(day['source'], 'intended')
+        self.assertEqual([a['activity'] for a in day['anchors']], ['the beach', 'haircut'])
+        self.assertEqual(day['intended_plan']['intent'], 'a day at the coast')
+
+    def test_an_unplanned_day_still_has_its_ordinary_shape(self):
+        import companion_life as life
+        day = life.expected_day(self.c.life, dt.date.fromisoformat('2026-09-23'))
+        self.assertEqual(day['source'], 'routine')
+        self.assertEqual([a['activity'] for a in day['anchors']], ['lunch'])
+
+    def test_something_moved_aside_is_not_shown_as_the_plan(self):
+        import companion_life as life
+        plan.settle(self.c, DAY, 'a day at the coast',
+                    items=[{'what': 'the beach', 'start': '10:00', 'end': '16:00', 'kind': 'idea'}])
+        beach = plan.read(self.c, DAY)['items'][0]['id']
+        plan.amend(self.c, DAY, beach, status='dropped', reason='rain')
+        day = life.expected_day(self.c.life, dt.date.fromisoformat(DAY))
+        self.assertEqual([a['activity'] for a in day['anchors']], [])
+
+
+class BridgeShapeTests(unittest.TestCase):
+    """A provider that accepts a schema and then ignores it.
+
+    It returns 200 and answers in prose, or in a shape of its own choosing. No
+    exception is raised, so a worker expecting a record got a sentence and failed
+    somewhere far away on a field that was never there. Checking that the reply
+    was JSON is not enough either: a well-formed object with the wrong keys
+    passes that and fails everywhere after it.
+    """
+
+    SCHEMA = {'type': 'object',
+              'properties': {'intent': {'type': 'string'}, 'items': {'type': 'array'},
+                             'tomorrow': {'type': 'object'}},
+              'required': ['intent', 'items']}
+
+    def missing(self, body):
+        import companion_text_provider as provider
+        return provider._missing(body, self.SCHEMA)
+
+    def test_prose_is_caught(self):
+        self.assertIn('not JSON', self.missing('An apple is a crisp fruit.'))
+
+    def test_a_list_at_the_top_is_caught(self):
+        self.assertIn('not an object', self.missing('[1, 2, 3]'))
+
+    def test_an_absent_required_field_is_named(self):
+        self.assertIn('items', self.missing('{"intent": "a day"}'))
+
+    def test_a_field_of_the_wrong_type_is_named(self):
+        """The case that reached `set()` and raised about hashability."""
+        complaint = self.missing('{"intent": 1, "items": {}}')
+        self.assertIn('intent must be a string', complaint)
+        self.assertIn('items must be an array', complaint)
+
+    def test_a_good_answer_produces_no_complaint(self):
+        self.assertEqual(self.missing('{"intent": "a day", "items": []}'), '')
+
+    def test_the_schema_is_put_in_the_prompt_rather_than_trusted_to_the_provider(self):
+        source = (ROOT / 'kit/scripts/companion_text_provider.py').read_text(encoding='utf-8')
+        self.assertIn('if schema:request=restate(request)', source,
+                      'the bridge is trusting json_schema enforcement again')
+
+
+class PresenceValidationTests(unittest.TestCase):
+    """Everything the writer objects to, objected to where the model can hear it.
+
+    Half the rules lived past the end of the pulse's correction loop, so a record
+    that failed them raised out of the job instead of coming back corrected.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        base = pathlib.Path(self.tmp.name)
+        self.c = cc.Companion(agent='Nova', human='Alex', profile='nova',
+                              hermes_root=base / 'hermes', vault=base / 'vault',
+                              timezone='UTC', context_mode='fixed')
+        self.c.home.mkdir(parents=True); self.c.soul_dir.mkdir(parents=True)
+        self.c.life.mkdir(parents=True, exist_ok=True); self.c.save()
+        import companion_presence as presence
+        self.presence = presence
+        presence.update_wardrobe(self.c, [{'id': 'tee', 'description': 'a tee', 'use': 'day'}])
+        self.now = dt.datetime(2026, 9, 21, 12, tzinfo=dt.timezone.utc)
+        presence.update(self.c, {'previous_id': None, 'outfit': ['tee'], 'location': 'home',
+                                 'activity': 'reading', 'mood': 'calm', 'text': 'At home.'}, self.now)
+
+    def record(self, **over):
+        base = {'previous_id': self.presence.current(self.c)['id'], 'outfit': ['tee'],
+                'location': 'home', 'activity': 'reading', 'mood': 'calm', 'text': 'Still here.'}
+        return {**base, **over}
+
+    def test_a_good_record_checks_clean_and_writes_nothing(self):
+        before = len(list(self.presence.events(self.c)))
+        self.assertTrue(self.presence.check(self.c, self.record())['valid'])
+        self.assertEqual(len(list(self.presence.events(self.c))), before, 'check must not write')
+
+    def test_objects_in_the_outfit_are_a_message_not_a_crash(self):
+        """This used to raise TypeError about hashability, which the pulse's
+        correction loop does not catch, so the whole tick died."""
+        with self.assertRaises(ValueError) as caught:
+            self.presence.check(self.c, self.record(outfit=[{'id': 'tee'}]))
+        self.assertIn('plain strings', str(caught.exception))
+
+    def test_an_empty_narrative_is_a_message_too(self):
+        with self.assertRaises(ValueError):
+            self.presence.check(self.c, self.record(text=''))
+
+    def test_check_and_update_agree_about_what_is_acceptable(self):
+        bad = self.record(outfit=[{'id': 'tee'}])
+        with self.assertRaises(ValueError):
+            self.presence.check(self.c, bad)
+        with self.assertRaises(ValueError):
+            self.presence.update(self.c, bad, self.now + dt.timedelta(minutes=30))

@@ -57,9 +57,16 @@ def _item_id(item):
 
 
 def clean_item(raw):
-    """One entry, checked. A malformed item is refused rather than stored."""
+    """One entry, checked. A malformed item is refused rather than stored.
+
+    `activity` and `setting` are accepted as names for `what` and `where`,
+    because that is what routine anchors have always called them and a companion
+    reads those all day. Asking her to use one vocabulary here and another there
+    was our inconsistency, not hers. Times are never inferred: a plan without
+    hours is the ambiguity this whole file exists to remove.
+    """
     if not isinstance(raw,dict):raise ValueError('An item must be an object')
-    what=str(raw.get('what') or '').strip()
+    what=str(raw.get('what') or raw.get('activity') or '').strip()
     if not what:raise ValueError('An item needs a `what`')
     kind=raw.get('kind') or 'other'
     if kind not in KINDS:raise ValueError(f'Unknown kind {kind!r}; expected one of {list(KINDS)}')
@@ -71,7 +78,7 @@ def clean_item(raw):
     if b<=a:raise ValueError(f'{what!r} ends before it starts')
     item={'id':str(raw.get('id') or '').strip() or _item_id(raw),
           'start':start,'end':end,'what':what[:160],
-          'where':str(raw.get('where') or '')[:160],
+          'where':str(raw.get('where') or raw.get('setting') or '')[:160],
           'kind':kind,'ref':str(raw.get('ref') or '')[:80],
           'status':status,'reason':str(raw.get('reason') or '')[:300]}
     return item
@@ -92,6 +99,19 @@ def conflicts(items,candidate,ignore=()):
 def empty(day,author='companion'):
     return {'date':_date(day).isoformat(),'author':author,'intent':'','theme':'custom',
             'items':[],'history':[],'settled_at':None}
+
+
+def read_for(root,day):
+    """Read a plan from a life directory, for callers that hold a path not a companion."""
+    path=pathlib.Path(root)/FOLDER/f'{_date(day).isoformat()}.json'
+    if not path.is_file():return None
+    try:data=json.loads(path.read_text(encoding='utf-8'))
+    except (OSError,ValueError):return None
+    if not isinstance(data,dict):return None
+    data.setdefault('items',[]);data.setdefault('history',[])
+    data['items']=sorted((x for x in data['items'] if isinstance(x,dict) and x.get('what')),
+                         key=lambda x:(_minutes(x.get('start')) or 0,PRECEDENCE.get(x.get('kind'),9)))
+    return data
 
 
 def read(c,day):
@@ -292,6 +312,71 @@ def migrate(c,apply=False,now=None):
                 _write(c,day,plan_out,'migrated from tomorrow.json and presence commitments')
             report['written']+=1
     return report
+
+
+def sync_commitments(c,commitments,tz=None,now=None):
+    """Fold the commitments on a presence record into the days they belong to.
+
+    A commitment is how the model says "I have promised to be somewhere". It
+    arrives on the presence record as a patch, which is a fine way to express a
+    change and a poor place to keep one: it was a second store of dated plans
+    that nothing compared against the first. The plan is the store; this is the
+    channel.
+
+    A promise displaces a whim, because that is what a promise is for, and the
+    displacement is written into the day's history rather than happening quietly.
+    Two promises in the same hours is a real conflict and is left for her to
+    resolve -- code should not pick which one she breaks.
+    """
+    from zoneinfo import ZoneInfo
+    tz=tz or ZoneInfo(getattr(c,'timezone','UTC') or 'UTC')
+    now=now or dt.datetime.now(dt.timezone.utc)
+    touched=[]
+    for row in (commitments or []):
+        if not isinstance(row,dict):continue
+        day,start=_local_hhmm(row.get('starts_at'),tz)
+        _,end=_local_hhmm(row.get('ends_at'),tz)
+        if not day or not start:continue
+        if not end:
+            end=(dt.datetime.combine(day,dt.time.fromisoformat(start))+dt.timedelta(hours=1)).strftime('%H:%M')
+        title=str(row.get('title') or '').strip()
+        if not title:continue
+        ref=str(row.get('id') or '')
+        status=row.get('status') or 'planned'
+        wanted='planned' if status=='planned' else ('done' if status=='completed' else 'dropped')
+        try:
+            candidate=clean_item({'start':start,'end':end,'what':title,'kind':'commitment',
+                                  'ref':ref,'status':wanted,'reason':str(row.get('reason') or '')})
+        except ValueError:
+            continue
+        with file_lock(folder(c)/'.lock'):
+            plan=read(c,day) or empty(day)
+            existing=[x for x in plan['items'] if x['kind']=='commitment' and ref and x['ref']==ref]
+            if existing:
+                existing[0].update(start=candidate['start'],end=candidate['end'],
+                                   what=candidate['what'],status=candidate['status'],
+                                   reason=candidate['reason'])
+                note=f"{title[:60]} -> {candidate['status']}"
+            else:
+                clash=conflicts(plan['items'],candidate)
+                promises=[x for x in clash if x['kind']=='commitment']
+                if promises and wanted=='planned':
+                    # Two things promised at once. Record it, do not choose.
+                    candidate=dict(candidate,status='moved',
+                        reason=f"clashes with {promises[0]['what'][:80]}; needs resolving")
+                    note=f"{title[:50]} clashes with {promises[0]['what'][:50]}"
+                else:
+                    for other in clash:
+                        other['status']='moved'
+                        other['reason']=f'displaced by {title[:80]}, which was promised'
+                    note=(f"{title[:60]} took the slot"+
+                          (f", moving {clash[0]['what'][:50]}" if clash else ''))
+                plan['items']=plan['items']+[candidate]
+            if not plan.get('intent'):
+                plan['intent']='a day with something promised in it'
+            touched.append({'date':day.isoformat(),'what':title[:60],'note':note})
+            _write(c,day,plan,note,now)
+    return touched
 
 
 def main():

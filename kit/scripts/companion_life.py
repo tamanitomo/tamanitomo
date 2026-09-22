@@ -361,6 +361,33 @@ def suggest(root,day=None,count=6,now=None):
                     'record what you would rather do with add-idea.')}
 
 
+def save_laid_out(root,day,items):
+    """The clothes set out for a particular day.
+
+    The only part of the old `tomorrow.json` that is not a plan: what she hung on
+    the back of the door. It keeps its own small file so the plan stays a
+    timeline and nothing else.
+    """
+    root=pathlib.Path(root)
+    day=day.isoformat() if hasattr(day,'isoformat') else str(day)
+    dt.date.fromisoformat(day)
+    data={'date':day,'items':[str(i)[:80] for i in (items or [])][:20]}
+    atomic_write(root/'laid-out.json',json.dumps(data,ensure_ascii=False,indent=2)+'\n')
+    return data
+
+
+def laid_out(root,day=None):
+    """What was set out, if it was set out for the day being asked about."""
+    root=pathlib.Path(root)
+    try:data=json.loads((root/'laid-out.json').read_text(encoding='utf-8'))
+    except (OSError,ValueError):return []
+    if not isinstance(data,dict):return []
+    if day is not None:
+        want=day.isoformat() if hasattr(day,'isoformat') else str(day)
+        if data.get('date')!=want:return []
+    return [str(i) for i in (data.get('items') or [])]
+
+
 def save_tomorrow_plan(root,plan):
     """Record what she means to do tomorrow.
 
@@ -421,15 +448,33 @@ def expected_day(root,day,now=None):
     if data.get('kind')!='imagined_routine':raise ValueError('routine must be imagined_routine')
     weekday=('monday','tuesday','wednesday','thursday','friday','saturday','sunday')[day.weekday()]
 
-    plan=read_tomorrow_plan(root,now)
-    if plan and plan.get('date') and plan['date']!=day.isoformat():plan=None
     catalog=data.get('routines_catalog',{})
     source='routine'
-    if plan and plan.get('anchors'):
-        rows=[dict(x) for x in plan['anchors'] if isinstance(x,dict)];source='intended'
-    elif plan and plan.get('theme') in catalog:
-        rows=[dict(x) for x in catalog[plan['theme']].get('anchors',[]) if isinstance(x,dict)];source='intended'
+    plan=None
+    # The plan for the day is the authority when there is one. `tomorrow.json` is
+    # read only so an older install still answers while it is being migrated.
+    try:
+        import companion_plan
+        settled=companion_plan.read_for(root,day)
+    except Exception:
+        settled=None
+    if settled and settled.get('settled_at'):
+        rows=[{'start':x['start'],'end':x['end'],'activity':x['what'],'setting':x.get('where',''),
+               'id':x['id'],'recurrence':x['kind'],'status':x['status']}
+              for x in settled['items'] if x.get('status')=='planned']
+        plan={'intent':settled.get('intent',''),'theme':settled.get('theme','custom'),
+              'date':day.isoformat(),'items':settled['items'],'history':settled.get('history',[])[-10:]}
+        source='intended'
     else:
+        plan=read_tomorrow_plan(root,now)
+        if plan and plan.get('date') and plan['date']!=day.isoformat():plan=None
+        if plan and plan.get('anchors'):
+            rows=[dict(x) for x in plan['anchors'] if isinstance(x,dict)];source='intended'
+        elif plan and plan.get('theme') in catalog:
+            rows=[dict(x) for x in catalog[plan['theme']].get('anchors',[]) if isinstance(x,dict)];source='intended'
+        else:
+            rows=None
+    if rows is None:
         rows=[dict(x,recurrence='weekly') for x in data.get('weekly',[])
               if isinstance(x,dict) and x.get('day')==weekday]
         rows+=[dict(x,recurrence='daily') for x in data.get('daily',[]) if isinstance(x,dict)]

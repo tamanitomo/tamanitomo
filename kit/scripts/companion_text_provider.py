@@ -16,6 +16,27 @@ import json
 import sys
 
 
+def _missing(text,schema):
+    """What is wrong with this answer, in words a model can act on. '' if nothing."""
+    try:
+        data=json.loads(str(text or ''))
+    except ValueError:
+        return 'it was not JSON at all.'
+    if not isinstance(data,dict):return 'the top level was not an object.'
+    required=[k for k in (schema.get('required') or []) if k not in data]
+    if required:return 'these required fields were absent: '+', '.join(sorted(required))+'.'
+    props=schema.get('properties') or {}
+    wrong=[]
+    for key,spec in props.items():
+        if key not in data or not isinstance(spec,dict):continue
+        want=spec.get('type')
+        if want=='array' and not isinstance(data[key],list):wrong.append(f'{key} must be an array')
+        elif want=='string' and not isinstance(data[key],str):wrong.append(f'{key} must be a string')
+        elif want=='object' and not isinstance(data[key],dict):wrong.append(f'{key} must be an object')
+    if wrong:return '; '.join(sorted(wrong))+'.'
+    return ''
+
+
 def chat(payload):
     from agent.auxiliary_client import resolve_provider_client
     provider=str(payload.get('provider') or '').strip()
@@ -32,23 +53,48 @@ def chat(payload):
     if payload.get('response_format'):request['response_format']=payload['response_format']
     effort=payload.get('reasoning_effort')
     if effort:request['reasoning_effort']=effort
+    wanted=request.get('response_format') or {}
+    schema=(wanted.get('json_schema') or {}).get('schema') if wanted.get('type')=='json_schema' else None
+
+    def restate(req):
+        """Put the schema in the prompt, for a provider that will not enforce one."""
+        out=dict(req)
+        out.pop('reasoning_effort',None)
+        out['messages']=[dict(m) for m in req['messages']]
+        out['messages'][-1]['content']=(str(out['messages'][-1].get('content',''))+
+            '\n\nReturn one JSON object and nothing else, satisfying exactly this JSON Schema, '
+            'including every required field and no additional properties:\n'+
+            json.dumps(schema,ensure_ascii=False))
+        out['response_format']={'type':'json_object'}
+        return out
+
+    # Do not ask a provider to enforce a schema it will quietly decline to
+    # enforce. This one accepts `json_schema`, returns 200, and answers in prose
+    # or in a shape of its own choosing -- no error, so a worker expecting a
+    # record got a sentence and failed somewhere far away on a field that was
+    # never there. Checking whether the reply was JSON was not enough either: a
+    # well-formed object with the wrong keys passes that and fails everywhere
+    # after it. The schema goes in the prompt, where the model can actually read
+    # it, and the shape is checked here rather than assumed.
+    if schema:request=restate(request)
     try:
         reply=client.chat.completions.create(**request)
-    except Exception as exc:
-        # A strict provider rejects the whole request for one unsupported field
-        # rather than ignoring it, so the retry drops what it is most likely to
-        # be objecting to instead of reporting a failure the worker cannot act on.
-        if not (effort or request.get('response_format')):raise
-        request.pop('reasoning_effort',None)
-        fmt=request.pop('response_format',None)
-        if fmt and fmt.get('type')=='json_schema':
-            request['messages']=[dict(m) for m in request['messages']]
-            request['messages'][-1]['content']=(str(request['messages'][-1].get('content',''))+
-                '\n\nReturn one JSON object and nothing else, satisfying exactly this JSON Schema, '
-                'including every required field and no additional properties:\n'+
-                json.dumps((fmt.get('json_schema') or {}).get('schema'),ensure_ascii=False))
-            request['response_format']={'type':'json_object'}
-        reply=client.chat.completions.create(**request)
+    except Exception:
+        if not (effort or wanted):raise
+        reply=client.chat.completions.create(**{k:v for k,v in request.items()
+                                                if k not in ('reasoning_effort','response_format')})
+    if schema:
+        missing=_missing(getattr(reply.choices[0].message,'content',''),schema)
+        if missing:
+            # One correction, naming what was wrong. A worker's own retry loop
+            # handles anything past that; two rounds of the same complaint is a
+            # model that is not going to get there.
+            follow=dict(request)
+            follow['messages']=list(request['messages'])+[
+                {'role':'assistant','content':str(getattr(reply.choices[0].message,'content','') or '')},
+                {'role':'user','content':'That did not match the schema: '+missing+
+                 ' Return the whole object again, corrected.'}]
+            reply=client.chat.completions.create(**follow)
     choice=reply.choices[0]
     usage=getattr(reply,'usage',None)
     return {'content':choice.message.content,'finish_reason':choice.finish_reason,

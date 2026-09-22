@@ -40,13 +40,22 @@ def schema(wardrobe,care_enabled=False,themes=None):
     # exist -- and picking one is a decision she makes, not one read out of her
     # sentence afterwards.
     if themes:
+        # A plan has times in it. Asking for a loose intention and a bag of ideas
+        # meant something else had to guess when any of it happened, and guessing
+        # is how two things end up in the same afternoon.
+        item={'type':'object','properties':{
+            'start':{'type':'string','minLength':4,'maxLength':5},
+            'end':{'type':'string','minLength':4,'maxLength':5},
+            'what':text(160),'where':{'type':'string','maxLength':160},
+            'kind':{'type':'string','enum':['commitment','idea','person','anchor','other']},
+            'ref':{'type':'string','maxLength':80}},
+            'required':['start','end','what','where','kind','ref'],'additionalProperties':False}
         fields['tomorrow']={'anyOf':[{'type':'object','properties':{
             'intent':text(300),
             'theme':{'type':'string','enum':list(themes)},
-            'ideas':{'type':'array','maxItems':4,'items':{'type':'string','minLength':1,'maxLength':80}},
-            'people':{'type':'array','maxItems':3,'items':{'type':'string','minLength':1,'maxLength':80}},
+            'items':{'type':'array','maxItems':10,'items':item},
             'outfit':{'type':'array','maxItems':20,'items':{'type':'string','minLength':1,'maxLength':80}}},
-            'required':['intent','theme','ideas','people','outfit'],'additionalProperties':False},{'type':'null'}]}
+            'required':['intent','theme','items','outfit'],'additionalProperties':False},{'type':'null'}]}
     if care_enabled:
         fields.update(lifestyle.schema_fields())
         # New acquisitions are validated atomically against the same update.
@@ -70,6 +79,14 @@ def lay_out(chosen,closet):
         ident=item.get('id') if isinstance(item,dict) else str(item)
         if ident and ident not in nightwear and ident not in out:out.append(ident)
     return out
+
+
+def _settle_ids(data,previous,phase_id):
+    """Never let model output bypass optimistic concurrency or choose a stale tick ID."""
+    data.pop('id',None)
+    data['previous_id']=previous['id']
+    if phase_id:data['id']=phase_id
+    return data
 
 
 def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
@@ -135,8 +152,8 @@ def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
                              (f" (last done {x['last_done']})" if x.get('last_done') else '')
                              for x in offered['suggestions'])+
                    '\nTake one, combine two, or ignore them entirely and do something of your own. '
-                   'Put the ids of any you took in `tomorrow.ideas`, and leave it empty if none of '
-                   'them is what you want. Wanting an ordinary day is a real answer. `theme` is a '
+                   'If you take one, put it in `tomorrow.items` with the hours you mean to give '
+                   'it and its id in `ref`. Ignoring all of them is a real answer. `theme` is a '
                    'different thing from an idea: it is the overall shape of the day, chosen from '
                    'the listed day-shape names, and "custom" is correct whenever an idea does not '
                    'match one of them.')
@@ -149,8 +166,16 @@ def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
                               (f", last seen {p['last_seen']}" if p.get('last_seen') else ', not seen yet')+
                               (f". You tend to: {', '.join(p['together'][:3])}" if p.get('together') else ''))
                              for p in due)+
-                   '\nPut the ids of anyone you plan to see in `tomorrow.people`, or leave it empty.')
-        user+=('\nTOMORROW: set `tomorrow` to what you actually mean to do, or null if you mean '
+                   '\nSeeing someone is an item like any other: give it hours and put their '
+                   'id in `ref` with kind "person".')
+        user+=('\nEach item is exactly: {"start":"HH:MM","end":"HH:MM","what":"...","where":"...",'
+               '"kind":"commitment|idea|person|anchor|other","ref":"the id you took it from, or \'\'"}. '
+               'Give real hours; a plan without them is not a plan.'
+               '\nYour day is ONE timeline. Two items may not cover the same minutes -- if two '
+               'things want the same hours, choose, or give one of them different hours. Use kind '
+               '"commitment" only for something you have actually promised somebody; "idea" or '
+               '"person" for something you simply want to do. Times are HH:MM in your own day.'
+               '\nTOMORROW: set `tomorrow` to what you actually mean to do, or null if you mean '
                'nothing in particular -- an ordinary day is a real answer and is better than '
                'inventing an outing. `intent` is one sentence in your own words. `theme` must be '
                'one of the listed names: pick the shape the day should take, or "custom" to keep '
@@ -186,19 +211,34 @@ def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
         try:
             day.validate_plan(data,candidate,now)
             lifestyle.evolve(c,data,data.get('outfit',[]),previous,closet,now)
+            # Everything the writer will object to, objected to here, where the
+            # model can still be told about it. Half the rules lived past the end
+            # of this loop, so a record that failed them raised out of the job
+            # instead of coming back corrected -- and a provider that will not
+            # enforce a schema produces exactly those failures routinely.
+            # The same normalisation the write does, applied before asking, so
+            # the check sees the record that would actually be written rather
+            # than the model's draft of it.
+            _settle_ids(data,previous,phase_id)
+            presence.check(c,data)
         except ValueError as exc:
             if attempt:raise
             payload['messages'] += [{'role':'assistant','content':reply['content']},{'role':'user','content':
                 'The proposed record was NOT saved. '+str(exc)+' Return the full corrected JSON record for the same checkpoint.'}]
             continue
         break
-    # Never let model output bypass optimistic concurrency or choose a stale tick ID.
-    data.pop('id',None)
-    data['previous_id']=previous['id']
-    if phase_id:data['id']=phase_id
+    _settle_ids(data,previous,phase_id)
     if not apply:return {'status':'preview','record':data,'planning_attempts':attempt+1,'usage':reply.get('usage'),
                          'model':route['model'],'provider':route['provider'] or route['base_url']}
     result=presence.update(c,data,now)
+    # The presence record is where a commitment is expressed; the plan is where
+    # it lives. Keeping both as stores is what let two dated plans disagree.
+    if data.get('commitments'):
+        try:
+            import companion_plan
+            companion_plan.sync_commitments(c,presence.current(c)['state'].get('commitments'),now=now)
+        except Exception as exc:
+            print(f'note: commitments not folded into the plan ({exc})',file=sys.stderr)
     if phase=='winddown' and isinstance(data.get('tomorrow'),dict):
         # What she means to do tomorrow, as she states it.
         #
@@ -213,9 +253,10 @@ def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
         # `save_tomorrow_plan` refuses a theme she did not choose from her own
         # catalog, which is the only use wording gets here: to be rejected.
         plan=data['tomorrow']
-        target=(now.date()+dt.timedelta(days=1)).isoformat()
-        taken=[str(i) for i in (plan.get('ideas') or [])]
-        seeing=[str(i) for i in (plan.get('people') or [])]
+        target=now.date()+dt.timedelta(days=1)
+        rows=[r for r in (plan.get('items') or []) if isinstance(r,dict)]
+        taken=[str(r.get('ref')) for r in rows if r.get('kind')=='idea' and r.get('ref')]
+        seeing=[str(r.get('ref')) for r in rows if r.get('kind')=='person' and r.get('ref')]
         # A theme is one of her day-shapes; an idea is a thing to do. A provider
         # that will not enforce an enum hands back whichever it thought of, and
         # losing the whole evening's plan over a mixed-up field would be a worse
@@ -226,17 +267,31 @@ def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
             print(f'note: {theme!r} is not one of her day-shapes; recording the plan as custom',
                   file=sys.stderr)
             theme=companion_life.CUSTOM_THEME
-        companion_life.save_tomorrow_plan(c.life,{
-            'date':target,'created_at':now.isoformat(),
-            'intent':plan.get('intent',''),'ideas':taken,'people':seeing,
-            'laid_out_outfit':lay_out(plan.get('outfit'),closet),
-            'theme':theme,'source':'pulse_winddown'})
+        import companion_plan
+        # One store for the day, written whole. An item she wrote that overlaps
+        # another is dropped with the reason recorded rather than taking the
+        # whole plan down -- an evening's thinking is worth more than one bad row.
+        items=[];refused=[]
+        for row in rows:
+            try:candidate=companion_plan.clean_item(row)
+            except ValueError as exc:refused.append(str(exc));continue
+            if companion_plan.conflicts(items,candidate):
+                refused.append(f"{candidate['what'][:60]} overlaps something already in the day")
+                continue
+            items.append(candidate)
+        try:
+            companion_plan.settle(c,target,plan.get('intent') or 'an ordinary day',
+                                  theme=theme,items=items,now=now)
+        except ValueError as exc:
+            print(f'note: tomorrow not settled ({exc})',file=sys.stderr)
+        for why in refused:print('note: '+why,file=sys.stderr)
+        companion_life.save_laid_out(c.life,target,lay_out(plan.get('outfit'),closet))
         # Recorded by id, so what she has done lately is a fact rather than
         # something read back out of her own descriptions of it.
-        try:companion_life.record_choice(c.life,taken,target)
+        try:companion_life.record_choice(c.life,taken,target.isoformat())
         except ValueError:pass  # An id she invented is not a reason to lose the plan.
         for who in seeing:
-            try:companion_life.saw_person(c.life,who,target)
+            try:companion_life.saw_person(c.life,who,target.isoformat())
             except ValueError:pass
     return {'status':'recorded','written':result.get('written',True),
             'previous_id':previous['id'],'planning_attempts':attempt+1,'usage':reply.get('usage'),
