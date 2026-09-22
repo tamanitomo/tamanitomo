@@ -1,3 +1,9 @@
+## 3.0.4 — Forwarding, and whose photograph this is (2026-09-22)
+
+- Forward whatever Hermes passes to the functions the streaming bridge wraps, so a chat turn no longer fails with `TypeError: run() got an unexpected keyword argument 'emitter'` on Hermes 0.21.3 while cron jobs carry on working. Reported, diagnosed and fixed by **erohtar** (#1).
+- Stop assigning an HTML-escaped URL directly to an image property: the entities stayed literal, `profile` arrived named `amp;profile`, and the photo viewer silently showed nothing for every companion but the first. The access token was being dropped the same way.
+- Make the viewer's navigation arrows a hint rather than furniture — no pill, no border, no blur, fading in only when a pointer is near — and remove them entirely where there is no pointer, since swiping is the interaction there.
+
 ## 3.0.3 — An empty day is allowed to be empty (2026-09-22)
 
 - Check the session record before writing about the person: `companion_life.py contact --day` reports how many of a day's sessions came from someone actually present rather than from a scheduled job, with their times and titles.
