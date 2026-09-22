@@ -35,7 +35,7 @@ class OperationPercentTests(unittest.TestCase):
         # Wait for the final write, not just the status flip: the row is saved
         # once more after it completes, and tearing the directory down between
         # the two is a flake, not a finding.
-        for _ in range(500):
+        for _ in range(2000):
             current = self.ops.rows[row['id']]
             if current['status'] != 'running' and current.get('finished_at'):return current
             time.sleep(0.01)
@@ -53,7 +53,10 @@ class OperationPercentTests(unittest.TestCase):
             return {}
         row = self.ops.submit('scope', 'Render', work)
         ident = row['id']
-        self.assertTrue(done.wait(5), 'the operation never ran')
+        # A wait for the pool to get to it, not an assertion about speed: the
+        # suite runs this alongside everything else, and a five-second budget
+        # failed on a loaded machine while the code under test was fine.
+        self.assertTrue(done.wait(60), 'the operation never ran')
         self.settled(row)
         return seen
 

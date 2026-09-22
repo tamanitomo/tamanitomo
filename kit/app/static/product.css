@@ -2655,3 +2655,20 @@ body[data-page="chat"] main{padding:0}
 .job-group-sensitive .job-group-head{border-color:var(--warn-bg);background:color-mix(in srgb,var(--warn-bg) 40%,transparent)}
 .job-group-none .job-group-head{border-color:var(--good-bg);background:color-mix(in srgb,var(--good-bg) 40%,transparent)}
 .sensitivity-summary{margin:12px 0}
+
+/* What runs when. A list of cron expressions is not an answer to "what happens
+   at eight in the morning", and that was the only view there was. */
+.job-timeline{margin:12px 0}
+.timeline-strip{display:grid;grid-template-columns:repeat(24,1fr);gap:2px;margin:12px 0 6px}
+.timeline-hour{position:relative;height:48px;border-radius:4px;border:1px solid var(--edge);
+  background:color-mix(in srgb,var(--accent) calc(var(--fill,0)*55%),var(--surface));
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:default}
+.timeline-hour.has-jobs{border-color:var(--accent-line)}
+.timeline-count{font-size:12px;font-variant-numeric:tabular-nums;color:var(--ink)}
+.timeline-label{font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums}
+.job-origin{margin:0 0 32px}
+.job-origin-head{margin:0 0 14px;padding-bottom:10px;border-bottom:2px solid var(--edge-2)}
+.job-origin-head h2{margin:0 0 4px;font-size:17px;font-weight:700;display:flex;align-items:center;gap:10px}
+.job-origin-head p{margin:0}
+.job-origin-other .job-origin-head{border-bottom-color:var(--warn-bg)}
+@media(max-width:900px){.timeline-strip{grid-template-columns:repeat(12,1fr)}.timeline-hour{height:38px}}

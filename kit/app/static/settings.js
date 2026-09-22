@@ -909,6 +909,50 @@ async function wireAvailableModel(providerField,modelField,urlField,{primary=fal
 // call a model at all, what does it put in the prompt, and where does that go.
 // The list answered none of them, and showed a provider even on the seven jobs
 // that never contact one -- which reads as though something is being sent.
+// When things actually run, on one strip. A list of cron expressions is not an
+// answer to "what happens at eight in the morning", and that was the only view
+// there was.
+function jobHours(job){
+  const expr=job.schedule?.expr||'';
+  const parts=expr.split(/\s+/);
+  if(parts.length<5)return null;                       // interval or one-shot
+  const [,hour]=parts;
+  if(hour==='*')return 'every';
+  const out=new Set();
+  for(const piece of hour.split(',')){
+    if(piece.includes('/')){
+      const [range,step]=piece.split('/');
+      const [lo,hi]=range==='*'?[0,23]:range.includes('-')?range.split('-').map(Number):[Number(range),23];
+      for(let h=lo;h<=hi;h+=Number(step)||1)out.add(h);
+    }else if(piece.includes('-')){
+      const [lo,hi]=piece.split('-').map(Number);
+      for(let h=lo;h<=hi;h++)out.add(h);
+    }else if(/^\d+$/.test(piece))out.add(Number(piece));
+  }
+  return out.size?out:null;
+}
+function jobTimelineHtml(jobs,timezone){
+  const rows=jobs.filter(j=>j.enabled);
+  const hourly=rows.filter(j=>jobHours(j)==='every');
+  const placed=rows.map(j=>({job:j,hours:jobHours(j)})).filter(x=>x.hours&&x.hours!=='every');
+  const odd=rows.filter(j=>jobHours(j)===null);
+  const byHour=Array.from({length:24},()=>[]);
+  for(const {job,hours} of placed)for(const h of hours)byHour[h].push(job);
+  const busiest=Math.max(1,...byHour.map(list=>list.length));
+  return `<details class="card job-timeline" open>
+    <summary><strong>What runs when</strong> <small class="dim">local time, ${esc(timezone||'')}</small></summary>
+    <div class="timeline-strip" role="img" aria-label="Twenty-four hour view of scheduled jobs">
+      ${byHour.map((list,h)=>`
+        <div class="timeline-hour${list.length?' has-jobs':''}" style="--fill:${list.length/busiest}"
+             title="${h.toString().padStart(2,'0')}:00 — ${list.length?list.map(j=>j.name).join(', '):'nothing scheduled'}">
+          <span class="timeline-count">${list.length||''}</span>
+          <span class="timeline-label">${h%6===0?h.toString().padStart(2,'0'):''}</span>
+        </div>`).join('')}
+    </div>
+    <p class="dim small">${hourly.length} run every hour${hourly.length?': '+esc(hourly.map(j=>j.name).join(', ')):''}.
+      ${odd.length?esc(odd.length+' run on an interval or once: '+odd.map(j=>j.name).join(', '))+'.':''}</p>
+  </details>`;
+}
 function sensitiveSummary(jobs,data){
   const sensitive=jobs.filter(j=>j.sensitivity==='sensitive'&&j.enabled);
   if(!sensitive.length)return '';
@@ -957,6 +1001,7 @@ async function renderJobsPanel(host){
   </div>
   ${noModel?`<p class="dim small">${noModel} model-backed job${noModel===1?' has':'s have'} no model of their own and follow the profile default.</p>`:''}
   ${sensitiveSummary(jobs,data)}
+  ${jobTimelineHtml(jobs,data.timezone)}
   <details class="card routing-card" id="job-routing">
     <summary><strong>Move every job to another provider</strong>
       <small class="dim">Model, provider and endpoint together, across all ${jobs.filter(j=>!j.no_agent).length} model-backed jobs</small></summary>
@@ -1002,6 +1047,7 @@ async function renderJobsPanel(host){
     const rows=jobs.filter(j=>(!q||(j.name||'').toLowerCase().includes(q))&&
       (state==='all'||state==='active'&&j.enabled||state==='paused'&&!j.enabled||state==='error'&&j.last_status==='error'));
     const groups=(data.sensitivity||[]).filter(g=>rows.some(j=>j.sensitivity===g.key));
+    const origins=(data.origins||[]).filter(o=>rows.some(j=>j.origin===o.key));
     const card=j=>`
       <details class="job-row${j.last_status==='error'?' is-failing':''}" data-job-id="${esc(j.id)}">
         <summary>
@@ -1040,8 +1086,8 @@ async function renderJobsPanel(host){
           </div>
         </div>
       </details>`;
-    host.querySelector('#job-list').innerHTML=rows.length?groups.map(g=>{
-      const mine=rows.filter(j=>j.sensitivity===g.key);
+    const bySensitivity=pool=>groups.map(g=>{
+      const mine=pool.filter(j=>j.sensitivity===g.key);
       if(!mine.length)return '';
       return `<section class="job-group job-group-${esc(g.key)}">
         <div class="job-group-head">
@@ -1050,6 +1096,16 @@ async function renderJobsPanel(host){
           <p class="dim small job-group-advice"><strong>Safest:</strong> ${esc(g.advice)}</p>
         </div>
         ${mine.map(card).join('')}
+      </section>`;}).join('');
+    host.querySelector('#job-list').innerHTML=rows.length?origins.map(o=>{
+      const mine=rows.filter(j=>j.origin===o.key);
+      if(!mine.length)return '';
+      return `<section class="job-origin job-origin-${esc(o.key)}">
+        <div class="job-origin-head">
+          <h2>${esc(o.label)} <span class="pill">${mine.length}</span></h2>
+          <p class="dim small">${esc(o.blurb)}</p>
+        </div>
+        ${bySensitivity(mine)}
       </section>`;}).join(''):empty('health','No matching jobs','Nothing here matches that search or filter.');
 
     /* A row builds its picker the first time it is opened, not for all 29 at

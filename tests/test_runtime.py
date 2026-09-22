@@ -311,8 +311,13 @@ if __name__=='__main__':unittest.main()
 
 
 class HandoffFreshnessTests(unittest.TestCase):
-    """The handoff is written by an LLM job. When that job stops, the context must
-    say the present is old rather than presenting it as now."""
+    """When the model stops running, the context must say the present is old
+    rather than presenting it as now.
+
+    The handoff used to be a file a job rewrote, so its mtime was the measure.
+    It is rebuilt whenever it is read now, which makes the mtime always a moment
+    ago and useless: freshness is the age of the newest state a model actually
+    confirmed, which is the thing the label was always really about."""
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         root=pathlib.Path(self.tmp.name)
@@ -325,8 +330,13 @@ class HandoffFreshnessTests(unittest.TestCase):
         self.now=dt.datetime(2026,9,9,14,0,tzinfo=dt.timezone.utc)
 
     def age(self,hours):
-        when=(self.now-dt.timedelta(hours=hours)).timestamp()
-        os.utime(self.active,(when,when))
+        """Say when a model last confirmed the present."""
+        import companion_presence as presence
+        when=self.now-dt.timedelta(hours=hours)
+        presence.record(self.c.life,'Mid-way through the roof repair.','roof repair',
+                        'in_progress',when,f'confirmed-{hours}',self.c.agent,self.c.human,
+                        state={'activity':'roof repair','location':'the roof','outfit':[],
+                               'mood':'focused','confirmed':True})
 
     def handoff_label(self):
         for line in ctx.build(self.c,{},self.now).splitlines():
@@ -336,7 +346,7 @@ class HandoffFreshnessTests(unittest.TestCase):
     def test_a_fresh_handoff_is_stamped_but_not_flagged(self):
         self.age(0.5)
         label=self.handoff_label()
-        self.assertIn('last refreshed 30 minutes ago',label)
+        self.assertIn('confirmed 30 minutes ago',label)
         self.assertNotIn('STALE',label)
 
     def test_an_old_handoff_says_so_and_defers_to_the_ledger(self):
@@ -364,8 +374,11 @@ class HandoffFreshnessTests(unittest.TestCase):
         label=self.handoff_label()
         self.assertIn('future timestamp',label);self.assertIn('STALE',label)
 
-    def test_a_missing_handoff_file_is_not_reported_as_current(self):
+    def test_a_handoff_that_cannot_be_built_is_not_reported_as_current(self):
+        """There is no 'Right now' to show, so nothing claims one."""
         self.active.unlink()
+        self.c.soul_dir.chmod(0o500)
+        self.addCleanup(lambda:self.c.soul_dir.chmod(0o700))
         self.assertEqual(self.handoff_label(),'')
 
 

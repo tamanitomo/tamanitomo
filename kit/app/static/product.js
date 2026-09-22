@@ -637,7 +637,7 @@ function buildCalendarHtml(agentName,missions,commitments=[],prefix='cal'){
 
     <div class="calendar-selected-day-pane">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-        <strong>Events & commitments for ${esc(selectedCalDate)}</strong>
+        <strong>Your list and shared notes for ${esc(selectedCalDate)}</strong>
         <span class="pill">${selectedDayMissions.length} scheduled</span>
       </div>
       ${selectedDayMissions.length?`
@@ -654,7 +654,7 @@ function buildCalendarHtml(agentName,missions,commitments=[],prefix='cal'){
             </div>
           </div>`).join('')}
       </div>`:
-      '<p class="dim small" style="margin:8px 0 0">No events or commitments on this date.</p>'
+      '<p class="dim small" style="margin:8px 0 0">Nothing of yours on this date.</p>'
       }
       <div class="schedule-block" id="${prefix}-schedule">
         <div class="schedule-heading"><strong>Her expected day</strong></div>
@@ -662,7 +662,7 @@ function buildCalendarHtml(agentName,missions,commitments=[],prefix='cal'){
       </div>
       <div class="cal-add-event-box" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--edge)">
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <input id="${prefix}-new-title" placeholder="Add event for this day…" style="flex:1;min-width:180px;padding:8px 12px;font-size:13px">
+          <input id="${prefix}-new-title" placeholder="Add something of yours for this day…" style="flex:1;min-width:180px;padding:8px 12px;font-size:13px">
           <button class="act small" id="${prefix}-add-btn">Add Event</button>
         </div>
       </div>
@@ -1963,11 +1963,12 @@ workspaceHandlers.loops=async()=>{
   const loops=d.loops||[];
   const openCount=missions.filter(x=>x.status==='open').length;
 
-  $('loops').innerHTML=heading('Plans & calendar','Shared schedule, commitments, autonomous investigations, and open threads.')+
+  $('loops').innerHTML=heading('Plans & calendar',
+    'Her days, your to-do list, the things you have told her about, and the threads she is carrying.')+
   `<div class="stat-strip">
-    <div class="stat-item"><span>Active tasks</span><strong>${openCount}</strong></div>
-    <div class="stat-item"><span>Total scheduled</span><strong>${missions.length}</strong></div>
-    <div class="stat-item"><span>Open threads</span><strong>${loops.length}</strong></div>
+    <div class="stat-item"><span>On your list</span><strong>${openCount}</strong></div>
+    <div class="stat-item"><span>Yours, all told</span><strong>${missions.length}</strong></div>
+    <div class="stat-item"><span>Threads she is carrying</span><strong>${loops.length}</strong></div>
   </div>
 
   ${buildCalendarHtml(d.agent, missions, d.commitments, 'cal')}
@@ -1975,22 +1976,25 @@ workspaceHandlers.loops=async()=>{
   <div class="planner-layout">
     <div class="planner-column">
       <div class="card">
-        <h2>Add Shared Event or Task</h2>
+        <h2>Your list, and things you've told her</h2>
+        <p class="dim small" style="margin:-8px 0 14px">Nothing here goes into her diary. Your
+          to-do list is yours and she can help you finish it; something you have told her about —
+          your birthday, a trip, an exam — is context she may act on by marking it, or giving you
+          room, or not at all. Her own day is hers to plan.</p>
         <div class="form-grid">
-          <label class="wide">What is happening or to be done?
-            <input id="mtitle" placeholder="e.g. Dinner reservation at 7pm, or Research flight options" required>
+          <label class="wide">What is it?
+            <input id="mtitle" placeholder="e.g. Book the flights, or I have an exam that morning" required>
           </label>
-          <label class="wide">Details & constraints
-            <input id="mdetail" placeholder="Time, location, specific requests or questions">
+          <label class="wide">Anything she should know
+            <input id="mdetail" placeholder="Time, place, what would actually help">
           </label>
-          <label>Target or event date
+          <label>Date
             <input id="mwhen" placeholder="YYYY-MM-DD" type="date" value="${esc(selectedCalDate)}">
           </label>
         </div>
         <div class="actions" style="margin-top:14px">
-          <button class="act" id="madd">Save to shared calendar</button>
+          <button class="act" id="madd">Add it</button>
         </div>
-        <p class="dim small" style="margin-top:10px">Your companion references and remembers all calendar items during conversation and autonomous routines.</p>
       </div>
 
       <div class="card">

@@ -77,6 +77,15 @@ def file_lock(path,timeout=30):
             finally:fcntl.flock(handle,fcntl.LOCK_UN)
 
 def atomic_write(path,text):
+    """Write a file so that a power cut leaves either the old one or the new one.
+
+    The contents were being fsynced and the rename was not, which is only half of
+    it: `os.replace` is atomic with respect to a reader, but the directory entry
+    it creates can still be lost on an unclean shutdown, taking the file with it.
+    For a memory file or a day's plan that is the difference between the old
+    version and no version. Syncing the directory afterwards is what makes the
+    rename durable, and it is cheap.
+    """
     path=pathlib.Path(path).resolve();path.parent.mkdir(parents=True,exist_ok=True)
     fd,tmp=tempfile.mkstemp(prefix='.'+path.name+'.',dir=path.parent)
     try:
@@ -84,8 +93,26 @@ def atomic_write(path,text):
         with os.fdopen(fd,'w',encoding='utf-8',newline='\n') as out:
             out.write(text);out.flush();os.fsync(out.fileno())
         os.replace(tmp,path)
+        _sync_dir(path.parent)
     finally:
         if os.path.exists(tmp):os.unlink(tmp)
+
+
+def _sync_dir(folder):
+    """Durability for the rename itself. Not every platform allows it; Windows
+    has no directory file descriptor to sync, and a read-only mount will refuse.
+    Neither is a reason to fail a write that has already landed."""
+    try:
+        fd=os.open(str(folder),os.O_RDONLY)
+    except (OSError,AttributeError):
+        return False
+    try:
+        os.fsync(fd)
+        return True
+    except OSError:
+        return False
+    finally:
+        os.close(fd)
 
 def default_home():
     """Match Hermes native Windows and POSIX data locations."""
