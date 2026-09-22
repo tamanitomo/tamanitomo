@@ -2245,6 +2245,14 @@ async function imagesPanelHTML(){
   </div>
 
   <h3 class="section-subheading">Appearance</h3>
+  <details class="settings-advanced" id="set-quality-tags-section"><summary>Quality tags <span class="dim small">(ComfyUI only)</span></summary>
+    <label for="set-quality-tags">Quality tags</label>
+    <textarea id="set-quality-tags" rows="2" placeholder="photographic, dr0skait"
+      title="Sent at the front of the quality box on every ComfyUI render for this companion. LoRA trigger words go here \u2014 a character LoRA does nothing until its keyword is in the positive prompt. ComfyUI lanes only; hosted providers never see it.">${esc(settings.quality_tags||'')}</textarea>
+    <small class="dim">Goes at the front of the <strong>quality</strong> box on every ComfyUI render for ${esc(chatName())}. This is where a LoRA's trigger word belongs \u2014 a character LoRA does nothing until its keyword appears in the positive prompt. Her appearance below stays separate, so it can temper that face rather than be replaced by it.</small>
+    <small class="dim">ComfyUI lanes only. Hosted providers are sent labelled prose and have no LoRA to activate, so they never receive these.</small>
+  </details>
+
   <p class="dim small" style="margin:0 0 12px">${following
     ? 'Uses their saved appearance.'
     : 'Uses their saved image description.'}
@@ -2266,6 +2274,7 @@ function wireImagesPanel(panel){
     const isComfy=provider.value==='__comfy__';
     panel.querySelector('#set-image-lanes').hidden=!isComfy;
     panel.querySelector('#set-comfy-section').hidden=!isComfy;
+    panel.querySelector('#set-quality-tags-section').hidden=!isComfy;
   };
   provider.onchange=()=>{
     if(provider.value==='__comfy__'){
@@ -2359,6 +2368,7 @@ function wireImagesPanel(panel){
       if(provider.value==='__comfy__')rememberComfy();
       images.settings.comfy_routes=comfyRoutes;images.settings.comfy_default=comfyDefault;
       images.settings.inherit=Boolean(inherit?.checked);
+      images.settings.quality_tags=panel.querySelector('#set-quality-tags').value.trim();
       images.settings.default_preset=panel.querySelector('#set-image-default').value;
       images.settings.routes=Object.fromEntries([...panel.querySelectorAll('[data-image-route]')].filter(x=>x.value).map(x=>[x.dataset.imageRoute,x.value]));
       const imageSave=await post('/images',{settings:images.settings,revision:images.revision});

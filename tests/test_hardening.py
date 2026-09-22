@@ -268,3 +268,45 @@ class LocalImportShadowTests(unittest.TestCase):
         for path in sorted((ROOT/'kit').rglob('*.py')):
             found+=self.offenders(path)
         self.assertEqual(found,[])
+
+
+class QualityTagsTests(unittest.TestCase):
+    """A LoRA does nothing until its trigger word is in the positive prompt.
+
+    That word belongs to the companion, not to the workflow: two companions can
+    share one lane and each fire her own trigger. So it is stored on her image
+    contract and merged into `quality`, which is the box that carries activation
+    keywords and style tags.
+    """
+    def setUp(self):
+        sys.path.insert(0,str(ROOT/'kit/scripts'))
+        import companion_media
+        self.media=companion_media
+
+    def test_her_tags_lead_the_quality_box(self):
+        self.assertEqual(self.media.merge_tags('photographic, dr0skait','sharp focus'),
+                         'photographic, dr0skait, sharp focus')
+
+    def test_a_trigger_the_lane_repeats_is_not_doubled(self):
+        # Asking for a trigger twice pulls the LoRA harder than asking once.
+        self.assertEqual(self.media.merge_tags('photographic, dr0skait','dr0skait, sharp focus'),
+                         'photographic, dr0skait, sharp focus')
+
+    def test_case_and_padding_do_not_defeat_that(self):
+        self.assertEqual(self.media.merge_tags('DR0SKait',' dr0skait ,  soft light'),
+                         'DR0SKait, soft light')
+
+    def test_either_side_may_be_empty(self):
+        self.assertEqual(self.media.merge_tags('','sharp focus'),'sharp focus')
+        self.assertEqual(self.media.merge_tags('photographic',''),'photographic')
+        self.assertEqual(self.media.merge_tags('',''),'')
+
+    def test_tags_must_be_a_short_string(self):
+        for bad in (123,['a'],'x'*2001):
+            with self.assertRaises(ValueError):
+                self.media.validate({'version':1,'presets':[],'quality_tags':bad})
+
+    def test_a_companion_with_no_image_file_yet_still_has_the_field(self):
+        class Home:
+            home=pathlib.Path(tempfile.mkdtemp())
+        self.assertEqual(self.media.load(Home()).get('quality_tags'),'')

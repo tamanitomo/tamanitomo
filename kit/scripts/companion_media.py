@@ -132,7 +132,8 @@ def intimacy_gate(c):
 def load(c):
     path=c.home/CONFIG
     if path.exists():return json.loads(path.read_text())
-    return {'version':1,'identity_override':None,'presets':[],'routes':{},'default_preset':'','inherit':False}
+    return {'version':1,'identity_override':None,'quality_tags':'','presets':[],'routes':{},
+            'default_preset':'','inherit':False}
 
 def hermes_bridge(c,command,payload=None):
     import subprocess
@@ -158,13 +159,32 @@ def discovered_presets(c):
                  parts={},negative='',endpoint='',available=r.get('available',False),active=r.get('active',False))
             for r in rows if re.fullmatch('[a-z0-9][a-z0-9_-]{0,55}',r.get('id',''))]
 
+def merge_tags(lead,rest):
+    """Join two comma bags, keeping the first occurrence of each tag.
+
+    Her trigger usually also appears in the lane that was built around it, and a
+    trigger written twice pulls the LoRA harder than asking for it once -- which
+    reads as the character being over-applied rather than as a duplicated word.
+    """
+    seen={};out=[]
+    for tag in [x.strip() for x in f'{lead},{rest}'.split(',')]:
+        key=tag.lower()
+        if not tag or key in seen:continue
+        seen[key]=True;out.append(tag)
+    return ', '.join(out)
+
+
 def effective(c):
     data=load(c)
     if data.get('inherit') and c.profile:
         own_identity=data.get('identity_override')
         own_source=data.get('identity_source')
+        # Quality tags name this companion's own character LoRA. Inheriting the
+        # installation's would fire somebody else's face on her lanes.
+        own_tags=data.get('quality_tags','')
         data=copy.deepcopy(load(cc.load(c.hermes_root)))
         data['identity_override']=own_identity
+        data['quality_tags']=own_tags
         if own_source is not None:data['identity_source']=own_source
         else:data.pop('identity_source',None)
         for preset in data.get('presets',[]):
@@ -185,6 +205,8 @@ def validate(data):
     if not isinstance(data,dict) or data.get('version')!=1:raise ValueError('Expected image preset format version 1')
     if data.get('identity_override') is not None and (not isinstance(data['identity_override'],str) or len(data['identity_override'])>20000):raise ValueError('Identity prompt is too long')
     if 'identity_source' in data and not isinstance(data['identity_source'],str):raise ValueError('Invalid identity source marker')
+    if not isinstance(data.get('quality_tags',''),str) or len(data.get('quality_tags',''))>2000:
+        raise ValueError('Quality tags must be a short line of text')
     if not isinstance(data.get('inherit',False),bool):raise ValueError('Inheritance must be true or false')
     presets=data.get('presets',[])
     if not isinstance(presets,list) or len(presets)>100:raise ValueError('At most 100 presets are supported')
@@ -295,6 +317,20 @@ def compile(c,preset_id='',category='portrait',overrides=None,draft=None,intimat
     # photorealistic, and the only one that did not had the words hand-written
     # into its preset. A preset that names a quality still wins.
     if not parts.get('quality'):parts['quality']=visual_style(c)
+    # Her quality tags, in front of whatever the lane asked for.
+    #
+    # This is what activates a LoRA. A character LoRA does nothing at all until
+    # its trigger word appears in the positive prompt, and the trigger belongs
+    # to the companion -- two companions share one lane and each fires her own
+    # trigger -- not to the workflow, which is just a wiring diagram. The
+    # identity box stays free for her written appearance, which is how the
+    # strength of that face gets tempered rather than taken on whole.
+    #
+    # ComfyUI only. A hosted provider is handed labelled prose and has no LoRA
+    # to activate; bare trigger tokens there are noise in the middle of a
+    # sentence.
+    if p.get('provider')=='comfyui':
+        parts['quality']=merge_tags(data.get('quality_tags',''),parts.get('quality',''))
     for key in ('scene','wardrobe','feeling','lighting','camera'):
         if not parts.get(key):parts[key]=recorded.get(key,'')
     overrides=overrides or {}
