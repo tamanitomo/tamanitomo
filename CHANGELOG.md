@@ -1,3 +1,20 @@
+## 3.0.0 — One author for a day (2026-09-21)
+
+- Hold each day in one plan with one ordered timeline; two items may not occupy the same hours, and a plan that overlaps itself is refused when written, not only when added to.
+- Require anything taking an occupied slot to name what it displaces, and record the displacement and its reason in that day's history. Nothing is deleted; items are marked done, moved or dropped.
+- Keep whether an item was promised or merely wanted, and give the promise the slot when a day will not hold both.
+- Make presence commitments a channel into that plan rather than a second store of dated plans; leave two clashing promises for the companion to resolve rather than choosing one.
+- Migrate `tomorrow.json` and presence commitments into the plan, idempotently, leaving any day already settled by hand alone.
+- Read care follow-ups from the loops the companion already records, instead of a file that had never existed for anyone.
+- Index each archived memory as it moves, with a backfill for everything archived before, and snapshot a memory file before trimming it.
+- Group background jobs by origin — shipped, yours, or not companion work — and within that by what they send; show a 24-hour view of when things run, and disclose jobs that make a second model call.
+- Retire nine jobs: eight duplicating shipped machinery, and the present advancer, whose rendering was already done by every presence write.
+- Judge whether the present is stale by when a model last confirmed it, not by a file's modification time.
+- Stop trusting a provider to enforce a JSON schema it accepts and ignores; state the schema in the prompt and check the shape that comes back.
+- Validate a presence record where the model can still be told what was wrong, rather than after the correction loop has ended.
+- Sync the directory after an atomic replace, so the rename survives an unclean shutdown.
+- Separate your to-do list from things you have told her about, and keep both out of her plan.
+
 ## 2.9.1 — Uncapped windows, and the call you could not see (2026-09-21)
 
 - Take the largest window a model is measured at rather than the smallest, so nothing caps the context but an explicit `context_length`.

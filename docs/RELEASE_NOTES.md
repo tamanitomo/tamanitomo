@@ -1,10 +1,18 @@
-Tamanitomo 2.9.1 stops capping the context window, and shows the second model call a job makes.
+Tamanitomo 3.0.0 gives a companion's day a single author, and stops the app being a place where things quietly happen.
 
-**The window is as large as the model allows.** Nothing should cap it but the person running it. A model reached through a signed-in provider has no endpoint address to look the window up by, and the workaround introduced in the last release picked the smallest measured window for that model — which is a cap by another name. It now takes the largest, ignoring any server on your own network, because a local server is always configured with an address and a same-named model behind one may be an entirely different size. Setting `context_length` yourself is still the only thing that limits it.
+**A day has one plan, and nothing else may claim it.** Three separate stores could each say what she was doing on a date: an intended day, a dated commitment inside her presence record, and an event you had entered. Nothing compared them, so all three could be true at once and it showed — a day at the beach that also involved a haircut and a licence renewal. There is now one plan per date holding one ordered timeline. Two things cannot occupy the same hours. Something new may take an occupied slot only by naming what it displaces, and the displacement is written into that day's history with a reason. Nothing is deleted; an item is marked done, moved or dropped and stays visible. A plan still changes during the day, because days do — it just changes on purpose, and says so.
 
-**A job that makes two model calls now says so.** Several background jobs run a pre-read before the agent turn, and that pre-read calls a model of its own — chosen from the companion's model tiers rather than from the job. So changing a job's model on the settings page left untouched the call that actually writes her presence. Those jobs now show both calls and which setting governs each.
+An item remembers whether it was something she promised or something she fancied doing, and that distinction does real work: when a day will not hold both, the promise keeps the slot.
 
-**A job the app does not recognise is no longer described as harmless.** Anything not part of the companion's own machinery was being filed as "uses a model, nothing private", which is an assertion about a prompt nobody had read. It now says plainly that what it sends depends on the prompt it was given.
+**Three things that were silently doing nothing now work.** Circling back on what you said you'd check on read one hand-written file that has never existed for anyone, so every companion appeared to track follow-ups and tracked none. It reads what she already records herself now. The date and anniversary sensors had nothing to read either. And archived memories went into the vault findable only by reading all of it; each one is indexed as it moves, with what came before backfilled.
+
+**You can see what runs, when, and whose it is.** Background jobs are grouped by where they came from — what ships with Tamanitomo, what you added, and what is not companion work at all — and within that by what they actually send to a model. A twenty-four hour strip shows when things run. Jobs that make a second, separate model call now say so.
+
+**Fewer moving parts.** Nine jobs are gone: eight that duplicated machinery already shipped and running, and one that kept a cached view fresh by writing a fourth copy of the present every quarter hour. Whether the present is old is now measured by when a model last confirmed it, rather than by when a file was last touched.
+
+**Your list and her diary are different things.** Your to-do list is yours, and she can help you finish it. Something you have told her about — a birthday, a trip, an exam — is context she may act on or not. Neither has ever belonged in her plan, and the app now says so instead of calling both a shared calendar.
+
+Writes are also durable: a file replacement was being flushed without its rename, which an unclean shutdown could lose.
 
 ### Install
 
