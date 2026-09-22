@@ -194,23 +194,39 @@ dialog.photo-viewer{
 }
 dialog.photo-viewer:not([open]){display:none}
 dialog.photo-viewer::backdrop{background:rgba(0,0,0,0.94)}
+/* The bar floats over the picture rather than sitting above it in a box of its
+   own. No divider and no panel: the darkness comes from a scrim that fades out
+   downward, and from the buttons themselves, which carry their own black. That
+   is what stops a photograph looking like it has been framed and captioned.
+
+   It takes no room in the layout, so the picture gets the whole window, and it
+   lets pointer events through everywhere except on the controls -- otherwise
+   the top of the image would be a dead strip you could not swipe from. */
 .viewer-topbar{
-  flex:none;
-  height:60px;
+  position:absolute;
+  top:0;
+  left:0;
+  right:0;
+  height:64px;
   display:flex;
   align-items:center;
   justify-content:space-between;
-  padding:0 24px;
-  background:rgba(12,13,18,0.85);
-  border-bottom:1px solid rgba(255,255,255,0.08);
-  backdrop-filter:blur(20px);
-  gap:16px;
+  padding:0 12px;
+  background:linear-gradient(to bottom,rgba(0,0,0,0.55) 0%,rgba(0,0,0,0.28) 55%,rgba(0,0,0,0) 100%);
+  gap:10px;
   z-index:20;
+  pointer-events:none;
 }
-.viewer-top-left{display:flex;align-items:center;gap:14px;min-width:0}
-.viewer-counter{font-size:12.5px;font-weight:600;color:#cbd5e1;background:rgba(255,255,255,0.1);padding:4px 10px;border-radius:20px;white-space:nowrap}
-.viewer-date{font-size:13px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.viewer-top-right{display:flex;align-items:center;gap:8px;flex-wrap:nowrap}
+.viewer-topbar>*{pointer-events:auto}
+/* Nothing in here may be squeezed. The back button had no say in its own width,
+   so on a narrow screen -- a folding phone's cover display, say -- the row of
+   actions stole from it until it was a sliver. The controls keep their size and
+   the text between them gives way instead. */
+.viewer-top-left{display:flex;align-items:center;gap:10px;min-width:0;flex:1 1 auto}
+.viewer-counter{font-size:12.5px;font-weight:600;color:#e8eaf0;background:rgba(0,0,0,0.45);padding:4px 10px;border-radius:20px;white-space:nowrap;flex:none}
+.viewer-date{font-size:13px;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto;text-shadow:0 1px 3px rgba(0,0,0,0.8)}
+.viewer-top-right{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;flex:none;max-width:70%;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
+.viewer-top-right::-webkit-scrollbar{display:none}
 .viewer-btn{
   display:inline-flex;
   align-items:center;
@@ -231,19 +247,20 @@ dialog.photo-viewer::backdrop{background:rgba(0,0,0,0.94)}
 .viewer-btn.is-warn{color:#f59e0b;background:rgba(245,158,11,0.15);border-color:rgba(245,158,11,0.3)}
 .viewer-btn.is-safe{color:#10b981;background:rgba(16,185,129,0.15);border-color:rgba(16,185,129,0.3)}
 .viewer-icon-btn{
-  width:36px;
-  height:36px;
+  width:38px;
+  height:38px;
+  flex:none;                 /* never squeezed, however many siblings there are */
   border-radius:50%;
   display:grid;
   place-items:center;
-  background:rgba(255,255,255,0.08);
-  border:1px solid rgba(255,255,255,0.12);
-  color:#f8fafc;
+  background:rgba(0,0,0,0.45);
+  border:0;
+  color:#fff;
   cursor:pointer;
   padding:0;
-  transition:all .15s ease;
+  transition:background .15s ease;
 }
-.viewer-icon-btn:hover{background:rgba(255,255,255,0.2);color:#fff;transform:scale(1.06)}
+.viewer-icon-btn:hover{background:rgba(0,0,0,0.68);color:#fff}
 .viewer-btn-danger:hover{background:rgba(239,68,68,0.3)!important;color:#f87171!important;border-color:rgba(239,68,68,0.4)!important}
 .viewer-stage{flex:1;display:flex;position:relative;overflow:hidden;align-items:center;justify-content:center;background:#06070a}
 /* Every gesture on the picture is handled in script -- swipe, pinch, pan,
@@ -251,7 +268,7 @@ dialog.photo-viewer::backdrop{background:rgba(0,0,0,0.94)}
    left the vertical axis to the page, which in a full-screen viewer scrolls
    nothing and cost the second finger of a pinch. */
 .viewer-canvas{flex:1;height:100%;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;touch-action:none;user-select:none}
-.viewer-img{max-width:92vw;max-height:calc(100vh - 84px);object-fit:contain;border-radius:4px;box-shadow:0 30px 80px rgba(0,0,0,0.9);transition:transform .2s cubic-bezier(0.2,0.8,0.2,1),opacity .2s ease;pointer-events:none;will-change:transform;transform-origin:center center}
+.viewer-img{max-width:100vw;max-height:100vh;object-fit:contain;border-radius:4px;box-shadow:0 30px 80px rgba(0,0,0,0.9);transition:transform .2s cubic-bezier(0.2,0.8,0.2,1),opacity .2s ease;pointer-events:none;will-change:transform;transform-origin:center center}
 /* The way a photo app does it: the picture is the thing, so the arrows are a
    hint rather than furniture. No pill, no border, no blur -- a bare chevron
    that stays out of the way until the pointer comes near, with a shadow so it
@@ -331,7 +348,10 @@ dialog.photo-viewer::backdrop{background:rgba(0,0,0,0.94)}
 .card-action-btn svg{width:15px;height:15px}
 
 @media(max-width:768px){
- .viewer-topbar{padding:0 12px;height:54px}
+ .viewer-topbar{padding:0 8px;height:58px;gap:6px}
+ .viewer-icon-btn{width:36px;height:36px}
+ .viewer-top-right{gap:4px;max-width:66%}
+ .viewer-counter{font-size:12px;padding:3px 8px}
  .viewer-btn span{display:none}
  .viewer-btn{padding:8px}
  .viewer-date{display:none}
