@@ -893,7 +893,7 @@ def register(app, select, load, operations):
             if h==rt.root:raise ValueError('The default profile cannot inherit from itself')
             root_tts=config(rt.root).get('tts') or {}
             if not root_tts.get('provider') or root_tts.get('provider')=='companion-default':raise ValueError('Configure a voice on the installation’s default profile first')
-            python=rt.root/'hermes-agent'/'venv'/('Scripts/python.exe' if os.name=='nt' else 'bin/python')
+            python=cp.venv_executable(rt.root/'hermes-agent')
             script=hr.KIT/'kit/scripts/companion_tts_inherit.py'
             if not python.is_file() or not (rt.root/'hermes-agent/tools/tts_command_provider.py').is_file():raise ValueError('Update Hermes for command-provider support first')
             args=[str(python),str(script),'--root',str(rt.root),'--input','{input_path}','--output','{output_path}']
@@ -913,7 +913,7 @@ def register(app, select, load, operations):
         if provider not in ('piper','kittentts','neutts'):raise ValueError('Choose a local engine to install')
         def run(rt,p,h,report):
             import subprocess
-            python=rt.root/'hermes-agent'/'venv'/('Scripts/python.exe' if os.name=='nt' else 'bin/python')
+            python=cp.venv_executable(rt.root/'hermes-agent')
             if not python.is_file():raise ValueError('Use Full Hermes setup for this installation')
             script = "import sys, shutil, importlib; from hermes_cli import setup; from hermes_cli.tools_config import _pip_install; provider=sys.argv[1]; "
             script += "assert provider!='neutts' or shutil.which('espeak-ng') or shutil.which('espeak'), 'Install espeak-ng through Full Hermes setup first'; "
@@ -954,7 +954,7 @@ def register(app, select, load, operations):
         def run(rt,p,h,report):
             import subprocess
             command=Path(rt.command()[0]).resolve()
-            python=rt.root/'hermes-agent'/'venv'/('Scripts/python.exe' if os.name=='nt' else 'bin/python')
+            python=cp.venv_executable(rt.root/'hermes-agent')
             if not python.is_file():python=command.parent/('python.exe' if os.name=='nt' else 'python')
             if not python.is_file():raise ValueError('Cannot locate Hermes Python. Use Full Hermes setup to check this installation.')
             c=cc.load(h);dest=c.data/'voice'/'preview.mp3';dest.parent.mkdir(parents=True,exist_ok=True)

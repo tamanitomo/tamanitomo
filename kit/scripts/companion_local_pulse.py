@@ -234,6 +234,14 @@ def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
     if not apply:return {'status':'preview','record':data,'planning_attempts':attempt+1,'usage':reply.get('usage'),
                          'model':route['model'],'provider':route['provider'] or route['base_url']}
     result=presence.update(c,data,now)
+    # A gap in the pulses -- a sleeping host, a quiet morning -- leaves this
+    # morning's items still reading as "planned" this afternoon. Retire the
+    # windows that have simply gone by before anything else reads the day.
+    try:
+        import companion_plan
+        companion_plan.reconcile(c,now=now)
+    except Exception as exc:
+        print(f'note: plan not reconciled against the clock ({exc})',file=sys.stderr)
     # The presence record is where a commitment is expressed; the plan is where
     # it lives. Keeping both as stores is what let two dated plans disagree.
     if data.get('commitments'):

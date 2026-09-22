@@ -90,7 +90,7 @@ class Runtime:
         if override and not self.managed:
             prefix = json.loads(override)
         else:
-            binary = self.root/'hermes-agent'/'venv'/('Scripts/hermes.exe' if os.name == 'nt' else 'bin/hermes')
+            binary = cp.venv_executable(self.root/'hermes-agent','hermes')
             if binary.is_file(): return [str(binary)]
             if self.managed: raise ValueError('Install the kit-managed Hermes runtime first.')
             binary = shutil.which('hermes')
@@ -111,7 +111,7 @@ class Runtime:
                    COMPANION_HERMES_COMMAND=json.dumps(self.command()), COMPANION_APP_CLIENT='1')
         # The managed runtime's tools must resolve beside its executable after updates.
         bindirs = [self.root/'bin', self.root/'node'/('' if os.name=='nt' else 'bin'),
-                   self.root/'hermes-agent'/'venv'/('Scripts' if os.name=='nt' else 'bin')]
+                   cp.venv_executable(self.root/'hermes-agent').parent]
         if os.name == 'nt': bindirs += [self.root/'git/bin', self.root/'git/cmd']
         env['PATH'] = os.pathsep.join(str(p) for p in bindirs if p.is_dir()) + os.pathsep + env.get('PATH','')
         return env
@@ -210,7 +210,7 @@ class Runtime:
                 self.command()
             except ValueError: pass
             else: raise ValueError('An existing Hermes installation was found. Use its Update action instead.')
-        if (self.root/'.companion-runtime.json').is_file() and (self.root/'hermes-agent'/'venv'/('Scripts/hermes.exe' if os.name=='nt' else 'bin/hermes')).exists():
+        if (self.root/'.companion-runtime.json').is_file() and cp.venv_executable(self.root/'hermes-agent','hermes').exists():
             return {'installed':True,'already_installed':True}
         self.root.mkdir(parents=True,exist_ok=True)
         ext='ps1' if os.name=='nt' else 'sh'

@@ -120,6 +120,23 @@ def default_home():
     if os.name=='nt':return pathlib.Path(os.environ.get('LOCALAPPDATA',str(pathlib.Path.home()/'AppData/Local')))/'hermes'
     return pathlib.Path.home()/'.hermes'
 
+def venv_executable(checkout,name='python'):
+    """The interpreter (or entry point) inside a checkout's virtualenv.
+
+    Hermes's own checkout is made by whoever installed it, and `uv venv` -- now
+    the ordinary way to make one -- writes `.venv`, not `venv`. Every bridge
+    here looked only for `venv` and reported "Hermes Python is unavailable" on a
+    perfectly working install, which sent people looking at their model settings
+    for a problem that was a directory name. Kit-created venvs keep their own
+    fixed layout and do not come through here.
+    """
+    leaf=(f'Scripts/{name}.exe' if os.name=='nt' else f'bin/{name}')
+    checkout=pathlib.Path(checkout)
+    for folder in ('venv','.venv'):
+        candidate=checkout/folder/leaf
+        if candidate.is_file():return candidate
+    return checkout/'venv'/leaf
+
 def terminal_command(argv):
     """Hermes terminal tool uses POSIX shells, including Git Bash on Windows."""
     parts=[str(x).replace('\\','/') if os.name=='nt' else str(x) for x in argv]

@@ -25,7 +25,8 @@ def _reasoning_state(reply):
     could ever silence -- which is worse than no warning, because it teaches you
     to ignore the one that means something.
     """
-    if getattr(getattr(reply,'choices',[None])[0].message,'reasoning_content',None):return True
+    choices=getattr(reply,'choices',None) or []
+    if choices and getattr(getattr(choices[0],'message',None),'reasoning_content',None):return True
     details=getattr(getattr(reply,'usage',None),'completion_tokens_details',None)
     if details is None:return None
     try:
@@ -64,12 +65,21 @@ def chat(payload):
         raise ValueError('Choose a specific provider for background work, not a routing alias')
     client,resolved=resolve_provider_client(provider=provider,model=model)
     if client is None:raise ValueError(f'Provider {provider} is unavailable')
+    # A reasoning model spends max_tokens on its thinking before it writes a
+    # single character of the answer. At the flat default, a job that thought
+    # hard about a difficult day had a few hundred tokens left for the JSON and
+    # returned it cut in half -- which reads downstream as a malformed schema,
+    # not as the budget problem it is. An explicit max_tokens from the caller is
+    # still honoured exactly; only the default moves.
+    effort=payload.get('reasoning_effort')
+    default_tokens=3600
+    if str(effort or '').lower() in ('medium','high'):
+        default_tokens=6000 if str(effort).lower()=='medium' else 8000
     request={'model':resolved,'messages':payload['messages'],
-             'max_tokens':payload.get('max_tokens',3600),
+             'max_tokens':payload.get('max_tokens',default_tokens),
              'temperature':payload.get('temperature',0.6),
              'timeout':payload.get('timeout',300)}
     if payload.get('response_format'):request['response_format']=payload['response_format']
-    effort=payload.get('reasoning_effort')
     if effort:request['reasoning_effort']=effort
     wanted=request.get('response_format') or {}
     schema=(wanted.get('json_schema') or {}).get('schema') if wanted.get('type')=='json_schema' else None
@@ -113,6 +123,11 @@ def chat(payload):
         reply=client.chat.completions.create(**(restate(request,keep_effort=False) if schema else
                                                 {k:v for k,v in request.items()
                                                  if k not in ('reasoning_effort','response_format')}))
+    # A provider can answer 200 with no choices at all -- a content filter, a
+    # cut-off stream -- and every read of choices[0] below was an IndexError
+    # raised far from the cause.
+    if not (getattr(reply,'choices',None) or []):
+        raise ValueError(f'{provider} returned no choices for {resolved}')
     if schema:
         missing=_missing(getattr(reply.choices[0].message,'content',''),schema)
         if missing:
@@ -124,7 +139,16 @@ def chat(payload):
                 {'role':'assistant','content':str(getattr(reply.choices[0].message,'content','') or '')},
                 {'role':'user','content':'That did not match the schema: '+missing+
                  ' Return the whole object again, corrected.'}]
-            reply=client.chat.completions.create(**follow)
+            # The correction is an improvement on an answer we already hold, not
+            # a prerequisite for having one. A rate limit or a context overflow
+            # on this second call used to take down a worker that had something
+            # imperfect but usable in hand; the caller's own validation is a
+            # better place to judge it than an exception from here.
+            try:
+                corrected=client.chat.completions.create(**follow)
+                if getattr(corrected,'choices',None) or []:reply=corrected
+            except Exception:
+                pass
     choice=reply.choices[0]
     usage=getattr(reply,'usage',None)
     return {'content':choice.message.content,'finish_reason':choice.finish_reason,

@@ -210,6 +210,16 @@ def build(c,payload=None,now=None,maintenance_notice=""):
             parts.append((10,'[Day continuity — plans are not completed events; full state: companion_presence.py show]\n'
                           +clip(companion_day.render(state,now),max(700,b['handoff']))
                           +'\nPersist agreed timed plans through presence update commitments; read '+str(c.life/'PRESENCE.md')+' for the update format.'))
+            # The plan records why a day bent rather than deleting what lost, and
+            # that record is worth more in the prompt than in the file: a reason
+            # she already gave is the difference between a day she can talk about
+            # and a schedule she can only recite.
+            try:
+                import companion_plan
+                moved=companion_plan.render_displacements(companion_plan.displacements(c,now.date()))
+                if moved:parts.append((7,clip(moved,max(300,b['handoff']//2))))
+            except (OSError,ValueError,KeyError,TypeError,ImportError):
+                pass
         else:parts.append((1,'[No current outfit/location recorded. Read companion_presence.py show and establish state before describing a current scene or making a photo.]'))
     except (OSError,ValueError,KeyError,TypeError):
         parts.append((10,'[Current lived state unavailable; do not invent a current outfit or location.]'))

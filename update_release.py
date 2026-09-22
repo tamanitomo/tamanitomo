@@ -56,4 +56,33 @@ def _apply_pending(root):
             elif name in written:dest.unlink(missing_ok=True)
         raise
     shutil.rmtree(folder)
+    _prune_backups(root,keep=3)
     print('Tamanitomo updated. Previous code is in '+str(backup))
+
+
+KEEP_BACKUPS=3
+
+def _prune_backups(root,keep=KEEP_BACKUPS):
+    """Keep the newest few rollback copies; a phone does not have room for all of them.
+
+    Every update snapshots the whole application, and nothing ever removed one,
+    so a host that updates often quietly grows a full copy per release -- which
+    matters most exactly where the kit is most likely to run out of room, a
+    Termux server or a small mini-PC. Pruning happens only after the update has
+    fully succeeded, and the copy just taken is by definition among the newest,
+    so the rollback path for this update is never the one that gets deleted.
+    A failure to tidy up is not a failure to update.
+    """
+    folder=root/'.update-backups'
+    try:
+        if not folder.is_dir() or folder.is_symlink():return []
+        saved=sorted((d for d in folder.iterdir() if d.is_dir() and not d.is_symlink()),
+                     key=lambda d:d.stat().st_mtime,reverse=True)
+        removed=[]
+        for old_backup in saved[max(int(keep),1):]:
+            shutil.rmtree(old_backup,ignore_errors=True)
+            removed.append(old_backup.name)
+        if removed:print(f'Removed {len(removed)} older backup(s), keeping the newest {max(int(keep),1)}.')
+        return removed
+    except OSError:
+        return []

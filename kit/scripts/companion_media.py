@@ -12,6 +12,8 @@ import re
 import time
 import urllib.request
 import urllib.parse
+
+import companion_platform as cp
 import uuid
 import companion_config as cc
 from companion_platform import atomic_write, file_lock
@@ -136,7 +138,7 @@ def hermes_bridge(c,command,payload=None):
     import subprocess
     from companion_gateway import _env_values
     checkout=c.hermes_root/'hermes-agent'
-    python=checkout/'venv'/('Scripts/python.exe' if os.name=='nt' else 'bin/python')
+    python=cp.venv_executable(checkout)
     if not python.is_file():raise ValueError('Hermes Python is unavailable')
     env=dict(os.environ,**_env_values(c.home));env.update(HERMES_HOME=str(c.home),PYTHONPATH=str(checkout))
     env.pop('HERMES_PROFILE',None)

@@ -3,13 +3,14 @@ import json,os,re,subprocess,tempfile,uuid
 from pathlib import Path
 from fastapi import Request,HTTPException
 from fastapi.responses import FileResponse
+import companion_platform as cp
 from .runtime import redact
 
 MAX_AUDIO=12*1024**2
 TYPES={'audio/webm':'.webm','audio/ogg':'.ogg','audio/wav':'.wav','audio/x-wav':'.wav','audio/mp4':'.m4a'}
 
 def bridge(rt,home,mode,payload):
-    python=rt.root/'hermes-agent/venv'/('Scripts/python.exe' if os.name=='nt' else 'bin/python')
+    python=cp.venv_executable(rt.root/'hermes-agent')
     if not python.is_file():python=Path(rt.command()[0]).resolve().parent/('python.exe' if os.name=='nt' else 'python')
     if not python.is_file():raise ValueError('Hermes Python is unavailable; finish Hermes setup first')
     script=Path(__file__).resolve().parents[1]/'scripts/companion_voice_chat.py'

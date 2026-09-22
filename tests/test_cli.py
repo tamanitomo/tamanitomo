@@ -163,11 +163,21 @@ class LifecycleTests(unittest.TestCase):
         self.assertNotEqual(r.returncode,0)
         self.assertIn('already a companion',r.stderr+r.stdout)
 
+    def test_a_broken_job_exits_one_and_an_unrelated_fault_exits_two(self):
+        """The settings page raises on 1 and only notes 2, so the split has to hold."""
+        jobs=self.home/'cron/jobs.json'
+        data=json.loads(jobs.read_text());data['jobs']=data['jobs'][:-1]
+        jobs.write_text(json.dumps(data))
+        r=run('--home',str(self.home),'doctor')
+        self.assertEqual(r.returncode,1)
+        self.assertIn('job set is incomplete',r.stdout)
+
     def test_doctor_flags_unfinished_soul_then_passes_when_edited(self):
         soul=self.home/'SOUL.md'
         soul.write_text(soul.read_text()+'\n✎ EDIT: an actual unanswered question\n')
         r=run('--home',str(self.home),'doctor')
-        self.assertEqual(r.returncode,1);self.assertIn('EDIT placeholders',r.stdout)
+        # 2, not 1: an unfinished SOUL is a fault, but not a job fault.
+        self.assertEqual(r.returncode,2);self.assertIn('EDIT placeholders',r.stdout)
         soul=self.home/'SOUL.md'
         soul.write_text(soul.read_text().replace('✎ EDIT','done'))
         import yaml
@@ -926,7 +936,7 @@ class StockSoulTests(unittest.TestCase):
         self.assertIn('Do not touch this.',c.soul.read_text(encoding='utf-8'))
         r=run('--home',str(self.home),'doctor')
         self.assertIn('no rendered companion identity',r.stdout)
-        self.assertEqual(r.returncode,1)
+        self.assertEqual(r.returncode,2)
 
 
 class ScriptedAnswerTests(unittest.TestCase):

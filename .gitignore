@@ -75,3 +75,13 @@ Thumbs.db
 *.sublime-project
 *.sublime-workspace
 deploy/publish-static.env
+
+# Audit and analysis scratch files
+diff_*.txt
+diffs.txt
+analysis_results.txt
+analyzer.py
+tests/analyze_tests.py
+tests/generate_report*.py
+tests/full_report*.md
+tests/test_analysis.txt

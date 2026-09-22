@@ -201,6 +201,81 @@ def amend(c,day,item_id,status=None,reason=None,now=None):
         return _write(c,day,plan,f"{found[0]['what'][:60]} -> {found[0]['status']}",now)
 
 
+def reconcile(c,day=None,tz=None,now=None):
+    """Retire commitments whose time has simply gone past.
+
+    A day that is not lived exactly as written leaves items sitting at
+    'planned' hours after their window closed -- a host asleep through the
+    morning, a quiet stretch with no pulse, a person busy elsewhere. The plan
+    then disagrees with the clock, and she reads her own morning walk at four in
+    the afternoon as something still ahead of her, which is how a companion ends
+    up talking about a thing that never happened as though it were about to.
+
+    Nothing is deleted and nothing is marked done: an item nobody recorded is
+    not an item anybody completed. It becomes 'moved' with the reason saying
+    plainly that its time passed unrecorded, which is the truth and reads as one
+    in the history. Only whole past windows are touched, so the thing she is in
+    the middle of right now is left alone. Idempotent: a second sweep over the
+    same day changes nothing.
+    """
+    from zoneinfo import ZoneInfo
+    tz=tz or ZoneInfo(getattr(c,'timezone','UTC') or 'UTC')
+    now=now or dt.datetime.now(tz)
+    if now.tzinfo is None:now=now.replace(tzinfo=tz)
+    local=now.astimezone(tz)
+    day=_date(day or local.date())
+    # Only today and the days behind it. Tomorrow's plan is not late.
+    if day>local.date():return []
+    cutoff=24*60 if day<local.date() else local.hour*60+local.minute
+    with file_lock(folder(c)/'.lock'):
+        plan=read(c,day)
+        if not plan:return []
+        stale=[]
+        for item in plan['items']:
+            end=_minutes(item.get('end'))
+            if item.get('status')=='planned' and end is not None and end<=cutoff:
+                item['status']='moved'
+                item['reason']=(item.get('reason') or 'its time passed with nothing recorded against it')[:300]
+                stale.append(item)
+        if not stale:return []
+        note=('past their window, unrecorded: '+', '.join(x['what'][:40] for x in stale[:4]))[:300]
+        _write(c,day,plan,note,now)
+        return stale
+
+
+def displacements(c,day=None,limit=4):
+    """What changed about today, in her own recorded reasons.
+
+    The plan already records every displacement instead of quietly deleting the
+    loser, and then nothing ever read it back. A moved item with a reason is
+    exactly the kind of small, true, specific thing that makes a day sound
+    lived -- "I pushed my walk to four to help with the deploy" -- so it belongs
+    in the context she thinks with, not only in a file.
+    """
+    plan=read(c,day or dt.date.today())
+    if not plan:return []
+    out=[]
+    for item in plan['items']:
+        if item.get('status') not in ('moved','dropped'):continue
+        out.append({'what':item.get('what',''),'start':item.get('start',''),
+                    'end':item.get('end',''),'status':item['status'],
+                    'reason':str(item.get('reason') or '').strip()})
+    return out[-max(int(limit),1):]
+
+
+def render_displacements(rows):
+    """One short block for the prompt, or '' when the day went as written."""
+    if not rows:return ''
+    lines=[]
+    for row in rows:
+        verb='moved' if row['status']=='moved' else 'dropped'
+        line=f"{row['what'][:80]} ({row['start']}–{row['end']}) was {verb}"
+        if row['reason']:line+=': '+row['reason'][:120]
+        lines.append(line+'.')
+    return ('[How today actually went — your own changes, already recorded. '
+            'Speak to these as things you did and decided, not as things that failed]\n'+'\n'.join(lines))
+
+
 def timeline(c,day,routine=None):
     """The day as it stands: what is planned, and what merely recurs.
 
@@ -382,11 +457,13 @@ def sync_commitments(c,commitments,tz=None,now=None):
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--home',type=pathlib.Path)
-    p.add_argument('action',choices=('show','migrate'))
+    p.add_argument('action',choices=('show','migrate','reconcile'))
     p.add_argument('--day');p.add_argument('--apply',action='store_true')
     a=p.parse_args();c=cc.load(a.home)
     if a.action=='migrate':
         print(json.dumps(migrate(c,apply=a.apply),ensure_ascii=False,indent=2));return
+    if a.action=='reconcile':
+        print(json.dumps(reconcile(c,a.day),ensure_ascii=False,indent=2));return
     print(json.dumps(timeline(c,a.day or dt.date.today()),ensure_ascii=False,indent=2))
 
 

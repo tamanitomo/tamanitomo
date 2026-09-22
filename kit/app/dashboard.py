@@ -12,6 +12,8 @@ import re
 import secrets
 import subprocess
 import threading
+
+import companion_platform as cp
 import time
 from urllib.parse import urlencode
 import httpx
@@ -40,7 +42,7 @@ class Dashboards:
             old=self.rows.get(key)
             if old and old['process'].poll() is None:return old
             if old:old['log'].close()
-            python=rt.root/'hermes-agent'/'venv'/('Scripts/python.exe' if os.name=='nt' else 'bin/python')
+            python=cp.venv_executable(rt.root/'hermes-agent')
             if not python.is_file():
                 python=Path(rt.command()[0]).resolve().parent/('python.exe' if os.name=='nt' else 'python')
             if not python.is_file():raise ValueError('Hermes Python is unavailable. Install Hermes first.')
