@@ -168,3 +168,59 @@ class CivitaiMirrorTests(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
+
+class HostGapTests(unittest.TestCase):
+    """What the target ComfyUI is missing decides whether this can run at all."""
+    def setUp(self):
+        sys.path.insert(0,str(ROOT))
+        import companion_media as media
+        self.media=media
+        self.real=media.request_json
+        self.addCleanup(setattr,media,'request_json',self.real)
+
+    def serve(self,classes,installed,vram=8*1024**3):
+        def fake(url,payload=None,headers=None):
+            if url.endswith('/object_info'):
+                return {c:{'input':{'required':{'x':[list(installed)]}}} for c in classes}
+            if url.endswith('/system_stats'):
+                return {'devices':[{'vram_total':vram}]}
+            raise AssertionError(url)
+        self.media.request_json=fake
+
+    def build(self):
+        import tempfile, pathlib as pl
+        from fastapi.testclient import TestClient
+        from kit.app.server import build
+        return TestClient(build(home=pl.Path(tempfile.mkdtemp())))
+
+    def png_of(self,graph):
+        return png({'prompt':json.dumps(graph)})
+
+    def test_a_graph_needing_absent_nodes_is_not_offered_as_renderable(self):
+        self.serve({'KSampler','CLIPTextEncode','EmptyLatentImage','CheckpointLoaderSimple'},
+                   {'stock.safetensors'})
+        r=self.build().post('/api/images/import',content=self.png_of(PACK_GRAPH),
+                            headers={'x-image-name':'pack.png'})
+        self.assertEqual(r.status_code,200)
+        body=r.json()
+        self.assertTrue(body['preset']['incomplete'])
+        self.assertIn('SOLoaderCoreEngineStudio',body['found']['missing_nodes'])
+        self.assertTrue(any('Not installed in this ComfyUI' in n for n in body['notes']))
+
+    def test_a_graph_this_comfyui_can_run_is_left_alone(self):
+        self.serve({'KSampler','CLIPTextEncode','EmptyLatentImage','CheckpointLoaderSimple',
+                    'VAEDecode','SaveImage'},{'stock.safetensors'})
+        body=self.build().post('/api/images/import',content=self.png_of(STOCK_GRAPH),
+                               headers={'x-image-name':'stock.png'}).json()
+        self.assertFalse(body['preset']['incomplete'])
+        # No lecture about VRAM for weights that are already sitting there.
+        self.assertFalse([n for n in body['notes'] if 'VRAM' in n],body['notes'])
+
+    def test_a_model_still_to_be_downloaded_does_get_the_vram_warning(self):
+        self.serve({'KSampler','CLIPTextEncode','EmptyLatentImage','CheckpointLoaderSimple',
+                    'VAEDecode','SaveImage'},{'somethingelse.safetensors'})
+        body=self.build().post('/api/images/import',content=self.png_of(STOCK_GRAPH),
+                               headers={'x-image-name':'stock.png'}).json()
+        self.assertIn('stock.safetensors',body['found']['missing_models'])
+        self.assertTrue([n for n in body['notes'] if 'VRAM' in n])

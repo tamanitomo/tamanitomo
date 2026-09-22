@@ -2,7 +2,13 @@
 from __future__ import annotations
 import copy
 
-PROMPT_NODES={'quality':'101','identity':'102','wardrobe':'103','scene':'104','lighting':'105','camera':'106'}
+# One node per part of the contract in companion_media.PARTS, in that order.
+# `feeling` was absent here, so every workflow built from this template -- and
+# every one imported through it -- resolved how she felt on each render and had
+# nowhere to put it.
+PROMPT_NODES={'quality':'101','identity':'102','wardrobe':'103','scene':'104',
+              'feeling':'107','lighting':'105','camera':'106'}
+CONCAT_ORDER=('102','103','104','107','105','106')
 
 # What a new workflow keeps clothed by default. This is the only bucket a
 # companion may set aside, and only at full closeness readiness; the always-on
@@ -17,11 +23,11 @@ def modular_template():
       '8':{'class_type':'CLIPSetLastLayer','inputs':{'clip':['1',1],'stop_at_clip_layer':-2}},
       '201':{'class_type':'CLIPTextEncode','inputs':{'clip':['8',0],'text':''}},
       '301':{'class_type':'EmptyLatentImage','inputs':{'width':832,'height':1216,'batch_size':1}},
-      '302':{'class_type':'KSampler','inputs':{'model':['1',0],'positive':['115',0],'negative':['201',0],'latent_image':['301',0],'seed':0,'steps':22,'cfg':5.,'sampler_name':'euler_ancestral','scheduler':'normal','denoise':1.}},
+      '302':{'class_type':'KSampler','inputs':{'model':['1',0],'positive':[str(110+len(CONCAT_ORDER)),0],'negative':['201',0],'latent_image':['301',0],'seed':0,'steps':22,'cfg':5.,'sampler_name':'euler_ancestral','scheduler':'normal','denoise':1.}},
       '303':{'class_type':'VAEDecode','inputs':{'samples':['302',0],'vae':['1',2]}},
       '304':{'class_type':'SaveImage','inputs':{'images':['303',0],'filename_prefix':'Companion'}}}
     for node in PROMPT_NODES.values():graph[node]={'class_type':'CLIPTextEncode','inputs':{'clip':['8',0],'text':''}}
-    for index,node in enumerate(['102','103','104','105','106']):
+    for index,node in enumerate(CONCAT_ORDER):
         graph[str(111+index)]={'class_type':'ConditioningConcat','inputs':{'conditioning_to':['101' if index==0 else str(110+index),0],'conditioning_from':[node,0]}}
     return {'id':'modular-sdxl','name':'Structured SDXL workflow','category':'portrait','provider':'comfyui',
       'endpoint':'http://127.0.0.1:8188','family':'sdxl','parts':{'quality':'high quality, detailed'},

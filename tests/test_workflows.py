@@ -102,10 +102,25 @@ class WorkflowTests(unittest.TestCase):
     def test_modular_branches_and_img2img_keep_models(self):
         p=wf.modular_template();media.validate({'version':1,'presets':[p]})
         self.assertEqual(set(wf.PROMPT_NODES),set(p['mappings'])&set(media.PARTS))
+        # Every part the kit resolves must have somewhere to land, or the
+        # template quietly throws one away on every render.
+        self.assertEqual(set(media.PARTS)-set(p['mappings']),set())
+        # And every prompt box must actually reach the sampler.
+        graph=p['workflow'];reached=set();node=str(graph['302']['inputs']['positive'][0])
+        while graph[node]['class_type']=='ConditioningConcat':
+            reached.add(str(graph[node]['inputs']['conditioning_from'][0]))
+            node=str(graph[node]['inputs']['conditioning_to'][0])
+        reached.add(node)
+        self.assertEqual({v[0] for k,v in p['mappings'].items() if k in media.PARTS}-reached,set())
         original=copy.deepcopy(p);derived=wf.image_to_image(p,.3)
         self.assertEqual(p,original)
         self.assertEqual(derived['workflow']['1'],p['workflow']['1'])
-        self.assertEqual(derived['workflow']['302']['inputs']['positive'],['115',0])
+        # The sampler reads the LAST concat, whatever that turns out to be --
+        # hard-coding it meant adding a part to the contract silently orphaned
+        # the final box instead of failing.
+        last=[str(110+len(wf.CONCAT_ORDER)),0]
+        self.assertEqual(derived['workflow']['302']['inputs']['positive'],last)
+        self.assertEqual(p['workflow']['302']['inputs']['positive'],last)
         self.assertEqual(derived['workflow']['302']['inputs']['denoise'],.3)
         self.assertTrue(derived['requires_reference']);media.validate({'version':1,'presets':[derived]})
         derived['workflow']['900']=copy.deepcopy(derived['workflow']['302'])

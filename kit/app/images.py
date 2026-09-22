@@ -167,6 +167,12 @@ def register(app,select,load):
             missing=[t for t in (found.get('node_types') or []) if t not in classes]
             if missing:
                 found['missing_nodes']=missing
+                # It cannot render here, whatever else is wired, so it must not
+                # be assignable to a lane yet. Saying "renderable" of a graph
+                # whose nodes this ComfyUI has never heard of is just a later,
+                # more confusing failure.
+                result.setdefault('preset',{})['incomplete']=True
+                preset['incomplete']=True
                 # The import said "this needs custom nodes" without knowing
                 # which ComfyUI it was going to. Now that we have asked one,
                 # that guess is replaced rather than repeated beside the answer.
@@ -201,8 +207,10 @@ def register(app,select,load):
             for name,size in sized[:2]:
                 advice=importer.describe_fit(vram,size,name)
                 if advice:notes.append(advice)
-        elif found.get('missing_models') or found.get('checkpoints'):
-            advice=importer.describe_fit(vram,None,(found.get('checkpoints') or [''])[0])
+        elif found.get('missing_models'):
+            # Only worth saying about something still to be downloaded. A model
+            # already sitting on this ComfyUI has self-evidently fitted.
+            advice=importer.describe_fit(vram,None,found['missing_models'][0])
             if advice:notes.append(advice)
 
     SLOT_FOR_KIND={'checkpoint':'checkpoint','lora':'lora','lycoris':'lora','locon':'lora',
