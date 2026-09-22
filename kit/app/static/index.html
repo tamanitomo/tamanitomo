@@ -75,7 +75,10 @@
     <button class="viewer-nav viewer-nav-prev" id="viewer-prev" aria-label="Previous photo (Left arrow)">
       <svg class="icon" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
     </button>
-    <div class="viewer-canvas" id="viewer-canvas">
+    <!-- A dialog gives focus to its first focusable child, which was the back
+         arrow, so every open drew a focus ring around it. Focus lands on the
+         picture instead; the keyboard shortcuts listen on the document. -->
+    <div class="viewer-canvas" id="viewer-canvas" tabindex="-1" autofocus>
       <img id="viewer-img" class="viewer-img" src="" alt="" draggable="false">
       <div id="viewer-conceal" class="viewer-conceal" hidden>
         <div class="viewer-conceal-card">

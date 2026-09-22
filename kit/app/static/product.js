@@ -1286,9 +1286,18 @@ function initPhotoViewer(){
       }
     }else lastTap=now;
   });
+  // A tap anywhere else puts the menu away, including on the picture itself.
+  $('photo-viewer').addEventListener('pointerdown',e=>{
+    if(!viewerCloseMenu)return;
+    if(e.target.closest('#viewer-menu, #viewer-btn-more'))return;
+    viewerCloseMenu();
+  },true);
   document.addEventListener('keydown',e=>{
     if(!$('photo-viewer').open)return;
     if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;
+    if(e.key==='Escape'&&$('viewer-menu')&&!$('viewer-menu').hidden){
+      e.preventDefault();viewerCloseMenu&&viewerCloseMenu();return;
+    }
     if(e.key==='ArrowRight'){e.preventDefault();navigateViewer(1);}
     else if(e.key==='ArrowLeft'){e.preventDefault();navigateViewer(-1);}
     else if(e.key==='Escape'){
@@ -1322,12 +1331,13 @@ function closePhotoViewer(){
   if($('viewer-variants-bar'))$('viewer-variants-bar').hidden=true;
   $('viewer-img').src='';
 }
-let viewerResetZoom=null;
+let viewerResetZoom=null,viewerCloseMenu=null;
 function navigateViewer(dir){
   const next=viewerIndex+dir;
   if(next>=0&&next<viewerItems.length){
     viewerIndex=next;
     if(viewerResetZoom)viewerResetZoom(false);
+    if(viewerCloseMenu)viewerCloseMenu();
     renderViewerPhoto();
   }
 }
@@ -1466,15 +1476,34 @@ function renderViewerPhoto(){
   const isNsfw=item.blur||item.rating==='nsfw';
   const downloadUrl=mediaUrl(item.url+'&download=true');
   const captureId=item.capture_id||item.capture;
+  /* Three things you reach for while looking at a picture stay on the bar --
+     is this safe, keep it, make me another. Everything else lives behind the
+     dots. Seven icons across the top of a photograph is a toolbar, and on a
+     narrow screen it was a toolbar that did not fit. */
   $('viewer-actions').innerHTML=`
     <button class="viewer-icon-btn ${isNsfw?'is-safe':'is-warn'}" id="viewer-btn-rate" title="${isNsfw?'Mark safe':'Mark NSFW'}" aria-label="${isNsfw?'Mark safe':'Mark NSFW'}">${icon(isNsfw?'shield_check':'shield_alert')}</button>
     <button class="viewer-icon-btn" id="viewer-btn-album" title="Add copy to album" aria-label="Add copy to album">${icon('album')}</button>
-    <a class="viewer-icon-btn" href="${downloadUrl}" download title="Download image" aria-label="Download image">${icon('download')}</a>
     ${captureId?`<button class="viewer-icon-btn" id="viewer-btn-retry" title="Try another provider" aria-label="Try another provider">${icon('sync')}</button>`:''}
-    <button class="viewer-icon-btn" id="viewer-btn-profile" title="Set as profile photo" aria-label="Set as profile photo">${icon('profile')}</button>
-    <button class="viewer-icon-btn" id="viewer-btn-info" title="Details (i)" aria-label="Details">${icon('info')}</button>
-    ${item.deletable?`<button class="viewer-icon-btn viewer-btn-danger" id="viewer-btn-delete" title="Delete photo" aria-label="Delete photo">${icon('trash')}</button>`:''}
+    <button class="viewer-icon-btn" id="viewer-btn-more" title="More" aria-label="More actions" aria-haspopup="true" aria-expanded="false">${icon('more')}</button>
+    <div class="viewer-menu" id="viewer-menu" role="menu" hidden>
+      <a role="menuitem" href="${downloadUrl}" download>${icon('download')}<span>Download</span></a>
+      <button role="menuitem" id="viewer-btn-profile">${icon('profile')}<span>Set as profile photo</span></button>
+      <button role="menuitem" id="viewer-btn-info">${icon('info')}<span>Details</span></button>
+      ${item.deletable?`<button role="menuitem" class="is-danger" id="viewer-btn-delete">${icon('trash')}<span>Delete photo</span></button>`:''}
+    </div>
   `;
+  const menu=$('viewer-menu'),moreBtn=$('viewer-btn-more');
+  const closeMenu=()=>{menu.hidden=true;moreBtn.setAttribute('aria-expanded','false');};
+  moreBtn.onclick=event=>{
+    event.stopPropagation();
+    const opening=menu.hidden;
+    menu.hidden=!opening;
+    moreBtn.setAttribute('aria-expanded',String(opening));
+  };
+  // Choosing something closes it; so does anything else, including a tap on
+  // the picture, which is how a menu over a photograph ought to behave.
+  menu.onclick=()=>closeMenu();
+  viewerCloseMenu=closeMenu;
   $('viewer-btn-rate').onclick=async()=>{
     const newRating=isNsfw?'safe':'nsfw';
     try{
