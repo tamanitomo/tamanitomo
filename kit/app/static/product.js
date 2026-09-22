@@ -1452,7 +1452,14 @@ function renderViewerPhoto(){
   $('viewer-prev').disabled=viewerIndex<=0;
   $('viewer-next').disabled=viewerIndex>=viewerItems.length-1;
   const img=$('viewer-img');
-  img.src=mediaUrl(item.url);img.alt=item.title||'';
+  // rawMediaUrl, not mediaUrl: this is a property assignment, and nothing
+  // decodes HTML entities on the way in. mediaUrl escapes for interpolation
+  // into an attribute, so assigning it directly left literal `&amp;` in the
+  // query string -- turning `profile` into `amp;profile`. The server then saw
+  // no profile at all and looked in the default companion's files, so the
+  // viewer showed nothing for every companion but the first. It loses the
+  // access token the same way.
+  img.src=rawMediaUrl(item.url);img.alt=item.title||'';
   const conceal=$('viewer-conceal');
   if(item.blur){conceal.hidden=false;img.classList.add('concealed-media');}
   else{conceal.hidden=true;img.classList.remove('concealed-media');}
@@ -1792,13 +1799,13 @@ workspaceHandlers.photos=async()=>{
           hoverTimer=setInterval(()=>{
             hoverIdx=(hoverIdx+1)%x.variants.length;
             const nextV=x.variants[hoverIdx];
-            if(nextV&&imgEl)imgEl.src=mediaUrl('/media/timeline/'+nextV.filename);
+            if(nextV&&imgEl)imgEl.src=rawMediaUrl('/media/timeline/'+nextV.filename);
           },1200);
         };
         b.onmouseleave=()=>{
           if(hoverTimer)clearInterval(hoverTimer);
           hoverIdx=0;
-          if(imgEl)imgEl.src=mediaUrl(x.url);
+          if(imgEl)imgEl.src=rawMediaUrl(x.url);
         };
       }
       b.onclick=e=>{

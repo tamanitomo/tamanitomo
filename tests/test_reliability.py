@@ -221,6 +221,18 @@ class ReliabilityTests(unittest.TestCase):
             self.skipTest('Node is needed for the workflow import regression')
         subprocess.run([node, str(Path(__file__).with_name('test_import_ui.js'))], check=True)
 
+    def test_media_urls_keep_their_profile(self):
+        """A URL escaped for an HTML attribute must not be assigned to a
+        property: the entities stay literal, `profile` arrives as `amp;profile`,
+        and every companion but the first is served the default one's pictures
+        -- or nothing at all."""
+        import shutil
+        import subprocess
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('Node is needed for the media URL regression')
+        subprocess.run([node, str(Path(__file__).with_name('test_media_url_ui.js'))], check=True)
+
     def test_model_licence_notice(self):
         """Weights carry their publisher's terms, which are independent of this
         project's licence. The downloader has to show them before fetching."""

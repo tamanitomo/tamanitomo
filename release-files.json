@@ -225,6 +225,7 @@
   "tests/test_lifestyle.py",
   "tests/test_local_models.py",
   "tests/test_media_review.py",
+  "tests/test_media_url_ui.js",
   "tests/test_missions.py",
   "tests/test_notes.py",
   "tests/test_onboarding.py",

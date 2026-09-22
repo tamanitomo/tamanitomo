@@ -252,24 +252,35 @@ dialog.photo-viewer::backdrop{background:rgba(0,0,0,0.94)}
    nothing and cost the second finger of a pinch. */
 .viewer-canvas{flex:1;height:100%;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;touch-action:none;user-select:none}
 .viewer-img{max-width:92vw;max-height:calc(100vh - 84px);object-fit:contain;border-radius:4px;box-shadow:0 30px 80px rgba(0,0,0,0.9);transition:transform .2s cubic-bezier(0.2,0.8,0.2,1),opacity .2s ease;pointer-events:none;will-change:transform;transform-origin:center center}
+/* The way a photo app does it: the picture is the thing, so the arrows are a
+   hint rather than furniture. No pill, no border, no blur -- a bare chevron
+   that stays out of the way until the pointer comes near, with a shadow so it
+   reads over a light photograph as well as a dark one.
+
+   They are gone entirely where there is no pointer to hover: on a phone the
+   gesture is the swipe, and a pair of large buttons sitting over the picture
+   is just something else to hit by accident. */
 .viewer-nav{
   position:absolute;
   top:50%;
   transform:translateY(-50%);
-  width:48px;
-  height:48px;
+  width:56px;
+  height:56px;
   border-radius:50%;
-  background:rgba(255,255,255,0.12);
-  border:1px solid rgba(255,255,255,0.16);
+  background:none;
+  border:0;
   color:#fff;
   display:grid;
   place-items:center;
   cursor:pointer;
   z-index:10;
-  backdrop-filter:blur(12px);
-  transition:all .2s ease;
+  opacity:0;
+  filter:drop-shadow(0 1px 3px rgba(0,0,0,0.7));
+  transition:opacity .18s ease;
 }
-.viewer-nav:hover:not(:disabled){background:rgba(255,255,255,0.25);border-color:rgba(255,255,255,0.35);transform:translateY(-50%) scale(1.1)}
+.viewer-stage:hover .viewer-nav{opacity:.38}
+.viewer-nav:hover:not(:disabled){opacity:.9}
+.viewer-nav:focus-visible{opacity:.9}
 .viewer-nav:disabled{opacity:0;pointer-events:none}
 .viewer-nav-prev{left:20px}
 .viewer-nav-next{right:20px}
@@ -324,9 +335,9 @@ dialog.photo-viewer::backdrop{background:rgba(0,0,0,0.94)}
  .viewer-btn span{display:none}
  .viewer-btn{padding:8px}
  .viewer-date{display:none}
- .viewer-nav{width:40px;height:40px}
- .viewer-nav-prev{left:10px}
- .viewer-nav-next{right:10px}
+ .viewer-nav{width:44px;height:44px}
+ .viewer-nav-prev{left:4px}
+ .viewer-nav-next{right:4px}
  .viewer-info-pane{width:100vw}
  .viewer-album-popover{right:12px;left:12px;width:auto}
 }
@@ -2676,3 +2687,9 @@ body[data-page="chat"] main{padding:0}
 .job-origin-head p{margin:0}
 .job-origin-other .job-origin-head{border-bottom-color:var(--warn-bg)}
 @media(max-width:900px){.timeline-strip{grid-template-columns:repeat(12,1fr)}.timeline-hour{height:38px}}
+
+/* No pointer to hover with means no way to summon these, and nothing to summon
+   them for: swiping is the whole interaction there. */
+@media (hover:none){
+  .viewer-nav{display:none}
+}
