@@ -69,11 +69,17 @@ def synchronize(app, runtime, old, updated):
             report(line.strip())
         result = runtime.run(['--home', str(updated.home), 'repair'], home=updated.home,
                              kit=True, timeout=600, check=False)
-        if result.returncode:
+        # Repair ends with a full health check, which flags standing advisories that
+        # have nothing to do with this save. Only exit code 1 means a job or schedule
+        # is actually wrong; 2 means the jobs are fine and something else needs eyes.
+        if result.returncode == 1:
             raise ValueError('Preferences were saved, but background jobs could not be updated. '
                              'Open Jobs & health and repair the routine. ' + redact(result.stderr or result.stdout)[-2000:])
-        return {'output': redact(result.stdout or result.stderr),
-                'note': 'Preferences saved and job synchronization completed. Review Jobs & health for any protected custom schedules.'}
+        note = 'Preferences saved and job synchronization completed. Review Jobs & health for any protected custom schedules.'
+        if result.returncode:
+            note = ('Preferences saved and background jobs updated. The health check flagged '
+                    'unrelated items — see Jobs & health when convenient.')
+        return {'output': redact(result.stdout or result.stderr), 'note': note}
 
     return app.state.operations.submit(str(runtime.root), 'Sync preferences to background jobs',
                                        sync, profile=updated.profile or 'default')

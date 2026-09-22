@@ -36,7 +36,10 @@ def job_model_drift(c,jobs,config):
     return lines
 def cmd_doctor(args):
     c=resolve(args,require_config=True)
-    b=c.budgets();ok=True
+    # `ok` covers every check; `jobs_ok` covers only the scheduled-job and schedule
+    # checks, so a caller that just synchronized jobs can tell its own work failing
+    # apart from unrelated advisories that were already standing.
+    b=c.budgets();ok=True;jobs_ok=True
     print(f'{c.agent} ({c.profile or "root profile"}) at {c.home}')
     print(f'  data:    {c.data}')
     print(f'  model:   {c.context_tokens:,} tokens -> {c.tier} tier')
@@ -122,26 +125,27 @@ def cmd_doctor(args):
         try:jobs=[j for j in json.loads(jp.read_text(encoding='utf-8')).get('jobs',[]) if j.get('name') in {cr.render(spec['name'],{'AGENT':c.agent}) for spec in load_manifest(c)['jobs']}]
         except ValueError:pass
     print(f'  jobs:    {len(jobs)} installed'+('' if jobs else '  ! none found'))
+    if not jobs:jobs_ok=False
     expected_names={cr.render(spec['name'],{'AGENT':c.agent}) for spec in load_manifest(c)['jobs']}
     if len(jobs)!=len(expected_names) or {j.get('name') for j in jobs}!=expected_names:
-        print('  ! job set is incomplete or contains duplicate names');ok=False
+        print('  ! job set is incomplete or contains duplicate names');ok=jobs_ok=False
     pulse=next((job for job in jobs if job.get('name')==c.agent+' companion pulse'),None)
     if not (c.life/'PRESENCE.md').exists() or (pulse and 'LIVED STATE v1:' not in pulse.get('prompt','')):
-        print('  ! lived-state instructions missing; run repair');ok=False
+        print('  ! lived-state instructions missing; run repair');ok=jobs_ok=False
     if not c.image_timeline:
         stale=next((j for j in _read_jobs(jp).get('jobs',[]) if j.get('name')==c.agent+' image timeline' and j.get('enabled')),None)
-        if stale:print('  ! image timeline is active despite opt-out; run repair');ok=False
+        if stale:print('  ! image timeline is active despite opt-out; run repair');ok=jobs_ok=False
     scripted=script_job_names(c)
     for job in jobs:
         if job.get('name') in scripted and not job.get('no_agent'):
-            print(f"  ! {job['name']} must run without a model");ok=False
+            print(f"  ! {job['name']} must run without a model");ok=jobs_ok=False
         if job.get('next_run_at'):
             try:dt.datetime.fromisoformat(job['next_run_at'])
-            except (ValueError,TypeError):print('  ! invalid job timestamp');ok=False
+            except (ValueError,TypeError):print('  ! invalid job timestamp');ok=jobs_ok=False
     if any(j.get('enabled') and not j.get('next_run_at') for j in jobs) or any(bool(j.get('enabled'))!=(True if j.get('name') in scripted else c.cron_active) for j in jobs):
-        print('  ! schedule state differs from setup choice, or an active job lacks next_run_at');ok=False
+        print('  ! schedule state differs from setup choice, or an active job lacks next_run_at');ok=jobs_ok=False
     if (c.home/'companion-pending-jobs.json').exists():
-        print('  ! scheduled jobs pending; run repair');ok=False
+        print('  ! scheduled jobs pending; run repair');ok=jobs_ok=False
     if jobs and c.cron_active and not c.is_root:
         import companion_gateway as cg
         info=cg.status(c)
@@ -183,7 +187,8 @@ def cmd_doctor(args):
         print(line)
     if not c.cron_active:print('  routine: paused by choice; no recurring runs authorized yet')
     print('\nOK' if ok else '\nIncomplete — see the ! lines above.')
-    return 0 if ok else 1
+    # 1 = a job or schedule is wrong; 2 = only advisories elsewhere.
+    return 0 if ok else (1 if not jobs_ok else 2)
 def cmd_repair(args):
     """Retry missing hooks and scheduled jobs without rewriting identity or ledgers."""
     c=resolve(args,require_config=True);report=['Repair']
