@@ -6,6 +6,11 @@
 - Report an unreadable or absent session record as unknown rather than as nobody having been there; the two are not the same and only one is safe to write from.
 - Count a dialogue between two companions as what it is, rather than as company.
 - Judge a presence record by the moment it describes instead of the moment it is validated, so the same pulse no longer passes before nine in the morning and fails at ten, and a job catching up is not measured against a day it was not writing about.
+- Let a browser keep a photograph instead of forbidding it, and answer the revalidation here, so scrolling a gallery stops re-fetching the whole library.
+- Track every pointer in the photo viewer, so two fingers pinch to zoom rather than reading as one violent swipe; add pan while zoomed and double tap to zoom where you tapped.
+- Move the picture out the way it was pushed and bring the next in from the far side, instead of snapping back and then changing.
+- Restore the picture without waiting for an animation frame, which never arrives in a tab that is not being drawn — a swipe before switching away used to leave it invisible.
+- Start selecting photographs by holding one, rather than only through a chip among the collection filters.
 
 ## 3.0.2 — What was missing, said out loud (2026-09-22)
 

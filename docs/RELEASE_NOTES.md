@@ -8,6 +8,10 @@ This matters more than a wrong detail. Affection nobody gave is the easiest thin
 
 Separately, a validation bug with the same shape underneath it: before writing a presence record, the pulse asks whether the record would be accepted, and that question was being answered against the wall clock rather than the moment the record describes. Which routine anchor is active is a fact about a moment. So the same pulse was accepted before nine in the morning and refused at ten, and a job catching up after a gap was judged against a day it was not writing about.
 
+Also in this release, the photo gallery on a phone. Photographs were served with instructions never to keep them, which is right for a JSON reply and ruinous for a two-megabyte picture: scrolling a library re-fetched the library, every time. They may now be kept for a day and revalidated after that, and the revalidation is answered without resending the image.
+
+Pinching did nothing, and worse than nothing — the viewer followed a single finger, so a second one overwrote the first's starting point and a pinch read as a violent swipe into the next photograph. Every finger is followed now, and what the gesture is follows from how many there are: two is a pinch, one on an unzoomed picture is a swipe, one on a zoomed picture is a pan. Double tap zooms to where you tapped and back. A swipe moves the picture out the way you pushed it and brings the next in from the far side, rather than snapping back and then changing behind your hand. And choosing several photographs, which was reachable only through a small chip among the collection filters, now starts by holding one.
+
 ### Install
 
 Download **tamanitomo-release.zip** below, extract it into its own application folder, and run the Tamanitomo launcher. Keep your Hermes home and vault outside that folder. The automatically generated GitHub source archives are for development; use the attached release ZIP for in-app updates.
