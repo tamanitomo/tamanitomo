@@ -23,6 +23,22 @@ def _text_chunks(raw:bytes)->dict:
     return {k:v for k,v in info.items() if isinstance(v,str)},size
 
 
+def _json_safe(value):
+    """Strip NaN and Infinity, which are readable JSON here and unwritable later.
+
+    ComfyUI stamps `is_changed: [NaN]` onto the nodes it saves. Python's json
+    reads that happily, so the graph parsed fine and every later step worked --
+    and then serialising the result to the browser raised "Out of range float
+    values are not JSON compliant", which named nothing, pointed nowhere, and
+    stopped any picture carrying the marker from being imported at all.
+    """
+    import math
+    if isinstance(value,float) and not math.isfinite(value):return None
+    if isinstance(value,dict):return {k:_json_safe(v) for k,v in value.items()}
+    if isinstance(value,list):return [_json_safe(v) for v in value]
+    return value
+
+
 def _comfy_graph(chunks:dict):
     """ComfyUI writes the API graph under `prompt`, and the editor graph under
     `workflow`. Only the first is renderable."""
@@ -33,8 +49,21 @@ def _comfy_graph(chunks:dict):
     if not isinstance(graph,dict) or not graph:return None
     for node in graph.values():
         if not isinstance(node,dict) or 'class_type' not in node:return None
-    return graph
+    return _json_safe(graph)
 
+
+# Enough of stock ComfyUI to tell "this needs a node pack" from "this does not".
+STOCK_NODES=frozenset('''
+CheckpointLoaderSimple CheckpointLoader UNETLoader VAELoader CLIPLoader DualCLIPLoader
+LoraLoader LoraLoaderModelOnly CLIPTextEncode CLIPSetLastLayer ConditioningCombine
+ConditioningConcat ConditioningSetArea ConditioningZeroOut EmptyLatentImage
+EmptySD3LatentImage LatentUpscale LatentUpscaleBy VAEDecode VAEEncode VAEEncodeForInpaint
+KSampler KSamplerAdvanced SamplerCustom SamplerCustomAdvanced BasicScheduler
+BasicGuider CFGGuider RandomNoise DisableNoise KSamplerSelect SaveImage PreviewImage
+LoadImage LoadImageMask ImageScale ImageScaleBy ImageInvert ImageBatch ImagePadForOutpaint
+ModelSamplingFlux ModelSamplingSD3 ModelSamplingDiscrete FluxGuidance NoteNode Note
+PrimitiveNode Reroute EmptyImage ImageCrop RepeatLatentBatch SetLatentNoiseMask
+'''.split())
 
 A1111_TAIL=re.compile(r'^(?P<key>[A-Za-z][A-Za-z0-9 _+/-]*): (?P<value>"[^"]*"|[^,]*)(?:, |$)')
 
@@ -90,22 +119,30 @@ def read_image_workflow(raw:bytes,name=''):
         draft['mappings']=_infer_mappings(graph)
         found['source']='ComfyUI graph'
         found['nodes']=len(graph)
-        found['loras']=[n['inputs'].get('lora_name') for n in graph.values()
-                        if n.get('class_type')=='LoraLoader' and n.get('inputs',{}).get('lora_name')]
-        found['checkpoints']=[n['inputs'].get('ckpt_name') for n in graph.values()
-                              if n.get('class_type')=='CheckpointLoaderSimple' and n.get('inputs',{}).get('ckpt_name')]
-        sampler=next((n for n in graph.values() if n.get('class_type')=='KSampler'),None)
-        if sampler:
-            for key,field in (('steps','steps'),('cfg','cfg'),('seed','seed')):
-                value=sampler.get('inputs',{}).get(field)
-                if isinstance(value,(int,float)):draft[key]=value;found[key]=value
-        latent=next((n for n in graph.values() if n.get('class_type')=='EmptyLatentImage'),None)
-        if latent:
-            for key in ('width','height'):
-                value=latent.get('inputs',{}).get(key)
-                if isinstance(value,int):draft[key]=value;found[key]=value
+        weights=classify_weights(graph)
+        found['loras']=weights['lora']
+        found['checkpoints']=weights['checkpoint']
+        for kind in ('vae','clip','embedding'):
+            if weights[kind]:found[kind+'s']=weights[kind]
+        found['node_types']=sorted({n.get('class_type') for n in graph.values() if n.get('class_type')})
+        # The numbers come from wherever the mapping landed, which is the stock
+        # node when there is one and the pack's own node when there is not.
+        for key in ('steps','cfg','seed','width','height'):
+            where=draft['mappings'].get(key)
+            if not where:continue
+            value=(graph.get(where[0],{}).get('inputs') or {}).get(where[1])
+            if isinstance(value,bool) or not isinstance(value,(int,float)):continue
+            if key in ('steps','seed','width','height'):value=int(value)
+            draft[key]=value;found[key]=value
         if not draft['mappings'].get('prompt') and not draft['mappings'].get('quality'):
             notes.append('The prompt node could not be identified, so the text boxes are not wired yet.')
+        custom=[t for t in found['node_types'] if t not in STOCK_NODES]
+        if custom:
+            found['custom_nodes']=custom
+            notes.append('This graph uses custom nodes: '+', '.join(custom[:6])+
+                         ('' if len(custom)<=6 else f' and {len(custom)-6} more')+
+                         '. They have to be installed in ComfyUI before it can run, '
+                         'whatever else is set up here.')
     else:
         parsed=_a1111(chunks)
         if parsed:
@@ -149,6 +186,54 @@ def read_image_workflow(raw:bytes,name=''):
     return {'preset':draft,'found':found,'notes':notes}
 
 
+WEIGHT_SUFFIXES=('.safetensors','.ckpt','.pt','.pth','.bin','.gguf','.sft')
+
+# What a field is called is a far better signal than what its node is called.
+# Stock ComfyUI has KSampler and CLIPTextEncode; a node pack has
+# SOGenerationPipelineStudio, which is a sampler in every way that matters and
+# still calls its inputs `steps`, `cfg` and `custom_width`. Matching on the
+# class name recognised the first and nothing at all about the second.
+FIELD_ALIASES={
+    'steps':('steps','num_steps','sampling_steps'),
+    'cfg':('cfg','cfg_scale','guidance','guidance_scale'),
+    'seed':('seed','seed_value','noise_seed','rand_seed'),
+    'width':('width','custom_width','empty_latent_width','image_width'),
+    'height':('height','custom_height','empty_latent_height','image_height'),
+}
+PROMPT_FIELDS=('positive_text','positive_prompt','manual_prompt','positive','prompt','text')
+NEGATIVE_FIELDS=('negative_text','negative_prompt','negative')
+# `model` is deliberately last: a node that has both `diffusion_model` and a
+# `model` wired from elsewhere should be read by the specific name.
+WEIGHT_FIELDS=(('lora',('lora_name','main_lora','lora','lora_file')),
+               ('vae',('vae_name','vae')),
+               ('clip',('clip_name','clip','text_encoder','text_encoder_name')),
+               ('embedding',('embedding','embedding_name')),
+               ('checkpoint',('ckpt_name','unet_name','diffusion_model','checkpoint','model_name','model')))
+
+
+def _is_weight(value):
+    return isinstance(value,str) and value.lower().endswith(WEIGHT_SUFFIXES)
+
+
+def classify_weights(graph):
+    """Every weights file the graph names, by the kind of thing it is.
+
+    Read off the field names rather than the node classes, so a pack that fuses
+    loader, sampler and save into three custom nodes is still legible. A value
+    that merely looks like a filename is not enough on its own -- a save node
+    remembers the path of the last picture it wrote, and that is not a model.
+    """
+    out={'checkpoint':[],'lora':[],'vae':[],'clip':[],'embedding':[]}
+    for node in graph.values():
+        for kind,fields in WEIGHT_FIELDS:
+            for field in fields:
+                value=(node.get('inputs') or {}).get(field)
+                if _is_weight(value):
+                    leaf=value.replace(chr(92),'/').rsplit('/',1)[-1]
+                    if leaf not in out[kind]:out[kind].append(leaf)
+    return out
+
+
 def _infer_mappings(graph):
     """Point the prompt, size and sampler controls at the nodes that own them."""
     mappings={}
@@ -166,14 +251,110 @@ def _infer_mappings(graph):
     if latent:
         mappings['width']=[latent,'width'];mappings['height']=[latent,'height']
     if 'prompt' not in mappings and encoders:mappings['prompt']=[encoders[0],'text']
+    # Anything the stock shapes did not account for, found by field name. This
+    # runs second and never overwrites, so a graph built from stock nodes is
+    # read exactly as it always was.
+    for key,names in FIELD_ALIASES.items():
+        if key in mappings:continue
+        for node_id,node in graph.items():
+            inputs=node.get('inputs') or {}
+            field=next((f for f in names if isinstance(inputs.get(f),(int,float))
+                        and not isinstance(inputs.get(f),bool)),None)
+            if field:mappings[key]=[node_id,field];break
+    # A prompt is a long piece of free text somebody typed. Following the
+    # sampler's own wiring is better than guessing, so try that first.
+    if 'prompt' not in mappings:
+        wired=_follow_text(graph,PROMPT_FIELDS)
+        if wired:mappings['prompt']=wired
+    if 'prompt' not in mappings:
+        best=None
+        for node_id,node in graph.items():
+            inputs=node.get('inputs') or {}
+            for field in PROMPT_FIELDS:
+                value=inputs.get(field)
+                if isinstance(value,str) and len(value.strip())>=20 and not _is_weight(value):
+                    if best is None or len(value)>best[0]:best=(len(value),[node_id,field])
+        if best:mappings['prompt']=best[1]
+    if 'negative' not in mappings:
+        for node_id,node in graph.items():
+            inputs=node.get('inputs') or {}
+            field=next((f for f in NEGATIVE_FIELDS if isinstance(inputs.get(f),str)),None)
+            if field:mappings['negative']=[node_id,field];break
     return mappings
 
 
+def _follow_text(graph,fields):
+    """Where a node's text input actually comes from, one hop back."""
+    for node in graph.values():
+        inputs=node.get('inputs') or {}
+        for field in fields:
+            ref=inputs.get(field)
+            if not (isinstance(ref,list) and len(ref)==2 and str(ref[0]) in graph):continue
+            upstream=graph[str(ref[0])];up_inputs=upstream.get('inputs') or {}
+            best=None
+            for candidate in ('text',*fields):
+                value=up_inputs.get(candidate)
+                if isinstance(value,str) and len(value.strip())>=20 and not _is_weight(value):
+                    if best is None or len(value)>best[0]:best=(len(value),[str(ref[0]),candidate])
+            if best:return best[1]
+    return None
+
+
+def human_bytes(value):
+    value=float(value or 0)
+    for unit in ('B','KB','MB','GB','TB'):
+        if value<1024 or unit=='TB':
+            return (f'{value:.0f} {unit}' if unit in ('B','KB','MB') or value>=10
+                    else f'{value:.1f} {unit}')
+        value/=1024
+
+
+# A picture generated on somebody else's machine says nothing about whether it
+# can be generated on yours, and the failure when it cannot is a CUDA
+# out-of-memory thrown deep inside ComfyUI. Someone new reads that as "broken",
+# not as "this model is bigger than my card", and has no way to know that the
+# same model exists in quantised form. So: say it here, before the download.
+QUANT_ADVICE=('Look for a GGUF or quantised build of the same model -- they are the same '
+              'weights at lower precision, in roughly half the space per step down '
+              '(FP16 -> FP8 -> Q8 -> Q6 -> Q4). Q8 and Q6 are usually hard to tell apart '
+              'from full precision; Q4 is visible but works. In ComfyUI a GGUF needs the '
+              'ComfyUI-GGUF node pack and its own loader node.')
+
+
+def describe_fit(vram_bytes,size_bytes=None,name=''):
+    """Whether a set of weights has room to run, said plainly. '' when unknown.
+
+    Weights are not the whole cost -- the text encoder, the VAE and the latents
+    all want the same card -- so this is deliberately conservative and says a
+    thing is tight well before it is impossible.
+    """
+    if not vram_bytes:return ''
+    card=human_bytes(vram_bytes)
+    label=(name or 'That model').rsplit('/',1)[-1]
+    # Do not tell someone holding a Q4 GGUF to go and find a GGUF.
+    quantised=bool(re.search(r'\.gguf$|\bq[2-8][_k]|\bnf4\b',label,re.I))
+    advice='' if quantised else ' '+QUANT_ADVICE
+    if not size_bytes:
+        return (f'This ComfyUI has {card} of VRAM. Check the file size before downloading: '
+                f'the weights have to fit alongside a text encoder and the image itself.'+advice)
+    size=human_bytes(size_bytes)
+    share=size_bytes/float(vram_bytes)
+    if share<=0.6:
+        return f'{label} is {size} and this card has {card} — room to spare.'
+    if share<=0.9:
+        return (f'{label} is {size} against {card} of VRAM. It may load, but with little left '
+                f'for the text encoder and the image; expect offloading and slow steps.'+advice)
+    return (f'{label} is {size} and this card has {card} — it will not fit, and ComfyUI will '
+            f'fail with an out-of-memory error partway through.'+
+            (advice or ' Look for a smaller quantisation of it, or a smaller model.'))
+
+
 def _is_renderable(draft,found):
+    # A graph that loads its weights through a pack's own loader is as complete
+    # as one using CheckpointLoaderSimple; it was called incomplete only because
+    # nothing here recognised the node.
     if found.get('source')!='ComfyUI graph':return False
-    graph=draft.get('workflow') or {}
-    has_model=any(n.get('class_type')=='CheckpointLoaderSimple' and n.get('inputs',{}).get('ckpt_name')
-                  for n in graph.values())
+    has_model=bool(found.get('checkpoints'))
     wired=bool((draft.get('mappings') or {}).get('prompt'))
     return bool(has_model and wired)
 
@@ -263,8 +444,21 @@ def read_image_url(url:str,fetch=None,fetch_json=None):
             request=urllib.request.Request(target,headers={'User-Agent':'Mozilla/5.0'})
             with urllib.request.urlopen(request,timeout=25) as response:
                 return response.read(4_000_000).decode('utf-8','replace')
-    try:html=fetch(url)
-    except Exception:
+    # civitai.red is a mirror of the same catalogue and serves the same image
+    # ids, but it answers an ordinary client with 403 -- so a link copied from
+    # there failed at the fetch, before anything had a chance to read it, and
+    # the error blamed the link. The id is what matters: ask .com for it first,
+    # and fall back to the address as given in case it is .com that is blocked
+    # here.
+    targets=[f'https://civitai.com/images/{match.group(1)}']
+    if url.split('?')[0] not in targets:targets.append(url)
+    html=None
+    for target in targets:
+        try:
+            html=fetch(target);break
+        except Exception:
+            continue
+    if html is None:
         raise ValueError('Could not reach that page. Check the link, or download the image and import the file.')
     meta=_civitai_meta_from_page(html)
     if not meta:

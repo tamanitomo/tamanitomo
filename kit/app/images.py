@@ -131,7 +131,7 @@ def register(app,select,load):
                 result.setdefault('notes',[]).append(
                     'Sorted '+str(len(media.split_terms(modesty)))+
                     ' of its negative terms into the modesty bucket.')
-        installed=set()
+        installed=set();classes=set()
         try:
             # No local import here: `media` is imported at module scope, and
             # re-importing it inside this function made the name local to the
@@ -139,15 +139,71 @@ def register(app,select,load):
             # first, raised UnboundLocalError and no workflow carrying a
             # negative prompt could be imported at all.
             info=media.request_json(media.endpoint(preset['endpoint'])+'/object_info')
-            for node in ('CheckpointLoaderSimple','LoraLoader','VAELoader','CLIPLoader'):
-                for spec in info.get(node,{}).get('input',{}).get('required',{}).values():
-                    if isinstance(spec[0],list):installed.update(spec[0])
+            classes=set(info)
+            for node,spec_group in info.items():
+                for spec in (spec_group.get('input',{}).get('required',{}) or {}).values():
+                    if isinstance(spec,list) and spec and isinstance(spec[0],list):
+                        installed.update(x for x in spec[0] if isinstance(x,str))
         except Exception:
             result.setdefault('notes',[]).append(
                 'Could not reach ComfyUI to see which of these you already have.')
+        _report_gaps(result,installed,classes,preset)
         for row in (result.get('found') or {}).get('resources',[]) or []:
             row['installed']=bool(row.get('file') and row['file'] in installed)
         return result
+
+    def _report_gaps(result,installed,classes,preset):
+        """Say what this ComfyUI is missing, and whether it could run it anyway.
+
+        An imported workflow that names a node pack you do not have, or a model
+        twice the size of your card, fails at render time with an error from
+        somewhere deep inside ComfyUI. Everything needed to say so plainly is
+        already in hand at import; it was simply never looked at.
+        """
+        import companion_image_import as importer
+        found=result.get('found') or {};notes=result.setdefault('notes',[])
+        leaf=lambda name:str(name).replace(chr(92),'/').rsplit('/',1)[-1]
+        if classes:
+            missing=[t for t in (found.get('node_types') or []) if t not in classes]
+            if missing:
+                found['missing_nodes']=missing
+                # The import said "this needs custom nodes" without knowing
+                # which ComfyUI it was going to. Now that we have asked one,
+                # that guess is replaced rather than repeated beside the answer.
+                generic=[n for n in notes if n.startswith('This graph uses custom nodes')]
+                for line in generic:notes.remove(line)
+                notes.append('Not installed in this ComfyUI: '+', '.join(missing[:6])+
+                             ('' if len(missing)<=6 else f' and {len(missing)-6} more')+
+                             '. Install the node pack that provides them (ComfyUI Manager '
+                             'can search by node name), then import this again.')
+        if installed:
+            names={leaf(x) for x in installed}
+            absent=[]
+            for kind in ('checkpoints','loras','vaes','clips'):
+                for name in (found.get(kind) or []):
+                    if name and leaf(name) not in names:absent.append(leaf(name))
+            if absent:
+                found['missing_models']=absent
+                notes.append('Not on this ComfyUI yet: '+', '.join(absent[:6])+
+                             ('' if len(absent)<=6 else f' and {len(absent)-6} more')+'.')
+        vram=0
+        try:
+            stats=media.request_json(media.endpoint(preset['endpoint'])+'/system_stats')
+            vram=max([int(d.get('vram_total') or 0) for d in (stats.get('devices') or [])] or [0])
+        except Exception:
+            pass
+        if not vram:return
+        found['vram_total']=vram
+        sized=[(r.get('file') or r.get('name'),int(r['size_kb']*1024))
+               for r in (found.get('resources') or [])
+               if r.get('size_kb') and str(r.get('kind'))=='checkpoint']
+        if sized:
+            for name,size in sized[:2]:
+                advice=importer.describe_fit(vram,size,name)
+                if advice:notes.append(advice)
+        elif found.get('missing_models') or found.get('checkpoints'):
+            advice=importer.describe_fit(vram,None,(found.get('checkpoints') or [''])[0])
+            if advice:notes.append(advice)
 
     SLOT_FOR_KIND={'checkpoint':'checkpoint','lora':'lora','lycoris':'lora','locon':'lora',
                    'vae':'vae','embedding':'embedding'}
