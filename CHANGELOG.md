@@ -1,3 +1,10 @@
+## 3.0.1 — Reasoning that is actually asked for (2026-09-21)
+
+- Keep `reasoning_effort` when a schema is restated into the prompt; that path had been stripping it from every structured request, so the workers that most need to think were told not to.
+- Drop the fields a provider may have objected to only on the retry after it actually objected, which is what that code was written for.
+- Treat "the provider does not report reasoning" as its own answer rather than as "it did not reason", and warn only on a reported zero.
+- Say on the jobs page when a provider cannot confirm reasoning, so an effort setting that is being sent does not look like one that is being ignored.
+
 ## 3.0.0 — One author for a day (2026-09-21)
 
 - Hold each day in one plan with one ordered timeline; two items may not occupy the same hours, and a plan that overlaps itself is refused when written, not only when added to.

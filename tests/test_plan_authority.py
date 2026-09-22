@@ -494,3 +494,73 @@ class HandoffRendersOnReadTests(unittest.TestCase):
         writers = [j['key'] for j in manifest['jobs']
                    if j.get('key') in ('pulse', 'wake', 'winddown', 'present')]
         self.assertEqual(sorted(writers), ['pulse', 'wake', 'winddown'])
+
+
+class ReasoningTests(unittest.TestCase):
+    """Three states, not two: it thought, it did not, or nobody said.
+
+    Collapsing the third into the second produced a warning on every single run
+    that no setting could silence -- which is worse than no warning at all,
+    because it teaches you to ignore the one that means something. And the path
+    that puts a schema into the prompt was stripping `reasoning_effort` on the
+    way, so the workers that most need to think were being told not to.
+    """
+
+    class Message:
+        def __init__(self, content='{}', reasoning_content=None):
+            self.content = content
+            self.reasoning_content = reasoning_content
+
+    class Choice:
+        def __init__(self, message):
+            self.message = message
+
+    class Reply:
+        def __init__(self, message, usage=None):
+            self.choices = [ReasoningTests.Choice(message)]
+            self.usage = usage
+
+    class Usage:
+        def __init__(self, details):
+            self.completion_tokens_details = details
+
+    class Details:
+        def __init__(self, reasoning_tokens):
+            self.reasoning_tokens = reasoning_tokens
+
+    def state(self, reply):
+        import companion_text_provider as provider
+        return provider._reasoning_state(reply)
+
+    def test_reasoning_text_means_it_thought(self):
+        self.assertIs(self.state(self.Reply(self.Message(reasoning_content='hmm'))), True)
+
+    def test_a_reported_token_count_means_it_thought(self):
+        reply = self.Reply(self.Message(), self.Usage(self.Details(240)))
+        self.assertIs(self.state(reply), True)
+
+    def test_a_reported_zero_means_it_did_not(self):
+        reply = self.Reply(self.Message(), self.Usage(self.Details(0)))
+        self.assertIs(self.state(reply), False)
+
+    def test_an_endpoint_that_reports_nothing_says_nothing(self):
+        """Which is every model behind this provider, at every effort."""
+        self.assertIsNone(self.state(self.Reply(self.Message(), self.Usage(None))))
+        self.assertIsNone(self.state(self.Reply(self.Message(), None)))
+
+    def test_the_warning_fires_only_on_a_definite_no(self):
+        source = (ROOT / 'kit/scripts/companion_local_pulse.py').read_text(encoding='utf-8')
+        self.assertIn("if reply.get('reasoned') is False:", source,
+                      'the warning is firing on unknown again')
+
+    def test_putting_the_schema_in_the_prompt_keeps_the_thinking(self):
+        source = (ROOT / 'kit/scripts/companion_text_provider.py').read_text(encoding='utf-8')
+        block = source[source.index('def restate('):source.index('    try:\n        reply=')]
+        self.assertIn('keep_effort=True', block)
+        self.assertIn('if not keep_effort:out.pop', block,
+                      'the schema path is stripping reasoning_effort again')
+
+    def test_only_a_rejected_request_drops_the_fields_it_objected_to(self):
+        source = (ROOT / 'kit/scripts/companion_text_provider.py').read_text(encoding='utf-8')
+        self.assertIn('keep_effort=False', source)
+        self.assertIn('where the provider actually objected', source)

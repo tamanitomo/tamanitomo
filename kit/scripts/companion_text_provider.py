@@ -16,6 +16,24 @@ import json
 import sys
 
 
+def _reasoning_state(reply):
+    """Did it think? True, False, or None for "this endpoint does not say".
+
+    The three are genuinely different and were collapsed into two. A provider
+    that reports nothing is not a provider that reasoned about nothing, and
+    treating it as such produced a warning on every single run that no setting
+    could ever silence -- which is worse than no warning, because it teaches you
+    to ignore the one that means something.
+    """
+    if getattr(getattr(reply,'choices',[None])[0].message,'reasoning_content',None):return True
+    details=getattr(getattr(reply,'usage',None),'completion_tokens_details',None)
+    if details is None:return None
+    try:
+        return int(getattr(details,'reasoning_tokens',0) or 0)>0
+    except (TypeError,ValueError):
+        return None
+
+
 def _missing(text,schema):
     """What is wrong with this answer, in words a model can act on. '' if nothing."""
     try:
@@ -56,10 +74,19 @@ def chat(payload):
     wanted=request.get('response_format') or {}
     schema=(wanted.get('json_schema') or {}).get('schema') if wanted.get('type')=='json_schema' else None
 
-    def restate(req):
-        """Put the schema in the prompt, for a provider that will not enforce one."""
+    def restate(req,keep_effort=True):
+        """Put the schema in the prompt, for a provider that will not enforce one.
+
+        Keeps the thinking. This began life as the retry for a provider that had
+        rejected the request outright, where dropping the unusual fields is the
+        point -- and then became the normal path for every schema, quietly
+        stripping reasoning from the workers that need it most. These jobs hold a
+        routine, a wardrobe and a continuity rule in mind and answer in one shot;
+        taking their thinking away is how they start inventing anchors and
+        garments, which is precisely what the warning was complaining about.
+        """
         out=dict(req)
-        out.pop('reasoning_effort',None)
+        if not keep_effort:out.pop('reasoning_effort',None)
         out['messages']=[dict(m) for m in req['messages']]
         out['messages'][-1]['content']=(str(out['messages'][-1].get('content',''))+
             '\n\nReturn one JSON object and nothing else, satisfying exactly this JSON Schema, '
@@ -81,8 +108,11 @@ def chat(payload):
         reply=client.chat.completions.create(**request)
     except Exception:
         if not (effort or wanted):raise
-        reply=client.chat.completions.create(**{k:v for k,v in request.items()
-                                                if k not in ('reasoning_effort','response_format')})
+        # Only here, where the provider actually objected, is it right to drop
+        # the fields it may have objected to.
+        reply=client.chat.completions.create(**(restate(request,keep_effort=False) if schema else
+                                                {k:v for k,v in request.items()
+                                                 if k not in ('reasoning_effort','response_format')}))
     if schema:
         missing=_missing(getattr(reply.choices[0].message,'content',''),schema)
         if missing:
@@ -98,7 +128,7 @@ def chat(payload):
     choice=reply.choices[0]
     usage=getattr(reply,'usage',None)
     return {'content':choice.message.content,'finish_reason':choice.finish_reason,
-            'reasoned':bool(getattr(choice.message,'reasoning_content',None)),
+            'reasoned':_reasoning_state(reply),
             'model':resolved,'provider':provider,
             'usage':{'completion_tokens':getattr(usage,'completion_tokens',0),
                      'prompt_tokens':getattr(usage,'prompt_tokens',0)} if usage else {}}

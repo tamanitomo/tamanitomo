@@ -200,7 +200,10 @@ def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
                                                               companion_life.themes(c.life) if phase=='winddown' else None)}}}
     for attempt in range(2):
         reply=worker.complete(c,payload,route,api_key_env,allow_remote,timeout=300,what='Local pulse')
-        if not reply.get('reasoned'):
+        # Only when the provider actually said it did not think. An endpoint that
+        # reports no accounting at all says nothing either way, and warning on
+        # that fired every run under every setting.
+        if reply.get('reasoned') is False:
             print('warning: model returned no reasoning; routine and wardrobe rules are easy to miss without it',
                   file=sys.stderr)
         if reply.get('finish_reason') not in ('stop',None):raise ValueError('Local pulse response was incomplete')

@@ -117,6 +117,11 @@ SENSITIVITY={
               'order':2},
 }
 
+# Whether a provider tells you how much thinking it did. Asking for reasoning
+# and being told nothing back is not the same as being told it did none, and
+# only one of those is worth a warning. Measured by asking, not assumed.
+REASONING_REPORTED={'openai-codex':False}
+
 CONTINUITY_RECOMMENDATIONS={
  'pulse':('Fast, reliable tool-use model','low','Preserve the present without overthinking every 15-minute tick.'),
  'autonomy':('Strong general model with tool use','medium','Planning and follow-through benefit from some reasoning.'),
@@ -1287,6 +1292,7 @@ def register(app, select, load, operations):
             script=str(row.get('script') or '')
             if preread and script.startswith('companion-local-') and not row.get('no_agent'):
                 row['second_call']={'why':'Its pre-read writes her presence before the agent turn.',
+                                    'reasoning_reported':REASONING_REPORTED.get(preread['provider'],None),
                                     'setting':'models.loops','provider':preread['provider'],
                                     'model':preread['model'],
                                     'reasoning_effort':preread['reasoning_effort']}

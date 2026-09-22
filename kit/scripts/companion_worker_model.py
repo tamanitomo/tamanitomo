@@ -90,9 +90,14 @@ def complete(c,payload,route,api_key_env='',allow_remote=False,timeout=300,what=
                  headers=companion_endpoint.headers(api_key_env))
         with urllib.request.urlopen(request,timeout=timeout) as response:reply=json.load(response)
         choice=reply['choices'][0]
+        details=(reply.get('usage') or {}).get('completion_tokens_details')
+        reasoned=companion_endpoint.confirm_thinking(reply,route['base_url'])
+        # None where the endpoint simply does not report it, so a caller can tell
+        # "it did not think" from "nobody said".
+        if not reasoned and not details and not companion_endpoint.is_loopback(route['base_url']):
+            reasoned=None
         return {'content':choice['message']['content'],'finish_reason':choice.get('finish_reason'),
-                'reasoned':companion_endpoint.confirm_thinking(reply,route['base_url']),
-                'usage':reply.get('usage') or {}}
+                'reasoned':reasoned,'usage':reply.get('usage') or {}}
     return _bridge(c,{'provider':route['provider'],'model':route['model'],
                       'messages':payload['messages'],'max_tokens':payload.get('max_tokens',3600),
                       'temperature':payload.get('temperature',0.6),
