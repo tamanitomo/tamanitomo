@@ -163,6 +163,98 @@ if [[ -z "${KIT_DIR:-}" ]]; then
   fi
 fi
 VAULT_DIR="${HOME_DIR}/vault"
+WHEELS_DIR="$HERMES_HOME/wheels"
+
+# The aarch64 wheelhouse is built for CPython 3.11 only.  A venv on any other
+# Python rejects every wheel and pip falls back to compiling the Rust packages
+# (pydantic-core, jiter, cryptography, rpds-py) with maturin, which is slow at
+# best and usually fails on a phone.  So on Termux every venv must be 3.11.
+WHEELHOUSE_PY="3.11"
+export PIP_DISABLE_PIP_VERSION_CHECK=1
+if [[ "$IS_TERMUX" -eq 1 ]]; then
+  # Take an older prebuilt wheel over a newer source release.
+  export PIP_PREFER_BINARY=1
+  # maturin refuses to build for Android without this, even with Rust installed.
+  if [[ -z "${ANDROID_API_LEVEL:-}" ]]; then
+    ANDROID_API_LEVEL="$(getprop ro.build.version.sdk 2>/dev/null || true)"
+    if [[ -n "$ANDROID_API_LEVEL" ]]; then export ANDROID_API_LEVEL; fi
+  fi
+fi
+
+python_missing_error() {
+  echo -e "${RED}Error: Python ${WHEELHOUSE_PY} is not installed.${RESET}" >&2
+  echo "Tamanitomo's prebuilt Android packages only work with Python ${WHEELHOUSE_PY}. Without it pip" >&2
+  echo "has to compile Rust packages from source, which is the 'error running maturin' failure." >&2
+  echo "Install it, then run this script again:" >&2
+  echo "  pkg install tur-repo && pkg install python${WHEELHOUSE_PY}" >&2
+}
+
+python_for_venv() {
+  if command -v "python${WHEELHOUSE_PY}" >/dev/null 2>&1; then
+    command -v "python${WHEELHOUSE_PY}"
+  elif [[ "$IS_TERMUX" -eq 1 ]]; then
+    return 1
+  else
+    command -v python3
+  fi
+}
+
+venv_python_version() {
+  "$1/bin/python" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null || echo "unusable"
+}
+
+# Create the venv at $1.  One left on the wrong Python by an earlier run is
+# rebuilt; otherwise every re-run would reuse it and fail the same way.
+ensure_venv() {
+  local dir="$1" py have
+  if ! py="$(python_for_venv)"; then
+    python_missing_error
+    exit 1
+  fi
+  if [[ -d "$dir" && "$IS_TERMUX" -eq 1 ]]; then
+    have="$(venv_python_version "$dir")"
+    if [[ "$have" != "$WHEELHOUSE_PY" ]]; then
+      echo -e "  ${YELLOW}! $dir uses Python $have, but the prebuilt packages need ${WHEELHOUSE_PY}. Rebuilding it.${RESET}"
+      rm -rf "$dir"
+    fi
+  fi
+  if [[ ! -d "$dir" ]]; then
+    echo -e "  Creating Python virtual environment in $dir..."
+    "$py" -m venv "$dir"
+  fi
+  "$dir/bin/python" -m pip install --upgrade pip >/dev/null 2>&1 || true
+}
+
+install_wheelhouse() {
+  local venv="$1" log
+  if [[ ! -d "$WHEELS_DIR" || $(find "$WHEELS_DIR" -maxdepth 1 -name "*.whl" 2>/dev/null | wc -l) -lt 10 ]]; then
+    return 0
+  fi
+  echo -e "  Installing pre-compiled wheels into $venv..."
+  log="$(mktemp)"
+  if ! "$venv/bin/python" -m pip install "$WHEELS_DIR"/*.whl >"$log" 2>&1; then
+    echo -e "  ${YELLOW}! The prebuilt packages did not install; pip may try to build them from source:${RESET}"
+    tail -n 5 "$log" | sed 's/^/    /'
+  fi
+  rm -f "$log"
+}
+
+# pip_install <venv> <pip install arguments...>
+pip_install() {
+  local venv="$1"
+  shift
+  if ! "$venv/bin/python" -m pip install "$@"; then
+    echo -e "${RED}Error: pip could not install Python packages into $venv.${RESET}" >&2
+    if [[ "$IS_TERMUX" -eq 1 ]]; then
+      echo "If the output above mentions maturin, Rust or cargo, a package had to be built from source." >&2
+      echo "  venv Python:       $(venv_python_version "$venv") (prebuilt packages need ${WHEELHOUSE_PY})" >&2
+      echo "  Rust compiler:     $(command -v rustc >/dev/null 2>&1 && rustc --version || echo 'missing - pkg install rust')" >&2
+      echo "  ANDROID_API_LEVEL: ${ANDROID_API_LEVEL:-unset}" >&2
+      echo "Fix whichever of those is wrong, then run this script again." >&2
+    fi
+    exit 1
+  fi
+}
 
 echo -e "${DIM}Destination home: ${HOME_DIR}${RESET}"
 echo -e "${DIM}Hermes directory: ${HERMES_HOME}${RESET}"
@@ -181,9 +273,11 @@ if [[ "$UPGRADE_MODE" -eq 1 && "$DRY_RUN" -eq 0 ]]; then
     git -C "$KIT_DIR" pull --ff-only origin main
   fi
   VENV_DIR="$KIT_DIR/.venv"
-  if [[ -f "$KIT_DIR/requirements.txt" && -x "$VENV_DIR/bin/pip" ]]; then
+  if [[ -f "$KIT_DIR/requirements.txt" ]]; then
     echo -e "  Updating Python dependencies..."
-    "$VENV_DIR/bin/python" -m pip install -r "$KIT_DIR/requirements.txt"
+    ensure_venv "$VENV_DIR"
+    install_wheelhouse "$VENV_DIR"
+    pip_install "$VENV_DIR" -r "$KIT_DIR/requirements.txt"
   fi
   echo -e "  Refreshing companion templates and cron shims..."
   "$VENV_DIR/bin/python" "$KIT_DIR/bin/tamanitomo" --home "$HERMES_HOME" upgrade --answers "$HOME_DIR/.companion-init-answers.json" >/dev/null 2>&1 || \
@@ -419,17 +513,30 @@ if [[ "$IS_TERMUX" -eq 1 ]]; then
   dpkg --configure -a --force-confdef --force-confold 2>/dev/null || true
   pkg update -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" || true
   pkg install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" tur-repo || true
-  pkg install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" python3.11 git clang rust make pkg-config libffi openssl nodejs ripgrep tmux curl termux-services termux-api jq termux-tools libjpeg-turbo libpng libheif || true
-  if command -v python3.11 >/dev/null 2>&1; then
-    ln -sf "$(command -v python3.11)" "$PREFIX_DIR/bin/python" 2>/dev/null || true
-    ln -sf "$(command -v python3.11)" "$PREFIX_DIR/bin/python3" 2>/dev/null || true
+  # apt installs all or nothing: one unavailable package here used to silently
+  # skip python3.11 and rust too.  Retry one at a time so the rest still land.
+  TERMUX_PACKAGES=(python3.11 git clang rust binutils make pkg-config libffi openssl nodejs ripgrep tmux curl termux-services termux-api jq termux-tools libjpeg-turbo libpng libheif)
+  if ! pkg install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" "${TERMUX_PACKAGES[@]}"; then
+    echo -e "  ${YELLOW}! Installing the packages together failed; retrying one at a time...${RESET}"
+    FAILED_PACKAGES=()
+    for package in "${TERMUX_PACKAGES[@]}"; do
+      pkg install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" "$package" || FAILED_PACKAGES+=("$package")
+    done
+    if [[ ${#FAILED_PACKAGES[@]} -gt 0 ]]; then
+      echo -e "  ${YELLOW}! Could not install: ${FAILED_PACKAGES[*]}${RESET}"
+    fi
   fi
+  if ! command -v python3.11 >/dev/null 2>&1; then
+    python_missing_error
+    exit 1
+  fi
+  ln -sf "$(command -v python3.11)" "$PREFIX_DIR/bin/python" 2>/dev/null || true
+  ln -sf "$(command -v python3.11)" "$PREFIX_DIR/bin/python3" 2>/dev/null || true
 fi
 
 # ------------------------------------------------------------------------------
 # Step 1.5: Acquire Pre-compiled Wheelhouse (aarch64)
 # ------------------------------------------------------------------------------
-WHEELS_DIR="$HERMES_HOME/wheels"
 mkdir -p "$WHEELS_DIR"
 SYS_ARCH="$(uname -m 2>/dev/null || echo "unknown")"
 
@@ -529,21 +636,14 @@ if ! command -v hermes >/dev/null 2>&1; then
       rm -rf "$HERMES_REPO"
       git clone --depth 1 https://github.com/NousResearch/hermes-agent.git "$HERMES_REPO"
     fi
-    if [[ ! -d "$HERMES_VENV" ]]; then
-      echo -e "  Setting up Hermes virtual environment..."
-      if command -v python3.11 >/dev/null 2>&1; then
-        python3.11 -m venv "$HERMES_VENV" 2>/dev/null || python3 -m venv "$HERMES_VENV"
-      else
-        python3 -m venv "$HERMES_VENV"
-      fi
-      if [[ -d "$WHEELS_DIR" && $(find "$WHEELS_DIR" -maxdepth 1 -name "*.whl" 2>/dev/null | wc -l) -ge 10 ]]; then
-        echo -e "  Installing pre-compiled wheels into Hermes venv..."
-        "$HERMES_VENV/bin/pip" install "$WHEELS_DIR"/*.whl >/dev/null 2>&1 || true
-      fi
-      if [[ -f "$HERMES_REPO/pyproject.toml" ]]; then
-        echo -e "  Installing Hermes Agent..."
-        "$HERMES_VENV/bin/pip" install -e "$HERMES_REPO"
-      fi
+    # Not gated on the venv existing: a run that failed half way left one
+    # behind without hermes in it, and every later run skipped the install.
+    echo -e "  Setting up Hermes virtual environment..."
+    ensure_venv "$HERMES_VENV"
+    install_wheelhouse "$HERMES_VENV"
+    if [[ -f "$HERMES_REPO/pyproject.toml" ]]; then
+      echo -e "  Installing Hermes Agent..."
+      pip_install "$HERMES_VENV" -e "$HERMES_REPO"
     fi
   else
     curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup || curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup
@@ -681,22 +781,12 @@ if [[ ! -f "$KIT_DIR/kit/cli/main.py" ]]; then
 fi
 
 VENV_DIR="$KIT_DIR/.venv"
-if [[ ! -d "$VENV_DIR" ]]; then
-  echo -e "  Creating Python virtual environment..."
-  if command -v python3.11 >/dev/null 2>&1; then
-    python3.11 -m venv "$VENV_DIR" || python3 -m venv "$VENV_DIR"
-  else
-    python3 -m venv "$VENV_DIR"
-  fi
-fi
+ensure_venv "$VENV_DIR"
 
 echo -e "  Installing Companion Kit Python dependencies..."
-"$VENV_DIR/bin/pip" install --upgrade pip >/dev/null 2>&1 || true
-if [[ -d "$WHEELS_DIR" && $(find "$WHEELS_DIR" -maxdepth 1 -name "*.whl" 2>/dev/null | wc -l) -ge 10 ]]; then
-  "$VENV_DIR/bin/pip" install "$WHEELS_DIR"/*.whl >/dev/null 2>&1 || true
-fi
+install_wheelhouse "$VENV_DIR"
 if [[ -f "$KIT_DIR/requirements.txt" ]]; then
-  "$VENV_DIR/bin/python" -m pip install -r "$KIT_DIR/requirements.txt"
+  pip_install "$VENV_DIR" -r "$KIT_DIR/requirements.txt"
 else
   echo 'Repository requirements.txt is missing; installation cannot continue.' >&2
   exit 1

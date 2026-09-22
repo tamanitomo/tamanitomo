@@ -96,6 +96,17 @@ The script will automatically:
 
 ---
 
+### If the install fails with "error running maturin"
+
+The prebuilt packages only work with **Python 3.11**. On any other Python, pip has to compile the Rust packages (`pydantic-core`, `jiter`, `cryptography`) on the phone, and that is where maturin fails. The installer now stops and says so rather than attempting the build, and rebuilds a virtualenv an earlier run left on the wrong Python. If it stops, install Python 3.11 and run it again:
+
+```bash
+pkg install tur-repo && pkg install python3.11
+bash setup-termux.sh
+```
+
+"A new release of pip is available" is only a notice, not the error.
+
 ## Step 5: Accessing Your Companion & Web Dashboard
 
 Your companion is now active in two places:

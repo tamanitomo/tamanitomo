@@ -1,3 +1,11 @@
+## 3.0.6 — One Python on the phone (2026-09-22)
+
+- Require Python 3.11 for every virtualenv on Termux, since the prebuilt Android packages exist for no other version. The installer used to fall back to whatever `python3` was there, pip rejected all eighteen wheels in silence, and the install died compiling Rust with `error running maturin`.
+- Install the Termux packages one at a time when installing them together fails. apt is all or nothing, so a single unavailable package had been quietly taking Python 3.11 and the Rust toolchain down with it.
+- Rebuild a virtualenv an earlier run left on the wrong Python, rather than reusing it and failing the same way on every attempt; and install Hermes into its virtualenv whenever it is missing, not only when the virtualenv is new.
+- Show why the prebuilt packages did not install instead of discarding the output, and when pip does fail, say which Python the virtualenv has, whether Rust is installed and whether `ANDROID_API_LEVEL` is set. That variable is now set from the phone, because maturin will not build for Android without it.
+- Stop pip announcing a newer version of itself during install, which read as the error.
+
 ## 3.0.5 — Six pages that had stopped being read (2026-09-22)
 
 - Fold Creations into the Vault, which held the same files behind a second door: a Recent view that lists them newest first with a type filter and thumbnails, and a Folders view that is the tree and the reader. The old page laid every file out flat with no hierarchy and grew to a hundred and twenty-four thousand pixels of identical document icons; Recent is five thousand. The old route still answers, so an existing link lands somewhere sensible.

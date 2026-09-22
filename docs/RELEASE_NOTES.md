@@ -1,14 +1,8 @@
-Tamanitomo 3.0.5 is about six pages that had quietly stopped being usable.
+Tamanitomo 3.0.6 fixes the Android installer for anyone whose phone did not already have Python 3.11.
 
-They grew by accretion. The same record appeared in two places, two lists asked the same question under different names, one page was a worse copy of another, and every list printed in full no matter how long it had become. None of it was broken; all of it was unreadable.
+The Android install depends on eighteen packages prebuilt for the phone, because several of Hermes's dependencies are written in Rust and compiling them on a phone takes half an hour when it works at all. Those packages exist for Python 3.11 only. The installer asked Termux for 3.11 in the same breath as seventeen other packages, and apt installs all or nothing, so one unavailable package meant no Python 3.11 and no Rust — and the error was thrown away. It then built the virtualenv on whatever Python was there, pip turned down every prebuilt package without a word, and the install ended in `error running maturin`, under a notice about a new pip that looked like the cause and was not.
 
-Creations and the Vault were two doors onto the same files. Creations laid every one of them out flat, newest first, with no hierarchy and no way to read anything in place — a hundred and twenty-four thousand pixels of identical grey document icons. Its one good idea has become the Vault's Recent view, and the tree and reader are Folders beside it. The page is five thousand pixels now instead of a hundred and twenty-four thousand.
-
-Memories was four cards of the same shape. Two of them were asking the same question: the ledger's open questions and the overview's carried threads were one idea written twice, on two different pages, so they are one section now, tagged by where each came from. Plans and calendar is about time again. And the forty preferences she had written about herself — what she noticed she liked, in her own words — were being sent by the server to a screen that had never displayed them. They have a column.
-
-The Timeline was a ledger printout: every scene change, every capture and every reflection as one more identical row, with the photographs reduced to a button saying View photo. A day is a story, so it reads as one. Her reflection leads the day, the scenes run beneath it, and the pictures sit inline at the hour they were taken. Her presence loop rewrites the same scene every few minutes, which meant a single shower arrived as six rows that said the same thing; consecutive beats that describe the same place now collapse into the span they covered. One morning went from thirty-eight rows to twenty-six.
-
-Together kept its shape. It was the best of the six. Its moments are searchable and arrive twenty at a time.
+Now the packages go in one at a time if they will not go in together, the installer stops with the command to run if Python 3.11 is still missing, and a virtualenv left on the wrong Python by an earlier attempt is rebuilt rather than reused. If pip fails anyway, it says which of the three things maturin needs is absent.
 
 ### Install
 
