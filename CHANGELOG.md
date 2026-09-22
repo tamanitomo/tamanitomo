@@ -11,6 +11,13 @@
 - Find Hermes in a checkout made by `uv`, which writes `.venv` where this looked only for `venv`.
 - Retire plan items whose time has passed unrecorded, so a morning walk stops reading as still ahead at four in the afternoon, and carry the reasons a day changed into what she is thinking with.
 - Keep the newest few update backups rather than one per update, forever.
+- Rebuild an imported workflow out of what it used — its model, its LoRAs at their strengths, its sampler settings — into a lane of this kit's own shape, and offer that beside the graph as detected and a download of the publisher's original file.
+- Read the architecture of an imported graph from its own wiring rather than from a filename, and say so plainly when a graph does not declare one instead of guessing.
+- Check settings recovered from someone else's image exactly as strictly as typed ones.
+- Mark an imported workflow incomplete when the target ComfyUI is missing the nodes it needs, rather than calling it renderable and failing later.
+- Stop advising on VRAM for weights that are already installed.
+- Carry LoRA activation keywords in a companion's own quality tags, so the trigger a character LoRA needs reaches the prompt on ComfyUI lanes without displacing her written appearance.
+- Give `feeling` a prompt box in the workflow template, and read the sampler's conditioning from the end of the chain so a contract that grows cannot orphan its last box.
 
 ## 3.0.1 — Reasoning that is actually asked for (2026-09-21)
 
