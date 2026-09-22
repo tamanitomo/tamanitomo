@@ -125,3 +125,53 @@ class ContextWindowTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class JobOriginTests(unittest.TestCase):
+    """Three questions the list should answer without reading any code:
+    what ships with Tamanitomo, what this person added, and what is not
+    companion work at all. A port scanner running under her name should not be
+    hidden by calling it a job like any other."""
+
+    def test_the_three_origins_are_named_and_described(self):
+        import inspect
+        from kit.app import manage
+        source = inspect.getsource(manage)
+        for key in ("'shipped'", "'yours'", "'other'"):
+            self.assertIn(key, source)
+        self.assertIn('count against her usage', source,
+                      'the cost of a foreign job running as her should be stated')
+
+    def test_a_shipped_job_is_recognised_by_the_manifest_not_its_name(self):
+        """Renaming a job must not move it out of the shipped group."""
+        import inspect
+        from kit.app import manage
+        block = inspect.getsource(manage).split("row['origin']")[0][-400:]
+        self.assertIn('companion_job', block)
+
+
+class JobTimelineTests(unittest.TestCase):
+    """`0 10 * * *` does not answer "what happens at ten"."""
+
+    def source(self):
+        return (ROOT / 'kit/app/static/settings.js').read_text(encoding='utf-8')
+
+    def test_there_is_a_twenty_four_hour_view(self):
+        js = self.source()
+        self.assertIn('function jobTimelineHtml', js)
+        self.assertIn("Array.from({length:24}", js)
+
+    def test_it_parses_the_shapes_cron_actually_uses(self):
+        """Steps, ranges and lists all appear in the shipped schedules."""
+        js = self.source()
+        block = js[js.index('function jobHours'):js.index('function jobTimelineHtml')]
+        for shape in ("includes('/')", "includes('-')", "split(',')"):
+            self.assertIn(shape, block)
+
+    def test_jobs_with_no_hour_are_still_accounted_for(self):
+        """An interval or one-shot job has no hour to sit in, and saying nothing
+        about it would be the same silence this whole view is meant to end."""
+        js = self.source()
+        block = js[js.index('function jobTimelineHtml'):js.index('function sensitiveSummary')]
+        self.assertIn('every hour', block)
+        self.assertIn('interval or once', block)

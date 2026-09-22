@@ -1266,6 +1266,14 @@ def register(app, select, load, operations):
             import companion_worker_model as worker
             preread=worker.resolve(companion,'loops')
         except Exception:preread=None
+        # Which of the three a job belongs to, so the list can say plainly what
+        # ships with Tamanitomo, what this person added, and what is not
+        # companion work at all. A port scanner running under her name is not
+        # hidden by calling it a job like any other.
+        for row in rows:
+            if row.get('companion_job'):row['origin']='shipped'
+            elif str(row.get('name') or '').startswith(companion.agent+' '):row['origin']='yours'
+            else:row['origin']='other'
         for row in rows:
             # A job the manifest does not know is still a job that runs. Say what
             # can be said -- whether it calls a model -- rather than asserting
@@ -1286,8 +1294,17 @@ def register(app, select, load, operations):
             row['provider_matters']=row['sensitivity']!='none'
         groups=[{'key':k,**v,'jobs':[r['id'] for r in rows if r.get('sensitivity')==k]}
                 for k,v in sorted(SENSITIVITY.items(),key=lambda kv:kv[1]['order'])]
+        origins=[{'key':'shipped','label':'Ships with Tamanitomo',
+                   'blurb':'The companion\u2019s own machinery. Every install has these.'},
+                 {'key':'yours','label':'Yours',
+                   'blurb':'Jobs you added for this companion. Tamanitomo does not ship or update them.'},
+                 {'key':'other','label':'Not companion work',
+                   'blurb':'Jobs that run in this profile but have nothing to do with her. '
+                           'They use her identity and her tools, and count against her usage.'}]
+        for group in origins:
+            group['jobs']=[r['id'] for r in rows if r.get('origin')==group['key']]
         return {'timezone':companion.timezone,'jobs':rows,'usage':hr.job_usage(companion,rows),
-                'sensitivity':groups,
+                'sensitivity':groups,'origins':origins,
                 'local_endpoint':bool((companion.models or {}).get('loops',{}).get('base_url'))}
 
 
