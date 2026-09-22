@@ -29,8 +29,10 @@ PACK_GRAPH={
      'prompt_source':'manual','manual_prompt':'photo of a woman leaning on a fence at a ranch',
      'prefix_enabled':False}},
  '12':{'class_type':'SOGenerationPipelineStudio','inputs':{
-     'clip_name':'qwen3vl_4b_fp8_scaled.safetensors','vae_name':'qwen_image_vae.safetensors',
-     'custom_width':1440,'custom_height':1920,'steps':9,'cfg':1.0,'sampler_name':'euler',
+     'clip_name':'qwen3vl_4b_fp8_scaled.safetensors','clip_type':'krea2',
+     'vae_name':'qwen_image_vae.safetensors','shift':1.25,
+     'custom_width':1440,'custom_height':1920,'steps':9,'cfg':1.0,
+     'sampler_name':'euler','scheduler':'beta',
      'seed_value':649526996593298,'model':['10',0],'positive_text':['11',0]}},
  '13':{'class_type':'SOOutputBuilderSaveStudio','inputs':{
      'extension':'png','saved_path':'output\\\\run\\\\prior_render_00001.png','samples':['12',0]}},
@@ -224,3 +226,71 @@ class HostGapTests(unittest.TestCase):
                                headers={'x-image-name':'stock.png'}).json()
         self.assertIn('stock.safetensors',body['found']['missing_models'])
         self.assertTrue([n for n in body['notes'] if 'VRAM' in n])
+
+
+class AdaptationTests(unittest.TestCase):
+    """Their ingredients, our shape.
+
+    A foreign graph runs their way, which only matches ours by luck. What does
+    transfer is what they used -- the model, the LoRAs and their strengths, the
+    sampler settings -- and that can be rebuilt into a lane where the prompt is
+    in seven boxes and the companion's contract still applies.
+    """
+    def setUp(self):
+        sys.path.insert(0,str(ROOT/'kit/scripts'))
+        import companion_image_import, companion_workflow
+        self.imp=companion_image_import
+        self.wf=companion_workflow
+
+    def spec_from(self,graph,name='x'):
+        return self.imp.extract_recipe(graph,{},name)
+
+    def test_the_family_comes_from_the_wiring_not_the_filename(self):
+        self.assertEqual(self.imp.detect_family(PACK_GRAPH),'krea2')
+        self.assertEqual(self.imp.detect_family(STOCK_GRAPH),'sdxl')
+
+    def test_a_graph_that_names_no_architecture_is_not_guessed_at(self):
+        mute={'1':{'class_type':'UNETLoader','inputs':{'unet_name':'mystery.safetensors'}},
+              '2':{'class_type':'EmptySD3LatentImage','inputs':{'width':8,'height':8}}}
+        self.assertEqual(self.imp.detect_family(mute),'')
+        self.assertTrue(self.spec_from(mute)['missing_family'])
+
+    def test_the_ingredients_come_across(self):
+        spec=self.spec_from(PACK_GRAPH)
+        self.assertEqual(spec['model']['filename'],'BIG MODEL_FP8.safetensors')
+        self.assertEqual(spec['clip']['filename'],'qwen3vl_4b_fp8_scaled.safetensors')
+        self.assertEqual(spec['vae']['filename'],'qwen_image_vae.safetensors')
+        self.assertEqual([l['filename'] for l in spec['loras']],['someone_epoch_09.safetensors'])
+        self.assertEqual(spec['loras'][0]['strength_model'],1.0)
+        self.assertEqual((spec['steps'],spec['cfg'],spec['width']),(9,1.0,1440))
+        self.assertEqual((spec['sampler_name'],spec['scheduler']),('euler','beta'))
+
+    def test_those_ingredients_build_a_lane_carrying_the_whole_contract(self):
+        import companion_media as media
+        spec=self.spec_from(PACK_GRAPH);spec['lora_stack']=True
+        lane=self.wf.create_recipe(spec)
+        self.assertEqual(set(media.PARTS)-set(lane['mappings']),set())
+        self.assertEqual(lane['family'],'krea2')
+        self.assertEqual(lane['steps'],9);self.assertEqual(lane['cfg'],1.0)
+        sampler=lane['workflow']['302']['inputs']
+        self.assertEqual((sampler['sampler_name'],sampler['scheduler']),('euler','beta'))
+        media.validate({'version':1,'presets':[lane]})
+
+    def test_the_stack_is_used_when_the_host_has_it(self):
+        spec=self.spec_from(PACK_GRAPH);spec['lora_stack']=True
+        node=self.wf.create_recipe(spec)['workflow']['500']
+        self.assertEqual(node['class_type'],self.wf.POWER_LORA_NODE)
+        self.assertEqual(node['inputs']['LORA_1']['lora'],'someone_epoch_09.safetensors')
+        self.assertTrue(node['inputs']['LORA_1']['on'])
+
+    def test_and_a_plain_chain_when_it_does_not(self):
+        spec=self.spec_from(PACK_GRAPH);spec['lora_stack']=False
+        g=self.wf.create_recipe(spec)['workflow']
+        self.assertEqual(g['500']['class_type'],'LoraLoader')
+        self.assertEqual(g['500']['inputs']['lora_name'],'someone_epoch_09.safetensors')
+
+    def test_a_nonsense_setting_in_somebody_elses_png_is_still_refused(self):
+        spec=self.spec_from(PACK_GRAPH);spec['steps']=9999
+        with self.assertRaises(ValueError):self.wf.create_recipe(spec)
+        spec=self.spec_from(PACK_GRAPH);spec['sampler_name']='../etc/passwd'
+        with self.assertRaises(ValueError):self.wf.create_recipe(spec)

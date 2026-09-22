@@ -1,6 +1,7 @@
 """Portable structured Comfy recipes; no companion identity or credentials embedded."""
 from __future__ import annotations
 import copy
+import re
 
 # One node per part of the contract in companion_media.PARTS, in that order.
 # `feeling` was absent here, so every workflow built from this template -- and
@@ -62,6 +63,9 @@ def image_to_image(preset,denoise=.35):
     return p
 
 
+POWER_LORA_NODE='Power Lora Loader (rgthree)'
+
+
 def create_recipe(spec):
     """Build known architectures from explicit slots; never infer family from a filename."""
     import math
@@ -99,17 +103,68 @@ def create_recipe(spec):
         g['301']['class_type']='EmptySD3LatentImage';g['303']['inputs']['vae']=['10',0]
         p.update(width=1024,height=1024,steps=9,cfg=1.)
         g['302']['inputs'].update(sampler_name='dpmpp_2m_sde',scheduler='beta')
+    # Settings recovered from a workflow we are adapting. Each is checked the
+    # same way a typed one would be; nothing is trusted because it arrived in
+    # somebody's PNG.
+    for key,low,high in (('steps',1,300),('width',64,4096),('height',64,4096)):
+        value=spec.get(key)
+        if value is None:continue
+        if isinstance(value,bool) or not isinstance(value,int) or not low<=value<=high:
+            raise ValueError(f'{key} must be a whole number between {low} and {high}')
+        p[key]=value
+    if spec.get('cfg') is not None:
+        cfg=spec['cfg']
+        if isinstance(cfg,bool) or not isinstance(cfg,(int,float)) or not math.isfinite(cfg) or not 0<=cfg<=100:
+            raise ValueError('CFG must be between 0 and 100')
+        p['cfg']=float(cfg)
+    for key in ('sampler_name','scheduler'):
+        value=spec.get(key)
+        if value is None:continue
+        if not isinstance(value,str) or not re.fullmatch(r'[a-z0-9_]{1,40}',value):
+            raise ValueError('Invalid '+key)
+        g['302']['inputs'][key]=value
+    if spec.get('shift') is not None and '307' in g:
+        shift=spec['shift']
+        if isinstance(shift,bool) or not isinstance(shift,(int,float)) or not math.isfinite(shift) or not 0<shift<=100:
+            raise ValueError('Sampling shift must be between 0 and 100')
+        g['307']['inputs']['shift']=float(shift)
+    if spec.get('negative') is not None:
+        if not isinstance(spec['negative'],str) or len(spec['negative'])>20000:raise ValueError('Invalid negative prompt')
+        p['negative']=spec['negative']
+
     loras=spec.get('loras',[])
     if not isinstance(loras,list) or len(loras)>24:raise ValueError('At most 24 LoRAs')
-    for index,item in enumerate(loras):
+    # One stack node when the host has it, a chain of stock loaders when it does
+    # not. The stack is what makes a second LoRA a click rather than a rewire,
+    # but a lane that will not load on a plain ComfyUI is worse than a verbose
+    # one, so the caller says which is available.
+    rows=[]
+    for item in loras:
         if not isinstance(item,dict) or not isinstance(item.get('enabled',True),bool):raise ValueError('Invalid LoRA slot')
+        # A switched-off LoRA is not part of this recipe, so it is neither
+        # checked against the family nor carried into the stack. Turning one on
+        # later goes through here again.
         if not item.get('enabled',True):continue
         filename=weight(item,'LoRA')
         if not filename.endswith('.safetensors'):raise ValueError('Use safetensors LoRA weights')
         strengths={key:item.get(key,1.) for key in ('strength_model','strength_clip')}
         if any(isinstance(v,bool) or not isinstance(v,(int,float)) or not math.isfinite(v) or not -5<=v<=5 for v in strengths.values()):raise ValueError('LoRA strengths must be between -5 and 5')
-        node=str(500+index);g[node]={'class_type':'LoraLoader','inputs':{'model':model_ref,'clip':clip_ref,'lora_name':filename,**strengths}}
-        model_ref=[node,0];clip_ref=[node,1]
+        rows.append((filename,strengths,True))
+    if spec.get('lora_stack') and rows:
+        # The stack names its rows LORA_1..LORA_n directly in `inputs`, each a
+        # record of its own. `strengthTwo` stays null, as the node writes it
+        # when a single strength is in use.
+        inputs={'model':model_ref,'clip':clip_ref}
+        for index,(filename,strengths,enabled) in enumerate(rows,start=1):
+            inputs[f'LORA_{index}']={'on':enabled,'lora':filename,
+                                     'strength':strengths['strength_model'],'strengthTwo':None}
+        g['500']={'class_type':POWER_LORA_NODE,'inputs':inputs}
+        model_ref=['500',0];clip_ref=['500',1]
+    else:
+        for index,(filename,strengths,_) in enumerate(rows):
+            node=str(500+index)
+            g[node]={'class_type':'LoraLoader','inputs':{'model':model_ref,'clip':clip_ref,'lora_name':filename,**strengths}}
+            model_ref=[node,0];clip_ref=[node,1]
     for node in [*PROMPT_NODES.values(),'201']:g[node]['inputs']['clip']=copy.deepcopy(clip_ref)
     g['302']['inputs'].update(model=model_ref,steps=p['steps'],cfg=p['cfg'])
     g['301']['inputs'].update(width=p['width'],height=p['height'])

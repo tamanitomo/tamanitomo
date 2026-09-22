@@ -349,6 +349,104 @@ def describe_fit(vram_bytes,size_bytes=None,name=''):
             (advice or ' Look for a smaller quantisation of it, or a smaller model.'))
 
 
+# --------------------------------------------------- adapting into our own lane
+
+# Structural evidence, not a filename. A graph that loads its text encoder with
+# `type: krea2` has told us what it is; a file called "krea2_something" has told
+# us what somebody named it. The first is worth acting on and the second is not,
+# which is the rule create_recipe already enforces.
+CLIP_TYPE_FAMILY={'krea2':'krea2','qwen_image':'zimage','lumina2':'zimage'}
+
+
+def detect_family(graph):
+    """Which architecture this graph is wired for, or '' if it does not say."""
+    for node in graph.values():
+        inputs=node.get('inputs') or {}
+        declared=str(inputs.get('type') or inputs.get('clip_type') or '').lower()
+        if declared in CLIP_TYPE_FAMILY:return CLIP_TYPE_FAMILY[declared]
+    classes={n.get('class_type') for n in graph.values()}
+    if 'CheckpointLoaderSimple' in classes or 'CheckpointLoader' in classes:
+        return 'sdxl'
+    if classes & {'EmptySD3LatentImage','ModelSamplingAuraFlow'}:
+        # A diffusion-model loader with an SD3-shaped latent is one of the newer
+        # families, but which one is not knowable from that alone.
+        return ''
+    return ''
+
+
+def _strength_beside(inputs,field):
+    """The strength that belongs to this LoRA field, whatever the pack calls it."""
+    stem=field.rsplit('_',1)[0]
+    for key in (f'{stem}_strength',f'{field}_strength','strength_model','strength','lora_strength'):
+        value=inputs.get(key)
+        if isinstance(value,(int,float)) and not isinstance(value,bool):return float(value)
+    return 1.0
+
+
+def extract_recipe(graph,found,name=''):
+    """Everything in someone else's graph that our own lane has a slot for.
+
+    The point is not to run their workflow. It is to notice that they used
+    model G with LoRA X at 0.8, twenty-two steps and a CFG of 5, and to put
+    those into our shape -- where the prompt is in seven boxes, the LoRAs are in
+    a stack you can extend, and the companion's own contract still applies.
+    """
+    weights=classify_weights(graph)
+    family=detect_family(graph)
+    loras=[]
+    for node in graph.values():
+        inputs=node.get('inputs') or {}
+        for kind,fields in WEIGHT_FIELDS:
+            if kind!='lora':continue
+            for field in fields:
+                value=inputs.get(field)
+                if not _is_weight(value):continue
+                leaf=value.replace(chr(92),'/').rsplit('/',1)[-1]
+                if any(x['filename']==leaf for x in loras):continue
+                enabled=inputs.get('main_enabled',inputs.get('on',True))
+                loras.append({'filename':leaf,'strength_model':_strength_beside(inputs,field),
+                              'strength_clip':_strength_beside(inputs,field),
+                              'enabled':bool(enabled) if isinstance(enabled,bool) else True,
+                              'family':'unknown','confirm_family':bool(family)})
+    mappings=_infer_mappings(graph)
+    def at(key):
+        where=mappings.get(key)
+        if not where:return None
+        return (graph.get(where[0],{}).get('inputs') or {}).get(where[1])
+    def number(key,cast):
+        value=at(key)
+        if isinstance(value,bool) or not isinstance(value,(int,float)):return None
+        return cast(value)
+    sampler=next((n.get('inputs') or {} for n in graph.values()
+                  if isinstance((n.get('inputs') or {}).get('sampler_name'),str)),{})
+    spec={'name':(name or 'Imported recipe')[:90],'family':family,
+          'model':{'filename':(weights['checkpoint'] or [''])[0],'family':'unknown',
+                   'confirm_family':bool(family)},
+          'loras':loras[:24]}
+    if family not in ('sdxl','sd15'):
+        spec['clip']={'filename':(weights['clip'] or [''])[0],'family':'unknown','confirm_family':bool(family)}
+        spec['vae']={'filename':(weights['vae'] or [''])[0],'family':'unknown','confirm_family':bool(family)}
+    for key,cast in (('steps',int),('width',int),('height',int)):
+        value=number(key,cast)
+        if value:spec[key]=value
+    cfg=number('cfg',float)
+    if cfg is not None:spec['cfg']=cfg
+    for key in ('sampler_name','scheduler'):
+        if isinstance(sampler.get(key),str) and sampler[key]:spec[key]=sampler[key]
+    # A pack often folds the sampling shift into its own pipeline node rather
+    # than a ModelSampling* of its own, so go by the field, not the class.
+    shift=next(((n.get('inputs') or {}).get('shift') for n in graph.values()
+                if isinstance((n.get('inputs') or {}).get('shift'),(int,float))
+                and not isinstance((n.get('inputs') or {}).get('shift'),bool)),None)
+    if isinstance(shift,(int,float)) and not isinstance(shift,bool):spec['shift']=float(shift)
+    prompt=at('prompt')
+    if isinstance(prompt,str) and prompt.strip():spec['quality']=prompt.strip()[:2000]
+    negative=at('negative')
+    if isinstance(negative,str) and negative.strip():spec['negative']=negative.strip()[:2000]
+    spec['missing_family']=not family
+    return spec
+
+
 def _is_renderable(draft,found):
     # A graph that loads its weights through a pack's own loader is as complete
     # as one using CheckpointLoaderSimple; it was called incomplete only because

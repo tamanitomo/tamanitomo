@@ -1,5 +1,6 @@
 """Image studio HTTP boundary; the generation recipe also runs outside the app."""
 import copy
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -7,7 +8,7 @@ import time
 import sys
 import uuid
 from fastapi import HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 import companion_media as media
 import companion_portrait as portrait
 
@@ -115,6 +116,33 @@ def register(app,select,load):
         try:return _settle_import(importer.read_image_workflow(raw,name))
         except ValueError as exc:raise HTTPException(400,str(exc))
 
+    @app.post('/api/images/import/original')
+    async def import_original(request:Request):
+        """Exactly what made that picture, for opening in ComfyUI unchanged.
+
+        The adapted lane is ours and the as-detected one has had its inputs
+        mapped; neither is the file the person published. Someone chasing a
+        result wants that file, so it is handed back byte-faithful rather than
+        reconstructed from what we understood of it.
+        """
+        raw=await request.body()
+        if not raw:raise HTTPException(400,'Choose an image first')
+        import companion_image_import as importer
+        try:
+            chunks,_=importer._text_chunks(raw)
+        except Exception:raise HTTPException(400,'That file is not an image this can read')
+        # `workflow` is the editor graph, which is what opens; `prompt` is the
+        # API graph, which is all some renders carry.
+        for key,suffix in (('workflow',''),('prompt','.api')):
+            if not chunks.get(key):continue
+            try:json.loads(chunks[key])
+            except ValueError:continue
+            stem=(request.headers.get('x-image-name','workflow') or 'workflow').rsplit('.',1)[0][:60]
+            return Response(content=chunks[key],media_type='application/json',
+                            headers={'Content-Disposition':
+                                     f'attachment; filename="{stem}{suffix}.json"'})
+        raise HTTPException(400,'That image carries no ComfyUI workflow to download.')
+
     def _settle_import(result):
         from .workflows import settings as workflow_settings
         preset=result.get('preset') or {}
@@ -148,9 +176,63 @@ def register(app,select,load):
             result.setdefault('notes',[]).append(
                 'Could not reach ComfyUI to see which of these you already have.')
         _report_gaps(result,installed,classes,preset)
+        _offer_adaptation(result,classes)
         for row in (result.get('found') or {}).get('resources',[]) or []:
             row['installed']=bool(row.get('file') and row['file'] in installed)
         return result
+
+    def _adaptable(result):
+        """Their graph, in our shape -- or a plain reason why not."""
+        import companion_image_import as importer
+        import companion_workflow as workflow
+        found=result.get('found') or {}
+        graph=(result.get('preset') or {}).get('workflow') or {}
+        if found.get('source')!='ComfyUI graph' or not graph:
+            return None,'Only a ComfyUI graph carries the parts to rebuild from.'
+        spec=importer.extract_recipe(graph,found,(result['preset'].get('name') or ''))
+        if spec.get('missing_family'):
+            return None,('This graph does not say which architecture it is for, and a filename '
+                         'is not evidence of one. Choose the family and it can be rebuilt.')
+        if not spec['model']['filename']:
+            return None,'No checkpoint or diffusion model was named, so there is nothing to build around.'
+        if spec['family'] not in ('sdxl','sd15') and not (spec.get('clip',{}).get('filename')
+                                                          and spec.get('vae',{}).get('filename')):
+            return None,'This family needs a text encoder and a VAE, and the graph names only one of them.'
+        return spec,''
+
+    def _offer_adaptation(result,classes):
+        """Rebuild what they used into our own lane, beside their original.
+
+        Their graph runs their way, which is only compatible with ours when it
+        happens to use our nodes. What transfers reliably is not the wiring but
+        the ingredients -- the model, the LoRAs and their strengths, the sampler
+        settings -- and those can be put into our shape, where the prompt is in
+        seven boxes and the companion's contract still applies.
+        """
+        import companion_workflow as workflow
+        spec,why=_adaptable(result)
+        if spec is None:
+            result['adapted']=None;result['adapted_error']=why;return
+        # One stack node beats a chain, but only where the host has it.
+        spec['lora_stack']=workflow.POWER_LORA_NODE in classes if classes else False
+        try:
+            lane=workflow.create_recipe(spec)
+        except ValueError as exc:
+            result['adapted']=None;result['adapted_error']=str(exc);return
+        lane['endpoint']=(result.get('preset') or {}).get('endpoint','')
+        lane['include_identity']=True
+        missing=set(result.get('found',{}).get('missing_models') or [])
+        lane['incomplete']=bool(missing)
+        result['adapted']=lane
+        result['adapted_error']=''
+        note=('Rebuilt into a companion-kit lane: '+spec['model']['filename']
+              +(f", {len(spec['loras'])} LoRA(s)" if spec['loras'] else '')
+              +f", {spec.get('steps','?')} steps, CFG {spec.get('cfg','?')}"
+              +('. Their original is offered as a download beside it.'))
+        result.setdefault('notes',[]).append(note)
+        if missing:
+            result['notes'].append('That rebuilt lane still needs the weights listed above before '
+                                   'it will render; everything else about it is ready.')
 
     def _report_gaps(result,installed,classes,preset):
         """Say what this ComfyUI is missing, and whether it could run it anyway.
