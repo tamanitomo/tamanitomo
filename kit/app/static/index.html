@@ -132,7 +132,7 @@
 <nav id="tabbar" class="tabbar" aria-label="Primary"></nav>
 
 <script>
-const TABS=[['now','Home'],['chat','Conversation'],['timeline','Timeline'],['photos','Photos & albums'],['journals','Journal'],['creations','Creations'],['relationship','Together'],['loops','Plans & calendar'],['knows','Memories'],['vault','Vault'],['identity','Identity'],['settings','Settings'],['roster','Companions'],['more','More']];
+const TABS=[['now','Home'],['chat','Conversation'],['timeline','Timeline'],['photos','Photos & albums'],['journals','Journal'],['relationship','Together'],['loops','Plans & calendar'],['knows','Memories'],['vault','Vault'],['identity','Identity'],['settings','Settings'],['roster','Companions'],['more','More']];
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const params=new URLSearchParams(location.search);

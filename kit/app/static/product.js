@@ -8,7 +8,7 @@ const tabLabel=id=>({chat:'Chat',photos:'Photos',journals:'Journal',now:'Home'}[
    directory. Anything added here appears in all three. */
 const primaryDestinations=['now','chat','photos','journals'];
 const navGroups=[
-  ['Life & memories', ['identity','timeline','relationship','knows','loops','creations','vault']],
+  ['Life & memories', ['identity','timeline','relationship','knows','loops','vault']],
   ['Studios',         ['image-studio','voice','local-models']],
   ['Setup & system',  ['settings','roster']]
 ];
@@ -2023,145 +2023,234 @@ workspaceHandlers.photos=async()=>{
   window.addEventListener('scroll',onScroll,{passive:true});
   draw();
 };
+/* Creations was a second door to the vault's files that laid every one of them
+   out flat, so it grew to a hundred and twenty thousand pixels of placeholder
+   document icons with no hierarchy and no way to read anything in place. Its
+   one good idea -- newest first, filtered by type -- is the Vault's Recent
+   view now. The route still answers so old links and bookmarks land somewhere
+   sensible rather than nowhere. */
 workspaceHandlers.creations=async()=>{
+  vaultView='recent';
+  showTab('vault');
+};
+workspaceHandlers.creationsLegacy=async()=>{
   const content=await api('/content');if(current!=='creations')return;profileTimezone=content.timezone;
   const items=content.items.filter(x=>x.source==='creation'&&x.kind!=='image');
   $('creations').innerHTML=heading('Creations','Writing, notes, audio, video, and documents stored in the companion vault.')+`<div class="filters"><label>Find a creation<input type="search" id="creation-search" placeholder="Search titles and folders…"></label><label>Type<select id="creation-type"><option value="all">Everything</option><option value="writing">Writing & notes</option><option value="audio">Audio</option><option value="video">Video</option><option value="document">Documents</option></select></label></div><div class="photo-grid" id="creation-grid"></div><p class="dim small">${content.limited?'Showing a bounded catalog. Browse the Vault for additional files.':'Files remain in their original folders. Changes appear when refreshed.'}</p>`;
   const filter=()=>{const q=$('creation-search').value.toLowerCase(),type=$('creation-type').value;const shown=items.filter(x=>(type==='all'||x.kind===type)&&(!q||(x.title+' '+x.path).toLowerCase().includes(q)));$('creation-grid').innerHTML=shown.map((x,i)=>`<button class="photo-card" data-file="${i}"><div class="file-art">${icon(x.kind==='writing'?'journals':'creations')}</div><div class="photo-meta"><small>${esc(x.kind)} · ${when(x.at)}</small><p>${esc(x.title)}</p><small>${esc(x.path.split('/').slice(0,-1).join(' / '))}</small></div></button>`).join('')||`<div style="grid-column:1/-1">${empty('creations','No creations found','Files saved in the companion vault appear here automatically. Try another filter or explore the Vault.',jump('vault','Open vault'))}</div>`;for(const b of $('creation-grid').querySelectorAll('[data-file]'))b.onclick=()=>openContent(shown[+b.dataset.file]);wireRoutes($('creations'));};$('creation-search').oninput=filter;$('creation-type').onchange=filter;filter();
 };
+/* The timeline was a ledger printout: every scene change, every capture and every
+   reflection as one more identical grey row, with the photos reduced to a "View
+   photo" button. A day is a story, so it reads as one now -- her reflection leads
+   the day, the scenes run beneath it in order, and the photos sit inline at the
+   hour they were taken instead of in a separate list. */
 workspaceHandlers.timeline=async()=>{
   const [life,content,tl,journal]=await Promise.all([api('/life'),api('/content'),api('/timeline'),api('/journals')]);if(current!=='timeline')return;
   profileTimezone=content.timezone;const photos=mergePhotos(content,tl);
-  const events=[...life.events.map(x=>({kind:'moment',at:x.recorded_at,title:x.state.activity,text:x.state.mood,place:x.state.location,unconfirmed:x.state.confirmed===false})),...photos.map(x=>({kind:'photo',at:x.at,title:x.title,item:x})),...journal.entries.map(x=>({kind:'journal',at:x.day+'T23:59:00',day:x.day,title:'Daily reflection',text:excerpt(x.text,240),entry:x}))].sort((a,b)=>{const dayA=a.day||dayKey(a.at),dayB=b.day||dayKey(b.at);if(dayA!==dayB)return dayB.localeCompare(dayA);if(a.kind==='journal')return b.kind==='journal'?0:-1;if(b.kind==='journal')return 1;return (Date.parse(b.at)||0)-(Date.parse(a.at)||0);});
-  $('timeline').innerHTML=heading('Timeline','High-density chronological stream of scene updates, captures, and journal reflections.')+`<div class="filters"><label>Show<select id="feed-kind"><option value="all">All records</option><option value="moment">Scene updates</option><option value="photo">Captures</option><option value="journal">Daily reflections</option></select></label><label>Day<input type="date" id="feed-day"></label><label>Search<input type="search" id="feed-search" placeholder="Search events…"></label><button class="quiet" id="feed-clear">Clear</button></div><div id="timeline-feed" class="timeline-compact-stream"></div><p class="dim small">Chronological feed of recorded scene changes, photo captures, and saved daily reflections.</p>`;
+  const entries=[
+    ...life.events.map(x=>({kind:'moment',at:x.recorded_at,title:x.state.activity,text:x.state.mood,place:x.state.location,unconfirmed:x.state.confirmed===false})),
+    ...photos.map(x=>({kind:'photo',at:x.at,title:x.title,item:x}))];
+  const journals=new Map(journal.entries.map(e=>[e.day,e]));
+  const days=new Map();
+  for(const e of entries){
+    const day=dayKey(e.at);
+    if(!days.has(day))days.set(day,[]);
+    days.get(day).push(e);
+  }
+  for(const day of journals.keys())if(!days.has(day))days.set(day,[]);
+  const ordered=[...days.keys()].sort((a,b)=>b.localeCompare(a));
+  const DAYS=12;let shownDays=DAYS;
+
+  $('timeline').innerHTML=heading('Timeline','Her days as they happened: what she wrote, where she was, and the photos taken along the way.')+
+  `<div class="memory-filters">
+    <input type="search" id="feed-search" placeholder="Search scenes, places, reflections…" aria-label="Search the timeline">
+    <input type="date" id="feed-day" aria-label="Jump to a day">
+    <label class="inline-label" style="margin:0"><input type="checkbox" id="feed-photos-only"> Only days with photos</label>
+    <button class="quiet" id="feed-clear">Clear</button>
+  </div>
+  <div id="timeline-feed" class="day-stream"></div>
+  <div class="vault-recent-more" id="timeline-more" hidden><button class="quiet" id="timeline-more-btn">Show earlier days</button></div>`;
+
   const filter=()=>{
-    const kind=$('feed-kind').value,day=$('feed-day').value,q=$('feed-search').value.toLowerCase();
-    const shown=events.filter(x=>(kind==='all'||x.kind===kind)&&(!day||(x.day||dayKey(x.at))===day)&&(!q||(x.title+' '+(x.text||'')+' '+(x.place||'')).toLowerCase().includes(q)));
-    let last='';
-    $('timeline-feed').innerHTML=shown.slice(0,250).map((x,i)=>{
-      const date=x.day||dayKey(x.at);
-      const head=last!==date?`<div style="font-weight:700;font-size:13px;color:var(--ink-2);margin:14px 0 6px;padding-left:4px">📅 ${esc(date)}</div>`:'';
-      last=date;
-      const iconBox=x.kind==='photo'?'📸':x.kind==='journal'?'📖':'✨';
-      const label=x.kind==='moment'?(x.unconfirmed?'Scene (unconfirmed)':'Scene update'):x.kind==='journal'?'Daily reflection':'Capture';
-      return head+`
-      <div class="timeline-row">
-        <div class="timeline-icon-box">${iconBox}</div>
-        <div class="timeline-row-info">
-          <span class="pill ${x.kind==='photo'?'status-good':x.kind==='journal'?'':''}">${label}</span>
-          <span class="timeline-row-title">${esc(x.title)}</span>
-          ${x.text?`<span class="timeline-row-meta">${esc(excerpt(x.text,80))}</span>`:''}
-          ${x.place?`<span class="dim small">📍 ${esc(x.place)}</span>`:''}
+    const day=$('feed-day').value,q=$('feed-search').value.toLowerCase(),photosOnly=$('feed-photos-only').checked;
+    const matching=ordered.filter(d=>{
+      if(day&&d!==day)return false;
+      const items=days.get(d),entry=journals.get(d);
+      if(photosOnly&&!items.some(x=>x.kind==='photo'))return false;
+      if(!q)return true;
+      const hay=(d+' '+(entry?entry.text:'')+' '+items.map(x=>x.title+' '+(x.text||'')+' '+(x.place||'')).join(' ')).toLowerCase();
+      return hay.includes(q);
+    });
+    const page=matching.slice(0,shownDays);
+    $('timeline-more').hidden=matching.length<=page.length;
+    $('timeline-feed').innerHTML=page.map(d=>{
+      const entry=journals.get(d);
+      /* Her presence loop rewrites the same scene every few minutes, so a single shower
+         arrived as six identical rows. Consecutive beats that say the same thing about the
+         same place are one beat spanning the time they actually covered. */
+      const raw=days.get(d).slice().sort((a,b)=>(Date.parse(a.at)||0)-(Date.parse(b.at)||0));
+      const items=[];
+      for(const beat of raw){
+        const prev=items[items.length-1];
+        if(beat.kind==='moment'&&prev&&prev.kind==='moment'&&prev.title===beat.title&&prev.place===beat.place){
+          prev.until=beat.at;prev.text=beat.text||prev.text;prev.repeats=(prev.repeats||1)+1;
+          prev.unconfirmed=prev.unconfirmed&&beat.unconfirmed;
+          continue;
+        }
+        items.push({...beat});
+      }
+      const shots=items.filter(x=>x.kind==='photo').length,scenes=items.length-shots;
+      const dayTitle=stamp(d+'T12:00:00',{weekday:'long',month:'long',day:'numeric'});
+      const counts=[scenes?scenes+(scenes===1?' scene':' scenes'):'',shots?shots+(shots===1?' photo':' photos'):''].filter(Boolean).join(' · ');
+      return `<section class="day-group">
+        <div class="day-head">
+          <h2>${esc(dayTitle)}</h2>
+          <span class="dim small">${esc(counts||'quiet day')}</span>
         </div>
-        <div class="timeline-row-time">${x.kind==='journal'?'Daily':stamp(x.at,{hour:'numeric',minute:'2-digit',month:undefined,day:undefined})}</div>
-        ${x.kind!=='moment'?`<button class="quiet small-btn" data-event="${i}">${x.kind==='photo'?'View photo':'Read'}</button>`:''}
-      </div>`;
-    }).join('')||empty('timeline','No events found','No matching events for this date or filter. New events appear as companion routines run.');
-    for(const b of $('timeline-feed').querySelectorAll('[data-event]'))b.onclick=()=>{
-      const x=shown[+b.dataset.event];
-      if(x.kind==='photo')openContent(x.item);
-      else{selectedJournal=x.entry.id;showTab('journals');}
-    };
+        ${entry?`<article class="day-lead">
+          <p>${esc(excerpt(entry.text,420))}</p>
+          <button class="link-button" data-journal="${esc(entry.id)}">Read the whole entry</button>
+        </article>`:''}
+        ${items.length?`<ol class="day-track">${items.map((x,bi)=>{
+          const prevTitle=bi?items[bi-1].title:'';
+          const clock=t=>stamp(t,{hour:'numeric',minute:'2-digit',month:undefined,day:undefined});
+          /* A range wrote the meridiem twice and wrapped the gutter onto two lines. When both
+             ends share it, it is said once at the end: 1:01-1:16 PM. */
+          const start=clock(x.at),stop=x.until?clock(x.until):'';
+          const half=t=>(t.match(/[AP]M$/)||[''])[0];
+          const time=stop&&stop!==start
+            ?(half(start)&&half(start)===half(stop)?start.replace(/\s*[AP]M$/,'')+'\u2013'+stop:start+'\u2009\u2013\u2009'+stop)
+            :start;
+          if(x.kind==='photo')return `<li class="day-beat is-photo">
+            <time>${esc(time)}</time>
+            <button class="day-shot" data-photo-id="${esc(x.item.content_id||x.item.path)}" aria-label="Open ${esc(x.title)}">
+              <img ${mediaPrivacy(x.item)} src="${mediaUrl(x.item.url)}" loading="lazy" alt="${esc(x.title)}">
+              ${x.title&&x.title!==prevTitle?`<span>${esc(x.title)}</span>`:''}
+            </button>
+          </li>`;
+          return `<li class="day-beat${x.unconfirmed?' is-unconfirmed':''}">
+            <time>${esc(time)}</time>
+            <div class="day-beat-body">
+              <p>${esc(x.title)}</p>
+              ${x.text?`<span class="dim small">${esc(x.text)}</span>`:''}
+              ${x.place?`<span class="dim small day-place">${esc(x.place)}</span>`:''}
+              ${x.unconfirmed?'<span class="pill">unconfirmed</span>':''}
+            </div>
+          </li>`;
+        }).join('')}</ol>`:'<p class="dim small" style="padding:4px 0 6px">She wrote, but nothing else was recorded.</p>'}
+      </section>`;
+    }).join('')||empty('timeline','Nothing here yet','No day matches this filter. Days fill in as her routines run.');
+    for(const b of $('timeline-feed').querySelectorAll('[data-journal]'))
+      b.onclick=()=>{selectedJournal=b.dataset.journal;showTab('journals');};
+    for(const b of $('timeline-feed').querySelectorAll('[data-photo-id]'))
+      b.onclick=()=>{const hit=photos.find(p=>(p.content_id||p.path)===b.dataset.photoId);if(hit)openContent(hit);};
   };
-  $('feed-kind').onchange=filter;$('feed-day').onchange=filter;$('feed-search').oninput=filter;
-  $('feed-clear').onclick=()=>{$('feed-kind').value='all';$('feed-day').value='';$('feed-search').value='';filter();};
+  const reset=()=>{shownDays=DAYS;filter();};
+  $('feed-day').onchange=reset;$('feed-search').oninput=reset;$('feed-photos-only').onchange=reset;
+  $('feed-clear').onclick=()=>{$('feed-day').value='';$('feed-search').value='';$('feed-photos-only').checked=false;reset();};
+  $('timeline-more-btn').onclick=()=>{shownDays+=DAYS;filter();};
   filter();
 };
-
 workspaceHandlers.knows=async()=>{
-  const d=await api('/ledgers');if(current!=='knows')return;
-  const factsTotal=d.facts?d.facts.length:0;
-  const standingTotal=d.standing?d.standing.length:0;
-  const momentsTotal=d.relationship?d.relationship.length:0;
-  const questionsTotal=d.questions?d.questions.length:0;
-  const categories=['all',...new Set((d.facts||[]).map(f=>f.category).filter(Boolean))];
+  const [d,o]=await Promise.all([api('/ledgers'),api('/overview')]);if(current!=='knows')return;
+  const facts=d.facts||[],standing=d.standing||[],prefs=(d.preferences||[]).slice().reverse();
+  /* Two lists were asking the same question in two places: the ledger's open questions and the
+     overview's carried threads. They are one section now, tagged by where they came from. */
+  const open=[...(d.questions||[]).map(q=>({kind:'question',text:q.text,detail:''})),
+              ...(o.loops||[]).map(l=>({kind:'thread',text:l.title,detail:l.detail||l.gentle_use||''}))];
+  const categories=['all',...new Set(facts.map(f=>f.category).filter(Boolean))];
+  const PAGE=24;let shown=PAGE;
 
-  $('knows').innerHTML=heading('Memory ledger','Verified personal knowledge, standing rules, and conversational context maintained by Hermes.')+
+  $('knows').innerHTML=heading('Memories','What she has learned about you, the rules you have set for her, what she has noticed she likes, and what she is still carrying.')+
   `<div class="stat-strip memory-kpi-strip">
-    <div class="stat-item"><span>Verified facts</span><strong>${factsTotal}</strong></div>
-    <div class="stat-item"><span>Standing rules</span><strong>${standingTotal}</strong></div>
-    <div class="stat-item"><span>Shared moments</span><strong>${momentsTotal}</strong></div>
-    <div class="stat-item"><span>Open inquiries</span><strong>${questionsTotal}</strong></div>
+    <div class="stat-item"><span>About you</span><strong>${facts.length}</strong></div>
+    <div class="stat-item"><span>Rules you set</span><strong>${standing.length}</strong></div>
+    <div class="stat-item"><span>Her own tastes</span><strong>${prefs.length}</strong></div>
+    <div class="stat-item"><span>Still open</span><strong>${open.length}</strong></div>
   </div>
-  <div class="filters">
-    <label>Search memory<input type="search" id="memory-search" placeholder="Search statements, evidence, guidelines…"></label>
-    <label>Category<select id="memory-category">${categories.map(c=>`<option value="${esc(c)}">${c==='all'?'All categories':esc(c[0].toUpperCase()+c.slice(1))}</option>`).join('')}</select></label>
-    <button class="quiet" id="memory-clear">Clear</button>
-  </div>
-  <div class="card" style="margin-bottom:20px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <h2 style="margin:0">Personal Facts & Knowledge</h2>
-      <span class="dim small" id="memory-fact-count">${factsTotal} facts recorded</span>
+  <div class="card">
+    <div class="section-heading" style="margin:0 0 4px">
+      <h2>About you</h2>
+      <span class="dim small" id="memory-fact-count"></span>
+    </div>
+    <div class="memory-filters">
+      <input type="search" id="memory-search" placeholder="Search statements and evidence…" aria-label="Search what she knows">
+      <select id="memory-category" aria-label="Category">${categories.map(c=>`<option value="${esc(c)}">${c==='all'?'All categories':esc(c[0].toUpperCase()+c.slice(1))}</option>`).join('')}</select>
+      <button class="quiet" id="memory-clear">Clear</button>
     </div>
     <div class="memory-grid" id="memory-facts-grid"></div>
-    <p class="dim small" style="margin-top:14px">Marking a fact incorrect records a superseding correction without deleting original evidence.</p>
+    <div class="vault-recent-more" id="memory-more" hidden><button class="quiet" id="memory-more-btn">Show more</button></div>
+    <p class="dim small" style="margin-top:14px">Marking something incorrect records a superseding correction. The original evidence is kept.</p>
   </div>
-  <div class="row">
+  <div class="memory-columns">
     <div class="card">
-      <h2>Standing Guidelines (${standingTotal})</h2>
-      <div id="memory-standing-list" class="memory-list" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
-        ${standingTotal?d.standing.map(r=>`<div class="memory-card"><div class="memory-card-header"><span class="pill">Guideline</span></div><p style="margin:6px 0;font-weight:500;color:var(--ink)">${esc(r.instruction)}</p><p class="dim small" style="margin:0">Evidence: ${esc(r.evidence)}</p></div>`).join(''):'<p class="dim small">No standing guidelines recorded.</p>'}
+      <h2>Rules you set (${standing.length})</h2>
+      <div class="memory-list">
+        ${standing.length?standing.map(r=>`<div class="memory-card"><p class="memory-statement" style="margin:0 0 6px">${esc(r.instruction)}</p><p class="memory-evidence" style="margin:0">${esc(r.evidence)}</p></div>`).join(''):'<p class="dim small">Nothing standing yet. Tell her how you want something done and it lands here.</p>'}
       </div>
     </div>
     <div class="card">
-      <h2>Open Inquiries (${questionsTotal})</h2>
-      <div id="memory-questions-list" class="memory-list" style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
-        ${questionsTotal?d.questions.map(q=>`<div class="memory-card"><p style="margin:0;font-weight:500;color:var(--ink)">❓ ${esc(q.text)}</p></div>`).join(''):'<p class="dim small">No open inquiries right now.</p>'}
+      <h2>Her own tastes (${prefs.length})</h2>
+      <p class="dim small" style="margin:-10px 0 14px">Things she noticed about herself, not about you. She writes these; you cannot.</p>
+      <div class="memory-list">
+        ${prefs.length?prefs.map(r=>`<div class="memory-card pref-${esc(r.valence||'mixed')}"><div class="memory-card-header"><span class="pill">${esc(r.valence||'noted')}</span><span class="dim small">${r.recorded_at?stamp(r.recorded_at,{month:'short',day:'numeric'}):''}</span></div><p class="memory-statement" style="margin:6px 0 4px">${esc(r.subject||'')}</p><p class="memory-evidence" style="margin:0">${esc(r.text||'')}</p></div>`).join(''):'<p class="dim small">She has not written down any preferences of her own yet.</p>'}
       </div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Still open (${open.length})</h2>
+    <p class="dim small" style="margin:-10px 0 14px">Questions she has not asked you yet, and threads she is carrying between sessions.</p>
+    <div class="memory-list">
+      ${open.length?open.map(x=>`<div class="memory-card"><div class="memory-card-header"><span class="pill">${x.kind==='question'?'Wants to ask':'Carrying'}</span></div><p class="memory-statement" style="margin:6px 0 ${x.detail?'4px':'0'}">${esc(x.text)}</p>${x.detail?`<p class="memory-evidence" style="margin:0">${esc(x.detail)}</p>`:''}</div>`).join(''):'<p class="dim small">Nothing open. She is not sitting on a question.</p>'}
     </div>
   </div>`;
 
   const filterFacts=()=>{
     const q=($('memory-search')?.value||'').toLowerCase();
     const cat=$('memory-category')?.value||'all';
-    const matches=(d.facts||[]).filter(f=>{
-      const matchCat=cat==='all'||f.category===cat;
-      const matchQ=!q||(f.statement+' '+f.evidence+' '+(f.category||'')).toLowerCase().includes(q);
-      return matchCat&&matchQ;
-    });
-    if($('memory-fact-count'))$('memory-fact-count').textContent=matches.length+' of '+factsTotal+' facts';
+    const matches=facts.filter(f=>(cat==='all'||f.category===cat)&&
+      (!q||(f.statement+' '+(f.evidence||'')+' '+(f.category||'')).toLowerCase().includes(q)));
+    const page=matches.slice(0,shown);
+    $('memory-fact-count').textContent=matches.length===facts.length
+      ?`${facts.length} recorded`:`${matches.length} of ${facts.length}`;
     const grid=$('memory-facts-grid');
-    if(!grid)return;
-    grid.innerHTML=matches.length?matches.map(f=>`
+    grid.innerHTML=page.length?page.map(f=>`
       <div class="memory-card">
         <div class="memory-card-header">
           <span class="pill">${esc(f.category||'fact')}</span>
-          <button class="quiet small-btn" data-forget="${esc(f.id)}" title="Mark this fact as incorrect">Mark incorrect</button>
+          <button class="quiet small-btn" data-forget="${esc(f.id)}" title="Mark this as incorrect">Not true</button>
         </div>
         <div class="memory-statement">${esc(f.statement)}</div>
         ${f.evidence?`<div class="memory-evidence">“${esc(f.evidence)}”</div>`:''}
-      </div>`).join(''):'<div class="dim small" style="grid-column:1/-1;padding:20px;text-align:center">No facts match this filter.</div>';
+      </div>`).join(''):'<div class="dim small" style="grid-column:1/-1;padding:24px;text-align:center">Nothing matches this filter.</div>';
+    $('memory-more').hidden=matches.length<=page.length;
     for(const b of grid.querySelectorAll('[data-forget]')){
       b.onclick=async()=>{
         b.disabled=true;
         await api(`/facts/${b.dataset.forget}/forget`,{method:'POST'});
-        notice('Fact marked incorrect.');
+        notice('Marked incorrect.');
         await workspaceHandlers.knows();
       };
     }
   };
-  $('memory-search').oninput=filterFacts;
-  $('memory-category').onchange=filterFacts;
-  $('memory-clear').onclick=()=>{
-    $('memory-search').value='';
-    $('memory-category').value='all';
-    filterFacts();
-  };
+  const reset=()=>{shown=PAGE;filterFacts();};
+  $('memory-search').oninput=reset;
+  $('memory-category').onchange=reset;
+  $('memory-clear').onclick=()=>{$('memory-search').value='';$('memory-category').value='all';reset();};
+  $('memory-more-btn').onclick=()=>{shown+=PAGE;filterFacts();};
   filterFacts();
 };
 
 workspaceHandlers.loops=async()=>{
   const [d,m]=await Promise.all([api('/overview'),api('/missions')]);if(current!=='loops')return;
   const missions=m.missions||[];
-  const loops=d.loops||[];
   const openCount=missions.filter(x=>x.status==='open').length;
 
   $('loops').innerHTML=heading('Plans & calendar',
-    'Her days, your to-do list, the things you have told her about, and the threads she is carrying.')+
+    'Her days, your to-do list, and the things you have told her about. What she is carrying lives in Memories.')+
   `<div class="stat-strip">
     <div class="stat-item"><span>On your list</span><strong>${openCount}</strong></div>
     <div class="stat-item"><span>Yours, all told</span><strong>${missions.length}</strong></div>
-    <div class="stat-item"><span>Threads she is carrying</span><strong>${loops.length}</strong></div>
   </div>
 
   ${buildCalendarHtml(d.agent, missions, d.commitments, 'cal')}
@@ -2190,17 +2279,6 @@ workspaceHandlers.loops=async()=>{
         </div>
       </div>
 
-      <div class="card">
-        <h2>Autonomous Open Threads (${loops.length})</h2>
-        <div class="threads-container">
-          ${loops.length?loops.map(l=>`
-            <div class="thread-card">
-              <div class="thread-title">💬 ${esc(l.title)}</div>
-              ${l.detail?`<p class="thread-desc">${esc(l.detail)}</p>`:''}
-              <div class="dim small" style="margin-top:6px">Context: ${esc(l.gentle_use)}</div>
-            </div>`).join(''):'<p class="dim small">No active open threads tracked across sessions.</p>'}
-        </div>
-      </div>
     </div>
 
     <div class="planner-column">

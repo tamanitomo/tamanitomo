@@ -46,6 +46,9 @@ workspaceHandlers['companion-edit']=async()=>{
 
 // Obsidian-like Knowledge Vault: hierarchical tree, live markdown preview/split, TOC outline, wikilinks.
 let vaultTreeData=new Map(),vaultExpanded=new Set(['notes','journal','soul']),vaultFilter='all',vaultQuery='',vaultViewMode='preview';
+// Which way into the vault is showing. Arriving by the old Creations route
+// opens Recent; otherwise the tree, which is what a vault is.
+let vaultView='folders';
 let vaultStack=[],vaultRequest=0,vaultDirty=false;
 async function leaveNote(){return confirmEditorLeave('vault');}
 
@@ -194,7 +197,28 @@ function renderVaultTree(){
 }
 
 workspaceHandlers.vault=async()=>{
- $('vault').innerHTML=`<div class="obsidian-layout">
+ $('vault').innerHTML=`
+ <div class="vault-views" role="tablist" aria-label="Vault views">
+   <button class="vault-view-tab" data-vault-view="recent" role="tab" aria-selected="false">Recent</button>
+   <button class="vault-view-tab" data-vault-view="folders" role="tab" aria-selected="true">Folders</button>
+ </div>
+ <div id="vault-recent" class="vault-recent" hidden>
+   <div class="vault-recent-filters">
+     <input type="search" id="vault-recent-search" placeholder="Search titles and folders…" aria-label="Search recent files">
+     <select id="vault-recent-type" aria-label="File type">
+       <option value="all">Everything</option>
+       <option value="writing">Writing &amp; notes</option>
+       <option value="image">Images</option>
+       <option value="audio">Audio</option>
+       <option value="video">Video</option>
+       <option value="document">Documents</option>
+     </select>
+   </div>
+   <div class="photo-grid" id="vault-recent-grid"></div>
+   <div class="vault-recent-more"><button class="quiet" id="vault-recent-more-btn" hidden>Show more</button>
+     <span class="dim small" id="vault-recent-count"></span></div>
+ </div>
+ <div class="obsidian-layout" id="vault-folders">
    <div class="vault-sidebar">
      <div class="vault-topbar">
        <div class="vault-actions-row">
@@ -220,6 +244,60 @@ workspaceHandlers.vault=async()=>{
       <div id="vault-document"><div class="vault-empty-state" style="margin:auto;text-align:center;padding:48px 24px"><div style="font-size:36px;margin-bottom:12px;opacity:0.6">📖</div><p class="dim" style="font-size:15px;margin:0 0 6px">Select a document from the vault or create a new note.</p><span class="dim small">Markdown, notes, and journals stay Obsidian-compatible</span></div></div>
     </div>
  </div>`;
+
+ /* Recent and Folders are two ways into the same files. "Creations" used to be
+    a page of its own that laid every file out flat -- a hundred and twenty
+    thousand pixels of placeholder document icons, with no hierarchy and no way
+    to read anything without leaving. It is this view now: the same newest-first
+    browse, bounded, beside the tree that could always do the rest. */
+ const PAGE=60;
+ let recentItems=null,recentShown=PAGE;
+ const paintRecent=()=>{
+  const grid=$('vault-recent-grid');if(!grid)return;
+  const q=($('vault-recent-search').value||'').toLowerCase();
+  const type=$('vault-recent-type').value;
+  const matching=(recentItems||[]).filter(x=>(type==='all'||x.kind===type)
+    &&(!q||((x.title||'')+' '+(x.path||'')).toLowerCase().includes(q)));
+  const page=matching.slice(0,recentShown);
+  grid.innerHTML=page.map((x,i)=>`<button class="photo-card" data-recent="${i}">
+     ${x.kind==='image'&&x.url?`<div class="photo-wrap"><img src="${mediaUrl(x.url)}" loading="lazy" alt="${esc(x.title||'')}"></div>`
+       :`<div class="file-art">${icon(x.kind==='writing'?'journals':'creations')}</div>`}
+     <div class="photo-meta"><small>${esc(x.kind||'file')} · ${when(x.at)}</small>
+     <p>${esc(x.title||'Untitled')}</p>
+     <small>${esc((x.path||'').split('/').slice(0,-1).join(' / '))}</small></div></button>`).join('')
+   ||`<div style="grid-column:1/-1">${empty('creations','Nothing here yet','Files saved in the vault appear here newest first. Try another filter, or browse the folders.','')}</div>`;
+  for(const b of grid.querySelectorAll('[data-recent]'))
+    b.onclick=()=>openContent(page[+b.dataset.recent]);
+  const more=$('vault-recent-more-btn');
+  more.hidden=matching.length<=recentShown;
+  more.onclick=()=>{recentShown+=PAGE;paintRecent();};
+  $('vault-recent-count').textContent=matching.length
+    ? `Showing ${page.length} of ${matching.length}`:'';
+ };
+ const loadRecent=async()=>{
+  if(recentItems)return paintRecent();
+  $('vault-recent-grid').innerHTML='<p class="dim">Reading the vault\u2026</p>';
+  try{
+   const content=await api('/content');
+   recentItems=(content.items||[]).slice();
+  }catch(error){
+   $('vault-recent-grid').innerHTML=`<p class="bad">${esc(error.message)}</p>`;return;
+  }
+  paintRecent();
+ };
+ const showVaultView=view=>{
+  vaultView=view;
+  $('vault-recent').hidden=view!=='recent';
+  $('vault-folders').hidden=view==='recent';
+  for(const tab of $('vault').querySelectorAll('.vault-view-tab'))
+    tab.setAttribute('aria-selected',String(tab.dataset.vaultView===view));
+  if(view==='recent')loadRecent();
+ };
+ for(const tab of $('vault').querySelectorAll('.vault-view-tab'))
+   tab.onclick=()=>showVaultView(tab.dataset.vaultView);
+ $('vault-recent-search').oninput=()=>{recentShown=PAGE;paintRecent();};
+ $('vault-recent-type').onchange=()=>{recentShown=PAGE;paintRecent();};
+ showVaultView(vaultView);
 
  for(const pill of $('vault').querySelectorAll('.vault-filter-pill')){
   pill.onclick=()=>{

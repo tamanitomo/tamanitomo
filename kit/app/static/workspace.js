@@ -594,8 +594,22 @@ workspaceHandlers.relationship=async()=>{
       <span class="pill">${d.moments.length} recorded</span>
     </div>
     <p class="dim">Things worth keeping, written down as they happened.</p>
-    <div class="moment-timeline">
-      ${d.moments.length?d.moments.slice().reverse().map(m=>`
+    <div class="memory-filters" ${d.moments.length>8?'':'hidden'}>
+      <input type="search" id="moment-search" placeholder="Search moments…" aria-label="Search moments">
+      <button class="quiet" id="moment-clear">Clear</button>
+    </div>
+    <div class="moment-timeline" id="moment-timeline"></div>
+    <div class="vault-recent-more" id="moment-more" hidden><button class="quiet" id="moment-more-btn">Show earlier moments</button></div>
+  </div>`;
+
+  /* Every moment ever recorded used to print at once. They are newest first, in pages. */
+  const MOMENTS=20;let momentsShown=MOMENTS;
+  const paintMoments=()=>{
+    const q=($('moment-search')?.value||'').toLowerCase();
+    const all=d.moments.slice().reverse().filter(m=>!q||(m.text+' '+(d.kinds[m.moment]||m.moment)).toLowerCase().includes(q));
+    const page=all.slice(0,momentsShown);
+    $('moment-more').hidden=all.length<=page.length;
+    $('moment-timeline').innerHTML=page.length?page.map(m=>`
         <div class="moment-card">
           <div class="moment-card-meta">
             <span class="pill">${esc(d.kinds[m.moment]||m.moment)}</span>
@@ -604,9 +618,15 @@ workspaceHandlers.relationship=async()=>{
             ${m.status==='active'?`<button class="quiet small-btn" data-retire="${esc(m.id)}">Retire</button>`:'<span class="dim small">Retired</span>'}
           </div>
           <p style="margin:0;font-size:13.5px;line-height:1.5;color:var(--ink)">${esc(m.text)}</p>
-        </div>`).join(''):'<p class="dim small" style="padding:20px;text-align:center">There is room here for your firsts. Meaningful shared moments will be preserved authentically as you interact together.</p>'}
-    </div>
-  </div>`;
+        </div>`).join(''):'<p class="dim small" style="padding:20px;text-align:center">'+(q?'No moment matches that.':'There is room here for your firsts. Meaningful shared moments will be preserved authentically as you interact together.')+'</p>';
+    for(const b of $('moment-timeline').querySelectorAll('[data-retire]'))b.onclick=async()=>{if(!await confirmEditorLeave('relationship'))return;await post('/relationship/'+encodeURIComponent(b.dataset.retire)+'/retire');notice('Moment retired.');await render('relationship');};
+  };
+  if($('moment-search')){
+    $('moment-search').oninput=()=>{momentsShown=MOMENTS;paintMoments();};
+    $('moment-clear').onclick=()=>{$('moment-search').value='';momentsShown=MOMENTS;paintMoments();};
+  }
+  $('moment-more-btn').onclick=()=>{momentsShown+=MOMENTS;paintMoments();};
+  paintMoments();
   for(const b of $('relationship').querySelectorAll('[data-retire]'))b.onclick=async()=>{if(!await confirmEditorLeave('relationship'))return;await post('/relationship/'+encodeURIComponent(b.dataset.retire)+'/retire');notice('Moment retired.');await render('relationship');};
   await mountFeelings();
 };
