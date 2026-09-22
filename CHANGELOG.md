@@ -1,3 +1,17 @@
+## 3.0.2 — What was missing, said out loud (2026-09-22)
+
+- Import a workflow from a picture made with custom nodes: read the weights and the sampler's numbers off the field names rather than a handful of stock class names, so a graph from a node pack is no longer called incomplete for being unfamiliar.
+- Drop the non-finite numbers ComfyUI stamps on the nodes it saves, which parsed fine and then made the reply unencodable, with an error that named no file.
+- Name the node classes and the model files the target ComfyUI does not have, instead of letting the render fail later with an error from deep inside it.
+- Read the card's VRAM and say when a model will not fit on it, with what to do about it: the same weights exist quantised. Do not suggest that to someone who already has a quantisation.
+- Fetch a civitai.red link from the mirror that answers, since that host refuses an ordinary client and the failure blamed the link.
+- Stop a preference save reporting that background jobs could not be updated when the jobs were updated and something unrelated was merely flagged.
+- Keep a worker alive when the retry meant to improve its answer is refused, and when a provider replies with no choices at all.
+- Scale the token budget for a reasoning model, so a job that thought hard does not return its answer cut in half.
+- Find Hermes in a checkout made by `uv`, which writes `.venv` where this looked only for `venv`.
+- Retire plan items whose time has passed unrecorded, so a morning walk stops reading as still ahead at four in the afternoon, and carry the reasons a day changed into what she is thinking with.
+- Keep the newest few update backups rather than one per update, forever.
+
 ## 3.0.1 — Reasoning that is actually asked for (2026-09-21)
 
 - Keep `reasoning_effort` when a schema is restated into the prompt; that path had been stripping it from every structured request, so the workers that most need to think were told not to.
