@@ -570,12 +570,68 @@ def record(root,text,activity,status,now,event_id=None,agent='companion',human='
             f.write(json.dumps(episode,ensure_ascii=False)+'\n');f.flush();os.fsync(f.fileno())
     return {'written':True,'episode':episode}
 
+# Which session sources mean a person was actually there. Everything else is the
+# companion's own machinery talking to itself: scheduled jobs, tool runs,
+# sub-agents, and the companion-to-companion dialogues two of them hold without
+# the human present.
+HUMAN_SOURCES=('cli','tui','telegram','discord','mobile','desktop','api_server','web')
+
+
+def contact(c,day=None):
+    """Did the human actually speak to her on this day, per the session record.
+
+    A journal that asks the model to remember whether anyone spoke to it is
+    asking the wrong thing: it will fill the silence, because filling silences
+    is what it is for. The sessions table already knows. A day whose every
+    session came from cron had nobody in it, and that is a fact a prompt can be
+    held to rather than a judgement it has to make.
+    """
+    import datetime as dt, sqlite3
+    tz=_tz(c)
+    day=str(day or '') or dt.datetime.now(tz).date().isoformat()
+    try:
+        target=dt.date.fromisoformat(day)
+    except ValueError:
+        raise SystemExit('Use a date as YYYY-MM-DD')
+    path=pathlib.Path(c.home)/'state.db'
+    out={'day':target.isoformat(),'human_sessions':0,'sources':{},'titles':[],
+         'evidence':str(path),'verdict':'no recorded contact'}
+    if not path.is_file():
+        out['verdict']='unknown: no session record on this host'
+        return out
+    try:
+        con=sqlite3.connect(f'file:{path}?mode=ro',uri=True)
+        rows=con.execute('select source,started_at,title from sessions').fetchall()
+    except sqlite3.Error as exc:
+        out['verdict']=f'unknown: session record unreadable ({exc})'
+        return out
+    finally:
+        try:con.close()
+        except Exception:pass
+    for source,started,title in rows:
+        if not started:continue
+        try:when=dt.datetime.fromtimestamp(float(started),tz)
+        except (TypeError,ValueError,OSError):continue
+        if when.date()!=target:continue
+        key=str(source or 'unknown')
+        out['sources'][key]=out['sources'].get(key,0)+1
+        if key in HUMAN_SOURCES:
+            out['human_sessions']+=1
+            if title:out['titles'].append(f'{when.strftime("%H:%M")} {title}'[:120])
+    if out['human_sessions']:
+        out['verdict']='contact recorded'
+    out['titles']=out['titles'][:20]
+    return out
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--home',type=pathlib.Path,help='companion home (default: $COMPANION_HOME/$HERMES_HOME)')
     s=p.add_subparsers(dest='cmd',required=True)
     s.add_parser('tick')
     s.add_parser('dates',help='Local today and yesterday, portable across operating systems')
+    ct=s.add_parser('contact',help='Whether the human actually spoke to her on a day, from the session record')
+    ct.add_argument('--day',help='YYYY-MM-DD; defaults to today')
     h=s.add_parser('history');h.add_argument('--day');h.add_argument('--limit',type=int,default=20)
     h.add_argument('--offset',type=int,help='Read a chronological page instead of the latest N')
     h.add_argument('--compact',action='store_true',help='Short, paged records for model context')
@@ -622,7 +678,8 @@ def main():
     dc.add_argument('--idea',required=True)
     a=p.parse_args()
     c=cc.load(a.home);tz=_tz(c);now=dt.datetime.now(tz);root=c.life
-    if a.cmd=='dates':out={'today':now.date().isoformat(),'yesterday':(now.date()-dt.timedelta(days=1)).isoformat(),'timezone':c.timezone}
+    if a.cmd=='contact':out=contact(c,getattr(a,'day',None))
+    elif a.cmd=='dates':out={'today':now.date().isoformat(),'yesterday':(now.date()-dt.timedelta(days=1)).isoformat(),'timezone':c.timezone}
     elif a.cmd=='plan-tomorrow':
         target_date=(now.date()+dt.timedelta(days=1)).isoformat()
         outfit_list=[x.strip() for x in (a.outfit or '').split(',') if x.strip()]

@@ -310,3 +310,70 @@ class QualityTagsTests(unittest.TestCase):
         class Home:
             home=pathlib.Path(tempfile.mkdtemp())
         self.assertEqual(self.media.load(Home()).get('quality_tags'),'')
+
+
+class ContactRecordTests(unittest.TestCase):
+    """Whether anyone was actually there is a fact, not a memory.
+
+    A journal that asks the model to recall whether the human spoke to it will
+    fill the silence, because filling silences is what it is for. The session
+    record already knows, and a day whose every session came from cron had
+    nobody in it.
+    """
+    def setUp(self):
+        sys.path.insert(0,str(ROOT/'kit/scripts'))
+        import companion_life
+        self.life=companion_life
+        self.home=pathlib.Path(tempfile.mkdtemp())
+
+    def profile(self,rows):
+        import sqlite3,datetime as dt
+        con=sqlite3.connect(self.home/'state.db')
+        con.execute('create table sessions (source text, started_at real, title text)')
+        for source,when,title in rows:
+            con.execute('insert into sessions values (?,?,?)',
+                        (source,when.timestamp(),title))
+        con.commit();con.close()
+        class C:
+            home=self.home
+            timezone='UTC'
+        return C()
+
+    def day(self,hour=12):
+        import datetime as dt
+        return dt.datetime(2026,9,21,hour,tzinfo=dt.timezone.utc)
+
+    def test_a_day_of_only_cron_had_nobody_in_it(self):
+        c=self.profile([('cron',self.day(h),f'job {h}') for h in range(0,23,2)])
+        out=self.life.contact(c,'2026-09-21')
+        self.assertEqual(out['human_sessions'],0)
+        self.assertEqual(out['verdict'],'no recorded contact')
+        self.assertEqual(out['titles'],[])
+
+    def test_a_real_conversation_is_reported_with_its_time(self):
+        c=self.profile([('cron',self.day(3),'job'),('telegram',self.day(9),'Morning chat')])
+        out=self.life.contact(c,'2026-09-21')
+        self.assertEqual(out['human_sessions'],1)
+        self.assertEqual(out['verdict'],'contact recorded')
+        self.assertEqual(out['titles'],['09:00 Morning chat'])
+
+    def test_companions_talking_to_each_other_is_not_the_human(self):
+        # Two companions holding a dialogue is not somebody visiting her.
+        c=self.profile([('companion-dialogue',self.day(14),'Invite her to swim'),
+                        ('subagent',self.day(15),'helper'),('tool',self.day(16),'tool run')])
+        self.assertEqual(self.life.contact(c,'2026-09-21')['human_sessions'],0)
+
+    def test_another_day_does_not_bleed_into_this_one(self):
+        import datetime as dt
+        c=self.profile([('cli',dt.datetime(2026,9,20,9,tzinfo=dt.timezone.utc),'yesterday')])
+        self.assertEqual(self.life.contact(c,'2026-09-21')['human_sessions'],0)
+        self.assertEqual(self.life.contact(c,'2026-09-20')['human_sessions'],1)
+
+    def test_no_session_record_says_unknown_rather_than_none(self):
+        class C:
+            home=pathlib.Path(tempfile.mkdtemp())
+            timezone='UTC'
+        out=self.life.contact(C(),'2026-09-21')
+        # "I could not check" must never read as "nobody was there".
+        self.assertNotEqual(out['verdict'],'no recorded contact')
+        self.assertIn('unknown',out['verdict'])
