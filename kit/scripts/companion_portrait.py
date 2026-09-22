@@ -160,10 +160,14 @@ def recorded_parts(c,record=None):
     again beside it, so the same clothes were described twice and the framing three
     times -- once as its own box, once inside the scene, and once in the tag list.
     """
-    from companion_presence import current,undress
+    from companion_presence import current,visible_outfit,wardrobe
     scene=record if record is not None else current(c)
     state=(scene or {}).get('state',{}) if scene else {}
-    _kind,outfit=undress(state)
+    # What the camera sees, not every layer she has on: a base layer under
+    # something else is not part of the picture.
+    try:closet=wardrobe(c)['items']
+    except Exception:closet=()
+    _kind,outfit=visible_outfit(state,closet)
     visual=state.get('visual') or {}
     location=state.get('location','')
     action=[state.get('activity',''),location]

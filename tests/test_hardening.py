@@ -434,3 +434,72 @@ class MediaCachingTests(unittest.TestCase):
         again=client.get(f'/media/timeline/{name}',headers={'If-None-Match':etag})
         self.assertEqual(again.status_code,304)
         self.assertEqual(len(again.content),0)  # no image bytes at all
+
+
+class VisibleOutfitTests(unittest.TestCase):
+    """An outfit is a stack; a photograph is of the outside of it.
+
+    Every layer was handed to the image model at once, so a record of jeans
+    over briefs came back with the briefs drawn riding out of the jeans -- in
+    every picture, because she is wearing underwear in every picture.
+    """
+    CLOSET = [{'id': 'jeans', 'category': 'day'},
+              {'id': 'briefs', 'category': 'underwear'},
+              {'id': 'trainers', 'category': 'footwear'},
+              {'id': 'pjs', 'category': 'sleep'},
+              {'id': 'unknown', 'category': ''}]
+    DESC = {'jeans': 'blue jeans', 'briefs': 'dusty rose briefs',
+            'trainers': 'white sneakers', 'pjs': 'ivory sleep set',
+            'unknown': 'something not in the closet'}
+
+    def setUp(self):
+        sys.path.insert(0, str(ROOT / 'kit/scripts'))
+        import companion_presence
+        self.p = companion_presence
+
+    def worn(self, *ids):
+        return {'outfit': [{'id': i, 'description': self.DESC[i]} for i in ids]}
+
+    def shown(self, *ids):
+        return self.p.visible_outfit(self.worn(*ids), self.CLOSET)[1]
+
+    def test_a_base_layer_under_clothes_is_not_in_the_picture(self):
+        self.assertEqual(self.shown('jeans', 'briefs', 'trainers'),
+                         'blue jeans, white sneakers')
+
+    def test_it_is_in_the_picture_when_nothing_covers_it(self):
+        self.assertEqual(self.shown('briefs'), 'dusty rose briefs')
+
+    def test_shoes_do_not_count_as_covering_it(self):
+        self.assertEqual(self.shown('briefs', 'trainers'),
+                         'dusty rose briefs, white sneakers')
+
+    def test_pyjamas_cover_it_too(self):
+        self.assertEqual(self.shown('pjs', 'briefs'), 'ivory sleep set')
+
+    def test_an_uncategorised_garment_counts_as_covering(self):
+        # The bias is deliberate: leaving out underwear that is showing makes a
+        # picture slightly wrong; adding underwear that is not makes one nobody
+        # asked for.
+        self.assertEqual(self.shown('unknown', 'briefs'),
+                         'something not in the closet')
+
+    def test_the_undressed_and_towel_states_are_untouched(self):
+        self.assertEqual(self.p.visible_outfit({'outfit': []}, self.CLOSET), ('undressed', ''))
+        towel = {'outfit': [{'id': 'towel', 'description': 'wrapped in a bath towel'}]}
+        kind, text = self.p.visible_outfit(towel, self.CLOSET)
+        self.assertEqual(kind, 'towel')
+        self.assertEqual(text, 'wrapped in a bath towel')
+
+    def test_without_a_closet_it_describes_everything_rather_than_failing(self):
+        """A known limit, stated rather than discovered.
+
+        Which item is a base layer is a fact held in the wardrobe, not on the
+        worn item, so with no wardrobe to consult there is no signal and every
+        layer is described -- the old behaviour. A render is never failed over
+        it. If this ever matters, the fix is to carry the category onto the
+        worn item when the outfit is recorded, not to guess from the words.
+        """
+        text = self.p.visible_outfit(self.worn('jeans', 'briefs'), ())[1]
+        self.assertIn('blue jeans', text)
+        self.assertIn('dusty rose briefs', text)

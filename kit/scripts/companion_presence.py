@@ -79,6 +79,40 @@ def undress(state):
     return None,text
 
 
+BASE_LAYERS=('underwear',)
+# Shoes do not cover anything, so a pair of trainers must not be the reason a
+# base layer is treated as hidden.
+COVERS_NOTHING=('footwear',)
+
+
+def visible_outfit(state,closet=()):
+    """The clothes a camera would see, rather than every layer she has on.
+
+    An outfit is a stack. Handing the whole stack to an image model describes
+    it all at once and it obligingly draws all of it, so a record of jeans over
+    briefs came back as briefs riding up out of the jeans -- in every picture,
+    because she is wearing underwear in every picture.
+
+    Which item is a base layer is read from its category in her wardrobe, never
+    from what the description happens to say. When something covers it, it is
+    left out; when nothing does, it is what she is wearing and is described.
+
+    The bias is deliberate: an unknown or ambiguous cover counts as covering.
+    Leaving out underwear that is showing makes a picture slightly wrong;
+    putting in underwear that is not makes one nobody asked for.
+    """
+    kind,text=undress(state)
+    if kind:return kind,text
+    items=[i for i in (state.get('outfit') or []) if isinstance(i,dict)]
+    category={i.get('id'):(i.get('category') or '') for i in closet if isinstance(i,dict)}
+    def kind_of(item):return category.get(item.get('id',''),'')
+    covering=[i for i in items if kind_of(i) not in BASE_LAYERS+COVERS_NOTHING]
+    if not covering:return kind,text
+    shown=[i['description'] for i in items
+           if i.get('description') and kind_of(i) not in BASE_LAYERS]
+    return kind,', '.join(shown)
+
+
 def wardrobe_clause(text):
     """`wearing X`, unless the description already reads as its own phrase.
 
