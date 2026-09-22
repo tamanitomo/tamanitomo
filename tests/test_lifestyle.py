@@ -128,6 +128,27 @@ class LifestyleTests(unittest.TestCase):
             result=worker.pulse(self.c,'http://127.0.0.1:11434/v1','test',now=self.now+dt.timedelta(minutes=15))
         self.assertEqual(result['planning_attempts'],2)
         self.assertEqual(p.current(self.c)['state']['outfit'][0]['id'],'pj')
+    def test_validation_judges_the_moment_recorded_not_the_moment_it_runs(self):
+        """`check` is asked whether a record is acceptable FOR ITS OWN MOMENT.
+
+        It used to default `now` to the wall clock, so the rules it applied --
+        which routine anchor is active, above all -- were about whenever the
+        check happened to run. The same record passed before nine in the
+        morning and failed at ten, and a job catching up was judged against a
+        day it was not writing about.
+        """
+        # 08:15 local: the 09:00-11:00 anchor is not active, so no choice is owed.
+        quiet=dict(self.data(),previous_id=p.current(self.c)['id'])
+        p.check(self.c,quiet,self.now+dt.timedelta(minutes=15))
+        # 09:30 local: it is active, and a record ignoring it must be refused.
+        with self.assertRaisesRegex(ValueError,'ROUTINE'):
+            p.check(self.c,quiet,self.now+dt.timedelta(minutes=90))
+        # ...and accepted once addressed, at that same moment.
+        answered=dict(quiet,routine_choice=dict(anchor='daily-0',decision='defer',
+                                                reason='Raining; will walk after lunch.'),
+                      duration_minutes=20)
+        p.check(self.c,answered,self.now+dt.timedelta(minutes=90))
+
     def test_active_routine_and_overdue_activity_cannot_be_silently_ignored(self):
         with self.assertRaisesRegex(ValueError,'ROUTINE'):self.write(90)
         self.write(90,routine_choice=dict(anchor='daily-0',decision='defer',reason='Heavy rain; stretch indoors and reconsider the walk after lunch.'),duration_minutes=20)

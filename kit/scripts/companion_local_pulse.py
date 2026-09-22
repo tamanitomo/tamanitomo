@@ -223,7 +223,7 @@ def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
             # the check sees the record that would actually be written rather
             # than the model's draft of it.
             _settle_ids(data,previous,phase_id)
-            presence.check(c,data)
+            presence.check(c,data,now)
         except ValueError as exc:
             if attempt:raise
             payload['messages'] += [{'role':'assistant','content':reply['content']},{'role':'user','content':

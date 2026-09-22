@@ -151,14 +151,22 @@ def show(c):
     return result
 
 
-def check(c,data):
+def check(c,data,now=None):
     """Would `update` accept this record? Raises the same ValueError if not.
 
     The pulse asks before it writes, so a model that got a field wrong is told
     what was wrong and asked again, rather than the job dying on a rule it was
     never shown. Validation-only: it writes nothing.
+
+    `now` is the moment the record is about, and it matters: the rules being
+    checked include which routine anchor is active, which is a question about
+    that moment and not about when the check happens to run. Left to default,
+    a record for eight in the morning was judged against whatever the clock
+    said at validation time -- so the same pulse passed or failed depending on
+    the hour it was run, and a job replaying or catching up was checked against
+    a day it was not writing about.
     """
-    return update(c,data,None,dry_run=True)
+    return update(c,data,now,dry_run=True)
 
 
 def update(c,data,now=None,dry_run=False):
