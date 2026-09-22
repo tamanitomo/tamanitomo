@@ -214,6 +214,7 @@
   "tests/test_feelings.py",
   "tests/test_gateway.py",
   "tests/test_hardening.py",
+  "tests/test_hermes_stream.py",
   "tests/test_history.py",
   "tests/test_identity.py",
   "tests/test_identity_retrofit.py",

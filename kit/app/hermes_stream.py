@@ -17,16 +17,23 @@ def main():
     code=0
     with contextlib.redirect_stdout(output):
         import cli
+        # These wrap functions belonging to somebody else's program, which is
+        # free to grow an argument without telling us. Both forward whatever
+        # they are given rather than restating a signature: Hermes 0.21.3 added
+        # an `emitter` to the quiet runner and passed it on every call, and a
+        # wrapper that named exactly two parameters turned every chat turn into
+        # a TypeError while cron, which does not come through here, carried on
+        # working. Reported by erohtar (#1), who also found the cause.
         configure=getattr(cli,'_configure_quiet_agent',None)
         if configure:
-            def configured(agent):
-                configure(agent)
+            def configured(agent,*args,**kwargs):
+                configure(agent,*args,**kwargs)
                 agent.stream_delta_callback=lambda delta:emit('delta',text=delta) if isinstance(delta,str) else None
             cli._configure_quiet_agent=configured
         quiet=getattr(cli,'_run_quiet_single_query',None)
         if quiet:
-            def run(instance,query):
-                try:return quiet(instance,query)
+            def run(instance,query,*args,**kwargs):
+                try:return quiet(instance,query,*args,**kwargs)
                 finally:emit('session',id=instance.session_id)
             cli._run_quiet_single_query=run
         from hermes_cli.main import main as hermes_main
