@@ -246,8 +246,12 @@ dialog.photo-viewer::backdrop{background:rgba(0,0,0,0.94)}
 .viewer-icon-btn:hover{background:rgba(255,255,255,0.2);color:#fff;transform:scale(1.06)}
 .viewer-btn-danger:hover{background:rgba(239,68,68,0.3)!important;color:#f87171!important;border-color:rgba(239,68,68,0.4)!important}
 .viewer-stage{flex:1;display:flex;position:relative;overflow:hidden;align-items:center;justify-content:center;background:#06070a}
-.viewer-canvas{flex:1;height:100%;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;touch-action:pan-y;user-select:none}
-.viewer-img{max-width:92vw;max-height:calc(100vh - 84px);object-fit:contain;border-radius:4px;box-shadow:0 30px 80px rgba(0,0,0,0.9);transition:transform .2s cubic-bezier(0.2,0.8,0.2,1),opacity .2s ease;pointer-events:none}
+/* Every gesture on the picture is handled in script -- swipe, pinch, pan,
+   double tap -- so the browser must not claim any of them first. `pan-y`
+   left the vertical axis to the page, which in a full-screen viewer scrolls
+   nothing and cost the second finger of a pinch. */
+.viewer-canvas{flex:1;height:100%;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;touch-action:none;user-select:none}
+.viewer-img{max-width:92vw;max-height:calc(100vh - 84px);object-fit:contain;border-radius:4px;box-shadow:0 30px 80px rgba(0,0,0,0.9);transition:transform .2s cubic-bezier(0.2,0.8,0.2,1),opacity .2s ease;pointer-events:none;will-change:transform;transform-origin:center center}
 .viewer-nav{
   position:absolute;
   top:50%;

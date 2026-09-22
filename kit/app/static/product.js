@@ -1164,32 +1164,128 @@ function initPhotoViewer(){
   $('photo-viewer').addEventListener('cancel',e=>{e.preventDefault();closePhotoViewer();});
   $('photo-viewer').addEventListener('close',()=>{document.body.style.overflow='';});
   const canvas=$('viewer-canvas'),img=$('viewer-img');
-  let startX=0,startY=0,currentX=0,isSwiping=false,startTime=0;
+  /* One gesture surface for the picture.
+
+     This began as a single-pointer swipe, which is most of what a viewer needs
+     and none of what a phone expects. Two fingers landing on it produced two
+     pointerdowns, the second overwriting the first's start position, so a pinch
+     read as a violent swipe and threw you into the next photo instead of
+     zooming. Every pointer is tracked now, and what the gesture IS follows from
+     how many there are: two is a pinch, one on an unzoomed picture is a swipe,
+     one on a zoomed picture is a pan. */
+  const pointers=new Map();
+  let scale=1,tx=0,ty=0;                 // what the picture is showing
+  let pinchStart=0,pinchScale=1,pinchX=0,pinchY=0,baseTx=0,baseTy=0;
+  let startX=0,startY=0,currentX=0,isSwiping=false,isPanning=false,startTime=0;
+  let lastTap=0;
+  const MAX_SCALE=6;
+  const apply=(animate)=>{
+    img.style.transition=animate?'transform .2s cubic-bezier(0.2,0.8,0.2,1)':'none';
+    img.style.transform=`translate(${tx}px, ${ty}px) scale(${scale})`;
+  };
+  const resetZoom=(animate)=>{scale=1;tx=0;ty=0;apply(animate);};
+  viewerResetZoom=resetZoom;             // navigation starts each picture unzoomed
+  const centre=()=>{
+    const list=[...pointers.values()];
+    return {x:list.reduce((n,p)=>n+p.x,0)/list.length,
+            y:list.reduce((n,p)=>n+p.y,0)/list.length};
+  };
+  const spread=()=>{
+    const [a,b]=[...pointers.values()];
+    return Math.hypot(a.x-b.x,a.y-b.y);
+  };
+  // Keep the picture from being dragged off its own screen.
+  const clamp=()=>{
+    const box=img.getBoundingClientRect(),frame=canvas.getBoundingClientRect();
+    const slackX=Math.max(0,(box.width-frame.width)/2),slackY=Math.max(0,(box.height-frame.height)/2);
+    tx=Math.min(slackX,Math.max(-slackX,tx));
+    ty=Math.min(slackY,Math.max(-slackY,ty));
+  };
   canvas.addEventListener('pointerdown',e=>{
     if(e.button!==0&&e.pointerType==='mouse')return;
     if(e.target.closest('button, a, input, select, textarea'))return;
-    startX=e.clientX;startY=e.clientY;currentX=startX;isSwiping=true;startTime=Date.now();
+    pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    // Capture keeps a finger that slides off the picture still talking to it.
+    // It throws if the pointer is not one the browser is tracking, and a lost
+    // capture is not a reason to lose the gesture.
+    try{canvas.setPointerCapture?.(e.pointerId);}catch{}
+    if(pointers.size===2){
+      // A pinch has begun, so whatever the first finger was doing is off.
+      isSwiping=false;isPanning=false;
+      pinchStart=spread();pinchScale=scale;
+      const c=centre();pinchX=c.x;pinchY=c.y;baseTx=tx;baseTy=ty;
+      return;
+    }
+    if(pointers.size!==1)return;
+    startX=e.clientX;startY=e.clientY;currentX=startX;startTime=Date.now();
+    baseTx=tx;baseTy=ty;
+    if(scale>1){isPanning=true;isSwiping=false;}
+    else{isSwiping=true;isPanning=false;}
     img.style.transition='none';
   });
   canvas.addEventListener('pointermove',e=>{
+    if(!pointers.has(e.pointerId))return;
+    pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pointers.size>=2){
+      if(!pinchStart)return;
+      const next=Math.min(MAX_SCALE,Math.max(1,pinchScale*(spread()/pinchStart)));
+      const c=centre();
+      // Hold the point between the fingers still while the picture grows
+      // around it, which is what makes a pinch feel attached to the thing.
+      tx=baseTx+(c.x-pinchX)+(pinchX-canvas.getBoundingClientRect().width/2)*(pinchScale-next)/pinchScale;
+      ty=baseTy+(c.y-pinchY)+(pinchY-canvas.getBoundingClientRect().height/2)*(pinchScale-next)/pinchScale;
+      scale=next;clamp();apply(false);
+      return;
+    }
+    if(isPanning){
+      tx=baseTx+(e.clientX-startX);ty=baseTy+(e.clientY-startY);
+      clamp();apply(false);
+      return;
+    }
     if(!isSwiping)return;
     currentX=e.clientX;
     const dx=currentX-startX,dy=e.clientY-startY;
-    if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>10){
-      img.style.transform=`translateX(${dx*0.75}px)`;
-    }
+    if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>10)img.style.transform=`translateX(${dx*0.75}px)`;
   });
-  const endSwipe=()=>{
+  const endGesture=e=>{
+    if(e&&pointers.has(e.pointerId))pointers.delete(e.pointerId);
+    if(pointers.size>=2)return;
+    if(pinchStart){
+      pinchStart=0;
+      // A pinch that came back to roughly nothing should settle to nothing,
+      // rather than leaving the picture a per cent larger than it started.
+      if(scale<=1.05)resetZoom(true);
+      else{clamp();apply(true);}
+      isSwiping=false;isPanning=false;
+      return;
+    }
+    if(isPanning){isPanning=false;clamp();apply(true);return;}
     if(!isSwiping)return;
     isSwiping=false;
-    img.style.transition='transform .2s cubic-bezier(0.2,0.8,0.2,1)';
     const dx=currentX-startX,dt=Date.now()-startTime,speed=Math.abs(dx)/(dt||1);
-    img.style.transform='';
-    if(dx<-50||(dx<-25&&speed>0.4))navigateViewer(1);
-    else if(dx>50||(dx>25&&speed>0.4))navigateViewer(-1);
+    if(dx<-50||(dx<-25&&speed>0.4))slideTo(1);
+    else if(dx>50||(dx>25&&speed>0.4))slideTo(-1);
+    else{img.style.transition='transform .2s cubic-bezier(0.2,0.8,0.2,1)';img.style.transform='';}
   };
-  canvas.addEventListener('pointerup',endSwipe);
-  canvas.addEventListener('pointercancel',endSwipe);
+  canvas.addEventListener('pointerup',endGesture);
+  canvas.addEventListener('pointercancel',endGesture);
+  // Double tap to zoom, the other half of what a phone expects. Deliberately
+  // last, so it never competes with a pinch that is still in progress.
+  canvas.addEventListener('pointerup',e=>{
+    if(e.pointerType==='mouse'||pointers.size)return;
+    const now=Date.now();
+    if(now-lastTap<300){
+      lastTap=0;
+      if(scale>1)resetZoom(true);
+      else{
+        const frame=canvas.getBoundingClientRect();
+        scale=2.5;
+        tx=(frame.width/2-(e.clientX-frame.left))*(scale-1);
+        ty=(frame.height/2-(e.clientY-frame.top))*(scale-1);
+        clamp();apply(true);
+      }
+    }else lastTap=now;
+  });
   document.addEventListener('keydown',e=>{
     if(!$('photo-viewer').open)return;
     if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;
@@ -1226,12 +1322,47 @@ function closePhotoViewer(){
   if($('viewer-variants-bar'))$('viewer-variants-bar').hidden=true;
   $('viewer-img').src='';
 }
+let viewerResetZoom=null;
 function navigateViewer(dir){
   const next=viewerIndex+dir;
   if(next>=0&&next<viewerItems.length){
     viewerIndex=next;
+    if(viewerResetZoom)viewerResetZoom(false);
     renderViewerPhoto();
   }
+}
+/* The swipe used to end by snapping the picture back to the middle and then
+   changing what it showed, so the gesture and the result looked unrelated. The
+   picture leaves the way you pushed it and the next one comes in from the far
+   side, which is the whole of what makes it feel like a stack of photographs
+   rather than a slideshow. */
+function slideTo(dir){
+  const next=viewerIndex+dir;
+  const img=$('viewer-img');
+  if(!(next>=0&&next<viewerItems.length)){
+    // Nothing that way: let it fall back, so the edge of the set is felt.
+    img.style.transition='transform .2s cubic-bezier(0.2,0.8,0.2,1)';
+    img.style.transform='';
+    return;
+  }
+  const out=dir>0?-1:1;
+  img.style.transition='transform .16s ease-out, opacity .16s ease-out';
+  img.style.transform=`translateX(${out*window.innerWidth*0.5}px)`;
+  img.style.opacity='0';
+  setTimeout(()=>{
+    navigateViewer(dir);
+    img.style.transition='none';
+    img.style.transform=`translateX(${-out*window.innerWidth*0.35}px)`;
+    // Flush that placement synchronously rather than waiting for a frame.
+    // requestAnimationFrame does not run in a tab that is not being drawn, and
+    // a swipe followed by switching away left the picture parked off-centre at
+    // zero opacity -- invisible, with nothing to say why, until something else
+    // happened to repaint it.
+    void img.offsetWidth;
+    img.style.transition='transform .2s cubic-bezier(0.2,0.8,0.2,1), opacity .2s ease-out';
+    img.style.transform='';
+    img.style.opacity='1';
+  },160);
 }
 function toggleViewerInfo(){
   const pane=$('viewer-info-pane');
@@ -1672,9 +1803,35 @@ workspaceHandlers.photos=async()=>{
       }
       b.onclick=e=>{
         if(e.target.closest('.photo-card-actions'))return;
+        if(b.dataset.longpressed){delete b.dataset.longpressed;return;}
         if(selectMode){const x=shown[+b.dataset.photo];togglePhotoSelected(x.content_id||x.path,b);draw();return;}
         openPhotoViewer(shown[+b.dataset.photo],shown,+b.dataset.photo);
       };
+      /* Hold a picture to start choosing pictures. Selecting was reachable only
+         through a small chip sitting among the collection filters, which is
+         where nobody looks for it on a phone -- so the gallery read as one that
+         could not select at all. The chip stays; this is the gesture people
+         already try. */
+      let holdTimer=null,holdX=0,holdY=0;
+      const cancelHold=()=>{if(holdTimer)clearTimeout(holdTimer);holdTimer=null;};
+      b.addEventListener('pointerdown',e=>{
+        if(e.target.closest('.photo-card-actions'))return;
+        holdX=e.clientX;holdY=e.clientY;
+        cancelHold();
+        holdTimer=setTimeout(()=>{
+          holdTimer=null;
+          b.dataset.longpressed='1';       // so the click that follows is not a tap
+          const x=shown[+b.dataset.photo];
+          if(!selectMode)toggleSelectMode();
+          togglePhotoSelected(x.content_id||x.path,b);
+          if(navigator.vibrate)navigator.vibrate(12);
+          draw();
+        },450);
+      });
+      b.addEventListener('pointermove',e=>{
+        if(holdTimer&&Math.hypot(e.clientX-holdX,e.clientY-holdY)>10)cancelHold();
+      });
+      for(const done of ['pointerup','pointercancel','pointerleave'])b.addEventListener(done,cancelHold);
       b.onkeydown=e=>{
         if(e.key==='Enter'||e.key===' '){
           if(e.target.closest('.photo-card-actions'))return;

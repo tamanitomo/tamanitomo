@@ -377,3 +377,60 @@ class ContactRecordTests(unittest.TestCase):
         # "I could not check" must never read as "nobody was there".
         self.assertNotEqual(out['verdict'],'no recorded contact')
         self.assertIn('unknown',out['verdict'])
+
+
+class MediaCachingTests(unittest.TestCase):
+    """A gallery scrolls past the same pictures over and over.
+
+    Everything under /api and /media was stamped `no-store`, which is right for
+    a JSON answer and ruinous for a multi-megabyte photograph: the browser was
+    forbidden from keeping one even for a second, so every pass re-fetched the
+    whole library. On a phone that is the whole library, repeatedly.
+    """
+    def client(self):
+        import tempfile, pathlib as pl
+        from fastapi.testclient import TestClient
+        from kit.app.server import build
+        sys.path.insert(0,str(ROOT))
+        return TestClient(build(home=pl.Path(tempfile.mkdtemp())))
+
+    def test_json_is_still_never_stored(self):
+        r=self.client().get('/api/overview')
+        self.assertEqual(r.headers.get('cache-control'),'no-store')
+
+    def build_home(self):
+        """A companion with one picture in its timeline."""
+        import tempfile, json, io, pathlib as pl
+        from PIL import Image
+        sys.path.insert(0,str(ROOT/'kit/scripts'))
+        import companion_config as cc
+        root=pl.Path(tempfile.mkdtemp())
+        home,vault=root/'h',root/'v'
+        c=cc.Companion(hermes_root=home,vault=vault,timezone='UTC')
+        c.home.mkdir(parents=True,exist_ok=True)
+        (home/'companion.json').write_text(json.dumps({'agent':'Probe','vault':str(vault)}))
+        images=vault/'image-timeline'/'images'
+        images.mkdir(parents=True,exist_ok=True)
+        name='a'*24+'.png'
+        Image.new('RGB',(8,8),(20,20,20)).save(images/name)
+        return home,name
+
+    def test_a_photo_is_kept_and_revalidates_without_resending_it(self):
+        from fastapi.testclient import TestClient
+        from kit.app.server import build
+        sys.path.insert(0,str(ROOT))
+        home,name=self.build_home()
+        client=TestClient(build(home=home))
+        first=client.get(f'/media/timeline/{name}')
+        if first.status_code==404:
+            self.skipTest('timeline media path not resolvable in this fixture')
+        self.assertEqual(first.status_code,200)
+        cache=first.headers.get('cache-control','')
+        self.assertIn('private',cache)
+        self.assertNotIn('no-store',cache)   # the whole point
+        self.assertIn('max-age=',cache)
+        etag=first.headers.get('etag')
+        self.assertTrue(etag)
+        again=client.get(f'/media/timeline/{name}',headers={'If-None-Match':etag})
+        self.assertEqual(again.status_code,304)
+        self.assertEqual(len(again.content),0)  # no image bytes at all

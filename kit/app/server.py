@@ -56,7 +56,7 @@ def get_network_ips():
 def build(home=None,token='',state_dir=None):
     """Create a workspace; profile selection is local to each request."""
     from fastapi import Body, FastAPI, HTTPException, Request
-    from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
+    from fastapi.responses import FileResponse, JSONResponse, HTMLResponse, Response
     from fastapi.staticfiles import StaticFiles
 
     from .runtime import Runtime, Operations, app_directory
@@ -304,14 +304,34 @@ def build(home=None,token='',state_dir=None):
         from .content import life_moments
         return {'events':list(islice(life_moments(presence.events(c)),100))}
 
+    # How long a picture may be reused without asking. A rendered capture is
+    # written once and never edited in place -- a re-render lands under a new
+    # name -- so a day is safe and makes scrolling back through a library cost
+    # nothing at all.
+    MEDIA_MAX_AGE=86400
+
     @app.get('/media/timeline/{name}')
-    def media(name:str):
+    def media(name:str,request:Request):
         c=load()
         import companion_timeline as tl
         if not tl.IMAGE.fullmatch(name):raise HTTPException(404)
         path=tl.root(c)/'images'/name
         if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(c.data.resolve()):raise HTTPException(404)
-        return FileResponse(path)
+        # A gallery scrolls past the same pictures over and over, and these are
+        # multi-megabyte files. The middleware stamps `no-store` on everything
+        # under /api and /media, which forbids keeping them even briefly, so
+        # every pass re-fetched the whole library -- on a phone, repeatedly.
+        #
+        # They are private to this companion, so they stay out of shared caches,
+        # but this browser may hold them. The 304 is answered here: the version
+        # of Starlette in use sets an ETag and then serves the body anyway, so a
+        # revalidation cost exactly as much as having no cache at all.
+        stat=path.stat()
+        etag=f'"{int(stat.st_mtime)}-{stat.st_size}"'
+        headers={'Cache-Control':f'private, max-age={MEDIA_MAX_AGE}','ETag':etag}
+        if etag in [x.strip() for x in (request.headers.get('if-none-match') or '').split(',')]:
+            return Response(status_code=304,headers=headers)
+        return FileResponse(path,headers=headers)
 
     @app.post('/api/timeline/{capture}/keep')
     def keep(capture:str,album:str='Favorites'):

@@ -1,3 +1,12 @@
+## 3.0.3 — An empty day is allowed to be empty (2026-09-22)
+
+- Check the session record before writing about the person: `companion_life.py contact --day` reports how many of a day's sessions came from someone actually present rather than from a scheduled job, with their times and titles.
+- Require the daily journal to run that check before it attributes a single word, want or feeling to the human, and to say plainly that a day held no exchange when none is recorded.
+- Treat a session title as what it is — a summary written afterwards — and never as something the person said.
+- Report an unreadable or absent session record as unknown rather than as nobody having been there; the two are not the same and only one is safe to write from.
+- Count a dialogue between two companions as what it is, rather than as company.
+- Judge a presence record by the moment it describes instead of the moment it is validated, so the same pulse no longer passes before nine in the morning and fails at ten, and a job catching up is not measured against a day it was not writing about.
+
 ## 3.0.2 — What was missing, said out loud (2026-09-22)
 
 - Import a workflow from a picture made with custom nodes: read the weights and the sampler's numbers off the field names rather than a handful of stock class names, so a graph from a node pack is no longer called incomplete for being unfamiliar.
