@@ -1605,6 +1605,11 @@ workspaceHandlers['image-studio']=async()=>{
 
  /* Reading a workflow back out of a picture. What cannot be read is reported
     rather than guessed, and the result is saved either way. */
+ /* The file the person chose, kept so "their original" can be handed back from
+    the bytes they gave us rather than rebuilt out of what we understood. A URL
+    import has no local file and offers no download. */
+ let importSource=null;
+
  function showImportResult(result){
   const report=$('workflow-import-report');
   {
@@ -1633,8 +1638,15 @@ workspaceHandlers['image-studio']=async()=>{
        ${missing.length?`<button type="button" class="quiet" id="fetch-all-missing">Download all ${missing.length} missing</button>`:''}
      </div>`:''}
      ${(result.notes||[]).map(n=>`<p class="dim small">${esc(n)}</p>`).join('')}
+     ${result.adapted?`<p class="dim small"><strong>Rebuilt lane</strong> uses what they used — their
+       model, their LoRAs at their strengths, their sampler settings — wired into this kit's own
+       shape, so the prompt boxes and your companion's settings apply to it. <strong>As detected</strong>
+       is their graph unchanged, which only runs here if it uses nodes this ComfyUI has.</p>`
+       :result.adapted_error?`<p class="dim small">Cannot rebuild this into a kit lane: ${esc(result.adapted_error)}</p>`:''}
      <div class="studio-actions">
-       <button class="act" id="keep-imported">${result.preset.incomplete?'Save as a draft':'Add this workflow'}</button>
+       ${result.adapted?`<button class="act" id="keep-adapted">${result.adapted.incomplete?'Save rebuilt lane as a draft':'Add the rebuilt lane'}</button>`:''}
+       <button class="${result.adapted?'quiet':'act'}" id="keep-imported">${result.preset.incomplete?'Save as detected (draft)':'Add as detected'}</button>
+       ${importSource?'<button class="quiet" id="download-original">Download their original</button>':''}
        <button class="quiet" id="discard-imported">Discard</button>
      </div></div>`;
    for(const row of resources){
@@ -1655,18 +1667,40 @@ workspaceHandlers['image-studio']=async()=>{
    if($('fetch-all-missing'))$('fetch-all-missing').onclick=async()=>{
      for(const row of missing)await fetchOne(row);
    };
-   $('discard-imported').onclick=()=>{report.innerHTML='';$('workflow-import-file').value='';};
-   $('keep-imported').onclick=()=>{
+   $('discard-imported').onclick=()=>{report.innerHTML='';$('workflow-import-file').value='';importSource=null;};
+   const adopt=(preset,message)=>{
     readPreset();
-    const preset={...result.preset,id:'import-'+presetSuffix()};
-    settings.presets.push(preset);
+    const saved={...preset,id:'import-'+presetSuffix()};
+    settings.presets.push(saved);
     presetIndex=settings.presets.length-1;
-    report.innerHTML='';$('workflow-import-file').value='';
+    report.innerHTML='';$('workflow-import-file').value='';importSource=null;
     setWorkflowMode('edit');drawPreset();
-    notice(preset.incomplete
+    notice(message);
+   };
+   if($('keep-adapted'))$('keep-adapted').onclick=()=>adopt(result.adapted,
+     result.adapted.incomplete
+       ? 'Rebuilt lane saved as a draft. It needs the weights listed above before it will render.'
+       : 'Rebuilt into a kit lane. Test it, then assign it to a lane.');
+   if($('download-original'))$('download-original').onclick=async()=>{
+    const status=$('workflow-import-status');
+    status.textContent='Reading their workflow\u2026';
+    try{
+     const headers={'content-type':'application/octet-stream',
+                    'x-image-name':(importSource.name||'workflow').replace(/[^\w.\- ]/g,'')};
+     if(token){headers['x-tamanitomo-token']=token;headers['x-companion-token']=token;}
+     const response=await fetch(scoped('/api/images/import/original'),
+                                {method:'POST',headers,body:importSource});
+     if(!response.ok)throw Error((await response.json().catch(()=>({}))).detail||'No workflow in that image');
+     const name=(response.headers.get('content-disposition')||'').match(/filename="([^"]+)"/)?.[1]
+                ||'workflow.json';
+     const url=URL.createObjectURL(await response.blob()),a=document.createElement('a');
+     a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+     status.textContent='';
+    }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
+   };
+   $('keep-imported').onclick=()=>adopt(result.preset,result.preset.incomplete
       ? 'Saved as a draft. Choose a checkpoint before it can serve a lane.'
       : 'Workflow imported. Test it, then assign it to a lane.');
-   };
   }
  }
 
@@ -1679,6 +1713,7 @@ workspaceHandlers['image-studio']=async()=>{
 
  $('workflow-import-file').onchange=()=>{
   const file=$('workflow-import-file').files[0];if(!file)return;
+  importSource=file;
   runImport(async()=>{
    const headers={'content-type':'application/octet-stream','x-image-name':file.name.replace(/[^\w.\- ]/g,'')};
     if(token){
@@ -1690,7 +1725,10 @@ workspaceHandlers['image-studio']=async()=>{
    return response.json();
   });
  };
- $('workflow-import-go').onclick=()=>runImport(()=>post('/images/import-url',{url:$('workflow-import-url').value}));
+ $('workflow-import-go').onclick=()=>{
+  importSource=null;                       // a page is not a file we can hand back
+  runImport(()=>post('/images/import-url',{url:$('workflow-import-url').value}));
+ };
  $('workflow-import-url').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();$('workflow-import-go').click();}};
 
  const addComfyPreset=async()=>{readPreset();const p=await api('/images/modular-template');p.id='comfy-'+presetSuffix();settings.presets.push(p);presetIndex=settings.presets.length-1;drawPreset();showStudioView('presets');};

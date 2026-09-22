@@ -210,6 +210,17 @@ class ReliabilityTests(unittest.TestCase):
             self.skipTest('Node is needed for the content and feed regressions')
         subprocess.run([node, str(Path(__file__).with_name('test_content_ui.js'))], check=True)
 
+    def test_import_offers_all_three_outcomes(self):
+        """An imported picture yields their graph rebuilt into a kit lane, their
+        graph as detected, and their original file. Each button must save its
+        own thing, and a refusal to rebuild has to say why."""
+        import shutil
+        import subprocess
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('Node is needed for the workflow import regression')
+        subprocess.run([node, str(Path(__file__).with_name('test_import_ui.js'))], check=True)
+
     def test_model_licence_notice(self):
         """Weights carry their publisher's terms, which are independent of this
         project's licence. The downloader has to show them before fetching."""

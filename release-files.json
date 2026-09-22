@@ -218,6 +218,7 @@
   "tests/test_identity.py",
   "tests/test_identity_retrofit.py",
   "tests/test_image_import_gaps.py",
+  "tests/test_import_ui.js",
   "tests/test_installers.py",
   "tests/test_job_sensitivity.py",
   "tests/test_licence_ui.js",
