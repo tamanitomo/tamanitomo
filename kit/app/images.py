@@ -133,7 +133,11 @@ def register(app,select,load):
                     ' of its negative terms into the modesty bucket.')
         installed=set()
         try:
-            import companion_media as media
+            # No local import here: `media` is imported at module scope, and
+            # re-importing it inside this function made the name local to the
+            # whole of it -- so the sort_negative call further up, which runs
+            # first, raised UnboundLocalError and no workflow carrying a
+            # negative prompt could be imported at all.
             info=media.request_json(media.endpoint(preset['endpoint'])+'/object_info')
             for node in ('CheckpointLoaderSimple','LoraLoader','VAELoader','CLIPLoader'):
                 for spec in info.get(node,{}).get('input',{}).get('required',{}).values():
@@ -210,7 +214,6 @@ def register(app,select,load):
             cached=read_scan_cache(rt.root)
             if cached.get('models'):return {**cached,'cached':True}
         config=workflow_settings(rt.root)
-        import companion_media as media
         folders=[]
         try:
             listing=media.request_json(media.endpoint(config['endpoint'])+'/api/experiment/models')

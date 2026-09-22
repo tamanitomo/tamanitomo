@@ -1,4 +1,5 @@
 """Edge cases that used to take a worker, a plan or a disk down quietly."""
+import ast
 import datetime as dt
 import json
 import os
@@ -217,3 +218,53 @@ class ProviderResilienceTests(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
+
+class LocalImportShadowTests(unittest.TestCase):
+    """A function-local import binds its name for the WHOLE function.
+
+    `_settle_import` read `media` near the top and imported it again further
+    down. Python makes the name local to all of the function, so the earlier
+    read raised UnboundLocalError and no ComfyUI workflow carrying a negative
+    prompt could be imported at all. The shape is invisible on inspection and
+    only fires on the path that reaches the earlier line, so it is worth
+    checking for across the app rather than fixing the one instance.
+    """
+    NESTED=(ast.FunctionDef,ast.AsyncFunctionDef,ast.Lambda,ast.ClassDef)
+
+    def own_scope(self,func):
+        """Every node belonging to this function, not to one nested inside it."""
+        out=[]
+        def walk(node,top=False):
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child,self.NESTED) and not top:continue
+                out.append(child);walk(child)
+        for stmt in func.body:
+            out.append(stmt)
+            if not isinstance(stmt,self.NESTED):walk(stmt)
+        return out
+
+    def offenders(self,path):
+        tree=ast.parse(path.read_text(encoding='utf-8'))
+        bad=[]
+        for func in ast.walk(tree):
+            if not isinstance(func,(ast.FunctionDef,ast.AsyncFunctionDef)):continue
+            nodes=self.own_scope(func)
+            bound={}
+            for node in nodes:
+                if isinstance(node,(ast.Import,ast.ImportFrom)):
+                    for alias in node.names:
+                        bound.setdefault((alias.asname or alias.name).split('.')[0],node.lineno)
+            for node in nodes:
+                if not (isinstance(node,ast.Name) and isinstance(node.ctx,ast.Load)):continue
+                line=bound.get(node.id)
+                if line is not None and node.lineno<line:
+                    bad.append(f'{path.name}:{node.lineno} reads {node.id} before the local '
+                               f'import on line {line} (in {func.name})')
+        return bad
+
+    def test_no_function_reads_a_name_it_imports_further_down(self):
+        found=[]
+        for path in sorted((ROOT/'kit').rglob('*.py')):
+            found+=self.offenders(path)
+        self.assertEqual(found,[])
