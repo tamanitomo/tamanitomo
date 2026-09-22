@@ -1,3 +1,15 @@
+## 3.0.5 — Six pages that had stopped being read (2026-09-22)
+
+- Fold Creations into the Vault, which held the same files behind a second door: a Recent view that lists them newest first with a type filter and thumbnails, and a Folders view that is the tree and the reader. The old page laid every file out flat with no hierarchy and grew to a hundred and twenty-four thousand pixels of identical document icons; Recent is five thousand. The old route still answers, so an existing link lands somewhere sensible.
+- Give the Memories page the forty preferences she had written about herself, which the server had been sending and no screen had ever shown.
+- Join the questions she wants to ask you and the threads she is carrying into one list, instead of asking the same thing twice under two names on two different pages, and leave Plans and calendar to be about time.
+- Read a day on the Timeline as a day: her reflection leads it, the scenes follow in order, and the photographs sit inline at the hour they were taken rather than behind a button that says View photo.
+- Collapse a scene that was rewritten every few minutes into the span it actually covered, so one morning's shower stops being six identical rows — thirty-eight rows became twenty-six for a single day.
+- Page the long lists rather than printing all of them: facts, moments, files and days all arrive in batches now, with what remains offered rather than assumed.
+- Photograph the outside of an outfit rather than every layer of it. A record of jeans over briefs handed both to the image model, which drew the briefs riding out of the jeans — in every picture, because she is wearing underwear in every picture. A layer nothing covers is still described.
+- Let the picture viewer's top bar float over the photograph without a divider, and stop it crushing the back button on a narrow cover screen.
+- Keep bookmark, regenerate and the safety rating on the bar itself and put the rest behind the dots, and let the back arrow be an arrow instead of a button in a circle.
+
 ## 3.0.4 — Forwarding, and whose photograph this is (2026-09-22)
 
 - Forward whatever Hermes passes to the functions the streaming bridge wraps, so a chat turn no longer fails with `TypeError: run() got an unexpected keyword argument 'emitter'` on Hermes 0.21.3 while cron jobs carry on working. Reported, diagnosed and fixed by **erohtar** (#1).
