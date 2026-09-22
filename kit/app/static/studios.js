@@ -986,7 +986,7 @@ workspaceHandlers['image-studio']=async()=>{
   <div class="card workflow-mode-panel" id="workflow-import-panel" hidden>
    <h3>Import from an image</h3>
    <p class="dim">A picture rendered by ComfyUI carries its whole workflow. One downloaded from
-    <a href="https://civitai.com" target="_blank" rel="noopener">civitai.com</a> or civitai.red usually
+    <a href="https://civitai.com" target="_blank" rel="noopener">Civitai</a> usually
     carries its prompt and settings instead. Whatever is there gets read; whatever is not, you finish by hand.</p>
    <label class="import-url-row">
     <input id="workflow-import-url" type="url" placeholder="https://civitai.com/images/12345678" aria-label="Civitai image address">
