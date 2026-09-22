@@ -230,7 +230,19 @@ def build(c,payload=None,now=None,maintenance_notice=""):
 
     active_path=c.soul_dir/'ActiveContext.md'
     active=read(active_path)
+    # How old the present is, not how old the file is. The handoff is rebuilt on
+    # read, so its mtime is always a few milliseconds ago -- judging freshness by
+    # that would present a state nobody has confirmed since yesterday morning as
+    # though it were current, which is the one thing this label exists to stop.
     handoff_at=written_at(active_path,tz)
+    try:
+        import companion_presence
+        confirmed=companion_presence.last_confirmed(c)
+        if confirmed:
+            stamp=dt.datetime.fromisoformat(confirmed['recorded_at'])
+            handoff_at=stamp.astimezone(tz) if stamp.tzinfo else stamp.replace(tzinfo=tz)
+    except Exception:
+        pass
     age=elapsed_seconds(handoff_at,now)
     handoff_stale=age is None or age < -60 or age>=STALE_AFTER_HOURS*3600
     newest_episode=None
@@ -263,7 +275,7 @@ def build(c,payload=None,now=None,maintenance_notice=""):
     if b['handoff']:
         cur=section(active,'Right now',b['handoff'])
         if cur:
-            label=f'[Current handoff — last refreshed {age_phrase(handoff_at,now)}'
+            label=f'[Current handoff — the present it describes was confirmed {age_phrase(handoff_at,now)}'
             if handoff_stale:
                 label+=('. STALE: the file is old or its timestamp is unreliable, so treat it as a '
                         'past snapshot, not the present. Prefer the episode ledger for what happened '

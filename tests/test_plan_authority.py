@@ -458,3 +458,39 @@ class PresenceValidationTests(unittest.TestCase):
             self.presence.check(self.c, bad)
         with self.assertRaises(ValueError):
             self.presence.update(self.c, bad, self.now + dt.timedelta(minutes=30))
+
+
+class HandoffRendersOnReadTests(unittest.TestCase):
+    """The handoff is a rendering of files that already know the answer.
+
+    A scheduled job kept it fresh by writing its own presence episode every
+    quarter hour, which made it the fourth writer of a field that should have
+    one. Rebuilding it where it is read removes the writer and the job with it.
+    """
+
+    def test_the_advancer_is_no_longer_a_shipped_job(self):
+        manifest = json.loads((ROOT / 'kit/templates/cron/manifest.json').read_text(encoding='utf-8'))
+        keys = [j.get('key') for j in manifest['jobs']]
+        self.assertNotIn('present', keys, 'the present advancer is back as a job')
+
+    def test_every_presence_write_refreshes_the_handoff(self):
+        """Which is why the advancer's rendering job was never needed: the pulse,
+        the morning and the wind-down all go through update(), and it rebuilds."""
+        source = (ROOT / 'kit/scripts/companion_presence.py').read_text(encoding='utf-8')
+        body = source[source.index('def update(c,data'):source.index('def advance(')]
+        self.assertIn('companion_active.write', body)
+
+    def test_freshness_is_the_age_of_the_present_not_of_the_file(self):
+        source = (ROOT / 'kit/scripts/companion_context.py').read_text(encoding='utf-8')
+        block = source[source.index("handoff_at=written_at(active_path,tz)"):][:900]
+        self.assertIn('last_confirmed', block,
+                      'the label is measuring the file again, not the present')
+
+    def test_presence_now_has_one_writer_family(self):
+        """pulse, morning and wind-down are the same worker at three times."""
+        source = (ROOT / 'kit/scripts/companion_presence.py').read_text(encoding='utf-8')
+        self.assertIn('def advance(', source, 'advance() is still available for a manual run')
+        manifest = json.loads((ROOT / 'kit/templates/cron/manifest.json').read_text(encoding='utf-8'))
+        writers = [j['key'] for j in manifest['jobs']
+                   if j.get('key') in ('pulse', 'wake', 'winddown', 'present')]
+        self.assertEqual(sorted(writers), ['pulse', 'wake', 'winddown'])

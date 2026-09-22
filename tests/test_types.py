@@ -20,7 +20,10 @@ def jobs_for(kind):
 class JobSetTests(unittest.TestCase):
     def test_a_companion_gets_the_whole_life(self):
         keys=jobs_for('companion')
-        for key in ('pulse','autonomy','present','wake','winddown','sensors','checkin','quiet'):
+        # No 'present': the pulse, the morning and the wind-down all rebuild the
+        # handoff through presence.update, so a separate advancer was a fourth
+        # writer of one field and a job that rendered what was already rendered.
+        for key in ('pulse','autonomy','wake','winddown','sensors','checkin','quiet'):
             self.assertIn(key,keys)
 
     def test_a_colleague_grows_but_has_no_mornings(self):

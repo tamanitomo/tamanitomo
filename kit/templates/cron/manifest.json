@@ -147,26 +147,6 @@
    "sends": "Deletes old image files to stay inside the budget."
   },
   {
-   "key": "present",
-   "name": "{{AGENT}} present advancer",
-   "file": "present.md.tmpl",
-   "expr": "10-59/15 * * * *",
-   "toolsets": [],
-   "no_agent": true,
-   "script": {
-    "module": "companion_presence",
-    "args": [
-     "advance"
-    ]
-   },
-   "types": [
-    "companion",
-    "colleague"
-   ],
-   "sensitivity": "none",
-   "sends": "Repeats the last recorded state, marked unconfirmed. Invents nothing."
-  },
-  {
    "key": "watch",
    "name": "{{AGENT}} health watch",
    "file": "watch.md.tmpl",
