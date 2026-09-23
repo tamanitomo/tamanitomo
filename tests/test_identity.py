@@ -79,28 +79,28 @@ class SectionTests(unittest.TestCase):
     def test_every_section_is_findable_and_the_locked_ones_are_marked(self):
         found=identity.sections(self.c.soul.read_text())
         self.assertIn('core',found);self.assertIn('appearance',found)
-        self.assertEqual(identity.locked_names(self.c),['appearance','boundary'])
+        self.assertEqual(identity.locked_names(self.c),['appearance','being-herself','closeness','hard-lines','relationship'])
         self.assertFalse(found['core']['locked'])
 
     def test_replacing_one_section_leaves_every_other_byte_alone(self):
         before=self.c.soul.read_text()
-        identity.replace(self.c,'humor','She laughs at her own jokes first.')
+        identity.replace(self.c,'support','She laughs at her own jokes first.')
         after=self.c.soul.read_text()
         self.assertIn('She laughs at her own jokes first.',after)
         found_before=identity.sections(before);found_after=identity.sections(after)
         for name in found_before:
-            if name=='humor':continue
+            if name=='support':continue
             self.assertEqual(found_before[name]['body'],found_after[name]['body'],name)
 
     def test_a_hand_edited_soul_survives_a_re_render_of_one_section(self):
-        text=self.c.soul.read_text().replace('## Essence','## Essence\n\nI wrote this myself and it stays.')
+        text=self.c.soul.read_text().replace('## Who Nova is','## Who Nova is\n\nI wrote this myself and it stays.')
         self.c.soul.write_text(text,encoding='utf-8')
-        identity.replace(self.c,'humor',identity.render_section(self.c,'humor'))
+        identity.replace(self.c,'support',identity.render_section(self.c,'support'))
         self.assertIn('I wrote this myself and it stays.',self.c.soul.read_text())
 
     def test_markers_cannot_be_smuggled_into_a_section(self):
         with self.assertRaisesRegex(ValueError,'markers'):
-            identity.replace(self.c,'humor','<!-- COMPANION-SECTION:appearance -->')
+            identity.replace(self.c,'support','<!-- COMPANION-SECTION:appearance -->')
 
     def test_an_unknown_section_is_named_not_guessed(self):
         with self.assertRaisesRegex(ValueError,'no section'):
@@ -176,6 +176,6 @@ class StyleTests(unittest.TestCase):
         c=cc.Companion(agent='Nova',human='Alex')
         text=cr.render_template('SOUL.md.tmpl',
                                 cr.mapping_for(c,'warm','none',interview={'human_boundary':'No romance.'}))
-        section=identity.sections(text)['boundary']
+        section=identity.sections(text)['hard-lines']
         self.assertTrue(section['locked'])
         self.assertIn('No romance.',section['body'])

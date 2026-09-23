@@ -106,7 +106,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(self.client.post('/api/missions',json={'detail':'x'}).status_code,400)
 
     def test_an_identity_section_can_be_edited_by_the_person(self):
-        r=self.client.post('/api/identity/humor',json={'body':'Dry, and she never explains a joke.'})
+        r=self.client.post('/api/identity/support',json={'body':'Dry, and she never explains a joke.'})
         self.assertEqual(r.status_code,200)
         self.assertIn('never explains a joke',self.c.soul.read_text())
         self.assertEqual(self.client.post('/api/identity/nope',json={'body':'x'}).status_code,404)
@@ -114,7 +114,7 @@ class AppTests(unittest.TestCase):
     def test_the_locked_sections_are_marked_so_the_page_can_say_so(self):
         sections={s['name']:s for s in self.client.get('/api/identity').json()['sections']}
         self.assertTrue(sections['appearance']['locked'])
-        self.assertFalse(sections['humor']['locked'])
+        self.assertFalse(sections['support']['locked'])
 
     def test_a_token_is_enforced_on_the_api_when_one_is_set(self):
         from kit.app.server import build

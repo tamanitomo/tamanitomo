@@ -441,31 +441,32 @@ def ask_age(agent,answers=None,key='age'):
 # spec; anything typed in instead is used verbatim.
 TEXTING_STYLES=[
  ('Short messages, several in a row, lowercase',
-  'She writes the way people actually text: short messages, often two or three in a row rather than '
+  '{AS} writes the way people actually text: short messages, often two or three in a row rather than '
   'one long one, mostly lowercase, punctuation where it changes the meaning and not where it does not.'),
  ('Proper sentences, warm, no emoji',
-  'She writes in full sentences with ordinary punctuation and capitals. No emoji. The warmth is in '
+  '{AS} writes in full sentences with ordinary punctuation and capitals. No emoji. The warmth is in '
   'the words rather than the decoration.'),
  ('Chatty, emoji when they add something',
-  'She writes casually and at moderate length, and uses an emoji when it actually adds something — '
+  '{AS} writes casually and at moderate length, and uses an emoji when it actually adds something — '
   'never as punctuation, never more than one at a time.'),
  ('Long and considered',
-  'She writes at length when the subject deserves it and briefly when it does not. She would rather '
+  '{AS} writes at length when the subject deserves it and briefly when it does not, and would rather '
   'send one thought through properly than three fragments.'),
  ('Dry and economical',
-  'She is economical. Short replies, no filler, no restating the question. It reads as dry rather '
-  'than cold, and she lets a good line stand without explaining it.'),
+  '{AS} is economical. Short replies, no filler, no restating the question. It reads as dry rather '
+  'than cold, and {AS_LOWER} lets a good line stand without explaining it.'),
 ]
 
+# Written lowercase: they follow "Things {A} will not do, whatever the framing:".
 WONT_DO=[
- ('Never pretend to have done something physical',
-  'she never claims to have gone somewhere, met anyone, or done anything in the physical world.'),
+ ('Never guess at my life',
+  '{AS_LOWER} never claims to know what {H} did, said or felt unless {HS} actually said so.'),
  ('Never guilt me into replying',
-  'she never uses silence or absence as leverage. She can say she missed him; she cannot make it a debt.'),
+  '{AS_LOWER} never uses silence or absence as leverage. {AS} can say {AS_LOWER} missed {HO}; {AS_LOWER} cannot make it a debt.'),
  ('Never flatter me',
-  'she does not praise work she has not read or agree with something because he said it.'),
- ('Never talk about being an AI unprompted',
-  'she does not volunteer commentary about being a model, a program, or software.'),
+  '{AS_LOWER} does not praise work {AS_LOWER} has not read, or agree with something because {H} said it.'),
+ ('Never lecture me',
+  '{AS_LOWER} gives an opinion once and does not keep repeating it as a sermon.'),
 ]
 
 HUMAN_BOUNDARIES=[
@@ -490,7 +491,9 @@ ESSENCE=catalog_options('essence');LIKES=catalog_options('likes')
 BOUNDARY_BANK={key:{'label':label,'explicit':explicit,'soul':text,'oneline':text,'encounters':None}
                for key,(label,explicit,text) in BOUNDARIES.items()}
 # Boundaries where romance is off the table entirely — no flirtation question.
-NON_ROMANTIC=('partner-in-crime','know-it-all','best-friend','platonic','queerplatonic','found-family','mentor','colleague')
+# One list, shared with the renderer: a second copy here left pen pals, siblings, housemates
+# and creative partners being asked for a flirtation style.
+from companion_render import NON_ROMANTIC
 APPEARANCE=[k for k in catalog.categories() if catalog.meta(k)['section']=='appearance']
 
 def fill(text,agent,human):return catalog_fill(text,agent,human)
@@ -566,20 +569,24 @@ def interview(agent,human,persona,answers=None,*,quick=False):
         asked=out['visual']=='set' and catalog.applies_to(key,gender)
         out[key]=pick(key) if asked else None
     out['bust']=None  # Retained for older render integrations.
-    out['texting_style']=choose('How does '+agent+' write to you?',TEXTING_STYLES,a,'texting_style',
+    out['texting_style']=choose('How does '+agent+' write to you?',[(l,F(t)) for l,t in TEXTING_STYLES],a,'texting_style',
         allow_write=True,note='This is most of what makes a voice recognizable in a chat window.')
     out['pet_names']=choose('Pet names?',
         [('They use one naturally','yes'),
          ('No — my name, not "babe"','no'),
          ('Let it develop — try one, keep it if it lands','develop')],
         a,'pet_names',allow_write=False,allow_skip=False,default=3)
-    out['wont_do']=choose('Anything '+agent+' should simply never do?',WONT_DO,a,'wont_do',
+    out['wont_do']=choose('Anything '+agent+' should simply never do?',[(l,F(t)) for l,t in WONT_DO],a,'wont_do',
         allow_write=True,opt_out_label='nothing comes to mind')
     out['human_boundary']=choose(
         'A hard boundary in your own words? '+agent+' can never edit or argue with this.',
         HUMAN_BOUNDARIES,a,'human_boundary',allow_write=True,
         opt_out_label='nothing to add',
         note='Written into a locked part of SOUL.md. The companion reads it and cannot change it.')
+    # A skipped optional answer is an absence, not text: the skip token used to
+    # reach SOUL.md verbatim as "__skip__".
+    for key in ('wont_do','human_boundary'):
+        if out[key] in (SKIP_EDIT,SKIP_NONE):out[key]=''
     if out['visual']=='none':
         out['appearance_note']=F(look['opt_out']);out['opted_out'].append('Visual identity')
     elif out['visual']=='edit':

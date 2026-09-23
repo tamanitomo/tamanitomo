@@ -72,7 +72,7 @@ class ProposalTests(unittest.TestCase):
         body=vision.proposal(self.c,{'hair_color':'dark auburn hair','build':'slight build',
                                      'eyes':'grey eyes'})
         self.assertIn(f'Nova is a {self.c.current_age()}-year-old adult.',body)
-        self.assertIn('## Physical Description',body)
+        self.assertIn('## What Nova looks like',body)
         # Fixed order is the whole reason a likeness stays the same person.
         self.assertLess(body.index('grey eyes'),body.index('dark auburn hair'))
         self.assertLess(body.index('dark auburn hair'),body.index('slight build'))

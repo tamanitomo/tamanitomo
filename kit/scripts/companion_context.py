@@ -317,6 +317,13 @@ def build(c,payload=None,now=None,maintenance_notice=""):
         # Never fail silently: a corrupt ledger must be visible, not invisible.
         parts.append((6,'[Reflection ledgers unavailable this turn — they are not empty, they could not be read. Do not conclude you know nothing.]'))
 
+    # Her private notes: written by her, never shown in the app, read only here.
+    try:
+        import companion_soul
+        private=companion_soul.render_private(c,budget=max(600,b['facts']))
+        if private:parts.append((6,private))
+    except (OSError,ValueError,ImportError):pass
+
     try:
         import companion_notes
         if not b.get('standing') and companion_notes.standing(c):suppressed.add('standing instructions')

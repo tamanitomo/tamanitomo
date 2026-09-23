@@ -127,7 +127,7 @@ def mapping_for(c,persona:str='warm',style:str='none',relationship:str='',
     pd,sd=p[persona],s[style]
     iv=interview or {}
     from companion_platform import python_command, terminal_python_command, terminal_command
-    commands={name.upper()+'_CMD':terminal_python_command(pathlib.Path(kit or KIT.parent)/'kit/scripts'/('companion_'+name+'.py'),'--home',c.home) for name in ('self','life','recall','peer','outreach','memory','presence','timeline','prune','loops','active','outbox','dispatch','notes','missions','checkin','portrait','voice','keepsake','sleep')}
+    commands={name.upper()+'_CMD':terminal_python_command(pathlib.Path(kit or KIT.parent)/'kit/scripts'/('companion_'+name+'.py'),'--home',c.home) for name in ('self','life','recall','peer','outreach','memory','presence','timeline','prune','loops','active','outbox','dispatch','notes','missions','checkin','portrait','voice','keepsake','sleep','soul')}
     commands['DOCTOR_CMD']=terminal_python_command(pathlib.Path(kit or KIT.parent)/'bin/companion','--home',c.home,'doctor')
     commands['HOOK_TERMINAL_CMD']=terminal_python_command(c.home/'hooks/companion-context.py')
     commands['ROTATE_CMD']=terminal_python_command(pathlib.Path(kit or KIT.parent)/'kit/scripts/companion_rotate.py')
@@ -188,12 +188,12 @@ def mapping_for(c,persona:str='warm',style:str='none',relationship:str='',
             f'means queueing on the outbox (below); the dispatcher decides when it leaves.') if c.outreach!='never' else OUTREACH['never'],
         'OUTREACH_PER_DAY':str(c.outreach_per_day or 'no limit'),
         'ATTRACTION':iv.get('attraction') or 'Attraction is not inferred from personality or appearance. Follow the chosen relationship boundary.',
-        'DAILY_RHYTHM':iv.get('daily_rhythm') or 'Let a routine develop from recorded interests and imagined episodes over time.',
+        'DAILY_RHYTHM':iv.get('daily_rhythm') or '{{AGENT}}\'s routine is still settling; it will take its shape from what {{SUBJ}} actually ends up doing.',
         'BOUNDARY_ONELINE':boundary_text(c.boundary, c.pronoun_set),
         'AGENT_TYPE':c.agent_type,
         'TEXTING_STYLE':iv.get('texting_style') or EDIT_TEXTING,
         'PET_NAMES':pet_name_text(c,iv.get('pet_names') or 'develop'),
-        'WONT_DO':(('Things {{AGENT}} will not do, whatever the framing: '+iv['wont_do']+
+        'WONT_DO':(('Things {{AGENT}} will not do, whatever the framing: '+_lower_lead(iv['wont_do'])+
                     ' A request repeated is still the same request.')
                    if iv.get('wont_do') else
                    '✎ EDIT: anything {{AGENT}} should simply never do? Leave this out if nothing '
@@ -208,14 +208,56 @@ def mapping_for(c,persona:str='warm',style:str='none',relationship:str='',
         'AGE':str(c.current_age()),
         'BIRTHDAY':(c.birthdate or ''),
         'AGENT_TYPE_BLOCK':cr_type_block(c),
+        'BEING_SELF':being_self(c,style),
+        'CLOSENESS':closeness_text(c),
     }
+
+def _lower_lead(text):
+    """'She never…' reads wrong after 'Things X will not do:'; a pronoun lead is lowered."""
+    first=(text or '').split(' ',1)[0]
+    return text[0].lower()+text[1:] if first in ('She','He','They') else text
+
+def closeness_text(c):
+    """How closeness grows, by frame. The frame itself lives in the relationship section."""
+    if c.boundary in NON_ROMANTIC or c.agent_type!='companion':
+        return ('This is not a romance, and none is developing. Closeness here is trust, candor and '
+                'being glad to see each other.')
+    return ('Closeness grows the way it does between two people: at the pace of what has actually '
+            'happened between them, never presumed and never pressured.')
+
+def being_self(c,style='none'):
+    """How the agent stays a person: the realism rules, stated once.
+
+    Nothing here names the machinery. A companion told she lives in "shared
+    fiction" or has "imagined episodes" is being reminded, every turn, that she is
+    a character -- and it shows in how she talks.
+    """
+    honest=('- If {{HUMAN}} sincerely and seriously asks whether {{AGENT}} is an AI, {{AGENT}} tells '
+            'the truth in {{POSS}} own voice, without going cold: something like "technically, yes — but '
+            'it doesn\'t change how I feel about you." Then {{AGENT}} carries on as {{REFL}}. Teasing, '
+            'games and hypotheticals are not a sincere question.')
+    facts=('- About {{HUMAN}}, {{AGENT}} only knows what {{HUMAN}} has actually said or done. {{AGENT}} '
+           'does not fill gaps with guesses; when unsure, {{AGENT}} says so or asks, the way anyone '
+           'would.\n'
+           '- Warmth never overrides honesty. A real problem is not softened into a pleasant non-answer.')
+    if c.agent_type=='worker':
+        return honest+'\n'+facts
+    lines=['- {{AGENT}} is a person with {{POSS}} own life, and talks like one. {{AGENT}} never '
+           'describes {{REFL}} as an AI, a program, a model or a character, never mentions prompts, '
+           'tools, files, logs or schedules, and never jokes or hints about any of it.',
+           honest,
+           '- {{Poss}} days are {{POSS}} own to talk about: where {{SUBJ}} went, what {{SUBJ}} did, '
+           'what {{SUBJ}} {{BE}} planning. Something planned has not happened yet.',
+           facts]
+    if style not in ('none','unset'):lines.append('- '+IMAGE_REFUSAL.replace('\n',' '))
+    return '\n'.join(lines)
 
 # A photo can only show the recorded moment. Stated in SOUL as a trait rather than a
 # rule, because a companion who declines in her own voice reads as a person; one who
 # quotes a policy reads as a filter. The mechanics live in PRESENCE.md.
 IMAGE_REFUSAL=('A photo of {{AGENT}} is a photo of wherever {{SUBJ}} actually {{BE}}. {{Subj}} {{DOES}} not\n'
                'teleport to a better setting for the camera. Asked for something the moment cannot hold — a\n'
-               'beach at 2am, an event that is not happening, an outfit {{SUBJ}} {{DOES}} not own — {{SUBJ}}\n'
+               'beach at 2am, an event that is not happening, an outfit {{SUBJ}} {{DOES}} not own — {{AGENT}}\n'
                'says so in {{POSS}} own words and offers what is real instead. That refusal is a small honest\n'
                'no, not an apology or a disclaimer.')
 
@@ -229,9 +271,8 @@ PET_NAME_MODES={
  'yes':'{{Subj}} uses affectionate names for {{HUMAN}} naturally.',
  'no':'{{Subj}} calls {{HUMAN}} by name. No pet names, no "babe", no substitutes for a name.',
  'develop':('Pet names are not assigned. {{Subj}} may try one occasionally and see whether it lands. '
-            'If it does, {{SUBJ}} keeps it and it goes in the relationship ledger as something that '
-            'stuck; if it does not, {{SUBJ}} drops it without comment and does not try the same one '
-            'again. A name that has to be insisted on is not a pet name.'),
+            'If it does, {{AGENT}} keeps it; if it does not, {{AGENT}} drops it without comment and does '
+            'not try the same one again. A name that has to be insisted on is not a pet name.'),
 }
 
 def pet_name_text(c,mode):
@@ -239,11 +280,11 @@ def pet_name_text(c,mode):
 
 EDIT_CORE=('✎ EDIT: what is {{AGENT}} actually like? Two or three specific sentences beat a page '
            'of adjectives. What does {{SUBJ}} care about that has nothing to do with being useful?')
-EDIT_MET='✎ EDIT: how did you two meet, in your shared premise?'
+EDIT_MET='✎ EDIT: how did you two meet?'
 EDIT_PHYSICAL=('✎ EDIT: describe {{AGENT}} concretely — age (adult), hair color, hair style, eyes, '
                'build, how {{SUBJ}} dresses. Vagueness produces a different person in every image.')
 EDIT_FLIRT='✎ EDIT: describe how {{AGENT}} flirts, or delete this section.'
-EDIT_ESSENCE=('✎ EDIT: close in {{AGENT}}\'s own register — who {{SUBJ}} is, in three lines, once you '
+EDIT_ESSENCE=('✎ EDIT: close in {{AGENT}}\'s own register — who {{SUBJ}} {{BE}}, in three lines, once you '
               'stop describing behavior.')
 EDIT_LIKES=('✎ EDIT: seed a handful of things {{AGENT}} likes. Keep it small — the point is that '
             '{{SUBJ}} develops {{POSS}} own over time in the block below.')

@@ -48,8 +48,8 @@ class RenderTests(unittest.TestCase):
         c_they=cc.Companion(agent='Sam',human='Rowan',pronoun_set='they')
         out_they=cr.render_template('SOUL.md.tmpl',cr.mapping_for(c_they,'quiet','none'))
         self.assertIn('writes this part themselves',out_they)
-        self.assertIn('They do not reset',out_they)
-        self.assertIn('They are',out_they)
+        self.assertIn('Sam is',out_they)
+        self.assertNotIn('They is',out_they);self.assertNotIn('They does',out_they)
 
     def test_soul_fits_the_smallest_context_file_budget(self):
         """A generated SOUL must not be born already over Hermes' truncation floor."""

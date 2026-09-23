@@ -396,7 +396,8 @@ def register(app, select, load, operations):
         import companion_catalog as catalog
         from zoneinfo import available_timezones
         return {'timezones':sorted(available_timezones()),'personas':render.load_personas(),'image_styles':render.load_styles(),
-                'boundaries':{k:{'label':v['label'],'description':v['oneline']} for k,v in wizard.BOUNDARY_BANK.items()},
+                'boundaries':{k:{'label':v['label'],'description':v['oneline'].replace('{H}’s','your').replace('{H}','you')
+                                  .replace('{A}','they').replace('{AS_LOWER}','they')} for k,v in wizard.BOUNDARY_BANK.items()},
                 'catalog':catalog.load(),'answer_keys':sorted(__import__('kit.cli.questions',fromlist=['known_answer_keys']).known_answer_keys())}
 
     @app.post('/api/onboarding/schedule')

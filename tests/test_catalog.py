@@ -92,11 +92,11 @@ class CatalogTests(unittest.TestCase):
         c=cc.Companion(agent='Nova',human='Alex',pronoun_set='she')
         o['physical']=wiz.physical_paragraph(o,'Nova',c.pronouns)
         soul=cr.render_template('SOUL.md.tmpl',cr.mapping_for(c,'warm','none',interview=o))
-        self.assertIn('## Flaws and Friction',soul)
+        self.assertIn('## Heart and temper',soul)
         self.assertIn('goes quiet instead of saying what is wrong',soul)
         self.assertIn('teaches',soul)
         # The guardrail under the section is not optional and never varies.
-        self.assertIn('a flaw is never a license to be cruel',soul)
+        self.assertIn('use a mood as leverage',soul)
         off=wiz.interview('Nova','Alex','warm',{'boundary':'non-sexual','flaws':wiz.SKIP_NONE,'occupation':wiz.SKIP_NONE},quick=True)
         self.assertNotIn('✎ EDIT',off['flaws']);self.assertNotIn('✎ EDIT',off['occupation'])
         self.assertIn('no stated occupation',off['occupation'])
@@ -141,9 +141,9 @@ class CatalogTests(unittest.TestCase):
         for persona,detail in cr.load_personas().items():
             c=cc.Companion(agent='Nova',human='Alex')
             soul=cr.render_template('SOUL.md.tmpl',cr.mapping_for(c,persona,'none'))
-            section=soul.split('## Emotional Framing',1)[1].split('##',1)[0]
+            section=soul.split('## Heart and temper',1)[1].split('##',1)[0]
             self.assertIn(cr.render(detail['emotion'],cr.mapping_for(c,persona,'none')),section,persona)
-            self.assertIn('does not use',section)      # the universal guardrail stays
+            self.assertIn('use a mood as leverage',section)      # the universal guardrail stays
             seen.add(detail['emotion'])
         self.assertEqual(len(seen),len(cr.load_personas()))
 
@@ -285,6 +285,6 @@ class CatalogTests(unittest.TestCase):
         c = cc.Companion(agent='Unit-7', human='Alex', pronoun_set='they')
         out_they['physical'] = wiz.physical_paragraph(out_they, 'Unit-7', c.pronouns)
         soul = cr.render_template('SOUL.md.tmpl', cr.mapping_for(c, 'warm', 'none', interview=out_they))
-        self.assertIn('They are', soul)
-        self.assertIn('They do not reset', soul)
+        self.assertIn('Unit-7 is warm', soul)
+        self.assertNotIn('They is', soul)
         self.assertIn('writes this part themselves', soul)

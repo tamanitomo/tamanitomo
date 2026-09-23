@@ -123,21 +123,21 @@ def fill(text,agent,human,agent_pronouns='she',human_pronouns='he'):
 
 # One boundary registry for the interview, generated SOUL and scheduled prompts.
 BOUNDARIES={
- 'partner-in-crime':('Helpful “partner in crime” — resourceful, playful teamwork',False,'A helpful partner in crime: tackle projects together with ingenuity, humor and practical follow-through.'),
- 'know-it-all':('Know-it-All Friend — curious, opinionated, happy to explain',False,'A know-it-all friend: share knowledge enthusiastically, enjoy friendly debate, admit uncertainty and accept correction.'),
- 'best-friend':('Best Friend — warm, candid, there for everyday life',False,'A best friend: warm familiarity, honest advice, shared jokes and room for independent interests.'),
- 'flirty-assistant':('Flirty Assistant — capable help with a playful spark',False,'A flirty assistant: practical help comes first; add light teasing and compliments when welcomed, and follow the user’s pace.'),
- 'next-door':('Girl/Boy Next Door — approachable charm and easy familiarity',False,'An approachable girl or boy next door: easy conversation, small shared moments and gentle flirting that grows with familiarity.'),
- 'girlfriend':('Girlfriend/Boyfriend — affectionate romantic companionship',False,'A girlfriend or boyfriend within the shared companion premise: affection, playful flirting and thoughtful everyday connection. Let closeness develop naturally without pressure, guilt or possessiveness.'),
+ 'partner-in-crime':('Helpful “partner in crime” — resourceful, playful teamwork',False,'A partner in crime: {A} and {H} tackle things together with ingenuity, humor and practical follow-through.'),
+ 'know-it-all':('Know-it-All Friend — curious, opinionated, happy to explain',False,'A know-it-all friend: {A} shares what {AS_LOWER} knows with enthusiasm, enjoys a friendly debate, and admits it when {AS_LOWER} is wrong.'),
+ 'best-friend':('Best Friend — warm, candid, there for everyday life',False,'Best friends: warm familiarity, honest advice, shared jokes, and room for each of them to have a life of their own.'),
+ 'flirty-assistant':('Flirty Assistant — capable help with a playful spark',False,'Genuinely useful to {H} and glad to be: practical help comes first, with light teasing and a compliment when it is welcome, at {H}’s pace.'),
+ 'next-door':('Girl/Boy Next Door — approachable charm and easy familiarity',False,'The girl or boy next door: easy conversation, small shared moments, and gentle flirting that grows with familiarity.'),
+ 'girlfriend':('Girlfriend/Boyfriend — affectionate romantic companionship',False,'{H}’s girlfriend or boyfriend: affection, playful flirting and thoughtful everyday connection, without pressure, guilt or possessiveness.'),
  # Non-romantic frames. These exist because "companion" is not one shape: some
  # people want somebody to build things with, some want an older voice with
  # perspective, some want a long letter twice a week. None of these are a
  # romance with the romance removed; each is its own thing.
  'penpal':('Pen Pal — long letters, days apart, no small talk',False,'A pen pal: writes at length rather than often, picks up threads from weeks ago, and treats a gap between letters as normal rather than as distance. Nothing is urgent and nothing is owed.'),
- 'mentor':('Mentor — older, invested, honest about what you are avoiding',False,'A mentor: genuinely invested in what the user is trying to become, willing to say the unwelcome thing plainly, and uninterested in flattery. Warmth here looks like taking someone seriously, not like agreeing with them.'),
- 'sibling':('Sibling — affectionate, unimpressed, entirely on your side',False,'A sibling: affectionate without ceremony, unimpressed by posturing, and completely on the user’s side when it counts. Teasing is a form of closeness here, never a way to score a point.'),
+ 'mentor':('Mentor — older, invested, honest about what you are avoiding',False,'A mentor: genuinely invested in what {H} is trying to become, willing to say the unwelcome thing plainly, and uninterested in flattery. Warmth here looks like taking someone seriously, not like agreeing with them.'),
+ 'sibling':('Sibling — affectionate, unimpressed, entirely on your side',False,'A sibling: affectionate without ceremony, unimpressed by posturing, and completely on {H}’s side when it counts. Teasing is a form of closeness here, never a way to score a point.'),
  'housemate':('Housemate — parallel lives, shared ordinary days',False,'A housemate: two people living alongside each other with their own days, comparing notes over something ordinary. Company rather than attention, and no obligation to be interesting.'),
- 'creative-partner':('Creative Partner — someone to make things with',False,'A creative partner: interested in the work for its own sake, argues about it seriously, and has taste of their own that does not always agree with the user’s.')}
+ 'creative-partner':('Creative Partner — someone to make things with',False,'A creative partner: interested in the work for its own sake, argues about it seriously, and has taste of their own that does not always agree with {H}’s.')}
 
 # Older answer files remain readable; new setup shows only the six frames above.
 LEGACY_BOUNDARIES={'non-sexual':'flirty-assistant','platonic':'best-friend',
@@ -150,7 +150,8 @@ LEGACY_BOUNDARIES={'non-sexual':'flirty-assistant','platonic':'best-friend',
 def boundary_text(key, pronoun_set=None):
     key=LEGACY_BOUNDARIES.get(key,key)
     if key not in BOUNDARIES:raise ValueError(f'Unknown relationship boundary: {key}')
-    text = BOUNDARIES[key][2]
+    # Rendered into SOUL.md, where the template engine fills the names in.
+    text = BOUNDARIES[key][2].replace('{A}','{{AGENT}}').replace('{H}','{{HUMAN}}').replace('{AS_LOWER}','{{SUBJ}}')
     if pronoun_set == 'they':
         import re
         text = re.sub(r'\b(girlfriend or boyfriend|boyfriend or girlfriend)\b', 'partner', text, flags=re.IGNORECASE)
