@@ -115,18 +115,23 @@ def cmd_doctor(args):
             if not n or n>b['total']:ok=False
             cap=vault_index.budget_chars(c)
             if cap:print(f'  vault map: {len(index):,} chars per session (budget {cap:,})')
+            import yaml
+            from .scaffold import SPILL_MARGIN,_runs_hook,_registered
+            config=yaml.safe_load((c.home/'config.yaml').read_text(encoding='utf-8')) or {}
+            registered=(config.get('hooks') or {}).get('pre_llm_call') or []
+            # The command that is actually registered, whatever Python runs the doctor:
+            # judging against this interpreter's command called a healthy hook
+            # unregistered and unconsented whenever the doctor ran under another one.
+            expected=_registered(registered,hook,cp.python_command(hook))
+            if not any(isinstance(h,dict) and _runs_hook(h.get('command',''),hook) for h in registered):
+                print('  ! continuity hook is not registered');ok=False
             approvals=c.home/'shell-hooks-allowlist.json'
             allowed=json.loads(approvals.read_text(encoding='utf-8')).get('approvals',[]) if approvals.exists() else []
-            if not any(e.get('event')=='pre_llm_call' and e.get('command')==cp.python_command(hook) for e in allowed):
+            if config.get('hooks_auto_accept') is not True and \
+                    not any(e.get('event')=='pre_llm_call' and e.get('command')==expected for e in allowed):
                 print('  ! hook consent missing; approve it in an interactive Hermes chat before unattended use')
                 target='' if c.is_root else f'-p {c.profile} '
                 print(f"    unattended: hermes {target}chat -q 'hello' --oneshot --accept-hooks");ok=False
-            import yaml
-            config=yaml.safe_load((c.home/'config.yaml').read_text(encoding='utf-8')) or {}
-            registered=(config.get('hooks') or {}).get('pre_llm_call') or []
-            if not any(isinstance(h,dict) and h.get('command')==cp.python_command(hook) for h in registered):
-                print('  ! continuity hook is not registered');ok=False
-            from .scaffold import SPILL_MARGIN,_runs_hook
             copies=sum(1 for h in registered if isinstance(h,dict) and _runs_hook(h.get('command',''),hook))
             if copies>1:
                 print(f'  ! continuity hook registered {copies} times; every turn carries it {copies} times. '
