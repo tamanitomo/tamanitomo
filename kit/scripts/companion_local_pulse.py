@@ -34,6 +34,9 @@ def schema(wardrobe,care_enabled=False,themes=None):
                       'items':{'type':'string','enum':[item['id'] for item in wardrobe]+['nude','undressed','bathing','towel']}}
     for key,limit in [('care',10),('wants',5)]:
         fields[key]={'type':'array','maxItems':limit,'items':text(160)}
+    # Code-owned facts about the moment, stated rather than read out of the prose.
+    fields['setting']={'type':'string','enum':['private','public']}
+    fields['private']={'type':'boolean'}
     fields.update(day.schema_fields())
     # Tomorrow is stated, never inferred. The theme is an enum of the day-shapes
     # this companion actually has, so the only themes she can pick are ones that
@@ -121,7 +124,10 @@ def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
             'and private stance. Select outfit IDs from the supplied wardrobe. Explain any transition. '
             'This record is local only: no messages, bookings, tools or external actions happen here. '
             'Use concise descriptions within the schema limits. Existing facts take precedence over '
-            'examples in the personality. Clothing can change for a believable reason.')
+            'examples in the personality. Clothing can change for a believable reason. '
+            'setting is "private" where nobody can see you (home, a changing room) and "public" '
+            'anywhere you could be seen. private is true only for a moment you would not want '
+            'photographed at all.')
     system+='\n'+day.GUIDANCE
     if phase=='morning':system+=' This is the morning checkpoint: reflect waking, rest and the start of the day. If already awake, continue coherently; do not rewind to bed.'
     elif phase=='winddown':system+=' This is the bedtime checkpoint: reflect how the day ends and preparations for rest, without inventing resolved feelings or finished commitments. Author your loose intended plan for tomorrow in next (e.g. walking along the beach and lunch at the pier, going to the library to research cooking ramen, shopping to surprise your human, or taking a slow rest day).'

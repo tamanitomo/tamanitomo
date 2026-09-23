@@ -1,3 +1,20 @@
+## 3.0.12 — What she sends, when she wakes, what she keeps (2026-09-23)
+
+- Deliver the health watch's alert. Kit jobs are created to keep their output local, which Hermes treats as "deliver nowhere", so the watch recorded an alert as sent and then kept quiet about it for six hours while nobody had seen it. It now sends through the companion's own channel, waits out quiet hours, and only counts an alert as given once it was delivered. Looking with `--json` no longer counts as having told anyone.
+- Decide what a companion may send in one place. The settings say you are willing; closeness, trust and any step back in the relationship now decide too, for every picture she makes, every review verdict and every delivery. A verdict recorded earlier is checked again when the picture would actually leave, including when pre-delivery review is off.
+- Record what each piece of clothing covers (`covers`: top, bottom, full or none). The starter closet states it, new pieces must, and older pieces fall back by category. Socks, shoes, a cardigan or a top on their own no longer count as being dressed, and the camera describes what is really worn.
+- Keep a moment she marks private out of the camera, always. What she has on is now read from the outfit rather than stored as if she had asked for privacy, so the two can no longer be confused.
+- Add a `setting` field (`private` or `public`) to presence updates. It carries forward while she stays put and must be given again after a move; the rules about what she may wear where read it instead of guessing from the location's words, which counted "Home Depot" as home. The words are used only to ask about a record that contradicts itself.
+- Run the morning routine when her declared morning arrives. It looks every quarter hour around the end of quiet hours and a fingerprint lets it run once, at the time she declared at wind-down, or just after quiet hours with no declaration.
+- Queue from `companion_outreach.py send` instead of delivering, and stop teaching a direct send in the prompts. A thought that was both queued and sent arrived twice.
+- Stop opening the Closet from switching on the clothing-care routine, and start a newly enabled routine with only the last two days' clothes in the hamper.
+- Clear only the conversations a check-in was started for, so one that ends while it runs is still reflected on.
+- Record a keepsake as shared only when it was queued; photos set to ask are offered in words.
+- Review a picture before claiming the day's message slot, and let a dry run of the dispatcher decide without claiming one.
+- Count what is waiting in the outbox for the autonomy fingerprint, not every message ever queued.
+- Leave the root companion's own folders off a profile's vault map.
+- Teach file-based recording in the per-turn lookup hints, matching the scheduled jobs.
+
 ## 3.0.11 — Updates on the phone stay fixed (2026-09-23)
 
 - Keep `hermes update` from trying to build nemo-relay on the phone. 3.0.10 left it out of the first install, but an update resolves Hermes's dependencies again and would have hit the same failure. The installer now writes an override that uv honours, exports it in the shell and in both background services, and installs uv so Hermes updates through it. An update may report one package as missing; that is this package, and the update still completes.

@@ -86,20 +86,24 @@ class WardrobeIsReadFromTheRecordTests(unittest.TestCase):
 
 
 class PublicIsAPlaceNotAWordTests(unittest.TestCase):
-    def test_her_own_home_stays_private_whatever_she_is_doing(self):
-        for location, activity in (('the spare room', 'working from home'),
-                                   ('my home office', 'answering email'),
-                                   ('the bedroom', 'doing homework'),
-                                   ('the bedroom', 'texting friends'),
-                                   ('the kitchen', 'making lunch'),
-                                   ('the bathroom', 'showering after a walk')):
-            with self.subTest(location=location, activity=activity):
-                self.assertFalse(presence.in_public(location, activity))
-
-    def test_actually_being_out_is_still_public(self):
-        for location in ('the office', 'the park', 'the mall', 'the library', 'a cafe', 'the train'):
+    """Public is a field she declares. The words of the location never decide it."""
+    def test_the_declaration_decides_whatever_the_words_say(self):
+        for location in ('the Home Depot', 'a public bathroom at the mall', 'my home office',
+                         'the bedroom', 'the office'):
             with self.subTest(location=location):
-                self.assertTrue(presence.in_public(location, 'out and about'))
+                self.assertTrue(presence.in_public({'location': location, 'setting': 'public'}))
+                self.assertFalse(presence.in_public({'location': location, 'setting': 'private'}))
+                # Undeclared is not public -- and, separately, never counts as private.
+                self.assertFalse(presence.in_public({'location': location}))
+
+    def test_words_only_flag_an_obvious_contradiction(self):
+        for location in ('the park', 'the mall', 'a cafe', 'the train'):
+            with self.subTest(location=location):
+                self.assertTrue(presence.reads_public(location))
+        # "carpool" is not a pool, and a changing room at the mall is the private part of it.
+        for location in ('stuck in the carpool lane', 'a changing room at the mall', 'the bedroom'):
+            with self.subTest(location=location):
+                self.assertFalse(presence.reads_public(location))
 
     def test_changing_in_private_is_allowed_and_in_public_is_not(self):
         tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
@@ -110,12 +114,20 @@ class PublicIsAPlaceNotAWordTests(unittest.TestCase):
                                       'category': 'underwear'}])
         now = dt.datetime(2026, 9, 21, 10, tzinfo=UTC)
         base_row = {'previous_id': None, 'outfit': ['bra'], 'mood': 'fine', 'text': 'x'}
-        presence.update(c, {**base_row, 'location': 'the bedroom', 'activity': 'texting friends'}, now)
+        presence.update(c, {**base_row, 'location': 'the bedroom', 'activity': 'texting friends',
+                            'setting': 'private'}, now)
         previous = presence.current(c)
+        self.assertEqual(previous['state']['setting'], 'private')
+        moved = {**base_row, 'previous_id': previous['id'], 'location': 'the library',
+                 'activity': 'reading', 'transition': 'Went out.'}
         with self.assertRaisesRegex(ValueError, 'private setting'):
-            presence.update(c, {**base_row, 'previous_id': previous['id'], 'location': 'the library',
-                                'activity': 'reading', 'transition': 'Went out.'},
-                            now + dt.timedelta(minutes=30))
+            presence.update(c, {**moved, 'setting': 'public'}, now + dt.timedelta(minutes=30))
+        # Moving on without saying where she is now does not inherit "private".
+        with self.assertRaisesRegex(ValueError, 'say where you are'):
+            presence.update(c, moved, now + dt.timedelta(minutes=30))
+        # A declaration that contradicts a plainly public place is asked about.
+        with self.assertRaisesRegex(ValueError, 'reads as a public place'):
+            presence.update(c, {**moved, 'setting': 'private'}, now + dt.timedelta(minutes=30))
 
 
 if __name__ == '__main__':

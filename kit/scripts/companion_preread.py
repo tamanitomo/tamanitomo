@@ -120,12 +120,13 @@ def fingerprint(c,now=None):
         for path in sorted(folder.glob('*.md')):
             try:ambient.append(path.name+':'+_digest(path.read_text(encoding='utf-8')))
             except OSError:continue
-    outbox=c.life/'outbox.jsonl'
-    queued=0
-    if outbox.exists():
-        try:queued=sum(1 for line in outbox.read_text(encoding='utf-8').splitlines()
-                       if line.strip() and json.loads(line).get('status')=='queued')
-        except ValueError:queued=-1
+    # What is waiting NOW, from the fold. Counting raw rows counted every message ever
+    # queued -- decisions are separate rows -- so the number only ever grew, and a
+    # message that was sent or held back never changed the fingerprint.
+    try:
+        import companion_outbox
+        queued=len(companion_outbox.waiting(c,now))
+    except (OSError,ValueError):queued=-1
     bucket=now.strftime('%Y-%m-%d')+f'#{now.hour//BUCKET_HOURS}'
     try:
         import companion_missions

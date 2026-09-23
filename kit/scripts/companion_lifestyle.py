@@ -8,6 +8,10 @@ import json
 from zoneinfo import ZoneInfo
 
 CATEGORIES=('day','active','sleep','underwear','outerwear','footwear')
+# What a piece covers, stated rather than guessed from its description: a top, a
+# bottom, both (a dress, a pyjama set, a swimsuit), or nothing that hides the hips
+# (underwear, socks, shoes).
+COVERS=('top','bottom','full','none')
 # Long enough for any real shower, short enough that an evening cannot be spent in one.
 MAX_BATH_MINUTES=40
 GUIDANCE='''EVERYDAY LIFE: Follow the routine anchors, including meals, getting ready, interests,
@@ -46,7 +50,8 @@ shower within two hours before changing into pajamas. Record care honestly withi
 with brief care/text explaining what happened; do not copy actions from a previous tick.
 The final outfit follows the ordered care actions. A shower/teeth/laundry action needs elapsed time.
 On an available shopping opportunity, optionally choose up to three new pieces for your own tastes,
-season or a wardrobe gap: supply wardrobe_additions [{id,description,use,category,condition:"clean"}]
+season or a wardrobe gap: supply wardrobe_additions [{id,description,use,category,covers,condition:"clean"}]
+(covers is top, bottom, full for a dress/set/swimsuit, or none for underwear, socks and shoes)
 and a shop action. It is a fictional acquisition, no purchases, web checkout or messages.
 Never invent completed care to satisfy validation. If not ready, keep current clothes and do the
 missing routine step. When a piece reaches its 24-hour limit and there is not enough elapsed time
@@ -70,8 +75,9 @@ def schema_fields():
         'description':{'type':'string','minLength':1,'maxLength':500},
         'use':{'type':'string','minLength':1,'maxLength':160},
         'category':{'type':'string','enum':list(CATEGORIES)},
+        'covers':{'type':'string','enum':list(COVERS)},
         'condition':{'type':'string','enum':['clean']}},
-        'required':['id','description','use','category','condition'],'additionalProperties':False}
+        'required':['id','description','use','category','covers','condition'],'additionalProperties':False}
     action={'type':'object','properties':{
         'kind':{'type':'string','enum':['brush_teeth','shower','laundry_start','laundry_finish','shop']},
         'items':{'type':'array','maxItems':40,'items':{'type':'string','minLength':1,'maxLength':80}}},
@@ -178,8 +184,8 @@ def evolve(c,data,outfit,previous,closet,now):
         for i in entering:
             status=result['clothes'].get(i,'clean')
             if status in ('dirty','washing'):raise ValueError(f'CARE: {i} needs completed laundry before re-wearing')
-    from companion_presence import in_public
-    if in_public(data.get('location') or '',data.get('activity') or ''):
+    # Her declared setting, not the words of the location.
+    if data.get('setting')=='public':
         if any(known.get(i,{}).get('category')=='sleep' for i in new_ids):
             raise ValueError('Change out of pajamas into clean daytime or active clothes before leaving the house.')
     for i in old_ids-new_ids:
@@ -202,6 +208,12 @@ def render(c,now,scene=None):
     scene=scene or presence.current(c);state=initial(scene,c);closet=presence.wardrobe(c)['items']
     lines=[GUIDANCE,'Care and clothing state (code-owned; change through care_actions):',json.dumps(state,ensure_ascii=False),
            'Available closet:',json.dumps(closet,ensure_ascii=False)]
+    unknown=[i['id'] for i in closet if isinstance(i,dict) and i.get('covers') not in COVERS
+             and not str(i.get('id','')).startswith('closet-')]
+    if unknown:
+        lines.append('These pieces do not say what they cover; the camera guesses from their category. '
+                     'Set covers (top, bottom, full or none) with a wardrobe update when convenient: '
+                     +', '.join(unknown[:20]))
     last=state['shopping_at'] or policy(c).get('shopping_baseline')
     if not last or now-day.timestamp(last)>=dt.timedelta(days=14):lines.append('Shopping opportunity available: optional browsing on an outing; choose only something you want or need.')
     if scene:
@@ -461,16 +473,16 @@ def build_starter_wardrobe(c, palette='auto'):
             sock_desc = f'{color} soft cushioned cotton ankle socks'
             sock_use = 'everyday and active wear'
 
-        for suffix, desc, use, cat in [
-            ('pajamas', pj_desc, 'sleep after an evening shower', 'sleep'),
-            (top_suffix, act_top_desc, 'exercise and active outings', 'active'),
-            ('training-bottoms', act_bot_desc, 'exercise, walks and workouts', 'active'),
-            ('day-top', day_top_desc, day_top_use, 'day'),
-            ('day-bottoms', day_bot_desc, day_bot_use, 'day'),
-            ('underwear', und_desc, 'fresh everyday base layer', 'underwear'),
-            ('socks', sock_desc, sock_use, 'day')
+        for suffix, desc, use, cat, cov in [
+            ('pajamas', pj_desc, 'sleep after an evening shower', 'sleep', 'full'),
+            (top_suffix, act_top_desc, 'exercise and active outings', 'active', 'top'),
+            ('training-bottoms', act_bot_desc, 'exercise, walks and workouts', 'active', 'bottom'),
+            ('day-top', day_top_desc, day_top_use, 'day', 'top'),
+            ('day-bottoms', day_bot_desc, day_bot_use, 'day', 'bottom'),
+            ('underwear', und_desc, 'fresh everyday base layer', 'underwear', 'none'),
+            ('socks', sock_desc, sock_use, 'day', 'none')
         ]:
-            items.append(dict(id=f'closet-{suffix}-{n}', description=desc, use=use, category=cat, condition='clean'))
+            items.append(dict(id=f'closet-{suffix}-{n}', description=desc, use=use, category=cat, covers=cov, condition='clean'))
 
     # Outerwear
     if agent_type == 'worker':
@@ -503,7 +515,7 @@ def build_starter_wardrobe(c, palette='auto'):
             else:
                 out_desc = 'cozy charcoal shawl-collar wool cardigan'
                 out_use = 'cooler evenings, reading and relaxed days'
-    items.append(dict(id='closet-cardigan', description=out_desc, use=out_use, category='outerwear', condition='clean'))
+    items.append(dict(id='closet-cardigan', description=out_desc, use=out_use, category='outerwear', covers='top', condition='clean'))
 
     # Footwear
     if agent_type == 'worker':
@@ -526,7 +538,7 @@ def build_starter_wardrobe(c, palette='auto'):
         else:
             foot_desc = 'clean classic low-top white platform canvas sneakers'
             foot_use = 'walks, errands and casual outings'
-    items.append(dict(id='closet-trainers', description=foot_desc, use=foot_use, category='footwear', condition='clean'))
+    items.append(dict(id='closet-trainers', description=foot_desc, use=foot_use, category='footwear', covers='none', condition='clean'))
 
     # Core Jeans
     if agent_type == 'worker':
@@ -541,7 +553,7 @@ def build_starter_wardrobe(c, palette='auto'):
         else:
             jean_desc = 'comfortable vintage-wash relaxed straight-leg blue jeans' if is_young else 'comfortable classic dark-wash straight-leg stretch jeans'
         jean_use = 'errands, cafes and days out'
-    items.append(dict(id='closet-jeans', description=jean_desc, use=jean_use, category='day', condition='clean'))
+    items.append(dict(id='closet-jeans', description=jean_desc, use=jean_use, category='day', covers='bottom', condition='clean'))
 
     # Warm Weather Outing Shorts / Skirt
     if agent_type == 'worker':
@@ -562,7 +574,7 @@ def build_starter_wardrobe(c, palette='auto'):
         else:
             short_desc = 'soft washed cotton canvas chino shorts'
         short_use = 'warm-weather outings, beach days and sunny afternoons'
-    items.append(dict(id='closet-shorts', description=short_desc, use=short_use, category='day', condition='clean'))
+    items.append(dict(id='closet-shorts', description=short_desc, use=short_use, category='day', covers='bottom', condition='clean'))
 
     # Occasion Piece
     if agent_type == 'worker':
@@ -591,7 +603,7 @@ def build_starter_wardrobe(c, palette='auto'):
             else:
                 occ_desc = 'roomy charcoal corduroy overshirt with casual dark chinos'
         occ_use = 'a change of style for friends, dates and special afternoons'
-    items.append(dict(id='closet-occasion', description=occ_desc, use=occ_use, category='day', condition='clean'))
+    items.append(dict(id='closet-occasion', description=occ_desc, use=occ_use, category='day', covers='full', condition='clean'))
 
     # Swimwear
     if agent_type == 'worker':
@@ -618,7 +630,7 @@ def build_starter_wardrobe(c, palette='auto'):
             else:
                 swim_desc = 'teal athletic swimming trunks with drawstring'
         swim_use = 'swimming at a fictional pool or beach'
-    items.append(dict(id='closet-swimwear', description=swim_desc, use=swim_use, category='active', condition='clean'))
+    items.append(dict(id='closet-swimwear', description=swim_desc, use=swim_use, category='active', covers='full', condition='clean'))
 
     return items
 
@@ -673,7 +685,13 @@ def seed(c, palette='auto', refresh=False):
         routine = json.loads(path.read_text()) if path.exists() else {'kind': 'imagined_routine', 'weekly': []}
         now = dt.datetime.now(ZoneInfo(c.timezone))
         if not routine.get('lifestyle', {}).get('enabled'):
-            worn = {i['id']: 'dirty' for row in presence.events(c) for i in row['state'].get('outfit', [])}
+            # Only what was actually worn lately is in the hamper. Every item ever worn
+            # used to start dirty, which could leave most of a closet unwearable on day one.
+            recent = now - dt.timedelta(hours=48)
+            worn = {}
+            for row in presence.events(c):
+                if dt.datetime.fromisoformat(row['recorded_at']) < recent: break
+                worn.update({i['id']: 'dirty' for i in row['state'].get('outfit', [])})
             scene = presence.current(c)
             current_ids = {i['id'] for i in scene['state']['outfit']} if scene else set()
             since = {}

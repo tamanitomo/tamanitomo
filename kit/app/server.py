@@ -408,13 +408,10 @@ def build(home=None,token='',state_dir=None):
         import companion_intimacy
         now=dt.datetime.now(dt.timezone.utc)
         curr=presence.current(c)
+        # Reading the closet changes nothing. Seeding it here used to switch on the
+        # whole clothing-care regime -- routine choices and care rules on every
+        # presence update -- for anyone who merely opened the tab.
         wardrobe=presence.wardrobe(c).get('items',[])
-        if not wardrobe:
-            try:
-                lifestyle.seed(c)
-                wardrobe=presence.wardrobe(c).get('items',[])
-            except Exception:
-                pass
         init_st=lifestyle.initial(curr,c) if lifestyle.enabled(c) else {'clothes':{}}
         clothes_status=dict(init_st.get('clothes',{}))
         wearing_ids={item['id'] for item in curr['state'].get('outfit',[])} if curr else set()

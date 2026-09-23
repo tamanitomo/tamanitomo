@@ -187,13 +187,11 @@ def prompt_parts(c,record=None):
 def undressed_render_allowed(c):
     """Whether a recorded undressed moment may be photographed as one.
 
-    Two permissions, both required: the user's adult-images switch, and the
-    closeness gate `companion_media` already owns. Returns (allowed, why not).
+    The same single gate every adult release asks: the user's switches AND the
+    closeness readiness `companion_intimacy` owns. Returns (allowed, why not).
     """
-    if not getattr(c,'adult_images_allowed',False):
-        return False,'adult images are switched off for this companion'
     import companion_media as media
-    allowed,blockers=media.intimacy_gate(c)
+    allowed,blockers=media.adult_ready(c)
     return allowed,('' if allowed else (' '.join(blockers)[:200] or 'closeness has not reached that point'))
 
 
@@ -301,13 +299,17 @@ def main():
             # blank while the modesty negatives still forbid bare skin asks the model
             # for a contradiction, and it resolves it by putting clothes back on --
             # which is the whole complaint. Either the negatives lift, or no photo.
-            from companion_presence import current,undress
-            kind,_=undress((current(c) or {}).get('state',{}))
-            if kind in ('undressed','bathing'):
+            from companion_presence import current,private_reason,undress,wardrobe
+            state=(current(c) or {}).get('state',{})
+            closet=wardrobe(c)['items']
+            reason=private_reason(state,closet)
+            if reason=='declared':
+                raise ValueError('She marked this moment private; it cannot be photographed.')
+            if reason=='undressed':
                 allowed,why=undressed_render_allowed(c)
                 if not allowed:
                     raise ValueError('This moment is a private one and cannot be photographed: '+why)
-                intimate=True
+                intimate=undress(state,closet)[0] in ('undressed','bathing','underwear')
         out=media.generate(c,a.preset,a.category,overrides,allow_nsfw=a.allow_nsfw,intimate=intimate)
     elif a.cmd=='review':
         import companion_media_review as review

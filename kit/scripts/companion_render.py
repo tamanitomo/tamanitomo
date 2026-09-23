@@ -66,6 +66,19 @@ def cron_at(hhmm,offset=0):
     minute=(t.hour*60+t.minute+offset)%(24*60)
     return f'{minute%60} {minute//60} * * *'
 
+def cron_window(hhmm,before=3,after=6):
+    """Every quarter hour from `before` hours ahead of HH:MM to `after` hours past it.
+
+    For a job gated by a fingerprint that decides the actual minute: the schedule is
+    only how often it is allowed to look."""
+    import datetime as _dt
+    try:
+        t=_dt.time.fromisoformat(hhmm if len(str(hhmm))==5 else str(hhmm)+':00')
+    except (ValueError,TypeError):
+        t=_dt.time(8,0)
+    hours=sorted({(t.hour+h)%24 for h in range(-before,after+1)})
+    return '*/15 '+','.join(str(h) for h in hours)+' * * *'
+
 def cr_type_block(c):
     """What this agent is for, in its own SOUL, in the second person.
 
@@ -159,7 +172,7 @@ def mapping_for(c,persona:str='warm',style:str='none',relationship:str='',
         'QUIET_START':c.quiet_start,'QUIET_END':c.quiet_end,
         # The two jobs that sit on the edges of the sleep window. Rendered from
         # the window itself so a change to quiet hours moves them with it.
-        'WAKE_CRON':cron_at(c.quiet_end,offset=10),
+        'WAKE_CRON':cron_window(c.quiet_end),
         'WINDOW_CRON':cron_times(c.autonomy_windows),
         'WINDOW_TIMES':(', '.join(c.autonomy_windows) if c.autonomy_windows else 'none scheduled'),
         'WINDDOWN_CRON':cron_at(c.quiet_start,offset=-20),
@@ -168,11 +181,11 @@ def mapping_for(c,persona:str='warm',style:str='none',relationship:str='',
                  f'unless {{{{SUBJ_H}}}} messages first.'),
         'OUTREACH_POLICY':OUTREACH.get(c.outreach,OUTREACH['updates_only'])+' '+(
             f'At most {c.outreach_per_day} unprompted message(s) a day; this is enforced in code, '
-            f'not left to judgement. Run {{{{OUTREACH_CMD}}}} send --message-file <path> when writing first — it exits '
-            f'non-zero when the answer is no. The send command reserves and delivers one message; do not claim or record separately.'
+            f'not left to judgement. Writing first always means queueing on the outbox (below); '
+            f'the dispatcher decides whether and when it leaves.'
             if c.outreach_per_day else
-            f'No daily limit was set. Quiet hours are still enforced in code: run {{{{OUTREACH_CMD}}}} '
-            f'send --message-file <path> when writing first.') if c.outreach!='never' else OUTREACH['never'],
+            f'No daily limit was set. Quiet hours are still enforced in code. Writing first always '
+            f'means queueing on the outbox (below); the dispatcher decides when it leaves.') if c.outreach!='never' else OUTREACH['never'],
         'OUTREACH_PER_DAY':str(c.outreach_per_day or 'no limit'),
         'ATTRACTION':iv.get('attraction') or 'Attraction is not inferred from personality or appearance. Follow the chosen relationship boundary.',
         'DAILY_RHYTHM':iv.get('daily_rhythm') or 'Let a routine develop from recorded interests and imagined episodes over time.',

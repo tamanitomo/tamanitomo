@@ -130,7 +130,9 @@ class RenderDestinationTests(unittest.TestCase):
         is exactly the one a person has to be able to find."""
         # allow_nsfw, so the hold is re-raised as itself rather than sent round
         # the clothed-replacement path, which is a different behaviour entirely.
-        with self.assertRaises(media.ImageHeld) as caught:
+        from unittest.mock import patch
+        with self.assertRaises(media.ImageHeld) as caught, \
+                patch.object(media, 'adult_ready', return_value=(True, [])):
             self.render('capture', held=True, allow_nsfw=True)
         held = caught.exception.path
         self.assertEqual(pathlib.Path(held).parent, self.c.data / 'creations/image-studio')

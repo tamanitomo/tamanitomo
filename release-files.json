@@ -205,6 +205,7 @@
   "tests/test_adopt.py",
   "tests/test_albums.py",
   "tests/test_app.py",
+  "tests/test_audit_2026_09_23.py",
   "tests/test_care_and_dates.py",
   "tests/test_catalog.py",
   "tests/test_cli.py",

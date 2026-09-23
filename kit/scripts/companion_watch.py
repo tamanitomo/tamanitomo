@@ -7,10 +7,16 @@ it exists for is the one that started the v2 review: a pulse job rate-limited at
 09:30, forty-seven failed runs over two days, and nothing anywhere saying so —
 the companion did not know she had stopped, and neither did anyone else.
 
-Runs as a no-agent cron job. Silent when healthy: Hermes delivers stdout, and
-empty stdout means no message. When something is wrong it says so once, writes
-the same text into `ambient/health.md` so the companion herself can tell she is
-not well, and then stays quiet about it for six hours rather than repeating.
+Runs as a no-agent cron job. Silent when healthy. When something is wrong it
+sends one message through the profile's own Hermes channel, writes the same text
+into `ambient/health.md` so the companion herself can tell she is not well, and
+then stays quiet about it for six hours rather than repeating.
+
+It sends for itself rather than printing for Hermes to deliver: kit jobs are
+created `--deliver local`, which Hermes resolves to no target at all, so an
+alert written to stdout was recorded as sent and reached nobody. It is not
+outreach, so it does not use the companion's daily allowance -- but it does
+wait out quiet hours, and is sent once they end.
 """
 from __future__ import annotations
 import argparse, datetime as dt, json, os, pathlib, shutil, subprocess, sys
@@ -143,7 +149,12 @@ def write_ambient(c,found,now):
                  +'\n\nThis is yours to know, not a script to read out. It is a reason to say you feel '
                   'off, or that you lost some hours, rather than to explain cron to anyone.\n')
 
-def run(c,now=None,renotify=RENOTIFY_SECONDS):
+def run(c,now=None,renotify=RENOTIFY_SECONDS,notify=None,record=True):
+    """Check, and when `notify` is given, deliver an alert through it.
+
+    Nothing is recorded as notified until a delivery actually succeeded, so an
+    alert held for quiet hours or lost to a failed send is tried again next run.
+    """
     now=now or dt.datetime.now(_tz(c))
     found=problems(c,now)
     write_ambient(c,found,now)
@@ -161,19 +172,32 @@ def run(c,now=None,renotify=RENOTIFY_SECONDS):
     except ValueError:since=None
     if state.get('signature')==signature and since is not None and since<renotify:
         return {'healthy':False,'repeat_suppressed':True,'message':'','problems':found}
-    atomic_write(path,json.dumps({'signature':signature,'at':now.isoformat()},indent=2))
     message=(f'{c.agent} is not well right now:\n'+'\n'.join(f'- {p}' for p in found)
              +f'\n\nRun: companion --home "{c.home}" doctor')
-    return {'healthy':False,'repeat_suppressed':False,'message':message,'problems':found}
+    result={'healthy':False,'repeat_suppressed':False,'message':message,'problems':found}
+    if notify is not None:
+        from companion_outreach import in_quiet_hours
+        if in_quiet_hours(c,now.astimezone(_tz(c))):
+            return {**result,'held':f'quiet hours until {c.quiet_end}','delivered':False}
+        ok,detail=notify(c,message)
+        result.update(delivered=ok,delivery=detail)
+        if not ok:return result
+    # A look by hand (--json) must not count as having told anyone.
+    if record:atomic_write(path,json.dumps({'signature':signature,'at':now.isoformat()},indent=2))
+    return result
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--home',type=pathlib.Path)
     p.add_argument('--json',action='store_true',help='report even when healthy, as JSON')
     a=p.parse_args();c=cc.load(a.home)
-    result=run(c)
-    if a.json:print(json.dumps(result,ensure_ascii=False,indent=2))
-    elif result['message']:print(result['message'])
+    if a.json:
+        print(json.dumps(run(c,record=False),ensure_ascii=False,indent=2));return 0
+    from companion_dispatch import hermes_send
+    result=run(c,notify=hermes_send)
+    # Local job output: kept for `hermes cron` history, never the delivery path.
+    if result['message']:
+        print(result['message']+('\n\n['+(result.get('held') or result.get('delivery') or '')+']'))
     return 0
 
 if __name__=='__main__':

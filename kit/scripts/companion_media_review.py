@@ -64,32 +64,45 @@ def inspect(c,path,prompt,allow_nsfw=False):
         # than explicit ones, which score >= 0.5 and are releasable with allow_nsfw. An uncertain
         # image is released only when adult content was intentional; the default still holds it.
         # Adult imagery is its own permission, not a side effect of the relationship
-        # being romantic. Reading `explicit` here meant every romantic companion was
-        # also cleared for nudes, with no way to want the one without the other.
-        explicit_mode=getattr(c,'adult_images_allowed',False)
-        passed=rating=='safe' or (rating in ('nsfw','unknown') and (allow_nsfw or explicit_mode))
-        result.update(status='passed' if passed else 'held',allow_nsfw=allow_nsfw or explicit_mode,sha256=digest)
+        # being romantic -- and a permission is not readiness. Only the one gate in
+        # companion_media clears an NSFW verdict; a caller's allow_nsfw cannot.
+        explicit_mode=_adult_ready(c)
+        passed=rating=='safe' or (rating in ('nsfw','unknown') and explicit_mode)
+        result.update(status='passed' if passed else 'held',allow_nsfw=explicit_mode,sha256=digest)
         write_metadata(path,{'rating':rating,'review':result})
         return result
     result=hermes_bridge(c,'review',{'path':str(path),'prompt':prompt,'provider':prefs['review_provider'],'model':prefs['review_model']})
     if not isinstance(result,dict) or not all(isinstance(result.get(k),bool) for k in ('matches_request','nsfw')):raise ValueError('Image reviewer returned no valid decision')
     if hashlib.sha256(path.read_bytes()).hexdigest()!=digest:raise ValueError('Image changed during review')
-    explicit_mode=getattr(c,'adult_images_allowed',False)
-    passed=result['matches_request'] and (allow_nsfw or explicit_mode or not result['nsfw'])
+    explicit_mode=_adult_ready(c)
+    passed=result['matches_request'] and (explicit_mode or not result['nsfw'])
     result={k:v for k,v in result.items() if k in ('matches_request','nsfw','reason','provider','model')}
-    result.update(status='passed' if passed else 'held',allow_nsfw=allow_nsfw or explicit_mode,sha256=digest)
+    result.update(status='passed' if passed else 'held',allow_nsfw=explicit_mode,sha256=digest)
     write_metadata(path,{'rating':'nsfw' if result['nsfw'] else 'safe','review':result})
     return result
 
 
+def _adult_ready(c):
+    from companion_media import adult_ready
+    return adult_ready(c)[0]
+
+
 def ensure_delivery(c,path,prompt):
     path=Path(path)
+    meta=metadata(path)
+    decision=meta.get('review',{})
+    # A verdict is about the picture; whether an adult picture may leave is about the
+    # relationship NOW. A pass recorded while adult images were on does not survive
+    # them being switched off, the closeness gate closing, or a friendship lock --
+    # and that holds even when pre-delivery review is switched off, because the
+    # rating is already known.
+    rated=decision.get('rating',meta.get('rating')) if decision else None
+    if rated in ('nsfw','unknown') and decision.get('status')!='unavailable' and not _adult_ready(c):
+        raise ValueError('Image held: it is rated adult and adult images are not available for this companion right now')
     if not preferences(c)['review_before_delivery']:return
-    decision=metadata(path).get('review',{})
     local=preferences(c)['review_provider']=='local-nsfw'
     if decision.get('status')=='passed' and (not local or decision.get('provider')=='local-nsfw') and decision.get('sha256')==hashlib.sha256(path.read_bytes()).hexdigest():return
     # A previously held image never becomes approved merely by entering the queue.
     if decision.get('status')=='held':raise ValueError('Image review held this image; regenerate or inspect it before sending')
-    allow_nsfw=getattr(c,'adult_images_allowed',False)
-    decision=inspect(c,path,prompt,allow_nsfw)
+    decision=inspect(c,path,prompt)
     if decision['status']!='passed':raise ValueError('Image review held this image: '+str(decision.get('reason','request mismatch'))[:300])

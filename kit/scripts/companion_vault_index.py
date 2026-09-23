@@ -33,6 +33,8 @@ MAX_HEADINGS=6
 HEADING_CHARS=48
 # Folders that hold installed tools rather than anything anyone wrote.
 TOOL_DIRS=frozenset({'node_modules','__pycache__','venv','site-packages','bower_components'})
+# The root agent's own life, at the top of the vault (its `data` is the vault root).
+ROOT_AGENT_DIRS=frozenset({'soul','companion-life','creations','image-timeline','albums'})
 # A folder's key files: the ones that say what the folder is, then the newest.
 KEY_NAMES=('readme','index','_index','overview','summary','manifest','soul')
 MAX_KEYS=5
@@ -54,6 +56,11 @@ def _prune(c,rel:str,name:str,excluded:set)->bool:
     # Another agent's private life is not this one's to map. A profile sees its
     # own subtree; the root agent sees none of them.
     if rel=='agents' and name!=(c.profile or ''):return True
+    # ...and the root agent's own life lives at the top of the vault, not under
+    # agents/, so a profile's map listed her soul, journal and pictures as if they
+    # were its own. The shared knowledge around them stays on the map.
+    if rel=='' and c.profile and name in ROOT_AGENT_DIRS:return True
+    if rel=='' and c.profile and name=='people' and not getattr(c,'share_people',False):return True
     return False
 
 def headings(path:pathlib.Path)->list:

@@ -129,6 +129,21 @@ def intimacy_gate(c):
         return False,['The closeness state could not be read: '+str(exc)[:200]]
     return bool(state.get('intimacy_ready')),list(state.get('intimacy_blockers') or [])
 
+
+def adult_ready(c):
+    """Whether adult imagery may be produced or released for this companion right now.
+
+    The two switches say the user is willing; they do not say the relationship is
+    there. Every NSFW release -- a render, a review verdict, a delivery -- asks this
+    one question, so a companion at Just Met, one below the trust line, or one
+    locked back to friendship is never cleared by the settings alone.
+    Returns (ready, why not).
+    """
+    if not getattr(c,'adult_images_allowed',False):
+        return False,['Adult images are switched off for this companion.']
+    allowed,blockers=intimacy_gate(c)
+    return allowed,([] if allowed else (blockers or ['Closeness has not reached that point.']))
+
 def load(c):
     path=c.home/CONFIG
     if path.exists():return json.loads(path.read_text())
@@ -418,7 +433,10 @@ def generate(c,preset_id='',category='portrait',overrides=None,report=lambda x:N
     scanner still rates and records it; the safety floor still applies; and
     `compile` refuses the whole thing unless the closeness gate is open.
     """
-    if intimate or getattr(c,'adult_images_allowed',False):allow_nsfw=True
+    # Asking for adult content is not the same as being cleared for it: the one gate
+    # decides, whether the request came from a caller, a flag or an intimate render.
+    allow_nsfw=bool((intimate or allow_nsfw or getattr(c,'adult_images_allowed',False))
+                    and adult_ready(c)[0])
     if purpose not in PURPOSES:raise ValueError('A render is either a creation or a capture')
     try:return _generate(c,preset_id,category,overrides,report,allow_nsfw,draft,intimate,purpose)
     except ImageHeld as held:

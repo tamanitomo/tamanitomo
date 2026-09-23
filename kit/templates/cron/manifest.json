@@ -208,7 +208,9 @@
     "companion"
    ],
    "sensitivity": "sensitive",
-   "sends": "Overnight state, senses and anything queued to send."
+   "sends": "Overnight state, senses and anything queued to send. Runs once, when her declared morning arrives.",
+   "monitor": true,
+   "monitor_module": "companion_sleep"
   },
   {
    "key": "winddown",

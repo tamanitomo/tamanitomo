@@ -65,7 +65,7 @@ class CaptureTests(unittest.TestCase):
         import companion_portrait as pt
         curr=presence.current(self.c)
         presence.update(self.c,{'id':'bathing-state','previous_id':curr['id'],'outfit':['bathing'],
-                                'location':'bathroom','activity':'under a warm shower','mood':'relaxed',
+                                'location':'bathroom','activity':'under a warm shower','mood':'relaxed','setting':'private',
                                 'text':'Showering.','transition':'Stepping into the bathroom for a shower.'},
                         self.now+dt.timedelta(minutes=30))
         return pt.recorded_overrides(self.c)

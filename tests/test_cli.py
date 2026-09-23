@@ -717,7 +717,9 @@ class SettingsTests(unittest.TestCase):
                 self.assertNotIn('between 23:00 and 08:00',prompt,name)
             schedules={j['name']:j.get('schedule',{}).get('expr') for j in json.loads((home/'cron/jobs.json').read_text())['jobs']}
             c=cc.load(home)
-            self.assertEqual(schedules.get(c.agent+' morning'),'25 7 * * *')
+            # The morning job looks every quarter hour around the new end of quiet hours;
+            # its fingerprint picks the minute.
+            self.assertEqual(schedules.get(c.agent+' morning'),'*/15 4,5,6,7,8,9,10,11,12,13 * * *')
             self.assertEqual(schedules.get(c.agent+' wind-down'),'10 22 * * *')
 
     def test_the_gate_honours_the_new_window_without_a_repair(self):

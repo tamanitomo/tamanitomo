@@ -80,6 +80,14 @@ def verdict(c,entry,now):
         return {'action':'hold','reason':decision['reason'],'urgent':urgent}
     return {'action':'send','reason':decision['reason'],'urgent':urgent}
 
+def review_hold(c,entry):
+    """Why an image may not go, or '' when it may. Never claims a slot."""
+    if not pathlib.Path(entry['media_path']).exists():return ''  # deliver() reports this
+    from companion_media_review import ensure_delivery
+    try:ensure_delivery(c,entry['media_path'],entry.get('body',''))
+    except Exception as exc:return 'image held by pre-delivery review: '+str(exc)[:200]
+    return ''
+
 def deliver(c,entry):
     """Hand it to Hermes exactly once."""
     body=entry['body']
@@ -91,13 +99,17 @@ def deliver(c,entry):
             try:ensure_delivery(c,entry['media_path'],body)
             except Exception:return False,'image held: pre-delivery review did not pass; inspect it in Photos'
         body=f"MEDIA:{entry['media_path']}\n{body}"
+    return hermes_send(c,body,entry.get('target') or 'telegram')
+
+def hermes_send(c,body,target='telegram'):
+    """One native Hermes send with this profile's own credentials. (ok, detail)."""
     env={**os.environ,'HERMES_HOME':str(c.home),'PYTHONUTF8':'1'}
     if c.profile:
         prefixes=('TELEGRAM_','DISCORD_','SLACK_','SIGNAL_','WHATSAPP_','MATRIX_',
                   'WEIXIN_','FEISHU_','DINGTALK_','NTFY_','SIMPLEX_','QQBOT_','YUANBAO_')
         env={k:v for k,v in env.items() if not k.startswith(prefixes)}
     try:
-        proc=subprocess.run(hermes_command('send','--to',entry.get('target') or 'telegram','--json'),
+        proc=subprocess.run(hermes_command('send','--to',target,'--json'),
             input=body,capture_output=True,text=True,encoding='utf-8',timeout=120,env=env)
         try:payload=json.loads(proc.stdout)
         except ValueError:payload={}
@@ -118,13 +130,23 @@ def run(c,now=None,send=True):
             outbox.mark(c,entry['id'],'expired' if call['action']=='expire' else 'withheld',
                         call['reason'],now)
             handled.append({'id':entry['id'],**call});continue
+        # A dry run decides and stops: claiming first used up a real daily slot for a
+        # message it never sent.
+        if not send:
+            handled.append({'id':entry['id'],'action':'would-send','reason':call['reason']});break
+        # A picture is reviewed BEFORE a slot is claimed. A review that holds it is a
+        # verdict about the picture, not a delivery that failed, so it withholds the
+        # message and leaves today's allowance alone.
+        if entry.get('content')=='image' and entry.get('media_path'):
+            held=review_hold(c,entry)
+            if held:
+                outbox.mark(c,entry['id'],'withheld',held,now)
+                handled.append({'id':entry['id'],'action':'withhold','reason':held});continue
         # One send per run, and the slot is claimed before delivery so a crash
         # mid-send cannot hand back a free slot.
         claim=outreach.claim(c,entry.get('reason') or 'outbox',now=now,urgent=call.get('urgent',False))
         if not claim['allowed']:
             handled.append({'id':entry['id'],'action':'hold','reason':claim['reason']});break
-        if not send:
-            handled.append({'id':entry['id'],'action':'would-send','reason':call['reason']});break
         ok,detail=deliver(c,entry)
         outbox.mark(c,entry['id'],'sent' if ok else 'failed',detail,now)
         handled.append({'id':entry['id'],'action':'sent' if ok else 'failed','reason':detail})

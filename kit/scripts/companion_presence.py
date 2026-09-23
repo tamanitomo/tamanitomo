@@ -35,37 +35,78 @@ BATHING_ACTIVITY=re.compile(
     r'|\bshowering\b|\bbathing\b(?!\s*(?:suit|costume))|\bsoaking in\b',re.I)
 
 
-# Somewhere she could be seen. Matched on whole words against the LOCATION only:
-# `intimacy.PUBLIC_KEYWORDS` was built to judge whether a moment is private enough
-# for intimate media, and borrowing it here read "homework" as work, "making lunch"
-# as lunch out and "texting friends" as company -- so changing in her own bedroom
-# was refused. What she is doing does not move her; where she is does.
+# Where she is, as she declares it. A code-owned field like `asleep`: the rules about
+# being undressed or in pyjamas somewhere she could be seen read THIS, never the
+# words of the location. Substring-matching the location read "Home Depot" and a
+# "public bathroom at the mall" as home, and "carpool" as a swim -- the fifth time
+# prose decided something in this file. Absent, it carries forward while she stays
+# where she is; once she moves it is unknown until she says, and unknown is never
+# treated as private.
+SETTINGS=('private','public')
+# Words are kept for one job only: noticing a declaration that plainly disagrees
+# with where she says she is, so she can be asked to correct it. Whole words only.
 PUBLIC_PLACES={'office','library','park','street','pavement','sidewalk','cafe','restaurant',
   'mall','shop','store','market','supermarket','grocery','gym','pool','beach','bus','train',
   'station','airport','museum','cinema','theatre','bar','pub','clinic','hospital','school',
   'campus','workplace','salon','studio','church','stadium'}
-# A room of one's own beats any word that follows it: a home office is still home.
-PRIVATE_PLACES=('home','house','apartment','flat','bedroom','bathroom','ensuite','my room')
-# Places where being undressed is the point rather than an exposure.
-UNDRESSED_ACTIVITIES=('swim','pool','beach','sunbath','changing room','fitting room')
+PRIVATE_PLACES={'home','house','apartment','flat','bedroom','bathroom','ensuite','room',
+  'changing','fitting','cabin','tent','hotel'}
 
 
-def in_public(location,activity=''):
-    """Whether she is somewhere she could be seen, for wardrobe rules."""
-    import re
-    loc=(location or '').lower()
-    if any(marker in loc for marker in PRIVATE_PLACES):return False
-    if any(word in (activity or '').lower() for word in UNDRESSED_ACTIVITIES):return False
-    return bool(set(re.findall(r'[a-z]+',loc)) & PUBLIC_PLACES)
+def in_public(state):
+    """Whether she is somewhere she could be seen: her own declaration, nothing else."""
+    return (state or {}).get('setting')=='public'
 
 
-def undress(state):
-    """What the record says she has on: ('undressed'|'bathing'|'towel'|None, text).
+def reads_public(location):
+    """True only when the location's words name a public place and no private one."""
+    words=set(re.findall(r'[a-z]+',(location or '').lower()))
+    return bool(words & PUBLIC_PLACES) and not (words & PRIVATE_PLACES)
 
-    Read from outfit ids, never from prose. Sniffing `activity` and `location` for
-    "bath" stripped the clothes off anyone brushing their teeth in the bathroom,
-    sunbathing, or shopping for a bathing suit -- and did it while the record
-    plainly said what she was wearing.
+
+# What each piece of clothing covers. Kit-generated closet ids are code-owned, so
+# their shape is known; anything else declares `covers` or falls back by category.
+COVERS=('top','bottom','full','none')
+STARTER_COVERS=(('closet-pajamas-','full'),('closet-sports-bra-','top'),('closet-training-vest-','top'),
+  ('closet-training-bottoms-','bottom'),('closet-day-top-','top'),('closet-day-bottoms-','bottom'),
+  ('closet-underwear-','none'),('closet-socks-','none'),('closet-cardigan','top'),
+  ('closet-trainers','none'),('closet-jeans','bottom'),('closet-shorts','bottom'),
+  ('closet-occasion','full'),('closet-swimwear','full'))
+# A piece nobody described keeps the old reading -- it covers -- except where the
+# category says plainly that it cannot.
+CATEGORY_COVERS={'underwear':'none','footwear':'none','outerwear':'top','sleep':'full',
+                 'active':'full','day':'full'}
+
+
+def covers_of(item,closet=None):
+    """top, bottom, full or none, for a worn entry or a wardrobe item."""
+    if isinstance(item,str):item={'id':item}
+    if not isinstance(item,dict):return 'full'
+    known=(closet or {}).get(item.get('id')) if isinstance(closet,dict) else None
+    for source in (item,known or {}):
+        if source.get('covers') in COVERS:return source['covers']
+    ident=str(item.get('id') or '')
+    for prefix,value in STARTER_COVERS:
+        if ident.startswith(prefix):return value
+    category=item.get('category') or (known or {}).get('category')
+    return CATEGORY_COVERS.get(category,'full')
+
+
+def _closet_map(closet):
+    if isinstance(closet,dict):return closet
+    return {i.get('id'):i for i in (closet or ()) if isinstance(i,dict)}
+
+
+def undress(state,closet=()):
+    """What the record says she has on: ('undressed'|'bathing'|'towel'|'underwear'|None, text).
+
+    Read from outfit ids and what each piece covers, never from prose. Sniffing
+    `activity` and `location` for "bath" stripped the clothes off anyone brushing
+    their teeth in the bathroom, sunbathing, or shopping for a bathing suit.
+
+    'underwear' means nothing she has on covers her hips: underwear alone, or with
+    socks, a cardigan or a top. Socks used to count as clothes, so underwear and
+    socks was "dressed" and was photographed as "wearing socks".
     """
     # Both shapes reach this: a stored state holds {'id','description'} pairs, while a
     # validator sees the raw id list the update was written with.
@@ -76,7 +117,23 @@ def undress(state):
     for token in BARE_TOKENS:
         if token in ids:return ('bathing' if token=='bathing' else 'undressed'),''
     if 'towel' in ids:return 'towel',text
+    known=_closet_map(closet)
+    worn=[i for i in items if (i.get('id') if isinstance(i,dict) else i) not in VIRTUAL_TOKENS]
+    if not any(covers_of(i,known) in ('bottom','full') for i in worn):return 'underwear',text
     return None,text
+
+
+# Moments the camera treats as private unless the adult gate is open. Her own
+# `private: true` is a different thing and is never overridden.
+UNDRESSED_KINDS=('undressed','bathing','towel','underwear')
+
+
+def private_reason(state,closet=()):
+    """'declared' when she marked the moment private, 'undressed' when her outfit
+    makes it so, else None. Only the second can be unlocked by permissions."""
+    if (state or {}).get('private'):return 'declared'
+    if undress(state or {},closet)[0] in UNDRESSED_KINDS:return 'undressed'
+    return None
 
 
 BASE_LAYERS=('underwear',)
@@ -93,24 +150,19 @@ def visible_outfit(state,closet=()):
     briefs came back as briefs riding up out of the jeans -- in every picture,
     because she is wearing underwear in every picture.
 
-    Which item is a base layer is read from its category in her wardrobe, never
-    from what the description happens to say. When something covers it, it is
-    left out; when nothing does, it is what she is wearing and is described.
-
-    The bias is deliberate: an unknown or ambiguous cover counts as covering.
-    Leaving out underwear that is showing makes a picture slightly wrong;
-    putting in underwear that is not makes one nobody asked for.
+    A base layer is left out only when something she has on actually covers her
+    hips, which `undress` decides from what each piece covers. Socks, shoes, a
+    cardigan or a top alone cover nothing there: that outfit is 'underwear' and is
+    described in full, never as "wearing socks".
     """
-    kind,text=undress(state)
+    kind,text=undress(state,closet)
     if kind:return kind,text
+    known=_closet_map(closet)
+    def base(item):
+        cat=item.get('category') or (known.get(item.get('id')) or {}).get('category')
+        return cat in BASE_LAYERS or str(item.get('id','')).startswith('closet-underwear-')
     items=[i for i in (state.get('outfit') or []) if isinstance(i,dict)]
-    category={i.get('id'):(i.get('category') or '') for i in closet if isinstance(i,dict)}
-    def kind_of(item):return category.get(item.get('id',''),'')
-    covering=[i for i in items if kind_of(i) not in BASE_LAYERS+COVERS_NOTHING]
-    if not covering:return kind,text
-    shown=[i['description'] for i in items
-           if i.get('description') and kind_of(i) not in BASE_LAYERS]
-    return kind,', '.join(shown)
+    return kind,', '.join(i['description'] for i in items if i.get('description') and not base(i))
 
 
 def wardrobe_clause(text):
@@ -162,6 +214,10 @@ def update_wardrobe(c,items):
             row={'id':ident,'description':text(item.get('description'),'description'),
                  'use':text(item.get('use'),'use',160),
                  'condition':text(item.get('condition','clean'),'condition',160)}
+            covers=item.get('covers',by_id.get(ident,{}).get('covers'))
+            if covers is not None:
+                if covers not in COVERS:raise ValueError('covers must be top, bottom, full or none')
+                row['covers']=covers
             category=item.get('category',by_id.get(ident,{}).get('category'))
             if category is not None:
                 import companion_lifestyle
@@ -244,9 +300,28 @@ def update(c,data,now=None,dry_run=False):
             raise ValueError('A bath or shower cannot be taken in clothes: record the outfit as '
                              'bathing, towel or undressed, or say what you are really doing. '
                              'If this is something else in a bathroom, set private explicitly.')
-        is_undressed_state=not outfit or all(i in VIRTUAL_TOKENS or closet.get(i,{}).get('category')=='underwear' for i in outfit)
-        if is_undressed_state and 'towel' not in outfit and in_public(loc,act):
-            raise ValueError('Changing or undressed states require a private setting; dress in daytime or active clothes before going out')
+        # Where she is, as she says. Carried forward only while she stays put: once the
+        # location moves, the old answer is about somewhere else.
+        setting=data.get('setting')
+        if setting is not None and setting not in SETTINGS:
+            raise ValueError('setting must be "private" or "public"')
+        if setting is None and previous and previous['state'].get('setting') in SETTINGS \
+                and previous['state'].get('location')==loc:
+            setting=previous['state']['setting']
+        kind=undress({'outfit':outfit},closet)[0]
+        exposed=kind in ('undressed','bathing','underwear')
+        if exposed and setting!='private':
+            if setting=='public':
+                raise ValueError('Changing or undressed states require a private setting; dress in daytime '
+                                 'or active clothes before going out.')
+            raise ValueError('Undressed, bathing or underwear-only states need you to say where you are: '
+                             'add "setting": "private" if nobody can see you here (home, a changing room), '
+                             'or "public" if they can.')
+        # The words are used only to ask, never to decide: a declared private place whose
+        # name is plainly a public one is a record that disagrees with itself.
+        if exposed and setting=='private' and reads_public(loc):
+            raise ValueError(f'"{loc}" reads as a public place but setting says private. Name the private '
+                             'part of it (a changing room, a hotel room), or dress before being there.')
         care=data.get('care',[])
         if not isinstance(care,list) or len(care)>10:raise ValueError('care must be a short list of actual routine transitions')
         wants=data.get('wants',[])
@@ -282,8 +357,11 @@ def update(c,data,now=None,dry_run=False):
         # field she sets rather than something a later reader infers from the words.
         # It does NOT carry forward: privacy is about this moment, and a bath that
         # quietly persisted into breakfast would be worse than useless.
+        # Only her own declaration is stored. Being undressed is read from the outfit by
+        # private_reason() instead, so the camera can tell "she asked not to be
+        # photographed" (never overridden) from "she is undressed" (the adult gate's call).
         if 'private' in data:state['private']=bool(data['private'])
-        elif undress(state)[0] in ('undressed','bathing','towel'):state['private']=True
+        if setting in SETTINGS:state['setting']=setting
         narrative=text(data.get('text'),'episode text',1600)
         import companion_day
         parent=previous
@@ -303,7 +381,7 @@ def update(c,data,now=None,dry_run=False):
             if previous and previous['id']==ident:
                 added={i['id'] for i in data.get('wardrobe_additions',[])}
                 base_closet=[i for i in base_closet if i['id'] not in added]
-            state['lifestyle']=companion_lifestyle.evolve(c,data,outfit,parent,base_closet,
+            state['lifestyle']=companion_lifestyle.evolve(c,{**data,'setting':state.get('setting')},outfit,parent,base_closet,
                 dt.datetime.fromisoformat(previous['recorded_at']) if previous and previous['id']==ident else now)
             state['care_actions']=data.get('care_actions',[])
             state['wardrobe_additions']=data.get('wardrobe_additions',[])

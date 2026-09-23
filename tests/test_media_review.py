@@ -47,8 +47,12 @@ class MediaReviewTests(unittest.TestCase):
             decision=review.inspect(self.c,self.path,'Casual clothes at a table')
             self.assertEqual(decision['status'],'held')
             with self.assertRaises(ValueError):review.ensure_delivery(self.c,self.path,'At a table')
-            self.assertEqual(review.inspect(self.c,self.path,'Intentional adult portrait',True)['status'],'passed')
-        review.ensure_delivery(self.c,self.path,'Intentional adult portrait')
+            # Asking for adult content does not clear it; only the one gate does.
+            self.assertEqual(review.inspect(self.c,self.path,'Intentional adult portrait',True)['status'],'held')
+            with patch.object(media,'adult_ready',return_value=(True,[])):
+                self.assertEqual(review.inspect(self.c,self.path,'Intentional adult portrait',True)['status'],'passed')
+        with patch.object(media,'adult_ready',return_value=(True,[])):
+            review.ensure_delivery(self.c,self.path,'Intentional adult portrait')
         self.path.write_bytes(b'changed')
         with patch.object(media,'hermes_bridge',side_effect=ValueError('offline')),self.assertRaises(ValueError):review.ensure_delivery(self.c,self.path,'changed image')
     def test_malformed_or_missing_review_does_not_approve(self):
@@ -127,6 +131,7 @@ class MediaReviewTests(unittest.TestCase):
             self.assertEqual(generate.call_count,2)
         self.assertEqual(review.metadata(self.path)['replacement_status'],'failed')
         self.assertTrue(catalog(self.c)['items'][0]['blur'])
-        with patch.object(media,'_generate',side_effect=held) as generate:
+        with patch.object(media,'_generate',side_effect=held) as generate, \
+                patch.object(media,'adult_ready',return_value=(True,[])):
             with self.assertRaises(media.ImageHeld):media.generate(self.c,allow_nsfw=True)
             self.assertEqual(generate.call_count,1)

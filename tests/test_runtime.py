@@ -856,9 +856,14 @@ class ProseFileInputTests(unittest.TestCase):
         import subprocess,io
         c=make(pathlib.Path(tempfile.mkdtemp()),quiet_start='00:00',quiet_end='00:00');c.save()
         p=c.home/'message.txt';text='Apostrophe: isn\'t. Literal: $HOME.';p.write_text(text,encoding='utf-8')
-        with patch.object(sys,'argv',['outreach','--home',str(c.home),'send','--message-file',str(p)]),patch.object(sys,'stdout',io.StringIO()),patch.object(out.subprocess,'run',return_value=subprocess.CompletedProcess([],0,'{"success":true}','')) as run:
+        with patch.object(sys,'argv',['outreach','--home',str(c.home),'send','--message-file',str(p)]),patch.object(sys,'stdout',io.StringIO()),patch.object(out.subprocess,'run') as run:
             self.assertEqual(out.main(),0)
-            self.assertEqual(run.call_args.kwargs['input'],text)
+            # The command line queues; only the dispatcher delivers.
+            run.assert_not_called()
+        import companion_outbox as outbox
+        queued=[e for e in outbox.fold(c) if e['status']=='queued']
+        self.assertEqual([e['body'] for e in queued],[text.strip()])
+        self.assertFalse(out.path(c).exists(),'queueing must not use a daily slot')
 
     def test_missing_message_input_does_not_consume_a_slot(self):
         from unittest.mock import patch

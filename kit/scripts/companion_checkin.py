@@ -47,11 +47,19 @@ def flag(c,now=None,session_id=''):
     return state
 
 def clear(c,now=None):
-    """A reflection happened. Called by the job itself once it has recorded."""
+    """A reflection happened. Called by the job itself once it has recorded.
+
+    It clears the sessions the job was started for -- the count its monitor tick
+    saw -- not whatever is pending by the time it finishes. Zeroing the counter
+    erased a conversation that ended while the reflection was running, and nothing
+    would ever look at it.
+    """
     now=now or dt.datetime.now(_tz(c))
     with file_lock(path_for(c).with_suffix('.json.lock')):
         state=read(c)
-        state['pending']=0
+        pending=int(state.get('pending',0) or 0)
+        claimed=state.pop('claimed',None)
+        state['pending']=0 if claimed is None else max(0,pending-int(claimed))
         state['last_reflected']=now.isoformat()
         atomic_write(path_for(c),json.dumps(state,ensure_ascii=False,indent=2))
     return state
@@ -60,10 +68,15 @@ def fingerprint(c):
     """Stable bytes for --monitor-script. Changes only when there is something to do.
 
     No clock in here at all: this is the one gate that should stay silent
-    indefinitely when nobody is talking.
+    indefinitely when nobody is talking. It notes how many sessions it has seen,
+    so the run it triggers clears exactly those.
     """
-    state=read(c)
-    pending=int(state.get('pending',0) or 0)
+    with file_lock(path_for(c).with_suffix('.json.lock')):
+        state=read(c)
+        pending=int(state.get('pending',0) or 0)
+        if pending and state.get('claimed')!=pending:
+            state['claimed']=pending
+            atomic_write(path_for(c),json.dumps(state,ensure_ascii=False,indent=2))
     return f"pending {pending}\nlast_end {state.get('last_end','') if pending else ''}\n"
 
 def main():

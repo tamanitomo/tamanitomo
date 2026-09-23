@@ -61,7 +61,8 @@ class LifestyleTests(unittest.TestCase):
     def data(self,**kw):
         current=p.current(self.c)
         d=dict(previous_id=current['id'] if current else None,outfit=['old'],activity='reading',
-               location='home',mood='calm',text='A new moment.',transition='A deliberate change.')
+               location='home',mood='calm',text='A new moment.',transition='A deliberate change.',
+               setting='private')
         d.update(kw);return d
     def write(self,minutes,**kw):return p.update(self.c,self.data(**kw),self.now+dt.timedelta(minutes=minutes))
     def actions(self,*kinds):return [dict(kind=k,items=[]) for k in kinds]
@@ -98,7 +99,7 @@ class LifestyleTests(unittest.TestCase):
         self.assertIn('clean non-sleep clothing',str(error.exception))
         self.assertIn('shower/laundry can wait',str(error.exception))
     def test_shopping_is_atomic_bounded_and_profile_local(self):
-        item=dict(id='new',description='plum sports bra',use='exercise',category='active',condition='clean')
+        item=dict(id='new',description='plum sports bra',use='exercise',category='active',covers='top',condition='clean')
         bad=self.data(outfit=['new'],care_actions=self.actions('shop'),wardrobe_additions=[item])
         with self.assertRaisesRegex(ValueError,'brush teeth'):p.update(self.c,bad,self.now+dt.timedelta(minutes=15))
         self.assertNotIn('new',[i['id'] for i in p.wardrobe(self.c)['items']])
@@ -267,9 +268,9 @@ class LifestyleTests(unittest.TestCase):
     def test_undressed_or_underwear_only_in_public_is_blocked(self):
         p.update_wardrobe(self.c,[dict(id='undies',description='cotton underwear',use='underwear',category='underwear',condition='clean')])
         with self.assertRaisesRegex(ValueError,'private setting|going out'):
-            self.write(15,outfit=[],location='city park',activity='walking')
+            self.write(15,outfit=[],location='city park',activity='walking',setting='public')
         with self.assertRaisesRegex(ValueError,'private setting|going out'):
-            self.write(15,outfit=['undies'],location='coffee shop',activity='sitting at cafe')
+            self.write(15,outfit=['undies'],location='coffee shop',activity='sitting at cafe',setting='public')
 
     def test_sleepwear_morning_lounging_at_home_allowed_but_public_blocked(self):
         self.write(15,outfit=['pj'],location='home',care_actions=self.actions('brush_teeth','shower'))
@@ -277,7 +278,7 @@ class LifestyleTests(unittest.TestCase):
         self.write(12*60,outfit=['pj'],location='kitchen',activity='morning coffee')
         # Leaving house in pajamas is blocked
         with self.assertRaisesRegex(ValueError,'pajamas|sleepwear|private setting|going out'):
-            self.write(12*60+15,outfit=['pj'],location='public library',activity='studying')
+            self.write(12*60+15,outfit=['pj'],location='public library',activity='studying',setting='public')
 
 
 if __name__=='__main__':unittest.main()

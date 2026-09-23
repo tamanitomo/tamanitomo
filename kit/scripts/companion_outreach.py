@@ -7,9 +7,16 @@ retry loop, and the human gets twenty messages at 3am. This decides the same
 question in code, from the clock and a counter on disk, so the limit holds even
 for callers using this helper; it is not a restriction on arbitrary network tools.
 
+    companion_outreach.py send --message-file f   QUEUE a message on the outbox (never delivers)
     companion_outreach.py claim              reserve a send atomically, exit 1 if denied
     companion_outreach.py record --reason x  count a message that was sent
     companion_outreach.py status             today's tally as JSON
+
+`send` on the command line queues. It used to deliver directly, which gave a
+model two ways out of the house -- the outbox and this -- and a thought sent both
+ways arrived twice, with no expiry, no pacing and no record in the queue she
+reads back. The dispatcher is the only thing that delivers; `send()` below is the
+transport it shares, kept for callers that have already been through the gate.
 """
 from __future__ import annotations
 import argparse, datetime as dt, json, pathlib, sys, os, subprocess
@@ -137,6 +144,7 @@ def main():
     message_input.add_argument('--message',help='Message text for send; otherwise read stdin')
     message_input.add_argument('--message-file',type=pathlib.Path,help='Read literal UTF-8 message text from a file')
     p.add_argument('--to',default='telegram',help='Hermes delivery target (default: telegram home channel)')
+    p.add_argument('--ttl-hours',type=float,default=4,help='how long the message is still worth sending')
     p.add_argument('--urgent',action='store_true',
                    help='Something time-critical. Bypasses quiet hours, never the daily limit.')
     a=p.parse_args()
@@ -146,8 +154,19 @@ def main():
             message=a.message if a.message is not None else (a.message_file.read_text(encoding='utf-8') if a.message_file else (sys.stdin.read() if not is_terminal(sys.stdin) else ''))
         except (OSError,UnicodeError):
             print(json.dumps({'allowed':False,'delivered':False,'reason':'Message input file could not be read'}));return 1
-        result=send(c,message,a.reason,a.to)
-        print(json.dumps(result,ensure_ascii=False));return 0 if result.get('delivered') else 1
+        if c.outreach=='never':
+            print(json.dumps({'queued':False,'reason':'This companion does not message first. Reply only.'}));return 1
+        import companion_outbox as outbox
+        try:
+            result=outbox.queue(c,{'kind':'text','body':message,'reason':a.reason or 'outreach',
+                                   'priority':'high' if a.urgent else 'normal','ttl_hours':a.ttl_hours,
+                                   'target':a.to})
+        except ValueError as exc:
+            print(json.dumps({'queued':False,'reason':str(exc)},ensure_ascii=False));return 1
+        print(json.dumps({'queued':True,'id':result['entry']['id'],'already_waiting':not result.get('written',True),
+                          'note':'Queued, not sent. The dispatcher decides when it goes, within quiet hours '
+                                 'and the daily limit. Do not queue it again.'},ensure_ascii=False))
+        return 0
     if a.action=='claim':
         result=claim(c,a.reason,urgent=a.urgent)
         print(json.dumps(result,ensure_ascii=False));return 0 if result['allowed'] else 1

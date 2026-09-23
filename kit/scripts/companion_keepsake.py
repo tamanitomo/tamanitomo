@@ -88,22 +88,18 @@ def save(c, image_path, title, note, share=False, now=None) -> dict:
         'shared_at': now.isoformat() if share else None,
     }
 
-    # Write sidecar JSON in the creations folder
-    atomic_write(folder / f"{ident}.json", json.dumps(meta, indent=2))
-
-    # Append to life ledger
-    with file_lock(ledger_path(c).with_suffix('.jsonl.lock')):
-        slf._append(ledger_path(c), meta)
-
-    # If sharing immediately, queue to outbox
+    # Share first, record second: the record says what actually happened. It used
+    # to be written before the share was attempted, so a refusal or a queue error
+    # never reached it and the keepsake claimed to be shared regardless.
     dispatch_res = None
     if share:
         import companion_outbox as outbox
         perm = c.may_send('image')
-        if perm == 'no':
+        if perm != 'yes':
             meta['shared'] = False
             meta['shared_at'] = None
-            meta['share_error'] = "Proactive image sending is disabled in companion settings"
+            meta['share_error'] = ("Proactive image sending is disabled in companion settings" if perm == 'no'
+                                   else "Photos are set to ask: offer it in words instead of attaching it")
             dispatch_res = {'error': meta['share_error'], 'share_error': meta['share_error']}
         else:
             caption = f"{title}\n\n{note}" if title and note else (title or note)
@@ -117,7 +113,14 @@ def save(c, image_path, title, note, share=False, now=None) -> dict:
                     'ttl_hours': 12,
                 }, now=now)
             except Exception as e:
+                meta['shared'] = False
+                meta['shared_at'] = None
                 meta['share_error'] = str(e)
+                dispatch_res = {'error': str(e), 'share_error': str(e)}
+
+    atomic_write(folder / f"{ident}.json", json.dumps(meta, indent=2))
+    with file_lock(ledger_path(c).with_suffix('.jsonl.lock')):
+        slf._append(ledger_path(c), meta)
 
     # Refresh INDEX.md
     all_ks = list_keepsakes(c, limit=100)
@@ -162,6 +165,8 @@ def share(c, ident, note=None, now=None) -> dict:
     perm = c.may_send('image')
     if perm == 'no':
         raise ValueError("Proactive image sending is disabled in companion settings")
+    if perm == 'ask':
+        raise ValueError("Photos are set to ask: offer it in words instead of attaching it")
 
     title = meta.get('title', '')
     effective_note = note if note is not None else meta.get('note', '')

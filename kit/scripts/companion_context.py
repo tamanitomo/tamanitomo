@@ -354,8 +354,9 @@ def build(c,payload=None,now=None,maintenance_notice=""):
 
     tail=(f"[Read more only as needed]\nLife history: companion_life.py history --day YYYY-MM-DD. "
           f"Record an episode: companion_life.py record. What you know about {c.human} / your own "
-          f"tastes / your curiosity: companion_self.py profile | pref-history | wonder; record with "
-          f"fact --statement --evidence (evidence required), pref --valence, ask --text, resolve. "
+          f"tastes / your curiosity: companion_self.py profile | pref-history | wonder; record by "
+          f"writing a JSON {{\"entries\":[...]}} file and running companion_self.py ledger --file <path> "
+          f"(a fact needs evidence). "
           f"Your own SOUL block: companion_self.py soul --show|--append. Factual recall: "
           f"companion_recall.py 'subject'. Never treat absence of records as proof of never.")
     if c.compact:

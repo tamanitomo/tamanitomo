@@ -227,7 +227,12 @@ def prepare(c,now=None):
     # A recorded undressed moment can only be photographed honestly or not at all.
     # Without the permissions for the first, the second is the answer -- and saying
     # so here costs nothing, where letting the job find out costs a model call.
-    if scene and is_private(scene['state']):
+    reason=private_reason(c,scene['state']) if scene else None
+    # Her own "not this one" is final. Permissions can unlock a moment that is
+    # merely undressed; they never overrule her asking not to be photographed.
+    if reason=='declared':
+        return {'ready':False,'reason':'She marked this moment private; no photo of this one.'}
+    if reason=='undressed':
         from companion_portrait import undressed_render_allowed
         allowed,why=undressed_render_allowed(c)
         if not allowed:
@@ -267,15 +272,23 @@ def prepare(c,now=None):
     return {'ready':True,'capture_id':ident,'scene':scene,'image_style_guidance':style['soul'],'instruction':'Generate one image with the configured Hermes image provider, matching this saved scene and the SOUL visual identity. Import the actual returned local file or HTTPS URL with save. Do not send it to the user.'}
 
 
-def is_private(state):
-    """Whether this is a moment she would rather was not photographed.
+def private_reason(c,state):
+    """'declared', 'undressed' or None -- see companion_presence.private_reason."""
+    from companion_presence import private_reason as reason,wardrobe
+    try:closet=wardrobe(c)['items']
+    except (OSError,ValueError):closet=()
+    return reason(state,closet)
+
+
+def is_private(state,c=None):
+    """Whether this moment is one the camera treats as private at all.
 
     Her own marker first, and the undressed states as a floor beneath it, so an
     older record written before the marker existed is still covered.
     """
-    from companion_presence import undress
-    if state.get('private'):return True
-    return undress(state)[0] in ('undressed','bathing','towel')
+    if c is not None:return private_reason(c,state) is not None
+    from companion_presence import private_reason as reason
+    return reason(state) is not None
 
 
 def owning_capture(filename):
@@ -537,7 +550,9 @@ def fingerprint(c,now=None):
     # The same question prepare asks, in the same order: is this moment already
     # photographed? Only the visible fields belong here -- mood and private stance
     # change a sentence, not a picture.
-    if is_private(state):
+    reason=private_reason(c,state)
+    if reason=='declared':return 'private moment (declared)\n'
+    if reason=='undressed':
         from companion_portrait import undressed_render_allowed
         if not undressed_render_allowed(c)[0]:return 'private moment\n'
     return (f"style {c.image_style} scene {visual_key(state)} "

@@ -151,7 +151,7 @@ class ABathCannotBeTakenInClothesTests(unittest.TestCase):
     def write(self, minutes, **kw):
         row = {'previous_id': (self.presence.current(self.c) or {}).get('id'),
                'outfit': ['pj'], 'location': 'the bathroom', 'activity': 'brushing teeth',
-               'mood': 'ok', 'text': 'x', 'transition': 'x', **kw}
+               'mood': 'ok', 'text': 'x', 'transition': 'x', 'setting': 'private', **kw}
         return self.presence.update(self.c, row, self.now + dt.timedelta(minutes=minutes))
 
     def test_showering_in_pyjamas_is_refused(self):
@@ -161,7 +161,10 @@ class ABathCannotBeTakenInClothesTests(unittest.TestCase):
     def test_recording_it_honestly_is_accepted_and_marked_private(self):
         self.write(0, activity='taking a hot morning shower', outfit=['bathing'])
         state = self.presence.current(self.c)['state']
-        self.assertTrue(state['private'], 'a bath should mark the moment private')
+        # Read from the outfit, not stored as if she had declared it: only her own
+        # declaration is absolute, the undressed floor is the adult gate's to lift.
+        self.assertNotIn('private', state)
+        self.assertEqual(self.presence.private_reason(state), 'undressed')
 
     def test_ordinary_business_in_a_bathroom_is_untouched(self):
         for n, activity in enumerate(('brushing teeth', 'cleaning the shower', 'putting on a bathrobe',

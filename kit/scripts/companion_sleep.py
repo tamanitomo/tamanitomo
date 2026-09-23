@@ -177,6 +177,36 @@ def wake(c,now=None):
         atomic_write(path(c),json.dumps(ended,ensure_ascii=False,indent=2)+'\n')
     return {'woke':True,'was':was.isoformat(timespec='minutes'),'at':now.isoformat(timespec='minutes')}
 
+# The morning job is scheduled across a window rather than at one fixed minute, and a
+# fingerprint lets it run once: when the morning she actually declared arrives. A
+# fixed 08:10 run woke her out of a lie-in she had chosen, and missed an early start.
+WAKE_OFFSET_MINUTES=10
+WAKE_BEFORE_HOURS=3
+WAKE_AFTER_HOURS=6
+
+def wake_moment(c,day):
+    """When the morning job should run on local date `day`.
+
+    Her declaration for that morning, early or late, when there is one; otherwise
+    just after quiet hours end. Clamped to the window the job is scheduled across,
+    so a runaway plan still gets a morning.
+    """
+    tz=_tz(c)
+    minute=_minutes(c.quiet_end,8*60)
+    end=dt.datetime.combine(day,dt.time(minute//60,minute%60),tz)
+    moment=end+dt.timedelta(minutes=WAKE_OFFSET_MINUTES)
+    plan=read(c)
+    if plan and plan['until'].astimezone(tz).date()==day:moment=plan['until'].astimezone(tz)
+    lo=end-dt.timedelta(hours=WAKE_BEFORE_HOURS);hi=end+dt.timedelta(hours=WAKE_AFTER_HOURS)
+    return min(max(moment,lo),hi)
+
+def wake_fingerprint(c,now=None):
+    """Stable bytes for the morning job's --monitor-script: moves once a day, at wake."""
+    now=(now or dt.datetime.now(_tz(c))).astimezone(_tz(c))
+    today=now.date()
+    due=today if now>=wake_moment(c,today) else today-dt.timedelta(days=1)
+    return f'morning {due.isoformat()}\n'
+
 def main():
     p=argparse.ArgumentParser(description=__doc__,formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--home',type=pathlib.Path)
@@ -186,7 +216,10 @@ def main():
     d.add_argument('--note',default='',help='Anything worth knowing about tonight')
     s.add_parser('status',help='Is she asleep right now, and until when')
     s.add_parser('wake',help='End the declared night early')
+    s.add_parser('fingerprint',help='Monitor bytes for the morning job')
     a=p.parse_args();c=cc.load(a.home)
+    if a.cmd=='fingerprint':
+        sys.stdout.write(wake_fingerprint(c));return 0
     if a.cmd=='declare':out=declare(c,a.until,a.note)
     elif a.cmd=='wake':out=wake(c)
     else:out=status(c)
