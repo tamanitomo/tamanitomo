@@ -2840,3 +2840,25 @@ body[data-page="chat"] main{padding:0}
 .level-popup .act{margin-top:12px;min-width:140px}
 @keyframes level-glow{0%,100%{transform:scale(1)}50%{transform:scale(1.18)}}
 @media (prefers-reduced-motion:reduce){.level-popup.level-up .level-emblem{animation:none}}
+
+/* Onboarding: who you are hoping to meet */
+.meet-group{border:0;padding:0;margin:0 0 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.meet-group legend{font-weight:600;margin-bottom:8px;padding:0}
+.meet-card{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;cursor:pointer;background:var(--surface)}
+.meet-card:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.meet-card span{display:grid;gap:2px}
+/* Onboarding reveal: their look and life */
+.reveal-panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin:0 0 20px}
+.reveal-panel{padding:16px}
+.reveal-panel-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.reveal-panel-head h3{margin:0}
+.reveal-panel .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+/* Onboarding and Identity: who keeps what */
+.ownership-keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:0 0 18px}
+.ownership-keys p{margin:6px 0 0;line-height:1.5}
+.keeper{display:inline-block;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:999px;border:1px solid currentColor}
+.keeper-shared{color:var(--accent)}
+.keeper-yours{color:color-mix(in srgb,var(--ink,#333) 75%,var(--accent))}
+.keeper-hers{color:color-mix(in srgb,var(--accent) 60%,#b0487a)}
+.keeper-private{color:color-mix(in srgb,var(--ink,#333) 55%,transparent)}
+.keeper-fixed{color:color-mix(in srgb,var(--ink,#333) 55%,transparent)}

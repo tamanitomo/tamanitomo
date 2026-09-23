@@ -671,6 +671,13 @@ def scaffold(c,ans,report,soul_mode='create',raw=None):
     except Exception as exc:
         report.append(f"  ! wardrobe seed: {exc}")
     write(c.soul_dir/'Emotive.md',f'# Emotive — {c.agent}\n')
+    locks=(ans.get('soul_locks') if isinstance(ans,dict) else None) or {}
+    if locks:
+        import companion_soul
+        for section,value in locks.items():
+            try:companion_soul.set_lock(c,section,value)
+            except ValueError as exc:report.append(f'  ! soul lock {section}: {exc}')
+        report.append('  soul: '+', '.join(f"{k} {'locked' if v else 'open'}" for k,v in locks.items()))
     seed_open_loops(c,report)
     # The heading format is load-bearing: weekly rotation dates an entry by the
     # ISO date in its '## ' heading, and anything undated cannot be filed by month.

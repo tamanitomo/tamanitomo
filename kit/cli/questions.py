@@ -101,6 +101,12 @@ def questionnaire(c,answers=None,vault_default=None):
     # The narrative interview: identity, appearance, boundary, flirtation, likes, essence.
     iv=wiz.interview(out['agent'],out['human'],out['persona'],{**a,'pronoun_set':out['pronoun_set'],'human_pronoun_set':out['human_pronoun_set']})
     out['interview']=iv
+    # What the human hopes this brings, in their own words, kept verbatim.
+    iv['hope']=str(a.get('hope') or '').strip()[:1000]
+    # Which shared parts of the soul the human keeps to themselves, chosen at setup.
+    locks=a.get('soul_locks') or {}
+    if not isinstance(locks,dict):raise ValueError('soul_locks must map section ids to true or false')
+    out['soul_locks']={str(k):bool(v) for k,v in locks.items()}
     out['boundary']=iv['boundary_key'];out['age']=iv['age'];out['explicit']=iv['explicit']
     out['birthdate']=iv.get('birthdate','')
 
@@ -265,7 +271,7 @@ SETUP_KEYS=frozenset({'agent','human','human_names','persona','image_mode','imag
     'outreach','cron_active','quiet_start','quiet_end','timezone','vault','context_tokens',
     'image_timeline','context_ok','soul','move_soul','gateway_mode','gateway_action','outreach_per_day',
     'location','sensors','adaptive_quiet','permit_image','permit_voice','content_permissions',
-    'share_people','agent_type','relationship_pace'})
+    'share_people','agent_type','relationship_pace','soul_locks','hope'})
 def known_answer_keys():return SETUP_KEYS|wiz.INTERVIEW_KEYS
 OUTREACH_CAPS=[('Once a day','1'),('Up to three times a day (recommended)','3'),
                ('Up to five times a day','5'),('Up to ten times a day','10'),

@@ -209,6 +209,8 @@ def mapping_for(c,persona:str='warm',style:str='none',relationship:str='',
         'BIRTHDAY':(c.birthdate or ''),
         'AGENT_TYPE_BLOCK':cr_type_block(c),
         'BEING_SELF':being_self(c,style),
+        'HOPE':(('What {{HUMAN}} hoped this would bring, in {{POSS_H}} own words: “'+iv['hope']+'”')
+                if iv.get('hope') else ''),
         'CLOSENESS':closeness_text(c),
     }
 

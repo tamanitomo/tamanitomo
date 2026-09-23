@@ -113,9 +113,14 @@ def fill(text,agent,human,agent_pronouns='she',human_pronouns='he'):
             'AP':ap[2],'AO':ap[1],'AR':ap[4],'HS':hp[0],'HP':hp[2],'HO':hp[1]}
     import re
     result=re.sub(r'\{([A-Z_]+)\}',lambda m:values.get(m[1],m[0]),text or '')
+    # "girlfriend or boyfriend" is a menu, not a description: say which one this companion is.
+    if agent_pronouns in ('she','he'):
+        one = {'she':('girlfriend','girl'),'he':('boyfriend','boy')}[agent_pronouns]
+        result = re.sub(r'\b(girlfriend/boyfriend|boyfriend/girlfriend|girlfriend or boyfriend|boyfriend or girlfriend)\b', one[0], result, flags=re.IGNORECASE)
+        result = re.sub(r'\b(girl/boy|boy/girl|girl or boy|boy or girl)\b', one[1], result, flags=re.IGNORECASE)
     if agent_pronouns == 'they':
-        result = re.sub(r'\b(girlfriend/boyfriend|boyfriend/girlfriend)\b', 'partner', result, flags=re.IGNORECASE)
-        result = re.sub(r'\b(girl/boy|boy/girl)\b', 'companion', result, flags=re.IGNORECASE)
+        result = re.sub(r'\b(girlfriend/boyfriend|boyfriend/girlfriend|girlfriend or boyfriend|boyfriend or girlfriend)\b', 'partner', result, flags=re.IGNORECASE)
+        result = re.sub(r'\b(girl/boy|boy/girl|girl or boy|boy or girl)\b', 'companion', result, flags=re.IGNORECASE)
         result = re.sub(r'\b(girlfriend|boyfriend)\b', 'partner', result, flags=re.IGNORECASE)
         result = re.sub(r'\b(girl|boy)\b', 'companion', result, flags=re.IGNORECASE)
         result = re.sub(r'\b(woman|man)\b', 'person', result, flags=re.IGNORECASE)
@@ -152,8 +157,12 @@ def boundary_text(key, pronoun_set=None):
     if key not in BOUNDARIES:raise ValueError(f'Unknown relationship boundary: {key}')
     # Rendered into SOUL.md, where the template engine fills the names in.
     text = BOUNDARIES[key][2].replace('{A}','{{AGENT}}').replace('{H}','{{HUMAN}}').replace('{AS_LOWER}','{{SUBJ}}')
+    import re
+    if pronoun_set in ('she','he'):
+        one = {'she':('girlfriend','girl'),'he':('boyfriend','boy')}[pronoun_set]
+        text = re.sub(r'\b(girlfriend or boyfriend|boyfriend or girlfriend)\b', one[0], text, flags=re.IGNORECASE)
+        text = re.sub(r'\b(girl or boy|boy or girl)\b', one[1], text, flags=re.IGNORECASE)
     if pronoun_set == 'they':
-        import re
         text = re.sub(r'\b(girlfriend or boyfriend|boyfriend or girlfriend)\b', 'partner', text, flags=re.IGNORECASE)
         text = re.sub(r'\b(girl or boy|boy or girl)\b', 'companion', text, flags=re.IGNORECASE)
     return text

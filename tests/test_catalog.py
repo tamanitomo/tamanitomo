@@ -217,7 +217,7 @@ class CatalogTests(unittest.TestCase):
             soul=cr.render_template('SOUL.md.tmpl',m)
             self.assertEqual(cr.unresolved(soul),[])
             self.assertLess(len(soul),c.soul_warn)
-            self.assertEqual(m['BOUNDARY_ONELINE'],catalog.boundary_text(boundary))
+            self.assertEqual(m['BOUNDARY_ONELINE'],catalog.boundary_text(boundary,c.pronoun_set))
             self.assertEqual(iv['explicit'],catalog.BOUNDARIES[boundary][1])
             if boundary=='platonic':
                 self.assertNotIn('## Sexual Encounters',soul)

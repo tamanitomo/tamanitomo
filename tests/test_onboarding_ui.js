@@ -33,6 +33,13 @@ for(const item of QUIZ)
 
 const all=(pick)=>derive(QUIZ.map((q,i)=>Math.min(pick,q.a.length-1)),catalog);
 
+// Every personality is reachable by someone who answers like it. Averaging axes
+// used to leave twelve of the twenty unreachable.
+for(const key of Object.keys(PERSONA_AXES)){
+  const picks=QUIZ.map(q=>{const i=q.a.findIndex(o=>(o[3]||[])[0]===key);return i>=0?i:q.a.findIndex(o=>(o[3]||[]).includes(key));});
+  assert.equal(derive(picks.map(i=>i<0?null:i),catalog).persona,key,`persona ${key} cannot be reached`);
+}
+
 // Skipping every question still produces a complete, valid configuration.
 const skipped=derive(new Array(QUIZ.length).fill(null),catalog);
 assert.ok(personas[skipped.persona]);
@@ -119,9 +126,11 @@ for(let story=0;story<4;story++){
   assert.deepEqual(JSON.parse(request.body),{token:'fixture-bot-token',user_id:'123'});
   await element('btn-ch-next').onclick();
   element('btn-pur-next').onclick();
+  element('btn-meet-next').onclick();                  // "surprise me", no age band
   for(let i=0;i<QUIZ.length;i++)element('quiz-skip').onclick();
   element('cust-image-style').value='anime-soft';
   element('btn-rev-accept').onclick();
+  element('btn-own-next').onclick();                   // who keeps what
   element('ob-api-provider').value='openrouter';
   element('ob-api-key').value='fixture-key';
   element('ob-api-model').value='fixture-model';
@@ -139,6 +148,10 @@ for(let story=0;story<4;story++){
   await element('ob-schedule-create').onclick();
   const created=requests.find(r=>r.url==='/api/profiles'&&r.method==='POST');
   assert.equal(JSON.parse(created.body).answers.image_style,'anime-soft','explicit image style survives profile creation');
-  assert.equal(JSON.parse(created.body).answers.visual,'edit','the companion’s look is left open rather than silently assigned');
+  const answers=JSON.parse(created.body).answers;
+  // The quiz now chooses a look and shows it for editing before anything is saved.
+  assert.equal(answers.visual,'set','the look chosen by the quiz reaches setup');
+  assert.equal(answers.soul_locks.appearance,true,'appearance is locked unless opened');
+  assert.ok(['she','he'].includes(answers.pronoun_set),'"surprise me" settles on a pronoun');
   console.log('Onboarding request contracts passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});

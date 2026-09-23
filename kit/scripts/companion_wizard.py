@@ -532,7 +532,16 @@ def interview(agent,human,persona,answers=None,*,quick=False):
     gender='they' if agent_pronouns=='they' else ('male' if agent_pronouns=='he' else 'female')
     F=lambda text:catalog_fill(text,agent,human,agent_pronouns,human_pronouns)
     out={'skipped':[],'opted_out':[]}
+    def by_id(key,value):
+        """'id:7' or 'id:3,id:9' -> the catalog text, filled. Ids are stable where the
+        numbered position is not: options are re-sorted per personality."""
+        wanted=[v.strip()[3:] for v in str(value).split(',') if v.strip().startswith('id:')]
+        rows=catalog.load()['categories'][key].get(gender) or catalog.load()['categories'][key].get('female',[])
+        texts=[F(r['text']) for r in rows if r['id'] in wanted]
+        if not texts:raise ValueError(f'{key}: unknown catalog id {value}')
+        return ' '.join(texts)
     def pick(key,prompt=None,*,opt_out=True):
+        if isinstance(a.get(key),str) and a[key].startswith('id:'):a[key]=by_id(key,a[key])
         m=catalog.meta(key)
         offer=opt_out and catalog.can_opt_out(key)
         # Persona-sorted categories are ordered by the personality already chosen.

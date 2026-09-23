@@ -6,101 +6,178 @@
 (function(){
 
 /* ------------------------------------------------------------------ the quiz
-   Story dilemmas inspired by Pokémon Mystery Dungeon, followed by direct preferences mapping choices
-   to five personality axes: warmth, energy, candor, drive, closeness. */
+   Three parts, in the spirit of Pokémon Mystery Dungeon:
+     1. sixteen story scenes that decide the personality. Each answer awards
+        points to one or two named personalities (the first gets 2, the second
+        1); the highest tally wins, and the five axes below only break a tie.
+        Every personality leads at least three answers and appears in five,
+        so all twenty can come out -- averaging axes, as this used to, left
+        twelve of them unreachable.
+     2. seven scenes about their world: work, rhythm, a free afternoon, how you
+        met, and how they look. These pick from the catalogue, and the result
+        is shown and editable before anything is saved.
+     3. three direct questions: pace, contact and the relationship itself.
+   Option shape: [text, axes, direct settings, personality tags, world picks]. */
 const QUIZ=[
  {q:"After a long journey, you reach a tiny inn. Your travelling companion saves you a seat by the fire. What do you hope they do?",
   sub:"The fire is low, the road was long, and there is finally time to breathe.",
-  a:[["Pour something warm and listen to the story of my day.",{warmth:3,energy:-1}],
-     ["Unroll the map and help me make sense of where things went wrong.",{candor:3,drive:1}],
-     ["Tell me the absurd thing that happened while I was away.",{energy:3,warmth:1}],
-     ["Keep the seat beside me warm and let me speak when I am ready.",{energy:-2,drive:-1}]]},
+  a:[["Pour something warm and listen to the story of my day.",{warmth:3,energy:-1,candor:-1},{},['warm','nurturing']],
+     ["Unroll the map and help me make sense of where things went wrong.",{candor:3,drive:1},{},['pragmatic','analytical']],
+     ["Tell me the absurd thing that happened while I was away.",{energy:3,warmth:1},{},['bright','mischievous']],
+     ["Keep the seat beside me warm and let me speak when I am ready.",{energy:-2,drive:-1,candor:-1},{},['quiet','shy']]]},
  {q:"At a fork in the forest, you disagree about which path to take. How does your companion handle it?",
   sub:"Two paths, one map, and neither of you is entirely sure.",
-  a:[["Be gentle, but tell me what they really think.",{warmth:3,candor:1}],
-     ["Challenge my reasoning directly and explain why.",{candor:3,drive:1}],
-     ["Ask questions so we can work it out together.",{warmth:1,candor:2}],
-     ["Give me room, then return to it calmly.",{energy:-2,warmth:1}]]},
+  a:[["Be gentle, but tell me what they really think.",{warmth:3,candor:1},{},['protective','romantic']],
+     ["Challenge my reasoning directly and explain why.",{candor:3,drive:1},{},['sharp','intense']],
+     ["Ask questions so we can work it out together.",{warmth:1,candor:2},{},['social','analytical']],
+     ["Give me room, then return to it calmly.",{energy:-2,warmth:1,candor:-1},{},['stoic','steady']]]},
  {q:"A night market appears in a town that was empty a moment ago. You have until sunrise. Where do you go together?",
   sub:"Music drifts over the rooftops. Every stall seems to hold a different possibility.",
-  a:[["Follow the lanterns down the alley neither of us can find on the map.",{energy:3,drive:3}],
-     ["Visit the stall where we can invent a tiny world in a bottle.",{warmth:2,energy:2,drive:1}],
-     ["Find a rooftop, share a snack, and watch it all unfold.",{warmth:2,energy:-2,drive:-1}],
-     ["Find the clockmaker and ask how this impossible market works.",{candor:2,drive:1}]]},
+  a:[["Follow the lanterns down the alley neither of us can find on the map.",{energy:3,drive:3},{},['adventurous','whimsical']],
+     ["Visit the stall where we can invent a tiny world in a bottle.",{warmth:2,energy:2,drive:1},{},['creative','sunny']],
+     ["Find a rooftop, share a snack, and watch it all unfold.",{warmth:2,energy:-2,drive:-1},{},['melancholy','romantic']],
+     ["Find the clockmaker and ask how this impossible market works.",{candor:2,drive:1,closeness:-1},{},['analytical','sharp']]]},
  {q:"Your little airship refuses to start, and the last ferry leaves soon. What kind of help would you welcome?",
   sub:"The engine gives one indignant cough. Your companion looks from it to you.",
-  a:[["Roll up their sleeves and point out the first thing we should check.",{candor:2,drive:2}],
-     ["Lay out our options: repair, ferry, or a different adventure.",{candor:2,warmth:1}],
-     ["Remind me we can figure it out, one small step at a time.",{warmth:3,drive:1}],
-     ["Suggest an unusual solution involving the market’s clockmaker.",{energy:2,drive:3}]]},
+  a:[["Roll up their sleeves and point out the first thing we should check.",{candor:2,drive:2},{},['pragmatic','protective']],
+     ["Lay out our options: repair, ferry, or a different adventure.",{candor:2,warmth:1,closeness:-1},{},['steady','analytical']],
+     ["Remind me we can figure it out, one small step at a time.",{warmth:3,drive:1},{},['nurturing','sunny']],
+     ["Suggest an unusual solution involving the market’s clockmaker.",{energy:2,drive:3},{},['mischievous','creative']]]},
  {q:"Your companion keeps a room above the village bookshop. On your first visit, what catches your eye?",
   sub:"They have gone downstairs to make tea. Their room tells a story of its own.",
-  a:[["Half-built inventions and postcards from unexpected adventures.",{energy:3,drive:2}],
-     ["A favourite cup, a well-tended plant, and a place set for me.",{warmth:2,energy:-1}],
-     ["Books full of pointed margin notes and one very dry joke.",{candor:3,energy:1}],
-     ["A sketchbook by the window, with more inside than they say aloud.",{warmth:1,energy:-2}]]},
+  a:[["Half-built inventions and postcards from unexpected adventures.",{energy:3,drive:2},{},['creative','adventurous']],
+     ["A favourite cup, a well-tended plant, and a place set for me.",{warmth:2,energy:-1,candor:-1},{},['nurturing','protective']],
+     ["Books full of pointed margin notes and one very dry joke.",{candor:3,energy:1},{},['sharp','mischievous']],
+     ["A sketchbook by the window, with more inside than they say aloud.",{warmth:1,energy:-2},{},['shy','melancholy']]]},
  {q:"A dragon the size of a teapot has moved into your backpack. It insists it is your guide. What happens next?",
   sub:"It has a very important hat and absolutely no sense of direction.",
-  a:[["We appoint it captain and see where the day takes us.",{energy:3,drive:2}],
-     ["We ask what it knows, then quietly keep our own map.",{candor:2,drive:1}],
-     ["We make it a comfortable nest. It seems lonely.",{warmth:3,closeness:1}],
-     ["We share a look and enjoy the joke without a word.",{energy:-1,candor:1}]]},
+  a:[["We appoint it captain and see where the day takes us.",{energy:3,drive:2},{},['whimsical','bright']],
+     ["We ask what it knows, then quietly keep our own map.",{candor:2,drive:1,closeness:-1},{},['stoic','pragmatic']],
+     ["We make it a comfortable nest. It seems lonely.",{warmth:3,closeness:1},{},['nurturing','shy']],
+     ["We share a look and enjoy the joke without a word.",{energy:-1,candor:1},{},['quiet','steady']]]},
  {q:"You find a letter addressed to your future self. Your companion is beside you. How would you like to open it?",
   sub:"The seal is warm, as though it has just been pressed.",
-  a:[["Read it together. I want someone to share the feeling.",{warmth:3,closeness:3}],
-     ["Read it privately, then talk when I am ready.",{energy:-1,closeness:-2}],
-     ["Guess what it says first. Make a game of it.",{energy:3,closeness:1}],
-     ["Ask them to help turn its advice into a plan.",{candor:2,drive:2}]]},
+  a:[["Read it together. I want someone to share the feeling.",{warmth:3,closeness:3},{},['romantic','intense']],
+     ["Read it privately, then talk when I am ready.",{energy:-1,closeness:-2},{},['quiet','stoic']],
+     ["Guess what it says first. Make a game of it.",{energy:3,closeness:1},{},['bright','social']],
+     ["Ask them to help turn its advice into a plan.",{candor:2,drive:2,closeness:-1},{},['protective','pragmatic']]]},
  {q:"The village festival needs one last attraction. You have a shed, some string, and an afternoon. What do you build together?",
   sub:"There is no prize. The children have already started queuing.",
-  a:[["An impossible puppet theatre with a story we invent as we go.",{energy:2,drive:2}],
-     ["A quiet corner where anyone can leave a wish.",{warmth:3,energy:-1,closeness:1}],
-     ["A puzzle machine. We will make sure every clue works.",{candor:2,drive:1}],
-     ["A ridiculous obstacle course. We volunteer to go first.",{energy:3,drive:3}]]},
+  a:[["An impossible puppet theatre with a story we invent as we go.",{energy:2,drive:2},{},['whimsical','creative']],
+     ["A quiet corner where anyone can leave a wish.",{warmth:3,energy:-1,closeness:1},{},['shy','romantic']],
+     ["A puzzle machine. We will make sure every clue works.",{candor:2,drive:1},{},['analytical','steady']],
+     ["A ridiculous obstacle course. We volunteer to go first.",{energy:3,drive:3},{},['social','adventurous']]]},
  {q:"You have spent hours making a gift, but it is not quite working. What would you want your companion to say?",
   sub:"Paint on your sleeves. Glue on the table. A very lopsided little moon.",
-  a:[["The care is visible. Let’s keep the part that feels like you.",{warmth:3,candor:1}],
-     ["Here is what is wrong, and one way we can fix it.",{candor:3,drive:2}],
-     ["What if the crooked moon is the beginning of a better idea?",{energy:2,drive:3}],
-     ["Want company while you decide? We do not have to solve it now.",{warmth:2,energy:-2,drive:-1}]]},
+  a:[["The care is visible. Let’s keep the part that feels like you.",{warmth:3,candor:-1},{},['warm','romantic']],
+     ["Here is what is wrong, and one way we can fix it.",{candor:3,drive:2},{},['sharp','pragmatic']],
+     ["What if the crooked moon is the beginning of a better idea?",{energy:2,drive:3},{},['creative','whimsical']],
+     ["Want company while you decide? We do not have to solve it now.",{warmth:2,energy:-2,drive:-1,candor:-1},{},['melancholy','quiet']]]},
  {q:"A rainstorm closes the mountain pass. You are safe in an old observatory until morning. How do you pass the time?",
   sub:"The telescope points at clouds. Someone has left a kettle and a chessboard.",
-  a:[["Trade stories we have never told each other.",{warmth:2,closeness:3}],
-     ["Work on separate things, comfortably together.",{energy:-2,closeness:-1}],
-     ["Learn to repair the telescope together.",{candor:2,drive:2}],
-     ["Invent increasingly unlikely names for the constellations.",{energy:3,warmth:2}]]},
+  a:[["Trade stories we have never told each other.",{warmth:2,closeness:3},{},['intense','romantic']],
+     ["Work on separate things, comfortably together.",{energy:-2,closeness:-1},{},['stoic','quiet']],
+     ["Learn to repair the telescope together.",{candor:2,drive:2,closeness:-1},{},['protective','analytical']],
+     ["Invent increasingly unlikely names for the constellations.",{energy:3,warmth:2},{},['bright','social']]]},
  {q:"Your companion remembers something you mentioned weeks ago. What kind of surprise would delight you?",
   sub:"They slide a small parcel across the breakfast table.",
-  a:[["A tiny reminder of an ordinary moment we shared.",{warmth:3,closeness:3}],
-     ["A clever tool for the project I keep getting stuck on.",{candor:2,drive:2}],
-     ["A ticket to something neither of us has tried.",{energy:3,drive:3}],
-     ["A book, with no expectation that I read it immediately.",{energy:-2,warmth:1,closeness:-1}]]},
+  a:[["A tiny reminder of an ordinary moment we shared.",{warmth:3,closeness:3},{},['sunny','warm']],
+     ["A clever tool for the project I keep getting stuck on.",{candor:2,drive:2,closeness:-1},{},['pragmatic','protective']],
+     ["A ticket to something neither of us has tried.",{energy:3,drive:3},{},['adventurous','intense']],
+     ["A book, with no expectation that I read it immediately.",{energy:-2,warmth:1,closeness:-1},{},['shy','quiet']]]},
  {q:"At the end of the journey, you find a new path behind the inn. Your companion pauses at the gate. What feels right?",
   sub:"There is plenty of time. The next chapter does not need to start today.",
-  a:[["Ask what they would choose. I like an independent point of view.",{candor:3,drive:2}],
-     ["Make a little plan together, with room for surprises.",{warmth:2,drive:1}],
-     ["Race them to the first bend.",{energy:3,drive:3}],
-     ["Sit by the gate for a while. Being here is enough.",{warmth:2,energy:-2,closeness:2}]]},
+  a:[["Ask what they would choose. I like an independent point of view.",{candor:3,drive:2,closeness:-1},{},['intense','sharp']],
+     ["Make a little plan together, with room for surprises.",{warmth:2,drive:1},{},['sunny','social']],
+     ["Race them to the first bend.",{energy:3,drive:3},{},['mischievous','bright']],
+     ["Sit by the gate for a while. Being here is enough.",{warmth:2,energy:-2,closeness:2},{},['melancholy','stoic']]]},
+ {q:"A stranger at the crossroads asks your companion for directions to a town neither of you knows. What do they do?",
+  sub:"The signpost has been turned around, possibly on purpose.",
+  a:[["Admit they have no idea and help find someone who does.",{candor:2,warmth:1},{},['steady','analytical']],
+     ["Point confidently down a road and grin at you.",{energy:3,candor:-1},{},['mischievous','adventurous']],
+     ["Walk them there, even though it is well out of the way.",{warmth:3,drive:1},{},['warm','nurturing']],
+     ["Say 'no idea, sorry' and keep walking.",{candor:2,energy:-1,closeness:-2},{},['stoic','sharp']]]},
+ {q:"It is your companion’s birthday. How do they want to spend it?",
+  sub:"You asked. They have clearly been thinking about it.",
+  a:[["A big, loud dinner with everyone they love crammed round one table.",{energy:3,warmth:2},{},['social','bright']],
+     ["Somewhere quiet, with just you.",{warmth:2,energy:-1,closeness:3},{},['romantic','shy']],
+     ["Doing something they have never done before.",{energy:3,drive:3},{},['adventurous','intense']],
+     ["Honestly? Like any other day, with better cake.",{energy:-1,candor:1},{},['steady','pragmatic']]]},
+ {q:"You have had a terrible day and it shows. What does your companion do first?",
+  sub:"You have not said a word yet. They have already noticed.",
+  a:[["Makes you eat something, then listens.",{warmth:3,drive:1},{},['nurturing','protective']],
+     ["Gets angry on your behalf, loudly.",{energy:2,candor:2,closeness:1},{},['intense','protective']],
+     ["Makes you laugh until you forget why you were upset.",{energy:3,warmth:2},{},['sunny','mischievous']],
+     ["Sits beside you and says nothing at all.",{energy:-2,warmth:1,candor:-1},{},['quiet','melancholy']]]},
+ {q:"The village holds its yearly contest. What does your companion enter?",
+  sub:"There is a very small trophy and a very large amount of pride at stake.",
+  a:[["The pie contest. They bring enough for everyone.",{warmth:3,energy:1},{},['warm','social']],
+     ["Storytelling night, with a tale nobody saw coming.",{energy:2,drive:1},{},['whimsical','creative']],
+     ["The puzzle hunt. They have already solved half of it.",{candor:2,drive:2},{},['analytical','sharp']],
+     ["Nothing. They would rather watch you and be quietly delighted.",{warmth:2,energy:-2,closeness:2},{},['romantic','steady']]]},
+ // ---- their world: picks from the catalogue, shown and editable at the reveal
+ {q:"The innkeeper asks your companion what they do when they are not travelling. What do they say, with a grin?",
+  sub:"The whole common room leans in a little to hear.",world:true,
+  a:[["“I make things people look at.”",{},{},[],{occupation:['4','10','11','18','13']}],
+     ["“I look after people.”",{},{},[],{occupation:['1','2','12','17']}],
+     ["“I work with my hands — food, wood, engines, plants.”",{},{},[],{occupation:['6','7','8','9','14','15','19']}],
+     ["“I figure things out for a living.”",{},{},[],{occupation:['3','16','5','21']}]]},
+ {q:"The rooster crows at dawn. Where is your companion?",
+  sub:"The village is only just waking up.",world:true,
+  a:[["Already up, halfway through a walk.",{},{},[],{daily_rhythm:['1','5']}],
+     ["Asleep. They were up past two with a project.",{},{},[],{daily_rhythm:['2','6']}],
+     ["Getting ready for a proper day’s work.",{},{},[],{daily_rhythm:['4','11']}],
+     ["Somewhere unexpected. They do not really do routines.",{},{},[],{daily_rhythm:['9','14','15']}]]},
+ {q:"Your companion has one free afternoon in the village. Where do you find them?",
+  sub:"You go looking, and it does not take long.",world:true,
+  a:[["In the bookshop, three books deep.",{},{},[],{likes:['2','12','15']}],
+     ["Out on the trails, muddy and happy.",{},{},[],{likes:['3','9','19']}],
+     ["In a kitchen or a workshop, making something.",{},{},[],{likes:['4','6','13','18']}],
+     ["At the café with headphones, a game or a film.",{},{},[],{likes:['5','7','8','20']}]]},
+ {q:"How did the two of you first cross paths?",
+  sub:"You both tell it slightly differently.",world:true,
+  a:[["Over an argument about a book.",{},{},[],{met:['6','17']}],
+     ["Rain, a crowded café, and one free seat.",{},{},[],{met:['7','16']}],
+     ["Through friends. It took a while to notice each other.",{},{},[],{met:['2','14','11']}],
+     ["A message that went to the wrong person.",{},{},[],{met:['13','4','5']}]]},
+ {q:"A travelling painter sketches your companion. Which colours does she reach for first, for their hair?",
+  sub:"She squints at them, then at her paint box.",world:true,
+  a:[["Deep browns and near-black.",{},{},[],{hair_color:['1','2','3','4','15']}],
+     ["Warm golds and honey.",{},{},[],{hair_color:['5','8','10','11']}],
+     ["Copper, auburn and ginger.",{},{},[],{hair_color:['6','7','12','13']}],
+     ["Something bold — silver, or a colour from a bottle.",{},{},[],{hair_color:['16','20','21','22','24']}]]},
+ {q:"You spot your companion waiting at the station before they see you. What gives them away?",
+  sub:"The platform is busy. You would know them anywhere.",world:true,
+  a:[["Small and quick — easy to miss in a crowd.",{},{},[],{frame:'small'}],
+     ["Tall — a head above everyone else.",{},{},[],{frame:'tall'}],
+     ["Strong shoulders and a solid, easy stance.",{},{},[],{frame:'strong'}],
+     ["Soft and relaxed, comfortable in their own skin.",{},{},[],{frame:'soft'}]]},
+ {q:"They have dressed for your first proper meeting. What are they wearing?",
+  sub:"They pretend they did not think about it. They did.",world:true,
+  a:[["Whatever is comfortable — soft, worn-in, cosy.",{},{},[],{look:'comfy'}],
+     ["Something sharp and put-together.",{},{},[],{look:'sharp'}],
+     ["Something with character — vintage, arty or alternative.",{},{},[],{look:'character'}],
+     ["Ready for anything outdoors or on the move.",{},{},[],{look:'active'}]]},
+ // ---- direct preferences
  {q:"How quickly would you like familiarity to grow?",
-  sub:"This is a setting you control. Warmth does not automatically mean romance.",
+  sub:"This is a setting you control. Warmth does not automatically mean romance.",direct:'pace',
   a:[["Slowly. Let shared experiences earn familiarity.",{},{relationship_pace:'slow'}],
      ["Naturally, with room to discover what works.",{},{relationship_pace:'natural'}],
      ["A warm, familiar tone from the beginning.",{},{relationship_pace:'quick'}]]},
  {q:"When you are away, how would you like them to get in touch?",
-  sub:"These are actual contact permissions. Quiet hours still apply; you can review them next.",
+  sub:"These are actual contact permissions. Quiet hours still apply; you can review them next.",direct:'contact',
   a:[["Social messages and photos are welcome, up to six messages a day.",{},{permit_image:'yes',outreach:'free',outreach_per_day:6}],
      ["Meaningful updates, up to three a day. Ask before sharing photos.",{},{permit_image:'ask',outreach:'updates_only',outreach_per_day:3}],
      ["Replies only. No messages or photos unless I ask.",{},{permit_image:'no',outreach:'never',outreach_per_day:1}]]},
  {q:"What kind of relationship would you like to begin with?",
-  sub:"Only this answer sets the relationship. You can change the proposed frame before creating anyone.",
+  sub:"Only this answer sets the relationship. You can change the proposed frame before creating anyone.",direct:'relationship',
   a:[["A friend, with no romantic expectation.",{},{boundary:'best-friend',agent_type:'companion'}],
      ["A connection with room for flirtation.",{},{boundary:'next-door',agent_type:'companion'}],
      ["A romantic partner.",{},{boundary:'girlfriend',agent_type:'companion'}],
      ["A colleague with personality and shared projects.",{},{boundary:'creative-partner',agent_type:'colleague'}]]}
 ];
 
-/* Each personality as a point in the same five-axis space, so the interview can
-   pick the nearest one instead of asking people to read twenty descriptions. */
+/* Each personality as a point in five-axis space: only used to break a tie. */
 const PERSONA_AXES={
   warm:{warmth:3,energy:1,candor:0,drive:1,closeness:1},
   steady:{warmth:1,energy:-1,candor:1,drive:0,closeness:0},
@@ -125,24 +202,69 @@ const PERSONA_AXES={
 };
 const AXES=['warmth','energy','candor','drive','closeness'];
 
-function derive(picks,catalog){
-  const axis={warmth:0,energy:0,candor:0,drive:0,closeness:0};
-  const direct={};
+/* Catalogue entries that suit each personality, for the parts no scene asks
+   about directly. Ids refer to personas/catalog.json; one is rolled per person. */
+const PERSONA_PICKS={
+  warm:{core:['3','19','1','12'],voice:['1','13','15'],flirtation:['1','12','15'],essence:['1','2','9'],texting:3},
+  steady:{core:['2','9','10','17'],voice:['7','2','16'],flirtation:['10','17','4'],essence:['4','12'],texting:2},
+  bright:{core:['16','7','11'],voice:['5','17','8'],flirtation:['2','9','14'],essence:['9','7'],texting:1},
+  sharp:{core:['4','6','18'],voice:['4','14','11','2'],flirtation:['6','16','13'],essence:['11','17'],texting:5},
+  quiet:{core:['3','15','1'],voice:['9','18','6'],flirtation:['4','18','10'],essence:['6','4'],texting:5},
+  adventurous:{core:['20','13','6'],voice:['5','10','17'],flirtation:['3','9','14'],essence:['7','10'],texting:1},
+  creative:{core:['8','11','13'],voice:['8','10','13'],flirtation:['11','1','8'],essence:['8','15'],texting:4},
+  analytical:{core:['1','12','17'],voice:['12','2','16'],flirtation:['16','7','6'],essence:['11','13'],texting:4},
+  social:{core:['16','12','7'],voice:['1','5','15'],flirtation:['12','2','9'],essence:['9','14'],texting:3},
+  romantic:{core:['19','3','10'],voice:['9','6','10'],flirtation:['8','4','15'],essence:['16','15','2'],texting:4},
+  protective:{core:['14','9','2'],voice:['7','14','1'],flirtation:['10','15','3'],essence:['12','4'],texting:2},
+  sunny:{core:['16','1','10'],voice:['5','1','17'],flirtation:['12','14','2'],essence:['9','15'],texting:3},
+  mischievous:{core:['5','7','11'],voice:['8','15','11'],flirtation:['2','13','9'],essence:['3','17'],texting:1},
+  melancholy:{core:['18','3','15'],voice:['6','9','10'],flirtation:['4','18','11'],essence:['6','13'],texting:4},
+  intense:{core:['13','14','4'],voice:['17','4','14'],flirtation:['3','16','14'],essence:['5','17'],texting:1},
+  nurturing:{core:['14','10','19'],voice:['1','7','13'],flirtation:['15','10','12'],essence:['2','12'],texting:3},
+  stoic:{core:['2','9','6'],voice:['16','18','11'],flirtation:['18','10','17'],essence:['4','6'],texting:5},
+  whimsical:{core:['11','20','8'],voice:['13','10','8'],flirtation:['1','11','9'],essence:['8','18'],texting:1},
+  shy:{core:['15','3','1'],voice:['9','6','18'],flirtation:['5','14','4'],essence:['6','13'],texting:1},
+  pragmatic:{core:['17','4','9'],voice:['7','2','4'],flirtation:['6','7','10'],essence:['11','12'],texting:5}
+};
+/* Heights, builds and styles differ by list; these are catalogue ids per list. */
+const FRAME={
+  female:{small:{height:['3','4','5','6'],build:['12','4','10','17']},tall:{height:['13','14','15','16'],build:['8','13','16']},
+          strong:{height:['7','8','9','10','11'],build:['6','9','14','18','1']},soft:{height:['6','7','8','9','10'],build:['2','7','11','15']}},
+  male:{small:{height:['3','4','5','6'],build:['12','10','4','2']},tall:{height:['12','13','14','15','16'],build:['7','15','17']},
+        strong:{height:['7','8','9','10','11'],build:['3','6','11','14','1','13']},soft:{height:['7','8','9','10'],build:['8','9','16']}}
+};
+const LOOK={
+  female:{comfy:['1','2','19'],sharp:['3','5','7','14','16','20'],character:['4','6','10','11','13','17'],active:['8','9','12','15','18']},
+  male:{comfy:['1','2','17'],sharp:['3','4','7','13','14','20'],character:['5','9','10','15','18','19'],active:['6','8','11','12','16']}
+};
+const NAMES={she:['Mira','Juno','Hazel','Iris','Esme','Nell','Tessa','Clara','Maren','Ivy'],
+             he:['Theo','Rowan','Eli','Jonah','Silas','Milo','Arlo','Callum','Ezra','Finn'],
+             they:['Sage','River','Ash','Quinn','Rory','Lark','Robin','Emery']};
+const AGE_BANDS=[['Early twenties',23],['Late twenties',28],['Thirties',34],['Forties',44],['Fifty and up',54]];
+
+function tally(picks){
+  const score={},axis={};for(const k of AXES)axis[k]=0;
   picks.forEach((choice,i)=>{
-    if(choice==null)return;                       // skipped question
-    const opt=QUIZ[i]&&QUIZ[i].a[choice];if(!opt)return;
-    for(const k of AXES)if(opt[1]&&opt[1][k])axis[k]+=opt[1][k];
-    Object.assign(direct,opt[2]||{});
+    const opt=choice==null?null:QUIZ[i]?.a[choice];if(!opt)return;
+    (opt[3]||[]).forEach((p,rank)=>{score[p]=(score[p]||0)+(rank===0?2:1);});
+    for(const k of AXES)axis[k]+=(opt[1]&&opt[1][k])||0;
   });
-  let persona='warm',best=Infinity;
-  // Average answered personality questions: answering more questions must not
-  // push every person toward the most extreme archetype.
-  const measured=picks.filter((choice,i)=>choice!=null&&QUIZ[i]?.a[choice]&&Object.keys(QUIZ[i].a[choice][1]).length).length;
-  if(measured)for(const k of AXES)axis[k]/=measured;
-  for(const [key,point] of Object.entries(PERSONA_AXES)){
+  return {score,axis};
+}
+function cosine(a,b){let d=0,na=0,nb=0;for(const k of AXES){d+=(a[k]||0)*(b[k]||0);na+=(a[k]||0)**2;nb+=(b[k]||0)**2;}return na&&nb?d/Math.sqrt(na*nb):0;}
+
+function derive(picks,catalog){
+  const {score,axis}=tally(picks);
+  const direct={},world={};
+  picks.forEach((choice,i)=>{
+    const opt=choice==null?null:QUIZ[i]?.a[choice];if(!opt)return;
+    Object.assign(direct,opt[2]||{});Object.assign(world,opt[4]||{});
+  });
+  let persona='warm',best=-Infinity;
+  for(const key of Object.keys(PERSONA_AXES)){
     if(!catalog.personas?.[key])continue;
-    const distance=AXES.reduce((sum,k)=>sum+Math.pow((point[k]||0)-axis[k],2),0);
-    if(distance<best){best=distance;persona=key;}
+    const s=(score[key]||0)+0.01*cosine(axis,PERSONA_AXES[key]);
+    if(s>best){best=s;persona=key;}
   }
   const frames=Object.keys(catalog.boundaries||{});
   const boundary=frames.includes(direct.boundary)?direct.boundary:'best-friend';
@@ -152,8 +274,39 @@ function derive(picks,catalog){
     outreach:'updates_only',outreach_per_day:3,
     permit_image:'ask',permit_voice:'ask',
     quiet_start:'23:00',quiet_end:'08:00',
-    share_people:'no',visual:'edit',image_style:'none'
-  },direct,{boundary,_axis:axis});
+    share_people:'no',visual:'set',image_style:'none'
+  },direct,{boundary,world,_axis:axis});
+}
+
+/* A small seeded generator, so the same answers give the same person and
+   "shuffle" is a new seed rather than a different algorithm. */
+function seeded(seed){let s=seed>>>0||1;return()=>{s=(s+0x6D2B79F5)>>>0;let t=s;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}
+function hashSeed(text){let h=2166136261;for(const ch of String(text)){h^=ch.charCodeAt(0);h=Math.imul(h,16777619);}return h>>>0;}
+
+/* Everything the SOUL needs beyond the personality, as catalogue ids. */
+function resolveCompanion(derived,catalog,pronouns,seed){
+  const rnd=seeded(seed);
+  const oneOf=list=>list[Math.floor(rnd()*list.length)];
+  const cats=catalog.catalog?.categories||{};
+  const list=pronouns==='he'?'male':'female';
+  const ids=key=>(cats[key]?.[list]||cats[key]?.female||[]).map(r=>r.id);
+  const w=derived.world||{};
+  const P=PERSONA_PICKS[derived.persona]||PERSONA_PICKS.warm;
+  const frame=FRAME[list][w.frame||oneOf(['small','tall','strong','soft'])];
+  const flawsFor=(cats.flaws?.[list]||[]).filter(r=>(r.personas||[]).includes(derived.persona)).map(r=>r.id);
+  const out={
+    occupation:oneOf(w.occupation||ids('occupation')),daily_rhythm:oneOf(w.daily_rhythm||ids('daily_rhythm')),
+    likes:oneOf(w.likes||ids('likes')),met:oneOf(w.met||ids('met').filter(id=>!['1'].includes(id))),
+    hair_color:oneOf(w.hair_color||ids('hair_color')),hair_style:oneOf(ids('hair_style')),
+    eyes:oneOf(ids('eyes')),complexion:oneOf(ids('complexion')),
+    height:oneOf(frame.height),build:oneOf(frame.build),
+    style:oneOf(LOOK[list][w.look||oneOf(['comfy','sharp','character','active'])]),
+    marks:rnd()<0.45?oneOf(ids('marks')):'',
+    core:oneOf(P.core),voice:oneOf(P.voice),flirtation:oneOf(P.flirtation),essence:oneOf(P.essence),
+    flaws:oneOf(flawsFor.length?flawsFor:ids('flaws')),texting_style:P.texting
+  };
+  if(list==='male')out.facial_hair=rnd()<0.5?oneOf(ids('facial_hair')):'';
+  return out;
 }
 
 /* ------------------------------------------------------------------ helpers */
@@ -185,7 +338,9 @@ window.onboarding=async function(adopt){
   };
 
   let picks=new Array(QUIZ.length).fill(null);
-  let derived=null,step=0;
+  let derived=null,step=0,look=null,lookSeed=0;
+  // A worker gets the personality scenes and the pace question; no world, no contact or relationship.
+  const order=()=>QUIZ.map((q,i)=>i).filter(i=>draft.purpose!=='worker'||(!QUIZ[i].world&&(!QUIZ[i].direct||QUIZ[i].direct==='pace')));
   let oauthPollInterval=null;
   let scheduleApproved=false;
 
@@ -370,47 +525,82 @@ window.onboarding=async function(adopt){
     $('btn-pur-next').onclick=()=>{
       draft.purpose=target.querySelector('input[name="purpose_pick"]:checked')?.value||'relational';
       step=0;
-      questionStep();
+      meetStep();
+    };
+  }
+
+  /* ---------------------------------------------------------- 3b. Who you are hoping to meet */
+  function meetStep(){
+    const pron=draft.pronoun_set_chosen?draft.pronoun_set:'';
+    const card=(name,value,title,body,checked)=>`<label class="meet-card"><input type="radio" name="${name}" value="${value}" ${checked?'checked':''}><span><strong>${title}</strong>${body?`<small class="dim">${body}</small>`:''}</span></label>`;
+    shell(`
+      <div class="creator-head">
+        <span class="eyebrow">Before the adventure</span>
+        <h2>Who are you hoping to meet?</h2>
+        <p class="dim">Two quick things the story can’t decide for you. Everything else comes from your answers.</p>
+      </div>
+      <div class="creator-form">
+        <fieldset class="meet-group"><legend>They are…</legend>
+          ${card('meet_who','she','A woman','',pron==='she')}
+          ${card('meet_who','he','A man','',pron==='he')}
+          ${card('meet_who','they','Someone non-binary','They / them',pron==='they')}
+          ${card('meet_who','surprise','Surprise me','The quiz decides',!pron)}
+        </fieldset>
+        <fieldset class="meet-group"><legend>Around what age?</legend>
+          ${AGE_BANDS.map(([label,age])=>card('meet_age',String(age),label,'',Number(draft.age)===age)).join('')}
+        </fieldset>
+        <div class="creator-actions">
+          <button type="button" class="quiet" id="btn-meet-back">← Back</button>
+          <button type="button" class="act" id="btn-meet-next">Begin the adventure →</button>
+        </div>
+      </div>`);
+    $('btn-meet-back').onclick=()=>purposeStep();
+    $('btn-meet-next').onclick=()=>{
+      let who=target.querySelector('input[name="meet_who"]:checked')?.value||'surprise';
+      if(who==='surprise')who=Math.random()<0.5?'she':'he';
+      draft.pronoun_set=who;draft.pronoun_set_chosen=true;
+      const age=Number(target.querySelector('input[name="meet_age"]:checked')?.value);
+      if(age)draft.age=age;
+      step=0;questionStep();
     };
   }
 
   /* ---------------------------------------------------------- 4. PMD Mystery Dungeon Quiz */
   function questionStep(){
-    const total=draft.purpose==='worker'?QUIZ.length-2:QUIZ.length;
-    const item=QUIZ[step];
+    const seq=order(),total=seq.length,index=seq[step],item=QUIZ[index];
+    const part=item.direct?'Make it yours':item.world?'Their world':'Your little adventure';
     shell(`
       <div class="quiz-progress" role="group" aria-label="Question ${step+1} of ${total}">
-        ${QUIZ.slice(0,total).map((_,i)=>`<span class="${i<step?'is-done':i===step?'is-now':''}"></span>`).join('')}
+        ${seq.map((_,i)=>`<span class="${i<step?'is-done':i===step?'is-now':''}"></span>`).join('')}
         <small>${step+1} / ${total}</small>
       </div>
       <div class="quiz-body">
-        <span class="eyebrow" style="color:var(--accent)">${step<QUIZ.length-3?'Your little adventure':'Make it yours'} · Question ${step+1}</span>
+        <span class="eyebrow" style="color:var(--accent)">${part} · Question ${step+1}</span>
         <h2 style="margin-top:6px">${esc(item.q)}</h2>
         <p class="quiz-sub">${esc(item.sub)}</p>
         <div class="quiz-options">
-          ${item.a.map((opt,i)=>`<button type="button" class="quiz-option${picks[step]===i?' is-chosen':''}" data-pick="${i}">
+          ${item.a.map((opt,i)=>`<button type="button" class="quiz-option${picks[index]===i?' is-chosen':''}" data-pick="${i}">
             <span class="quiz-key">${String.fromCharCode(65+i)}</span><span>${esc(opt[0])}</span></button>`).join('')}
         </div>
       </div>
       <div class="creator-actions">
-        <button type="button" class="quiet" id="quiz-back">${step===0?'← Purpose':'← Previous'}</button>
+        <button type="button" class="quiet" id="quiz-back">${step===0?'← Who you’re meeting':'← Previous'}</button>
         <button type="button" class="link-button" id="quiz-skip">Skip this question</button>
       </div>`,'is-quiz');
 
-    for(const b of target.querySelectorAll('[data-pick]'))b.onclick=()=>{picks[step]=Number(b.dataset.pick);advance();};
-    $('quiz-skip').onclick=()=>{picks[step]=null;advance();};
-    $('quiz-back').onclick=()=>{if(step===0)purposeStep();else{step--;questionStep();}};
+    for(const b of target.querySelectorAll('[data-pick]'))b.onclick=()=>{picks[index]=Number(b.dataset.pick);advance();};
+    $('quiz-skip').onclick=()=>{picks[index]=null;advance();};
+    $('quiz-back').onclick=()=>{if(step===0)meetStep();else{step--;questionStep();}};
 
     target.tabIndex=-1;target.focus({preventScroll:true});
     target.onkeydown=e=>{
       const n=/^[a-dA-D]$/.test(e.key)?e.key.toLowerCase().charCodeAt(0)-97:(/^[1-4]$/.test(e.key)?Number(e.key)-1:-1);
-      if(n>=0&&n<item.a.length){e.preventDefault();picks[step]=n;advance();}
+      if(n>=0&&n<item.a.length){e.preventDefault();picks[index]=n;advance();}
     };
   }
 
   function advance(){
-    const total=draft.purpose==='worker'?QUIZ.length-2:QUIZ.length;
-    if(step<total-1){step++;questionStep();}
+    if(step<order().length-1){step++;questionStep();}
     else{
       derived=derive(picks,catalog);
       if(draft.purpose==='worker'){
@@ -418,6 +608,9 @@ window.onboarding=async function(adopt){
         derived.boundary='creative-partner';
         derived.outreach='never';derived.permit_image='no';derived.permit_voice='no';
       }
+      lookSeed=hashSeed(picks.join(',')+draft.pronoun_set+draft.age);
+      look=resolveCompanion(derived,catalog,draft.pronoun_set,lookSeed);
+      if(!draft.agent_named){const names=NAMES[draft.pronoun_set]||NAMES.they;draft.agent=names[lookSeed%names.length];}
       revealStep();
     }
   }
@@ -458,6 +651,8 @@ window.onboarding=async function(adopt){
           <div><dt>Unprompted Photos</dt><dd>${esc(PERMIT_LABEL[derived.permit_image]||derived.permit_image)}</dd></div>
         </dl>
       </div>
+
+      ${derived.agent_type==='worker'?'':lookPanels()}
 
       <div class="creator-form">
           <label>Companion Name
@@ -525,7 +720,14 @@ window.onboarding=async function(adopt){
       </div>`);
 
     $('btn-rev-quiz').onclick=()=>{captureReview();step=0;questionStep();};
+    const reshuffle=keys=>{captureReview();const fresh=resolveCompanion(derived,catalog,draft.pronoun_set,(lookSeed=(lookSeed*31+7)>>>0));
+      for(const k of keys)if(k in fresh)look[k]=fresh[k];revealStep();};
+    if($('btn-shuffle-look'))$('btn-shuffle-look').onclick=()=>reshuffle(LOOK_FIELDS.map(f=>f[0]));
+    if($('btn-shuffle-life'))$('btn-shuffle-life').onclick=()=>reshuffle(LIFE_FIELDS.map(f=>f[0]));
+    if($('cust-name'))$('cust-name').oninput=()=>{draft.agent_named=true;};
     function captureReview(){
+      for(const el of target.querySelectorAll('[data-look]'))look[el.dataset.look]=el.value;
+      const before=draft.pronoun_set;
       draft.hope=$('cust-hope').value.trim();
       draft.human_boundary=$('cust-boundary-note').value.trim();
       derived.quiet_start=$('cust-quiet-start').value||'23:00';
@@ -534,7 +736,7 @@ window.onboarding=async function(adopt){
       derived.outreach=$('cust-outreach').value;
       derived.outreach_per_day=Math.max(1,Math.min(100,Number($('cust-cap').value)||3));
       derived.image_style=$('cust-image-style').value;
-      derived.visual=derived.image_style==='none'?'none':'edit';
+      derived.visual='set';
       derived.permit_image=$('cust-images').value;
       derived.permit_voice=$('cust-voice').value;
       // Capture any custom tweaks made in drawer
@@ -542,13 +744,75 @@ window.onboarding=async function(adopt){
       if(custName)draft.agent=custName;
       const custHuman=$('cust-human')?.value.trim();
       if(custHuman)draft.human_names=custHuman;
-      if($('cust-pronoun'))draft.pronoun_set=$('cust-pronoun').value;
-      if($('cust-human-pronoun'))draft.human_pronoun_set=$('cust-human-pronoun').value;
+      if($('cust-pronoun')?.value)draft.pronoun_set=$('cust-pronoun').value;
+      if($('cust-human-pronoun')?.value)draft.human_pronoun_set=$('cust-human-pronoun').value;
       if($('cust-persona'))derived.persona=$('cust-persona').value;
       if($('cust-boundary'))derived.boundary=$('cust-boundary').value;
       if($('cust-pace'))derived.relationship_pace=$('cust-pace').value;
+      // The catalogue lists differ by gender, so a changed pronoun re-rolls the look.
+      if(draft.pronoun_set!==before)look=resolveCompanion(derived,catalog,draft.pronoun_set,lookSeed);
     }
-    $('btn-rev-accept').onclick=()=>{captureReview();inferenceStep();};
+    $('btn-rev-accept').onclick=()=>{captureReview();derived.agent_type==='worker'?inferenceStep():ownershipStep();};
+  }
+
+  /* The look and life the quiz chose, as editable catalogue picks. */
+  const LOOK_FIELDS=[['hair_color','Hair colour'],['hair_style','Hair style'],['eyes','Eyes'],['complexion','Skin'],
+                     ['height','Height'],['build','Build'],['style','How they dress'],['marks','A detail'],['facial_hair','Facial hair']];
+  const LIFE_FIELDS=[['occupation','Work'],['daily_rhythm','Their rhythm'],['likes','Loves'],['met','How you met']];
+  function lookPanels(){
+    const cats=catalog.catalog?.categories||{};
+    const list=draft.pronoun_set==='he'?'male':'female';
+    const field=([key,label])=>{
+      const rows=cats[key]?.[list];if(!rows)return '';
+      const none=['marks','facial_hair'].includes(key)?[['','None']]:[];
+      return `<label>${esc(label)}<select data-look="${key}" id="look-${key}">${options(none.concat(rows.map(r=>[r.id,r.label])),look[key]||'')}</select></label>`;
+    };
+    return `<div class="reveal-panels">
+      <section class="card reveal-panel"><div class="reveal-panel-head"><h3>Their look</h3>
+        <button type="button" class="link-button" id="btn-shuffle-look">Shuffle</button></div>
+        <div class="form-grid">${LOOK_FIELDS.map(field).join('')}</div>
+        <small class="dim">Chosen from your answers. Photos are drawn from this, so change anything that isn’t them.</small></section>
+      <section class="card reveal-panel"><div class="reveal-panel-head"><h3>Their life</h3>
+        <button type="button" class="link-button" id="btn-shuffle-life">Shuffle</button></div>
+        <div class="form-grid">${LIFE_FIELDS.map(field).join('')}</div>
+        <small class="dim">Their life keeps going between conversations, and they’ll grow it themselves.</small></section>
+    </div>`;
+  }
+
+  /* ---------------------------------------------------------- 5b. Who keeps what */
+  function ownershipStep(){
+    const name=esc(draft.agent||'Your companion');
+    const sections=[['core','Who '+name+' is','Personality'],['daily-life',name+'’s life','Work, rhythm, the things they love'],
+                    ['voice','How '+name+' talks','Tone, texting, pet names'],['heart','Heart and temper','Feelings, flaws, making up'],
+                    ['support','Support and humor','Showing up, and what makes them laugh'],['appearance','What '+name+' looks like','Locked unless you open it']];
+    draft.soul_locks=draft.soul_locks||{appearance:true};
+    shell(`
+      <div class="creator-head">
+        <span class="eyebrow">One last thing</span>
+        <h2>${name} will grow</h2>
+        <p class="dim">A companion who never changes is a costume. ${name} rewrites parts of who they are as your relationship deepens — more of them open up over time. You decide what stays exactly as you set it.</p>
+      </div>
+      <div class="ownership-keys">
+        <div><span class="keeper keeper-shared">Shared</span><p>Starts from your answers. ${name} can rewrite it as they change, unless you lock it. You can always edit it too.</p></div>
+        <div><span class="keeper keeper-yours">Yours</span><p>What you are to each other, closeness and hard lines. ${name} never changes these.</p></div>
+        <div><span class="keeper keeper-hers">Theirs</span><p>${name}’s own words about themselves. You can read them; only they write them.</p></div>
+        <div><span class="keeper keeper-private">Private</span><p>What they really think and feel about you. Written only for themselves — you will never see it. It opens up as you grow closer.</p></div>
+      </div>
+      <div class="creator-form">
+        <h3 style="margin:8px 0 4px">Lock anything you want kept exactly as it is</h3>
+        ${sections.map(([id,title,hint])=>`<label class="switch-container" data-toggle-row>
+          <input type="checkbox" data-lock="${id}" ${draft.soul_locks[id]?'checked':''}>
+          <span class="switch-slider" aria-hidden="true"></span>
+          <span class="switch-label"><strong>${title}</strong> <small class="dim">${hint}</small></span></label>`).join('')}
+        <small class="dim">You can change these any time on the Identity page.</small>
+        <div class="creator-actions">
+          <button type="button" class="quiet" id="btn-own-back">← Back</button>
+          <button type="button" class="act" id="btn-own-next">Connect a model →</button>
+        </div>
+      </div>`);
+    const capture=()=>{for(const el of target.querySelectorAll('[data-lock]'))draft.soul_locks[el.dataset.lock]=el.checked;};
+    $('btn-own-back').onclick=()=>{capture();revealStep();};
+    $('btn-own-next').onclick=()=>{capture();inferenceStep();};
   }
 
   /* ---------------------------------------------------------- 5. Model connection */
@@ -926,7 +1190,18 @@ window.onboarding=async function(adopt){
       image_style:derived.image_style||'none'
     };
 
-    if(draft.hope)answers.essence='A guiding intention for this connection, in the human’s own words: '+draft.hope;
+    // Everything the quiz chose, by catalogue id: stable where a list position is not.
+    if(look&&answers.agent_type!=='worker'){
+      answers.visual='set';
+      for(const [key,value] of Object.entries(look)){
+        if(key==='texting_style'){answers.texting_style=String(value);continue;}
+        if(key==='flirtation'&&['best-friend','creative-partner'].includes(answers.boundary))continue;
+        answers[key]=value?'id:'+value:'skip:none';
+      }
+      answers.pet_names='develop';
+      answers.soul_locks=draft.soul_locks||{appearance:true};
+    }
+    if(draft.hope)answers.hope=draft.hope;
     if(draft.birthdate)answers.birthdate=draft.birthdate;
     if(draft.human_boundary)answers.human_boundary=draft.human_boundary;
     if(draft.vault)answers.vault=draft.vault;
