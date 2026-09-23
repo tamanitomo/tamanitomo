@@ -72,9 +72,28 @@ class KeeperTests(unittest.TestCase):
     def test_the_new_soul_has_every_keeper_section_and_no_machinery(self):
         text=Path(self.c.soul).read_text()
         import companion_identity as ident
-        self.assertEqual(set(ident.sections(text)),set(soul.SECTIONS))
-        for word in ('shared fiction','imagined','premise','PRESENCE.md','companion_presence','Operational'):
+        found=ident.sections(text)
+        self.assertEqual(set(found),set(soul.SECTIONS))
+        for word in ('shared fiction','imagined','premise'):
             self.assertNotIn(word,text)
+        # Machinery lives only in the hidden "How things work" section.
+        for name,sec in found.items():
+            if name=='operating':continue
+            for word in ('PRESENCE.md','companion_presence','companion_outbox','credentials'):
+                self.assertNotIn(word,sec['body'],name)
+        for word in ('companion_presence.py','PRESENCE.md','outbox','credentials'):   # photos only with an image style
+            self.assertIn(word,found['operating']['body'])
+
+    def test_updates_keep_local_notes(self):
+        import companion_identity as ident, companion_render as cr
+        path=Path(self.c.soul);text=path.read_text()
+        text=text.replace(cr.LOCAL_BEGIN+'\n'+cr.LOCAL_END,cr.LOCAL_BEGIN+'\nUse the Pocket voice.\n'+cr.LOCAL_END)
+        text=text.replace('Never expose secrets','Old wording. Never expose secrets')
+        path.write_text(text)
+        self.assertTrue(soul.refresh_operating(self.c))
+        body=ident.sections(path.read_text())['operating']['body']
+        self.assertIn('Use the Pocket voice.',body);self.assertNotIn('Old wording.',body)
+        self.assertFalse(soul.refresh_operating(self.c))
 
 
 class IdentityPageTests(KeeperTests):
@@ -93,6 +112,8 @@ class IdentityPageTests(KeeperTests):
         self.assertEqual(by['own-words']['keeper'],'hers');self.assertFalse(by['own-words']['lockable'])
         self.assertNotIn('hums when he is nervous',client.get('/api/identity',headers=h).text)
         self.assertTrue(next(n for n in d['private'] if n['id']=='about-you')['written'])
+        self.assertNotIn('operating',by,'How things work is for Hermes, not the page')
+        self.assertEqual(client.post('/api/identity/operating',json={'body':'x'},headers=h).status_code,403)
 
     def test_locks_and_protected_sections(self):
         client=self.client();h={'x-companion-token':'t'}

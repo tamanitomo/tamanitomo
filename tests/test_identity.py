@@ -79,7 +79,7 @@ class SectionTests(unittest.TestCase):
     def test_every_section_is_findable_and_the_locked_ones_are_marked(self):
         found=identity.sections(self.c.soul.read_text())
         self.assertIn('core',found);self.assertIn('appearance',found)
-        self.assertEqual(identity.locked_names(self.c),['appearance','being-herself','closeness','hard-lines','relationship'])
+        self.assertEqual(identity.locked_names(self.c),['appearance','being-herself','closeness','hard-lines','operating','relationship'])
         self.assertFalse(found['core']['locked'])
 
     def test_replacing_one_section_leaves_every_other_byte_alone(self):

@@ -1,3 +1,8 @@
+## 3.0.15 — How things work (2026-09-23)
+
+- Add a hidden "How things work" section to the SOUL. 3.0.14 moved operating knowledge out of the identity file and two pieces had nowhere else to live: the tool safety rules (no exposed secrets, no destructive or irreversible changes without asking, reversible steps when unattended) and the image rules for pictures made in a conversation (use the saved workflows, adults only, review before attaching). The per-turn hook does run on Telegram, but it rides on the message and can be trimmed; SOUL.md is the system prompt on every platform. The section also says how the current moment is kept in step with the day, where memory lives, how voice notes are made and that anything unprompted is queued.
+- Keep the section current on `companion repair`, preserving anything written between the local-notes markers. The Identity page does not show it and the API will not edit it.
+
 ## 3.0.14 — Who they are, and how you meet them (2026-09-23)
 
 - Rebuild the base SOUL as eleven sections, each with a keeper: shared, yours, theirs, fixed. Closeness (five sections), conduct (three), honesty (two) and voice (two) are stated once; commands, image rules and operating instructions are out of the identity file.

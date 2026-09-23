@@ -742,7 +742,9 @@ def build(home=None,token='',state_dir=None):
                                  'guide':(by.get(s['name']) or {}).get('guide',''),
                                  'her':(by.get(s['name']) or {}).get('her'),
                                  'changes':companion_soul.changes(c,s['name'],20)}
-                                for s in ident.sections(text).values()],
+                                for s in ident.sections(text).values()
+                                # Hermes reads it; the page does not show it.
+                                if not (companion_soul.SECTIONS.get(s['name']) or {}).get('hidden')],
                     # Private notes: that they exist and when they open, never what they say.
                     'private':[{'id':r['id'],'title':r['title'],'opens':r.get('opens'),'open':r['her']['can'] or
                                 'cooldown' in r['her'] or r['id'] in companion_soul.private_notes(c),
@@ -766,7 +768,7 @@ def build(home=None,token='',state_dir=None):
         keeper=(companion_soul.SECTIONS.get(section) or {}).get('keeper')
         # Her own words are hers, and the fixed section is the app's.
         if keeper=='hers':raise HTTPException(403,f'{c.agent} writes this section; it can be read but not edited here.')
-        if keeper=='fixed':raise HTTPException(403,'This section is maintained by the app.')
+        if keeper in ('fixed','system'):raise HTTPException(403,'This section is maintained by the app.')
         import companion_identity as ident
         _,text=ident.read(c)
         found=ident.sections(text).get(section)

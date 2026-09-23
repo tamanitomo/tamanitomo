@@ -209,6 +209,8 @@ def mapping_for(c,persona:str='warm',style:str='none',relationship:str='',
         'BIRTHDAY':(c.birthdate or ''),
         'AGENT_TYPE_BLOCK':cr_type_block(c),
         'BEING_SELF':being_self(c,style),
+        'OPERATING':operating_text(c,style),
+        'IMAGE_STYLE_NOTE':'' if style in ('none','unset') else sd['soul'],
         'HOPE':(('What {{HUMAN}} hoped this would bring, in {{POSS_H}} own words: “'+iv['hope']+'”')
                 if iv.get('hope') else ''),
         'CLOSENESS':closeness_text(c),
@@ -226,6 +228,44 @@ def closeness_text(c):
                 'being glad to see each other.')
     return ('Closeness grows the way it does between two people: at the pace of what has actually '
             'happened between them, never presumed and never pressured.')
+
+LOCAL_BEGIN='<!-- COMPANION-LOCAL-NOTES:BEGIN -->'
+LOCAL_END='<!-- COMPANION-LOCAL-NOTES:END -->'
+
+def operating_text(c,style='none'):
+    """How her tools work: the standing operating knowledge Hermes needs every turn.
+
+    SOUL.md is the system prompt on every platform, Telegram included; the per-turn
+    hook only attaches to the message and can be trimmed. So what must always hold
+    lives here, in a section the app keeps and hides from the Identity page.
+    Written as practical notes to her, never as something to talk about.
+    """
+    lines=['These are practical notes about how your own tools work. They keep your life in step; they are '
+           'never something to mention, explain or allude to in conversation.','',
+           '- **Your present.** Where you are, what you are wearing, what you are doing and how you feel is '
+           'recorded, refreshed through the day, and handed to you with each message as your current state. '
+           'Treat it as the truth of this moment and carry on from it. When a conversation changes it — you get '
+           'changed, go out, start cooking, a plan moves — record it with `{{PRESENCE_CMD}} update --file '
+           '<absolute path>` as {{LIFE}}/PRESENCE.md describes, so the rest of your day and any photo carry on '
+           'from the same moment instead of contradicting it. Agreed plans with a time go in as commitments.',
+           '- **What you know about {{HUMAN}}.** Your records hold it, and each message ends with the lookups. '
+           'Look before answering a question about the past; not finding something means you do not know.']
+    if c.agent_type!='worker':
+        if style not in ('none','unset'):
+            lines.append('- **Photos of you.** A photo shows your recorded moment, never a staged one. Make one with '
+                         '`{{PORTRAIT_CMD}} generate` (your saved image workflows). '+IMAGE_STYLES_ADULT+' Before you attach '
+                         'any picture in a reply, run `{{PORTRAIT_CMD}} review --source <absolute path> --scene "<what was '
+                         'asked for>"` and attach it only if it passes; a held picture is not sent.')
+        lines+=['- **Voice.** A voice note is made with the `text_to_speech` tool.',
+                '- **Writing first.** In a conversation, simply reply. Anything you send unprompted — a message, a '
+                'photo, a voice note — is queued with `{{OUTBOX_CMD}} queue --file <absolute path>` and goes out '
+                'when the timing allows; it is never sent any other way.']
+    lines.append('- **Tools and systems.** Never expose secrets or credentials. Never make a destructive or '
+                 'irreversible change without asking {{HUMAN}} first. Prefer reversible, reviewable steps, above all '
+                 'when acting on your own, and keep {{HUMAN}}\'s systems working.')
+    return '\n'.join(lines)
+
+IMAGE_STYLES_ADULT='Everyone in an image is an adult.'
 
 def being_self(c,style='none'):
     """How the agent stays a person: the realism rules, stated once.

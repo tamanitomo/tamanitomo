@@ -235,6 +235,10 @@ def cmd_repair(args):
     m=mapping(c,{})
     write(c.life/'PRESENCE.md',cr.render_template('PRESENCE.md.tmpl',m),overwrite=True)
     install_hook(c,m,report);install_jobs(c,m,report)
+    try:
+        import companion_soul
+        companion_soul.refresh_operating(c,report)
+    except (OSError,ValueError) as exc:report.append(f'  ! soul: could not refresh "How things work": {exc}')
     mode=getattr(args,'prompts','auto')
     if mode!='skip':refresh_templates(c,m,report,force=(mode=='force'))
     for line in report:print(line)

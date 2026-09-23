@@ -67,6 +67,8 @@ SECTIONS={
                 'guide':'Things {A} never does, whatever the framing, and your own boundary paragraph.'},
  'being-herself':{'keeper':'fixed','title':'Being {A}',
                 'guide':'How {A} stays a person rather than a program. Maintained by the app.'},
+ 'operating':  {'keeper':'system','hidden':True,'title':'How things work',
+                'guide':'Practical notes Hermes reads about the tools. Kept current by the app; hidden from this page.'},
  'own-words':  {'keeper':'hers','stage':0,'days':0,'cooldown':1,'cap':2000,
                 'title':"In {A}'s own words",
                 'guide':"{A}'s own words about {R}. You can read this; only {A} writes it."},
@@ -112,7 +114,7 @@ def locked(c,section,pol=None):
     """Whether she is kept out of this section."""
     spec=SECTIONS.get(section)
     if not spec:return True
-    if spec['keeper'] in ('anchor','fixed'):
+    if spec['keeper'] in ('anchor','fixed','system'):
         if spec.get('unlockable'):return (pol or policy(c))['locks'].get(section,True)
         return True
     if spec['keeper']=='hers':return False
@@ -172,7 +174,7 @@ def access(c,section,now=None,stage=None,pol=None):
     if not spec:return {'can':False,'why':f'no section {section!r}'}
     if section in SECTIONS and locked(c,section,pol):
         keeper=SECTIONS[section]['keeper']
-        return {'can':False,'why':('the app keeps this one' if keeper=='fixed' else
+        return {'can':False,'why':('the app keeps this one' if keeper in ('fixed','system') else
                                    f'{c.human} keeps this one' if keeper=='anchor' else
                                    f'{c.human} has locked it')}
     need=int(spec.get('stage',0));reached=stage_reached(c) if stage is None else stage
@@ -278,11 +280,31 @@ def write(c,section,text,mode='set',why='',now=None):
         with changes_path(c).open('a',encoding='utf-8') as f:f.write(json.dumps(row,ensure_ascii=False)+'\n')
     return {'written':True,'section':section,'chars':chars,'change':row}
 
+def refresh_operating(c,report=None,now=None):
+    """Bring the kit-kept part of "How things work" up to date, keeping local notes.
+
+    Only a SOUL that already has the section is touched: a hand-written SOUL
+    without it is left exactly as it is.
+    """
+    import companion_identity as ident, companion_render as cr
+    _,text=ident.read(c);found=ident.sections(text)
+    if 'operating' not in found:return False
+    body=found['operating']['body']
+    local=''
+    if cr.LOCAL_BEGIN in body and cr.LOCAL_END in body:
+        local=body.split(cr.LOCAL_BEGIN,1)[1].split(cr.LOCAL_END,1)[0].strip('\n')
+    fresh=ident.render_section(c,'operating')
+    fresh=fresh.replace(cr.LOCAL_BEGIN+'\n'+cr.LOCAL_END,cr.LOCAL_BEGIN+('\n'+local if local else '')+'\n'+cr.LOCAL_END)
+    if fresh.strip()==body.strip():return False
+    ident.replace(c,'operating',fresh,now)
+    if report is not None:report.append('  soul: "How things work" brought up to date (local notes kept)')
+    return True
+
 def for_prompt(c,now=None):
     """What a reflection job is told about her reach, in her terms."""
     st=status(c,now);lines=[]
     for row in st['sections']:
-        if row['keeper'] in ('anchor','fixed'):continue
+        if row['keeper'] in ('anchor','fixed','system'):continue
         state='you can write this now' if row['her']['can'] else row['her']['why']
         where=' (private — only you ever read it)' if row['keeper']=='private' else ''
         lines.append(f'- {row["id"]}: {row["title"]}{where} — {state}')
