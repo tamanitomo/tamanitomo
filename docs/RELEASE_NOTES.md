@@ -1,8 +1,10 @@
-Tamanitomo 3.0.6 fixes the Android installer for anyone whose phone did not already have Python 3.11.
+Tamanitomo 3.0.7 lets a companion see everything in her vault.
 
-The Android install depends on eighteen packages prebuilt for the phone, because several of Hermes's dependencies are written in Rust and compiling them on a phone takes half an hour when it works at all. Those packages exist for Python 3.11 only. The installer asked Termux for 3.11 in the same breath as seventeen other packages, and apt installs all or nothing, so one unavailable package meant no Python 3.11 and no Rust — and the error was thrown away. It then built the virtualenv on whatever Python was there, pip turned down every prebuilt package without a word, and the install ended in `error running maturin`, under a notice about a new pip that looked like the cause and was not.
+Until now she knew only the files her continuity happened to mention. A note she wrote a month ago, or a project folder you set up for her, was invisible unless she already knew to look for it. Now each session starts with a map: every note by name under its folder, and the sections inside as many notes as the model's window can carry, newest first. She can open any of them directly.
 
-Now the packages go in one at a time if they will not go in together, the installer stops with the command to run if Python 3.11 is still missing, and a virtualenv left on the wrong Python by an earlier attempt is rebuilt rather than reused. If pip fails anyway, it says which of the three things maturin needs is absent.
+The map is sent once per session, not on every turn, so it sits in the cached part of the prompt rather than being paid for again with every message. It is sized from the window (a tenth of it, up to twenty-five thousand tokens), and `vault_index_tokens` in `companion.json` sets it by hand or switches it off. A map that had to leave something out says so, and `companion_vault_index.py show <folder>` lists any folder in full.
+
+This release also fixes the continuity hook being registered twice when repair ran under a different Python. Every turn then carried the whole continuity block twice. Run **companion repair** after updating: it removes the duplicate and raises Hermes's hook output limit so the first turn of a session is read in full rather than written to disk.
 
 ### Install
 

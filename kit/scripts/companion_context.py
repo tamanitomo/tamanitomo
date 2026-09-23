@@ -412,6 +412,16 @@ def main():
     except (OSError,ValueError) as exc:
         notice='[Memory maintenance failed: '+str(exc)+'. Originals are preserved; check companion_memory.py status before adding memory.]\n'
     from companion_local_context import BEGIN,END
-    print(json.dumps({'context':BEGIN+'\n'+build(c,payload,maintenance_notice=notice)+'\n'+END},ensure_ascii=False))
+    out=BEGIN+'\n'+build(c,payload,maintenance_notice=notice)+'\n'+END
+    # The vault map rides outside the continuity fence: the local context engine
+    # drops old continuity snapshots from replayed history, and the map has to
+    # stay there, sent once, for the rest of the session.
+    try:
+        import companion_vault_index
+        index=companion_vault_index.for_prompt(c,payload)
+    except Exception as exc:
+        index=f'[Vault index unavailable this turn ({type(exc).__name__}); the vault is unchanged. List it with companion_vault_index.py show.]'
+    if index:out+='\n\n'+index
+    print(json.dumps({'context':out},ensure_ascii=False))
 
 if __name__=='__main__':main()

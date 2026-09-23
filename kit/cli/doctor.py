@@ -103,9 +103,15 @@ def cmd_doctor(args):
             if r.returncode:raise ValueError(f'hook exited {r.returncode}: {r.stderr[:200]}')
             payload=json.loads(r.stdout or '{}')
             if not isinstance(payload.get('context'),str):raise ValueError('hook context is not text')
-            n=len(payload['context'])
+            import companion_vault_index as vault_index
+            # A fresh session carries the vault map after the continuity block.
+            # The map has its own budget; only the per-turn block is held to b.
+            context,_,index=payload['context'].partition(vault_index.BEGIN)
+            n=len(context.rstrip())
             print(f'  hook:    {"ok" if n else "EMPTY"}, {n} chars'+('' if n<=b['total'] else '  ! over budget'))
             if not n or n>b['total']:ok=False
+            cap=vault_index.budget_chars(c)
+            if cap:print(f'  vault map: {len(index):,} chars per session (budget {cap:,})')
             approvals=c.home/'shell-hooks-allowlist.json'
             allowed=json.loads(approvals.read_text(encoding='utf-8')).get('approvals',[]) if approvals.exists() else []
             if not any(e.get('event')=='pre_llm_call' and e.get('command')==cp.python_command(hook) for e in allowed):
@@ -117,6 +123,17 @@ def cmd_doctor(args):
             registered=(config.get('hooks') or {}).get('pre_llm_call') or []
             if not any(isinstance(h,dict) and h.get('command')==cp.python_command(hook) for h in registered):
                 print('  ! continuity hook is not registered');ok=False
+            from .scaffold import SPILL_MARGIN,_runs_hook
+            copies=sum(1 for h in registered if isinstance(h,dict) and _runs_hook(h.get('command',''),hook))
+            if copies>1:
+                print(f'  ! continuity hook registered {copies} times; every turn carries it {copies} times. '
+                      'Run companion repair');ok=False
+            spill=(config.get('hooks') or {}).get('output_spill') or {}
+            if cap and isinstance(spill,dict) and spill.get('enabled',True) is not False:
+                limit=int(spill.get('max_chars') or 10_000)
+                if limit<cap+c.injection_cap+SPILL_MARGIN:
+                    print(f'  ! hooks.output_spill.max_chars is {limit:,}: the first turn of a session would '
+                          'be spilled to disk instead of read. Run companion repair');ok=False
         except Exception as e:
             print(f'  ! hook failed: {e}');ok=False
     jobs=[]

@@ -34,6 +34,12 @@ HERMES_CONTEXT_FILE_CEILING=500_000
 INJECTION_FRACTION=0.03
 INJECTION_MIN=1_200
 INJECTION_MAX=9_000
+# The vault map is sent once per session and then rides in the cached prefix, so
+# it may take a larger slice than the per-turn injection. Automatic sizing gives
+# it a tenth of the window, up to 25K tokens; a fixed setting may go higher.
+VAULT_INDEX_FRACTION=0.10
+VAULT_INDEX_AUTO_MAX_TOKENS=25_000
+VAULT_INDEX_MIN_CHARS=2_000
 
 # subject, object, possessive-determiner, possessive-pronoun, reflexive.
 # Third-person singular only: setup asks whether the companion is male or female
@@ -83,6 +89,17 @@ def injection_cap(context_tokens:int)->int:
     return _clamp(context_tokens*HERMES_CHARS_PER_TOKEN*INJECTION_FRACTION,
                   INJECTION_MIN,INJECTION_MAX)
 
+def vault_index_cap(context_tokens:int,setting:int=-1)->int:
+    """Chars the once-per-session vault map may occupy. `setting` is tokens:
+    -1 sizes it from the window, 0 switches the map off. Never more than half the
+    window, whatever was asked for."""
+    if setting==0:return 0
+    ceiling=context_tokens*HERMES_CHARS_PER_TOKEN//2
+    if setting<0:
+        tokens=min(int(context_tokens*VAULT_INDEX_FRACTION),VAULT_INDEX_AUTO_MAX_TOKENS)
+    else:tokens=setting
+    return max(VAULT_INDEX_MIN_CHARS,min(tokens*HERMES_CHARS_PER_TOKEN,ceiling))
+
 def tier(context_tokens:int)->str:
     if context_tokens<=16_384:return 'tiny'
     if context_tokens<=65_536:return 'small'
@@ -126,6 +143,11 @@ class Companion:
     vault:pathlib.Path=pathlib.Path.home()/'vault'
     context_tokens:int=DEFAULT_CONTEXT_TOKENS
     context_mode:str="auto"  # auto follows Hermes on each load; fixed is an intentional kit override
+    # The vault map sent at the start of each session, in tokens: -1 sizes it
+    # from the window, 0 switches it off. Folders listed in vault_index_exclude
+    # (paths relative to the vault) are left off the map entirely.
+    vault_index_tokens:int=-1
+    vault_index_exclude:list=dataclasses.field(default_factory=list)
     image_interval_minutes:int=15
     schedule_offset_minutes:int=0
     image_timeline:bool=False
@@ -284,6 +306,10 @@ class Companion:
         if not isinstance(self.outreach_per_day,int) or not 0<=self.outreach_per_day<=100:
             raise ValueError('outreach_per_day must be a whole number of messages, 0 for no limit')
         if not isinstance(self.soul_in_vault,bool):raise ValueError('soul_in_vault must be true or false')
+        if isinstance(self.vault_index_tokens,bool) or not isinstance(self.vault_index_tokens,int) or self.vault_index_tokens<-1:
+            raise ValueError('vault_index_tokens must be -1 (automatic), 0 (off) or a number of tokens')
+        if not isinstance(self.vault_index_exclude,list) or not all(isinstance(x,str) for x in self.vault_index_exclude):
+            raise ValueError('vault_index_exclude must be a list of folder paths')
 
     # ---- per-job model choices -------------------------------------------
     def tier_model(self,tier:str)->dict:

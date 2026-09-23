@@ -271,6 +271,13 @@ def _install_jobs_locked(c,m,report):
 # hashes to what we wrote is unedited and safe to re-render when the template
 # improves; anything else is someone's work and is never overwritten silently.
 FINGERPRINT_FILE='cron/prompt-fingerprints.json'
+# Room above the vault map and continuity budget for labels and fences.
+SPILL_MARGIN=4_000
+
+def _runs_hook(command:str,hook:pathlib.Path)->bool:
+    """True when a configured hook command runs this hook file, under any interpreter."""
+    tail=str(command or '').strip().rstrip('"\'')
+    return bool(tail) and tail.endswith(str(hook))
 
 def _fingerprint(text):
     import hashlib
@@ -434,7 +441,10 @@ def install_hook(c,m,report):
     cleaned=[]
     for entry in pre:
         value=entry.get('command','') if isinstance(entry,dict) else ''
-        if value==cmd:continue
+        # Ours whatever interpreter wrote it. Matching the exact command let a run
+        # under a different Python append a second copy, and Hermes then ran the
+        # hook twice, injecting the whole continuity block twice every turn.
+        if value==cmd or _runs_hook(value,hook):continue
         if 'inject-continuity.sh' in value:
             if legacy and value in (str(old),'~/.hermes/hooks/inject-continuity.sh'):continue
             report.append('  ! unrelated continuity hook already registered; inspect config.yaml before installing this hook')
@@ -468,8 +478,20 @@ def install_hook(c,m,report):
         cp.atomic_write(end_hook,end_source)
     end_cmd=cp.python_command(end_hook)
     ends=[e for e in (hooks.get('on_session_end') or [])
-          if not (isinstance(e,dict) and e.get('command')==end_cmd)]
+          if not (isinstance(e,dict) and (e.get('command')==end_cmd or _runs_hook(e.get('command',''),end_hook)))]
     ends.append({'command':end_cmd});hooks['on_session_end']=ends
+    # Hermes spills any hook output over hooks.output_spill.max_chars to disk and
+    # injects only a preview. The first turn of a session carries the vault map
+    # as well as the continuity block, so the limit has to cover both.
+    import companion_vault_index as vault_index
+    need=vault_index.budget_chars(c)+c.injection_cap+SPILL_MARGIN
+    spill=hooks.get('output_spill')
+    spill=spill if isinstance(spill,dict) else {}
+    try:current=int(spill.get('max_chars') or 0)
+    except (TypeError,ValueError):current=0
+    if spill.get('enabled',True) is not False and current<need:
+        spill['max_chars']=need;hooks['output_spill']=spill
+        report.append(f'  hook output limit raised to {need:,} chars so the vault map is not spilled')
     data['hooks']=hooks
     if cfg.exists():shutil.copy2(cfg,cfg.with_name('config.yaml.pre-companion-'+uuid.uuid4().hex[:8]))
     cp.atomic_write(cfg,yaml.safe_dump(data,sort_keys=False,allow_unicode=True))

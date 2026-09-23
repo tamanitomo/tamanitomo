@@ -1,3 +1,12 @@
+## 3.0.7 — A map of the vault (2026-09-22)
+
+- Give the companion a map of the whole vault at the start of every session: each note by name under its folder, and the sections inside as many notes as the window allows, newest first. Before, she only knew the files something else happened to mention, and "is there a note about this" was a guess.
+- Send the map once per session, not once per turn. Hermes replays each turn's injected context with the history, so a map sent every turn would be carried over and over; sent once, it stays in the cached prefix. It is sent again only when compression has summarised it away.
+- Size the map from the model's window: a tenth of it, up to twenty-five thousand tokens, set by `vault_index_tokens` (`0` switches it off). When names alone do not fit, the largest folders fold into a count, and on a very small window it becomes a tree of folder counts. Every partial map says what it left out, and `companion_vault_index.py show <folder>` lists any folder in full.
+- Leave other agents' private folders off the map, along with hidden folders and anything named in `vault_index_exclude`.
+- Recognise the kit's own Hermes hooks whatever Python the command names. Repair run under a different interpreter used to register the continuity hook a second time, and Hermes then ran both copies, so every turn carried the whole continuity block twice. The doctor now reports a duplicate.
+- Raise Hermes's hook output limit so the first turn of a session is not written to disk in place of being read, and have the doctor say when that limit is too low.
+
 ## 3.0.6 — One Python on the phone (2026-09-22)
 
 - Require Python 3.11 for every virtualenv on Termux, since the prebuilt Android packages exist for no other version. The installer used to fall back to whatever `python3` was there, pip rejected all eighteen wheels in silence, and the install died compiling Rust with `error running maturin`.
