@@ -117,7 +117,7 @@ def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
     if apply and phase=='pulse' and previous['state'].get('confirmed',True) and prior_time>=interval:
         return {'status':'skipped','reason':'This interval already has a model-confirmed state'}
     system=(c.soul.read_text(encoding='utf-8')+'\n\n'
-            'You are authoring one short presence record for your ongoing imagined companion life. '
+            'You are writing one short record of where you are and what you are doing in your own life right now. '
             'Return only the requested JSON. Keep elapsed time, ordinary routines, sleep and existing '
             'plans coherent. Do not invent human messages, actions or participation. A quiet interval '
             'may continue the same activity; do not manufacture drama. Express your own mood, wants '

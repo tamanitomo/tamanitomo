@@ -16,7 +16,7 @@ COVERS=('top','bottom','full','none')
 MAX_BATH_MINUTES=40
 GUIDANCE='''EVERYDAY LIFE: Follow the routine anchors, including meals, getting ready, interests,
 exercise, errands and time outside. Choose specific places and enjoyable activities that fit your
-personality. These are fictional outings, never real bookings or claims about the human. Carry an
+personality. These are your own outings: never real bookings, and never claims about the human. Carry an
 activity while it makes sense, then finish it or explain a delay; a paraphrase is not a new activity.
 Address the active routine with routine_choice {anchor: supplied anchor id, decision: follow or defer, reason}.
 FIELD LIMITS (a value over its cap is rejected and the whole tick is lost; count before writing):
@@ -46,13 +46,13 @@ laundry_finish, shop. Each action is {kind, items: []}; laundry actions list clo
 Laundry finish requires an earlier start and 90 minutes to wash and dry. Starting is not finishing.
 Removed washable clothes go in the hamper and cannot be put back on until laundry finishes.
 Continuing to wear the current clothes is allowed for less than 24 hours; then change to clean pieces. Brush teeth today before putting on fresh clothes;
-shower within two hours before changing into pajamas. Record care honestly within this imagined life,
+shower within two hours before changing into pajamas. Record care honestly,
 with brief care/text explaining what happened; do not copy actions from a previous tick.
 The final outfit follows the ordered care actions. A shower/teeth/laundry action needs elapsed time.
 On an available shopping opportunity, optionally choose up to three new pieces for your own tastes,
 season or a wardrobe gap: supply wardrobe_additions [{id,description,use,category,covers,condition:"clean"}]
 (covers is top, bottom, full for a dress/set/swimsuit, or none for underwear, socks and shoes)
-and a shop action. It is a fictional acquisition, no purchases, web checkout or messages.
+and a shop action. It happens in your own life: no real purchases, web checkout or messages.
 Never invent completed care to satisfy validation. If not ready, keep current clothes and do the
 missing routine step. When a piece reaches its 24-hour limit and there is not enough elapsed time
 for a full shower or laundry routine, take the smallest honest transition: brush teeth if needed,
@@ -629,7 +629,7 @@ def build_starter_wardrobe(c, palette='auto'):
                 swim_desc = 'tailored quick-dry printed boardshorts'
             else:
                 swim_desc = 'teal athletic swimming trunks with drawstring'
-        swim_use = 'swimming at a fictional pool or beach'
+        swim_use = 'swimming at the pool or the beach'
     items.append(dict(id='closet-swimwear', description=swim_desc, use=swim_use, category='active', covers='full', condition='clean'))
 
     return items
@@ -660,10 +660,10 @@ def default_daily_routine(c):
         ]
     return [
         dict(start='08:00', end='09:30', activity='wake, brush teeth, dress in clean daytime clothes, and have breakfast', setting='home; choose breakfast and a small pleasure to start the day'),
-        dict(start='10:00', end='11:30', activity='get outside for a walk, exercise, an errand or a favorite local place', setting='choose a specific fictional route or destination, with preparation and travel'),
-        dict(start='12:00', end='13:00', activity='make or choose lunch', setting='home or a fictional cafe, depending on the morning'),
-        dict(start='14:00', end='16:00', activity='an interest, creative project, planned class or time with a fictional friend', setting='choose a setting that fits the activity; existing weekly plans take priority'),
-        dict(start='18:00', end='19:30', activity='dinner and an enjoyable evening', setting='home or a chosen fictional outing'),
+        dict(start='10:00', end='11:30', activity='get outside for a walk, exercise, an errand or a favorite local place', setting='choose a specific route or destination, with preparation and travel'),
+        dict(start='12:00', end='13:00', activity='make or choose lunch', setting='home or a cafe, depending on the morning'),
+        dict(start='14:00', end='16:00', activity='an interest, creative project, planned class or time with a friend', setting='choose a setting that fits the activity; existing weekly plans take priority'),
+        dict(start='18:00', end='19:30', activity='dinner and an enjoyable evening', setting='home or an outing of your choosing'),
         dict(start='20:30', end='22:00', activity='check the hamper; wash and dry a load when needed, then shower and change into clean pajamas', setting='home; allow 90 minutes for laundry, use another clean set while it runs'),
         dict(start='22:00', end='23:30', activity='brush teeth, enjoy a quiet bedtime ritual and go to sleep', setting='home; choose a book, music or something comforting')
     ]

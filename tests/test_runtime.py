@@ -363,9 +363,12 @@ class HandoffFreshnessTests(unittest.TestCase):
         out=ctx.build(self.c,{},self.now)
         self.assertIn('more recent than the handoff',out)
         self.assertIn('The episode ledger above is more recent',self.handoff_label())
-        # and it survives a window too small to hold both
+        # In a window too small to hold both, the older handoff is the one that
+        # gives way, and it is named as omitted. (This used to assert the phrase
+        # "imagined episodes", which it only ever found in the rules text: a 4k
+        # window gives the day's entries no budget at all.)
         small=cc.dataclasses.replace(self.c,context_tokens=4096)
-        self.assertIn('imagined episodes',ctx.build(small,{},self.now))
+        self.assertRegex(ctx.build(small,{},self.now),r'Omitted this turn[^\]]*Current handoff')
 
     def test_six_hours_and_future_clock_skew_are_stale(self):
         self.age(6)

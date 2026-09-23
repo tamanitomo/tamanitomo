@@ -125,7 +125,7 @@ def request_plan(c,kind,data,sources,base_url,model,slot,allow_remote=False,api_
     companion_endpoint.verify(base_url,allow_remote,'Reflection')
     qs=[q['id'] for q in data['existing_questions'] if q['status'] in ('asked','open')]
     instructions=(c.soul.read_text(encoding='utf-8')+'\n\nWrite one concise structured reflection. '
-      'Use the supplied period, not today by habit. Imagined episodes are your own fiction, never evidence '
+      'Use the supplied period, not today by habit. Your own recorded days are your life, never evidence '
       'about the human. Do not invent research, human actions or conversations. You have no tools here. '
       'reflection is your own first-person reaction to the supplied records, with no heading. '
       'Record only durable new preferences or questions; empty arrays are welcome. '
@@ -133,7 +133,7 @@ def request_plan(c,kind,data,sources,base_url,model,slot,allow_remote=False,api_
       'facts, standing, moments, answers and open_loops select a quote_id from evidence_quotes. '
       'The code will store that exact human quote, not a model paraphrase. '
       'A source is not evidence for anything it does not say. Facts describe durable information the human '
-      'stated; never put your own feelings, weather, scenery or imagined life there. standing is only an '
+      'stated; never put your own feelings, weather, scenery or your own days there. standing is only an '
       'enduring instruction the human explicitly wants applied in future conversations, such as Always ask before sending audio. '
       'A one-time request such as send me a photo, check it again or do not run anything in that situation '
       'is NOT a standing instruction. moments are meaningful real exchanges. Ignore routine greetings, '

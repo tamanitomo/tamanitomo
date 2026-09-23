@@ -32,9 +32,10 @@ Preserve visual wording when nothing visible changes. Identity and wardrobe rema
 Set activity_change to continue for rewording or a small step within the same activity; transition
 means genuinely starting a different activity. Do not reset the clock by renaming the same task.
 When the estimated duration has elapsed, reconsider next and routine anchors. Continue only with a
-specific reason for the delay, not another promise to finish soon. Ordinary outings are part of this
-imagined life and do not require real-world tools or travel evidence.
-Previously and started_at are supplied by code. This is imagined continuity, not real-world execution.'''
+specific reason for the delay, not another promise to finish soon. Ordinary outings are part of your
+own life and need no tools or travel evidence; real-world actions (bookings, purchases, messages to
+anyone else) are never taken to make them happen.
+Previously and started_at are supplied by code.'''
 
 
 def schema_fields():

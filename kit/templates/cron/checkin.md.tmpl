@@ -16,7 +16,7 @@ Use `write_file` to create a unique UTF-8 JSON input under `{{DATA}}/companion-l
 For facts and questions, the shape is `{"entries":[...]}` with entries such as:
 `{"kind":"fact","category":"likes","statement":"...","evidence":"actual quoted exchange and date","confidence":"stated"}`
 or `{"kind":"ask","text":"..."}`. Then run `{{SELF_CMD}} ledger --file "<absolute path just written>"`.
-Only facts about {{HUMAN}} belong in `fact`; your own thoughts and imagined life are not evidence.
+Only facts about {{HUMAN}} belong in `fact`; your own thoughts and your own days are not evidence about {{OBJ_H}}.
 For standing instructions or relationship moments, create a separate `{"entries":[...]}` file with
 `{"kind":"standing","instruction":"...","evidence":"actual exchange and date","scope":"..."}` or
 `{"kind":"moment","moment":"note","text":"...","happened_on":"YYYY-MM-DD"}` and run
