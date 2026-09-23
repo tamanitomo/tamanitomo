@@ -2543,7 +2543,7 @@ body[data-page="chat"] main{padding:0}
 .time-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .time-pair label,.time-pair input{min-width:0;width:100%}
 .time-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
-.time-chip{display:flex;align-items:center;gap:4px;border:1px solid var(--border);border-radius:12px;padding:4px 6px}
+.time-chip{display:flex;align-items:center;gap:4px;border:1px solid var(--edge);border-radius:12px;padding:4px 6px}
 .time-chip input{width:130px;margin:0;border:0}
 .time-chip button{min-width:40px;min-height:40px}
 
@@ -2844,7 +2844,7 @@ body[data-page="chat"] main{padding:0}
 /* Onboarding: who you are hoping to meet */
 .meet-group{border:0;padding:0;margin:0 0 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .meet-group legend{font-weight:600;margin-bottom:8px;padding:0}
-.meet-card{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;cursor:pointer;background:var(--surface)}
+.meet-card{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1px solid var(--edge);border-radius:10px;cursor:pointer;background:var(--surface)}
 .meet-card:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
 .meet-card span{display:grid;gap:2px}
 /* Onboarding reveal: their look and life */
@@ -2862,3 +2862,13 @@ body[data-page="chat"] main{padding:0}
 .keeper-hers{color:color-mix(in srgb,var(--accent) 60%,#b0487a)}
 .keeper-private{color:color-mix(in srgb,var(--ink,#333) 55%,transparent)}
 .keeper-fixed{color:color-mix(in srgb,var(--ink,#333) 55%,transparent)}
+
+/* Identity: keepers, locks, her changes, private notes */
+.soul-lock-toggle{display:inline-flex;align-items:center;gap:4px;font-size:12px}
+.soul-changes{margin:8px 0 0}
+.soul-changes ol{margin:6px 0 0;padding-left:18px;line-height:1.5}
+.soul-changes time{font-variant-numeric:tabular-nums;color:var(--dim)}
+.soul-private{margin:28px 0 0}
+.soul-private-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.soul-private-card{display:grid;gap:4px;padding:12px 14px;border:1px dashed var(--edge);border-radius:10px;opacity:.7}
+.soul-private-card.is-open{opacity:1;border-style:solid}

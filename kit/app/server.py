@@ -733,13 +733,40 @@ def build(home=None,token='',state_dir=None):
                      'boundary':c.boundary,'boundary_label':frame[0] if frame else c.boundary,
                      'relationship_pace':c.relationship_pace,
                      'image_style':c.image_style}
-            return {'sections':[{**s,'body':s['body']} for s in ident.sections(text).values()],
+            import companion_soul
+            keepers=companion_soul.status(c)
+            by={row['id']:row for row in keepers['sections']}
+            return {'sections':[{**s,'body':s['body'],'keeper':(by.get(s['name']) or {}).get('keeper'),
+                                 'lockable':(by.get(s['name']) or {}).get('lockable',False),
+                                 'her_locked':(by.get(s['name']) or {}).get('locked',True),
+                                 'guide':(by.get(s['name']) or {}).get('guide',''),
+                                 'her':(by.get(s['name']) or {}).get('her'),
+                                 'changes':companion_soul.changes(c,s['name'],20)}
+                                for s in ident.sections(text).values()],
+                    # Private notes: that they exist and when they open, never what they say.
+                    'private':[{'id':r['id'],'title':r['title'],'opens':r.get('opens'),'open':r['her']['can'] or
+                                'cooldown' in r['her'] or r['id'] in companion_soul.private_notes(c),
+                                'written':r['id'] in companion_soul.private_notes(c)}
+                               for r in keepers['sections'] if r['keeper']=='private'],
+                    'stage_name':keepers['stage_name'],'days_together':keepers['days_together'],
                     'portrait':portrait.compile_prompt(c),'profile':profile}
         except OSError as exc:raise HTTPException(500,str(exc))
+
+    @app.post('/api/identity-lock')
+    def lock_section(payload:dict):
+        """The human's switch: keep a shared section exactly as it is, or let it grow."""
+        import companion_soul
+        try:return companion_soul.set_lock(load(),str(payload.get('section','')),payload.get('locked') is True)
+        except ValueError as exc:raise HTTPException(400,str(exc))
 
     @app.post('/api/identity/{section}')
     def write_section(section:str,payload:dict):
         c=load()
+        import companion_soul
+        keeper=(companion_soul.SECTIONS.get(section) or {}).get('keeper')
+        # Her own words are hers, and the fixed section is the app's.
+        if keeper=='hers':raise HTTPException(403,f'{c.agent} writes this section; it can be read but not edited here.')
+        if keeper=='fixed':raise HTTPException(403,'This section is maintained by the app.')
         import companion_identity as ident
         _,text=ident.read(c)
         found=ident.sections(text).get(section)

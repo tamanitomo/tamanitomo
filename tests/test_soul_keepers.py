@@ -77,4 +77,31 @@ class KeeperTests(unittest.TestCase):
             self.assertNotIn(word,text)
 
 
+class IdentityPageTests(KeeperTests):
+    def client(self):
+        from kit.app.server import build
+        from fastapi.testclient import TestClient
+        c=TestClient(build(self.c.home,token='t',state_dir=Path(self.temp.name)/'state'));self.addCleanup(c.close)
+        return c
+
+    def test_the_page_shows_keepers_and_hides_private_notes(self):
+        with self.at(1):soul.write(self.c,'about-you','He hums when he is nervous.','set','noticed it twice',self.now)
+        client=self.client();h={'x-companion-token':'t'}
+        d=client.get('/api/identity',headers=h).json()
+        by={s['name']:s for s in d['sections']}
+        self.assertEqual(by['heart']['keeper'],'shared');self.assertTrue(by['heart']['lockable'])
+        self.assertEqual(by['own-words']['keeper'],'hers');self.assertFalse(by['own-words']['lockable'])
+        self.assertNotIn('hums when he is nervous',client.get('/api/identity',headers=h).text)
+        self.assertTrue(next(n for n in d['private'] if n['id']=='about-you')['written'])
+
+    def test_locks_and_protected_sections(self):
+        client=self.client();h={'x-companion-token':'t'}
+        self.assertEqual(client.post('/api/identity-lock',json={'section':'heart','locked':True},headers=h).status_code,200)
+        self.assertTrue(soul.locked(self.c,'heart'))
+        self.assertEqual(client.post('/api/identity-lock',json={'section':'hard-lines','locked':False},headers=h).status_code,400)
+        self.assertEqual(client.post('/api/identity/own-words',json={'body':'x'},headers=h).status_code,403)
+        self.assertEqual(client.post('/api/identity/being-herself',json={'body':'x'},headers=h).status_code,403)
+        self.assertEqual(client.post('/api/identity/heart',json={'body':'## Heart and temper\n\nWarm.'},headers=h).status_code,200)
+
+
 if __name__=='__main__':unittest.main()

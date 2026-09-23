@@ -362,19 +362,19 @@ window.onboarding=async function(adopt){
         </p>
       </div>
       <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:20px 0">
-        <div style="padding:14px;border-radius:8px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--border)">
+        <div style="padding:14px;border-radius:8px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--edge)">
           <strong style="display:block;margin-bottom:4px">1. Communication</strong>
           <p class="small dim">Telegram bot on your phone or local web workspace.</p>
         </div>
-        <div style="padding:14px;border-radius:8px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--border)">
+        <div style="padding:14px;border-radius:8px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--edge)">
           <strong style="display:block;margin-bottom:4px">2. Nature & Purpose</strong>
           <p class="small dim">Relational companion with emotions or focused worker.</p>
         </div>
-        <div style="padding:14px;border-radius:8px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--border)">
+        <div style="padding:14px;border-radius:8px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--edge)">
           <strong style="display:block;margin-bottom:4px">3. A little adventure</strong>
           <p class="small dim">Twelve short scenes, then three choices about what you want. Skip any question.</p>
         </div>
-        <div style="padding:14px;border-radius:8px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--border)">
+        <div style="padding:14px;border-radius:8px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--edge)">
           <strong style="display:block;margin-bottom:4px">4. Meet & connect</strong>
           <p class="small dim">Review your companion and connect a conversation model.</p>
         </div>
@@ -401,14 +401,14 @@ window.onboarding=async function(adopt){
         </div>`:''}
       <div class="creator-form">
         <div style="display:grid;gap:12px">
-          <label style="display:flex;align-items:flex-start;gap:12px;padding:14px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
+          <label style="display:flex;align-items:flex-start;gap:12px;padding:14px;border:1px solid var(--edge);border-radius:8px;cursor:pointer;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
             <input type="radio" name="channel_pick" value="telegram" ${tgConfigured?'checked':''} style="margin-top:4px">
             <div>
               <strong>Telegram Bot (Recommended for 24/7 access)</strong>
               <p class="small dim" style="margin-top:3px">Chat directly with your companion on your phone or desktop, with notifications and voice notes.</p>
             </div>
           </label>
-          <label style="display:flex;align-items:flex-start;gap:12px;padding:14px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
+          <label style="display:flex;align-items:flex-start;gap:12px;padding:14px;border:1px solid var(--edge);border-radius:8px;cursor:pointer;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
             <input type="radio" name="channel_pick" value="web" ${!tgConfigured?'checked':''} style="margin-top:4px">
             <div>
               <strong>Web Workspace Only</strong>
@@ -417,7 +417,7 @@ window.onboarding=async function(adopt){
           </label>
         </div>
 
-        <div id="tg-guide-box" style="margin-top:14px;padding:16px;border-radius:8px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px dashed var(--border);display:${draft.channel==='telegram'&&!tgConfigured?'block':'none'}">
+        <div id="tg-guide-box" style="margin-top:14px;padding:16px;border-radius:8px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px dashed var(--edge);display:${draft.channel==='telegram'&&!tgConfigured?'block':'none'}">
           <h4 style="margin:0 0 8px">Telegram Setup Guide (Takes 60 seconds):</h4>
           <ol class="small dim" style="padding-left:18px;margin:0 0 14px;line-height:1.6">
             <li>Open Telegram and chat with <a href="https://t.me/botfather" target="_blank" rel="noopener"><strong>@BotFather</strong></a>. Send <code>/newbot</code>.</li>
@@ -494,7 +494,7 @@ window.onboarding=async function(adopt){
       </div>
       <div class="creator-form">
         <div style="display:grid;gap:14px">
-          <label style="display:flex;align-items:flex-start;gap:14px;padding:16px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
+          <label style="display:flex;align-items:flex-start;gap:14px;padding:16px;border:1px solid var(--edge);border-radius:8px;cursor:pointer;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
             <input type="radio" name="purpose_pick" value="relational" ${draft.purpose==='relational'?'checked':''} style="margin-top:4px">
             <div>
               <strong style="font-size:16px">Relational Companion (Recommended)</strong>
@@ -504,7 +504,7 @@ window.onboarding=async function(adopt){
               </p>
             </div>
           </label>
-          <label style="display:flex;align-items:flex-start;gap:14px;padding:16px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
+          <label style="display:flex;align-items:flex-start;gap:14px;padding:16px;border:1px solid var(--edge);border-radius:8px;cursor:pointer;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
             <input type="radio" name="purpose_pick" value="worker" ${draft.purpose==='worker'?'checked':''} style="margin-top:4px">
             <div>
               <strong style="font-size:16px">Worker Companion with Continuity</strong>
@@ -885,14 +885,14 @@ window.onboarding=async function(adopt){
         </div>
 
         <!-- Panel 1: Keep It Local -->
-        <div id="panel-local" style="display:block;padding:16px;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
+        <div id="panel-local" style="display:block;padding:16px;border:1px solid var(--edge);border-radius:8px;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
           <h4 style="margin:0 0 6px">Conversation on your own hardware</h4>
           <p class="small dim" style="margin:0 0 12px">Local inference processes conversation on the host. Voice, images, Telegram, and fallback models have their own provider settings; review those separately.</p>
 
           ${mobileAdvisoryHTML}
 
           <!-- Engine Status Bar -->
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;padding:10px 14px;background:var(--surface);border:1px solid var(--edge);border-radius:8px">
             <div>
               <span class="pill ${loc.online?'status-good':'status-bad'}">● ${loc.online ? 'Local Engine Online ('+esc(loc.engine||'llama.cpp')+')' : 'Local Engine Offline'}</span>
               <span class="small dim" style="margin-left:8px">${loc.loaded_model ? 'Active: '+esc(loc.loaded_model.id) : (loc.installed ? 'Engine runtime ready' : 'Ready to configure')}</span>
@@ -906,7 +906,7 @@ window.onboarding=async function(adopt){
             ${recGguf.filter(m=>!isMobile || m.mobile_recommended).map(m=>{
               const isPresent=diskModels.some(dm=>dm.name.toLowerCase().includes(m.id.toLowerCase()) || dm.path.toLowerCase().includes(m.filename));
               return `
-                <div class="card" style="margin-bottom:0;display:flex;flex-direction:column;justify-content:space-between;padding:14px;border:1px solid var(--border)">
+                <div class="card" style="margin-bottom:0;display:flex;flex-direction:column;justify-content:space-between;padding:14px;border:1px solid var(--edge)">
                   <div>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
                       <span class="pill">${esc(m.family)}</span>
@@ -928,7 +928,7 @@ window.onboarding=async function(adopt){
           </div>
 
           ${diskModels.length ? `
-            <details style="margin-top:10px;padding:10px;background:var(--surface);border-radius:6px;border:1px solid var(--border)">
+            <details style="margin-top:10px;padding:10px;background:var(--surface);border-radius:6px;border:1px solid var(--edge)">
               <summary class="small" style="cursor:pointer;font-weight:600">📁 Or choose an existing model found on storage (${diskModels.length} discovered)</summary>
               <div style="display:grid;gap:6px;margin-top:10px">
                 ${diskModels.map(dm=>`
@@ -948,7 +948,7 @@ window.onboarding=async function(adopt){
         </div>
 
         <!-- Panel 2: Cloud OAuth -->
-        <div id="panel-oauth" style="display:none;padding:16px;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
+        <div id="panel-oauth" style="display:none;padding:16px;border:1px solid var(--edge);border-radius:8px;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
           <h4 style="margin:0 0 6px">1-Click Browser Device Authorization</h4>
           <p class="small dim" style="margin:0 0 12px">Sign in directly via your provider account. No API key creation required.</p>
           <label style="margin-bottom:12px">Select OAuth Provider
@@ -971,7 +971,7 @@ window.onboarding=async function(adopt){
         </div>
 
         <!-- Panel 3: API Key -->
-        <div id="panel-apikey" style="display:none;padding:16px;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
+        <div id="panel-apikey" style="display:none;padding:16px;border:1px solid var(--edge);border-radius:8px;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
           <h4 style="margin:0 0 6px">Direct API Key</h4>
           <p class="small dim" style="margin:0 0 12px">Enter an API key for your favorite inference provider.</p>
           <div style="display:grid;gap:10px">
@@ -998,7 +998,7 @@ window.onboarding=async function(adopt){
         </div>
 
         <!-- Panel 4: Skip / Later -->
-        <div id="panel-skip" style="display:none;padding:16px;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
+        <div id="panel-skip" style="display:none;padding:16px;border:1px solid var(--edge);border-radius:8px;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
           <h4 style="margin:0 0 6px">Configure Inference Later</h4>
           <p class="small dim" style="margin:0">Save your companion now. Before your first conversation, install Hermes and connect a model in Settings.</p>
         </div>

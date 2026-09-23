@@ -480,7 +480,13 @@ const SECTION_TITLE={
   texting:'How {subj} writes',flirtation:'How {subj} flirts',support:'How {subj} helps',
   conflict:'Conflict and repair',humor:'{Poss} humour',flaws:'Where {subj} is difficult',
   likes:'What {subj} likes',honesty:'Accuracy and honesty',priorities:'Operating rules',
-  essence:'In one line'};
+  essence:'In one line',heart:'Heart and temper',closeness:'Closeness','hard-lines':'Hard lines',
+  'being-herself':'Being {obj}self','own-words':'In {poss} own words'};
+/* Who keeps each section. Shown as a badge so nobody has to guess what is safe to edit. */
+const KEEPER_LABEL={shared:['Shared','keeper-shared','Started from your answers. {Subj} can rewrite it as {subj} grows, unless you lock it. You can edit it too.'],
+  anchor:['Yours','keeper-yours','Yours to keep. {Subj} never changes it.'],
+  hers:['{Poss2}','keeper-hers','{Poss} own words. You can read this; only {subj} writes it.'],
+  fixed:['Fixed','keeper-fixed','How {subj} stays a person. Maintained by the app.']};
 const SECTION_NOTE={
   core:'The person underneath everything else.',
   relationship:'How you know each other, and how that is written.',
@@ -622,26 +628,43 @@ async function renderIdentity(){
         <div class="soul-passage-title">
           <h3>${esc(sectionTitle(s.name))}</h3>
           <div class="soul-passage-tags">
-            ${s.locked?`<span class="pill soul-lock" title="${esc(who.agent||'The companion')} cannot rewrite this section. You still can.">${esc(gendered('{poss2} to write'))}</span>`:''}
+            ${s.keeper&&KEEPER_LABEL[s.keeper]?`<span class="keeper ${KEEPER_LABEL[s.keeper][1]}" title="${esc(gendered(KEEPER_LABEL[s.keeper][2]))}">${esc(gendered(KEEPER_LABEL[s.keeper][0]))}</span>`
+              :(s.locked?`<span class="pill soul-lock" title="${esc(who.agent||'The companion')} cannot rewrite this section. You still can.">${esc(gendered('{poss2} to write'))}</span>`:'')}
+            ${s.lockable?`<label class="soul-lock-toggle" title="${esc(gendered('Locked: {subj} cannot rewrite this section.'))}"><input type="checkbox" data-lock="${esc(s.name)}" ${s.her_locked?'checked':''}> Locked</label>`:''}
+            ${s.keeper==='shared'&&!s.her_locked&&s.her&&!s.her.can&&s.her.why?`<span class="dim small">${esc(gendered('{Subj} can rewrite it '))}${esc(s.her.why.replace(/^opens/,'once it opens'))}</span>`:''}
             <span class="pill soul-pill-todo" data-todo-pill="${esc(s.name)}"
               ${sectionUnfinished(s.body)?'':'hidden'}>needs writing</span>
             <code class="section-key">${esc(s.name)}</code>
           </div>
         </div>
-        ${SECTION_NOTE[s.name]?`<p class="soul-passage-note">${esc(SECTION_NOTE[s.name])}</p>`:''}
-        <button class="quiet soul-edit" data-edit="${esc(s.name)}">Edit</button>
+        ${s.guide||SECTION_NOTE[s.name]?`<p class="soul-passage-note">${esc(s.guide||gendered(SECTION_NOTE[s.name]))}</p>`:''}
+        ${['hers','fixed'].includes(s.keeper)?'':`<button class="quiet soul-edit" data-edit="${esc(s.name)}">Edit</button>`}
       </div>
       <div class="soul-passage-body prose" data-body="${esc(s.name)}">${soulBodyHTML(s.body)}</div>
+      ${(s.changes||[]).length?`<details class="soul-changes"><summary>${esc(gendered('How {subj} has changed this'))} (${s.changes.length})</summary>
+        <ol>${s.changes.slice().reverse().map(ch=>`<li><time>${esc((ch.at||'').slice(0,10))}</time> ${esc(ch.why||'')}</li>`).join('')}</ol></details>`:''}
       ${s.name==='appearance'?'<div class="image-block" id="image-block" hidden></div>':''}
     </section>`).join('')}</article>`;
 
+  const privateNotes=(d.private||[]).length?`<section class="soul-private">
+      <h3>${esc(gendered('Private — {poss2} alone'))}</h3>
+      <p class="dim">${esc(gendered('What {subj} really thinks and feels about you. {Subj} writes these only for {obj}self; they are never shown here. More open up as you grow closer.'))}</p>
+      <div class="soul-private-grid">${d.private.map(n=>`<div class="soul-private-card${n.open?' is-open':''}">
+        <strong>${esc(n.title)}</strong>
+        <span class="dim small">${n.written?esc(gendered('{Subj} has written here')):n.open?'Open':'Opens at '+esc(n.opens||'a later stage')}</span></div>`).join('')}</div>
+    </section>`:'';
   $('identity').innerHTML=hero+warn+
     `<div class="section-heading" id="soul-heading">
       <div><h2>${esc(gendered('{Poss} documents'))}</h2>
       <span class="dim small">The SOUL exactly as Hermes reads it. Edit a section in place — every save keeps a backup.</span></div>
       <div class="actions" id="identity-tools"></div>
     </div>
-    <div class="identity-doc-layout">${outline}${doc}</div>`;
+    <div class="identity-doc-layout">${outline}${doc}</div>${privateNotes}`;
+  for(const box of $('identity').querySelectorAll('[data-lock]'))box.onchange=async()=>{
+    try{await api('/identity-lock',{method:'POST',body:JSON.stringify({section:box.dataset.lock,locked:box.checked})});
+      notice(box.checked?gendered('Locked. {Subj} will leave it as it is.'):gendered('Unlocked. {Subj} can grow it.'));}
+    catch(e){box.checked=!box.checked;notice(e.message,true);}
+  };
 
   // The raw markdown is kept here so Cancel restores what the file actually
   // holds rather than a round trip through the rendered HTML.
