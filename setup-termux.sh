@@ -690,6 +690,35 @@ if [[ "$SYS_ARCH" == "aarch64" || "$SYS_ARCH" == "arm64" ]]; then
   fi
 fi
 
+# Hermes requires nemo-relay everywhere except Android, and recognises Android by
+# "android" in the kernel release string. Older (pre-GKI) phone kernels do not
+# carry it, so pip sets out to compile nemo-relay's Rust from source and the
+# install dies with "Failed to build nemo-relay". Hermes runs without it (the
+# relay falls back to a no-op), so on the phone install Hermes's dependency list
+# without it and then Hermes itself with --no-deps -- the workaround Hermes's own
+# pyproject names for these devices.
+hermes_requirements_without_relay() {
+  "$1/bin/python" - "$2/pyproject.toml" <<'PY'
+import re, sys, tomllib
+with open(sys.argv[1], 'rb') as fh:
+    dependencies = tomllib.load(fh)['project']['dependencies']
+for dependency in dependencies:
+    name = re.split(r'[\s;<>=!~\[(]', dependency.strip(), maxsplit=1)[0]
+    if re.sub(r'[-_.]+', '-', name).lower() != 'nemo-relay':
+        print(dependency)
+PY
+}
+
+install_hermes_on_phone() {
+  local venv="$1" repo="$2" requirements="$1/.hermes-requirements.txt"
+  if ! hermes_requirements_without_relay "$venv" "$repo" > "$requirements"; then
+    echo -e "${RED}Error: could not read Hermes's dependency list from $repo/pyproject.toml.${RESET}" >&2
+    exit 1
+  fi
+  pip_install "$venv" -r "$requirements"
+  pip_install "$venv" --no-deps -e "$repo"
+}
+
 # ------------------------------------------------------------------------------
 # Step 2: Set up Hermes Agent
 # ------------------------------------------------------------------------------
@@ -712,7 +741,7 @@ if ! command -v hermes >/dev/null 2>&1; then
     install_wheelhouse "$HERMES_VENV"
     if [[ -f "$HERMES_REPO/pyproject.toml" ]]; then
       echo -e "  Installing Hermes Agent..."
-      pip_install "$HERMES_VENV" -e "$HERMES_REPO"
+      install_hermes_on_phone "$HERMES_VENV" "$HERMES_REPO"
     fi
   else
     curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup || curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup

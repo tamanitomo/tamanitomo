@@ -1,3 +1,7 @@
+## 3.0.10 — Phones Hermes does not recognise (2026-09-23)
+
+- Install Hermes on Android without `nemo-relay`. Hermes asks for that package everywhere except Android and recognises Android by the word "android" in the kernel's release string, which older phone kernels do not carry. On those phones pip set out to compile nemo-relay from Rust source and the install ended in "Failed to build nemo-relay" before Tamanitomo was ever downloaded. Hermes runs without it, so the installer now installs Hermes's own dependency list without that one package and then Hermes itself, which is the workaround Hermes suggests for these devices.
+
 ## 3.0.9 — Installing again is how you update (2026-09-23)
 
 - Ask what to do when the Linux or Android installer finds Tamanitomo already installed: upgrade, which keeps everything and moves the program to the newest release, or a fresh install, which sets the old program folder aside and installs a clean copy. Before, running the installer again quietly kept the old code, so someone who reinstalled to fix a problem was still running the version that had it. Your companion, your setup answers and your vault are kept either way, and an unattended run always upgrades.

@@ -189,6 +189,35 @@ class ReleaseSyncTests(unittest.TestCase):
         self.assertIn('Settings > Updates', result.stdout)
 
 
+@unittest.skipUnless(os.name == 'posix' and shutil.which('bash'), 'POSIX installer contracts')
+class HermesOnPhoneTests(unittest.TestCase):
+    """Pre-GKI phone kernels lack "android" in their release, so Hermes's marker
+    asks for nemo-relay, which cannot be built on a phone."""
+
+    def test_nemo_relay_is_left_out_and_everything_else_kept(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/'venv/bin').mkdir(parents=True)
+            (root/'venv/bin/python').symlink_to(sys.executable)
+            (root/'hermes').mkdir()
+            (root/'hermes/pyproject.toml').write_text(
+                '[project]\nname = "hermes-agent"\ndependencies = [\n'
+                '  "httpx[socks]==0.28.1",\n'
+                '  "nemo-relay>=0.8.3,<0.9; sys_platform == \'linux\' and \'android\' not in platform_release",\n'
+                '  "Nemo_Relay",\n  "pyyaml>=6",\n]\n')
+            script = shell_function('setup-termux.sh', 'hermes_requirements_without_relay') + \
+                'hermes_requirements_without_relay "$1" "$2"\n'
+            result = subprocess.run(['bash', '-c', script, 'reqs', str(root/'venv'), str(root/'hermes')],
+                                    capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.split('\n')[:-1], ['httpx[socks]==0.28.1', 'pyyaml>=6'])
+
+    def test_the_phone_installs_hermes_without_its_dependency_resolution(self):
+        installer = (ROOT/'setup-termux.sh').read_text()
+        self.assertIn('install_hermes_on_phone "$HERMES_VENV" "$HERMES_REPO"', installer)
+        self.assertNotIn('pip_install "$HERMES_VENV" -e "$HERMES_REPO"', installer)
+
+
 def termux_helpers():
     """The venv/pip helpers from setup-termux.sh, runnable on their own."""
     text = (ROOT/'setup-termux.sh').read_text()
