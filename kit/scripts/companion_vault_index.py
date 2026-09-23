@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""A map of the vault: every note by name, and the sections inside as many of
-them as the window can carry.
+"""A map of the vault: every folder, how many notes it holds, and a few of the
+files that say what it is.
 
 Without it an agent only knows the files something else happens to mention, and
 "is there a note about X" becomes a guess. With it she can see the whole shape
-of what she keeps and open the right file directly.
+of what she keeps and go straight to the right place; `show <folder>` then
+lists that folder in full, with each note's sections.
 
 It is sent once per session, not once per turn. Hermes replays each turn's
 injected context with the history, so a map sent every turn would be carried N
@@ -13,11 +14,9 @@ hook looks for its own marker in the history and sends the map again only when
 it is missing: the first turn, and the first turn after compression summarised
 it away.
 
-Tiering is by budget, never by folder name. Names come first, because a file
-she cannot see cannot be opened. If even names overrun, the biggest folders
-fold into a count with the command that lists them. Whatever room is left goes
-to section headings, most recently changed notes first, since that is where
-the living material is.
+Fitting is by budget, never by folder name. Every folder is listed; key files
+per folder shrink from five toward none if the window is tight, and only a very
+small window falls back to a tree of folder counts.
 """
 from __future__ import annotations
 import argparse, datetime as dt, json, os, pathlib, re, sys
@@ -32,6 +31,11 @@ FRESH_SECONDS=15*60
 HEAD_BYTES=64_000
 MAX_HEADINGS=6
 HEADING_CHARS=48
+# Folders that hold installed tools rather than anything anyone wrote.
+TOOL_DIRS=frozenset({'node_modules','__pycache__','venv','site-packages','bower_components'})
+# A folder's key files: the ones that say what the folder is, then the newest.
+KEY_NAMES=('readme','index','_index','overview','summary','manifest','soul')
+MAX_KEYS=5
 HEADING=re.compile(r'^(#{1,2})\s+(.+?)\s*#*\s*$')
 FENCE=re.compile(r'^\s*(```|~~~)')
 
@@ -44,7 +48,7 @@ def _excluded(c)->set:
 
 def _prune(c,rel:str,name:str,excluded:set)->bool:
     """True when a directory must not be walked."""
-    if name.startswith('.'):return True
+    if name.startswith('.') or name in TOOL_DIRS:return True
     path=f'{rel}/{name}' if rel else name
     if path in excluded:return True
     # Another agent's private life is not this one's to map. A profile sees its
@@ -93,57 +97,48 @@ def _line(note,with_headings):
     if with_headings and note['headings']:return '- '+note['name']+': '+' · '.join(note['headings'])
     return '- '+note['name']
 
+def _keys(ns:list)->list:
+    """A folder's notes, the ones that explain it first, then newest first."""
+    def rank(n):
+        name=n['name'].lower()
+        return (KEY_NAMES.index(name) if name in KEY_NAMES else len(KEY_NAMES),-n['mtime'])
+    return sorted(ns,key=rank)
+
 def render(c,notes:list,budget:int,built:str='')->str:
-    """The map, fitted to `budget` chars. Never silently partial: folded folders
-    and notes shown without their sections are both counted in a notice."""
+    """Every folder with its note count and a few key files, fitted to `budget`
+    chars. The whole shape of the vault, not its contents: anything inside is
+    one `show` away. Never silently partial."""
     dirs={}
     for n in notes:dirs.setdefault(n['dir'],[]).append(n)
     command=cc_command(c,'show')
-    head=(f'[Vault index — {c.vault}: {len(notes)} notes in {len(dirs)} folders'
-          +(f', built {built}' if built else '')+'. Each "- name" is <folder>/<name>.md; after ":" are its '
-          'sections. Open any of them with your file tools. This map is a snapshot from the start of the '
-          f'session: {command} [folder] lists the current state]')
-    with_sections=sum(1 for n in notes if n['headings'])
-    def compose(folded,shown):
-        notice=[]
-        if folded:notice.append(f'{len(folded)} folder(s) folded to a count')
-        missing=sum(1 for n in notes if n['headings'] and id(n) not in shown and n['dir'] not in folded)
-        if missing:notice.append(f'sections omitted for {missing} of {with_sections} notes (oldest first)')
+    head=(f'[Vault map — {c.vault}: {len(notes)} notes in {len(dirs)} folders'
+          +(f', built {built}' if built else '')+'. Each line is a folder, its note count, and a few of its '
+          'key files (<folder>/<name>.md). Everything you have written or kept is in here: open any file '
+          f'with your file tools, and list a folder in full, with each note\'s sections, with: {command} <folder>]')
+    def compose(keys):
         out=[head]
-        if notice:out.append('[Partial for space, nothing hidden: '+'; '.join(notice)+'. The show command above lists any folder in full.]')
         for d in sorted(dirs):
-            ns=dirs[d];out.append(f'{d or "(vault root)"}/ ({len(ns)})')
-            if d in folded:out.append(f'- ({len(ns)} notes not listed for space: show {d or "."})')
-            else:out.extend(_line(n,id(n) in shown) for n in ns)
+            ns=dirs[d];line=f'{d or "(vault root)"}/ ({len(ns)})'
+            if keys:
+                shown=[n['name'] for n in _keys(ns)[:keys]]
+                line+=': '+', '.join(shown)+(f' +{len(ns)-len(shown)} more' if len(ns)>len(shown) else '')
+            out.append(line)
         return '\n'.join(out)
-    folded=set()
-    # Fold the biggest folders first until names alone fit. Deeper wins a tie:
-    # a nested archive is a better thing to fold than a top-level folder.
-    while len(compose(folded,set()))>budget and len(folded)<len(dirs):
-        folded.add(max((d for d in dirs if d not in folded),key=lambda d:(len(dirs[d]),d.count('/'))))
-    if len(compose(folded,set()))>budget:
-        # Too small a window for even folded folders: a tree of folder counts,
-        # as deep as fits. Still a map, just a coarser one.
-        def tree(depth):
-            counts={}
-            for d,ns in dirs.items():
-                key='/'.join(d.split('/')[:depth]) if d else ''
-                counts[key]=counts.get(key,0)+len(ns)
-            return [f'- {k or "(vault root)"}/ ({v})' for k,v in sorted(counts.items())]
-        note='[Folder note counts only for space; deepest shown include their subfolders. The show command above lists inside.]'
-        depth=max((d.count('/')+1 for d in dirs if d),default=1)
-        while depth>1 and len('\n'.join([head,note,*tree(depth)]))>budget:depth-=1
-        return '\n'.join([head,note,*tree(depth)])[:max(budget,len(head))]
-    candidates=[n for n in sorted(notes,key=lambda n:-n['mtime']) if n['headings'] and n['dir'] not in folded]
-    text=compose(folded,{id(n) for n in candidates})
-    if len(text)<=budget:return text
-    # Sections, newest notes first, into whatever room names left. The base
-    # already carries the notice at its longest, so every step stays in budget.
-    total=len(compose(folded,set()));shown=set()
-    for n in candidates:
-        extra=len(_line(n,True))-len(_line(n,False))
-        if total+extra<=budget:shown.add(id(n));total+=extra
-    return compose(folded,shown)
+    for keys in range(MAX_KEYS,-1,-1):
+        text=compose(keys)
+        if len(text)<=budget:return text
+    # Too small a window for every folder: a tree of folder counts, as deep as
+    # fits. Still a map, just a coarser one.
+    def tree(depth):
+        counts={}
+        for d,ns in dirs.items():
+            key='/'.join(d.split('/')[:depth]) if d else ''
+            counts[key]=counts.get(key,0)+len(ns)
+        return [f'{k or "(vault root)"}/ ({v})' for k,v in sorted(counts.items())]
+    note='[Folder counts only for space; the deepest folders shown include their subfolders.]'
+    depth=max((d.count('/')+1 for d in dirs if d),default=1)
+    while depth>1 and len('\n'.join([head,note,*tree(depth)]))>budget:depth-=1
+    return '\n'.join([head,note,*tree(depth)])[:max(budget,len(head))]
 
 def cc_command(c,action:str)->str:
     try:

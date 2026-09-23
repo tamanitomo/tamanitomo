@@ -42,37 +42,39 @@ class VaultIndexTests(unittest.TestCase):
         self.assertEqual(by['plan'],['Garden plan','Beds','Watering'])
         self.assertEqual(by['README'],[])
 
-    def test_every_name_and_section_when_the_budget_allows(self):
+    def test_every_folder_with_its_count_and_key_files(self):
+        note(self.vault,'projects/garden/README.md','# Readme',age=500_000)
         text=vi.render(self.c,vi.scan(self.c),100_000)
-        self.assertIn('projects/garden/ (2)',text)
-        self.assertIn('- plan: Garden plan · Beds · Watering',text)
-        self.assertIn('- old: Old · Ancient history',text)
-        self.assertNotIn('Partial for space',text)
+        self.assertIn('projects/garden/ (3): README, plan, old',text,'README explains the folder, then newest first')
+        self.assertIn('(vault root)/ (1): README',text)
+        self.assertIn('archive/big/ (1): one',text)
+        self.assertNotIn('Folder counts only',text)
 
-    def test_sections_go_to_recent_notes_first_and_the_omission_is_stated(self):
-        long=''.join(f'## A long section heading number {i}\n' for i in range(6))
-        for i in range(5):note(self.vault,f'history/h{i}.md',long,age=50_000+i)
-        notes=vi.scan(self.c)
-        full=vi.render(self.c,notes,10**9)
-        tight=vi.render(self.c,notes,len(full)-400)
-        self.assertLessEqual(len(tight),len(full)-400)
-        self.assertIn('- plan: Garden plan · Beds · Watering',tight,'the newest note keeps its sections')
-        self.assertIn('\n- h4\n',tight,'the oldest loses them first')
-        self.assertIn('sections omitted for',tight)
+    def test_many_notes_are_counted_not_listed(self):
+        for i in range(12):note(self.vault,f'journal/d{i:02}.md',age=i)
+        text=vi.render(self.c,vi.scan(self.c),100_000)
+        self.assertIn('journal/ (12): d00, d01, d02, d03, d04 +7 more',text)
 
-    def test_small_budgets_fold_folders_and_never_hide_that_they_did(self):
-        for i in range(200):note(self.vault,f'archive/big/n{i:03}.md')
+    def test_small_budgets_drop_key_files_then_depth_and_say_so(self):
         notes=vi.scan(self.c)
-        full=vi.render(self.c,notes,10**9)
-        text=vi.render(self.c,notes,len(full)-300)
-        self.assertLessEqual(len(text),len(full)-300)
-        self.assertIn('201 notes not listed for space: show archive/big',text)
-        self.assertIn('1 folder(s) folded to a count',text)
-        self.assertIn('- plan',text)
+        bare=vi.render(self.c,notes,len(vi.render(self.c,notes,10**9))-1)
+        self.assertLess(len(bare),len(vi.render(self.c,notes,10**9)))
+        self.assertIn('projects/garden/ (2)',bare)
         head=len(vi.render(self.c,[],10**9))
-        tiny=vi.render(self.c,notes,head+250)
-        self.assertIn('Folder note counts only',tiny);self.assertIn('- archive/',tiny)
-        self.assertLessEqual(len(tiny),head+250)
+        for i in range(30):note(self.vault,f'archive/deep/level{i}/n.md')
+        notes=vi.scan(self.c)
+        tiny=vi.render(self.c,notes,head+200)
+        self.assertIn('Folder counts only',tiny);self.assertIn('archive/deep/ (30)',tiny);self.assertNotIn('level0',tiny)
+        self.assertLessEqual(len(tiny),head+200)
+
+    def test_installed_tool_folders_are_not_part_of_the_vault(self):
+        note(self.vault,'site/node_modules/pkg/README.md','# pkg')
+        self.assertNotIn(('site/node_modules/pkg','README'),self.names())
+
+    def test_show_lists_a_folder_in_full_with_sections(self):
+        out=vi.show(self.c,'projects')
+        self.assertIn('- plan: Garden plan · Beds · Watering',out)
+        self.assertIn('- old: Old · Ancient history',out)
 
     def test_sent_once_per_session_and_again_once_compression_drops_it(self):
         first=vi.for_prompt(self.c,{'extra':{'conversation_history':[]}})
@@ -87,7 +89,7 @@ class VaultIndexTests(unittest.TestCase):
         first=vi.build(self.c)
         note(self.vault,'new-note.md')
         self.assertEqual(vi.build(self.c),first)
-        self.assertIn('- new-note',vi.build(self.c,force=True))
+        self.assertIn('README, new-note',vi.build(self.c,force=True))
 
     def test_the_local_context_engine_keeps_the_map_when_it_drops_old_snapshots(self):
         snapshot=local.BEGIN+'\n[Nova — continuity]\nstate\n'+local.END
