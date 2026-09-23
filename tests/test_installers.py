@@ -212,6 +212,57 @@ class HermesOnPhoneTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(result.stdout.split('\n')[:-1], ['httpx[socks]==0.28.1', 'pyyaml>=6'])
 
+    def run_persist(self, root, api_level='34'):
+        # A PATH with only what the function needs, so a uv on this machine
+        # does not hide whether the phone would be given one.
+        bin_dir = root/'bin'; bin_dir.mkdir(exist_ok=True)
+        for tool in ('cat', 'grep', 'mkdir', 'touch'):
+            (bin_dir/tool).symlink_to(shutil.which(tool))
+        (bin_dir/'pkg').write_text('#!/bin/sh\necho "$@" >> "$FAKE_PKG_LOG"\n'); (bin_dir/'pkg').chmod(0o755)
+        script = ('android_overrides_file() { echo "$HERMES_HOME/android-overrides.txt"; }\n'
+                  + shell_function('setup-termux.sh', 'persist_android_build_env')
+                  + 'YELLOW=; RESET=\npersist_android_build_env\npersist_android_build_env\n')
+        env = {'PATH': str(bin_dir), 'HOME_DIR': str(root/'home'), 'HERMES_HOME': str(root/'home/.hermes'),
+               'ANDROID_API_LEVEL': api_level, 'FAKE_PKG_LOG': str(root/'pkg.log')}
+        (root/'home').mkdir(exist_ok=True)
+        return subprocess.run([shutil.which('bash'), '-c', script], capture_output=True, text=True, env=env, timeout=30)
+
+    def test_hermes_update_is_kept_off_nemo_relay_for_good(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result = self.run_persist(root)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            overrides = (root/'home/.hermes/android-overrides.txt').read_text()
+            self.assertIn("nemo-relay; sys_platform == 'never'", overrides)
+            for rc in ('.bashrc', '.profile'):
+                text = (root/'home'/rc).read_text()
+                self.assertEqual(text.count('UV_OVERRIDE='), 1, 'a second run must not add the line again')
+                self.assertIn(str(root/'home/.hermes/android-overrides.txt'), text)
+                self.assertEqual(text.count('ANDROID_API_LEVEL="34"'), 1)
+            self.assertIn('install -y uv', (root/'pkg.log').read_text(), 'hermes update needs uv to honour the override')
+
+    def test_both_services_carry_the_override(self):
+        installer = (ROOT/'setup-termux.sh').read_text()
+        self.assertIn('android_overrides_file() { echo "$HERMES_HOME/android-overrides.txt"; }', installer)
+        self.assertEqual(installer.count('export UV_OVERRIDE="$(android_overrides_file)"'), 2)
+        self.assertIn('libheif uv)', installer)
+
+    @unittest.skipUnless(shutil.which('uv'), 'needs uv')
+    def test_uv_really_drops_a_package_the_override_names(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/'pkg/demo').mkdir(parents=True); (root/'pkg/demo/__init__.py').write_text('')
+            (root/'pkg/pyproject.toml').write_text(
+                '[project]\nname = "demo"\nversion = "0.1"\ndependencies = ["nemo-relay>=0.8.3,<0.9"]\n'
+                '[build-system]\nrequires = ["setuptools"]\nbuild-backend = "setuptools.build_meta"\n')
+            (root/'ov.txt').write_text("nemo-relay; sys_platform == 'never'\n")
+            env = {**os.environ, 'UV_OVERRIDE': str(root/'ov.txt'), 'VIRTUAL_ENV': str(root/'v')}
+            subprocess.run(['uv', 'venv', '-q', str(root/'v')], check=True, capture_output=True, timeout=60)
+            result = subprocess.run(['uv', 'pip', 'install', '--dry-run', '-e', str(root/'pkg')],
+                                    capture_output=True, text=True, env=env, timeout=120)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn('nemo-relay', (result.stdout + result.stderr).lower())
+
     def test_the_phone_installs_hermes_without_its_dependency_resolution(self):
         installer = (ROOT/'setup-termux.sh').read_text()
         self.assertIn('install_hermes_on_phone "$HERMES_VENV" "$HERMES_REPO"', installer)

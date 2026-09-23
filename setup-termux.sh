@@ -261,6 +261,40 @@ echo -e "${DIM}Hermes directory: ${HERMES_HOME}${RESET}"
 echo -e "${DIM}Tamanitomo:       ${KIT_DIR}${RESET}"
 echo ""
 
+# The installer leaves nemo-relay out of Hermes on the phone, but `hermes update`
+# resolves Hermes's dependencies again and would try to compile it all over. uv
+# honours UV_OVERRIDE (Hermes passes it through), and an override whose marker
+# can never be true drops the package from every resolution. So: install uv,
+# keep the override beside Hermes, and export it wherever Hermes might update
+# itself -- the shell and both services. ANDROID_API_LEVEL goes with it, since
+# any later source build of a Rust package needs it.
+android_overrides_file() { echo "$HERMES_HOME/android-overrides.txt"; }
+
+persist_android_build_env() {
+  local overrides rc
+  overrides="$(android_overrides_file)"
+  mkdir -p "$HERMES_HOME"
+  cat > "$overrides" <<'OVERRIDES'
+# Written by the Tamanitomo installer. Packages Hermes asks for that cannot be
+# built on a phone; a marker that is never true keeps uv from resolving them.
+nemo-relay; sys_platform == 'never'
+OVERRIDES
+  export UV_OVERRIDE="$overrides"
+  for rc in "$HOME_DIR/.bashrc" "$HOME_DIR/.profile"; do
+    touch "$rc"
+    if ! grep -q "UV_OVERRIDE=" "$rc" 2>/dev/null; then
+      echo "export UV_OVERRIDE=\"$overrides\"  # tamanitomo: keep hermes update off packages a phone cannot build" >> "$rc"
+    fi
+    if [[ -n "${ANDROID_API_LEVEL:-}" ]] && ! grep -q "ANDROID_API_LEVEL=" "$rc" 2>/dev/null; then
+      echo "export ANDROID_API_LEVEL=\"$ANDROID_API_LEVEL\"  # tamanitomo: needed by Rust source builds" >> "$rc"
+    fi
+  done
+  if ! command -v uv >/dev/null 2>&1; then
+    pkg install -y uv >/dev/null 2>&1 || \
+      echo -e "  ${YELLOW}Could not install uv; hermes update will fall back to pip, which cannot skip nemo-relay.${RESET}"
+  fi
+}
+
 # Bring a git checkout to the newest published release. Running the installer
 # again is how people update, so a second run must not leave the first run's
 # code in place. A checkout with local changes, or already past the newest
@@ -341,6 +375,7 @@ if [[ "$UPGRADE_MODE" -eq 1 && "$DRY_RUN" -eq 0 ]]; then
     UPGRADE_URL="https://${GITHUB_TOKEN}@github.com/tamanitomo/tamanitomo.git"
   fi
   sync_to_release "$KIT_DIR" "$UPGRADE_URL"
+  if [[ "$IS_TERMUX" -eq 1 ]]; then persist_android_build_env; fi
   VENV_DIR="$KIT_DIR/.venv"
   if [[ -f "$KIT_DIR/requirements.txt" ]]; then
     echo -e "  Updating Python dependencies..."
@@ -584,7 +619,7 @@ if [[ "$IS_TERMUX" -eq 1 ]]; then
   pkg install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" tur-repo || true
   # apt installs all or nothing: one unavailable package here used to silently
   # skip python3.11 and rust too.  Retry one at a time so the rest still land.
-  TERMUX_PACKAGES=(python3.11 git clang rust binutils make pkg-config libffi openssl nodejs ripgrep tmux curl termux-services termux-api jq termux-tools libjpeg-turbo libpng libheif)
+  TERMUX_PACKAGES=(python3.11 git clang rust binutils make pkg-config libffi openssl nodejs ripgrep tmux curl termux-services termux-api jq termux-tools libjpeg-turbo libpng libheif uv)
   if ! pkg install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" "${TERMUX_PACKAGES[@]}"; then
     echo -e "  ${YELLOW}! Installing the packages together failed; retrying one at a time...${RESET}"
     FAILED_PACKAGES=()
@@ -747,6 +782,8 @@ if ! command -v hermes >/dev/null 2>&1; then
     curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup || curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup
   fi
 fi
+
+if [[ "$IS_TERMUX" -eq 1 && "$DRY_RUN" -eq 0 ]]; then persist_android_build_env; fi
 
 if [[ -f "$HERMES_HOME/hermes-agent/venv/bin/hermes" && ! -f "$PREFIX_DIR/bin/hermes" ]]; then
   ln -sf "$HERMES_HOME/hermes-agent/venv/bin/hermes" "$PREFIX_DIR/bin/hermes" 2>/dev/null || true
@@ -939,6 +976,8 @@ export PREFIX=${PREFIX_DIR}
 export HERMES_HOME=${HERMES_HOME}
 export PATH="${HERMES_HOME}/hermes-agent/venv/bin:${KIT_DIR}/.venv/bin:${PREFIX_DIR}/bin:\$PATH"
 export HERMES_ACCEPT_HOOKS=1
+export UV_OVERRIDE="$(android_overrides_file)"
+export ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-}"
 cd "${HOME_DIR}" || exit 1
 
 # Network rollover guard: Allow sockets and routing to settle (e.g. during Wi-Fi to 5G handover)
@@ -975,6 +1014,8 @@ export COMPANION_BIND=0.0.0.0
 export COMPANION_PORT=${PORT}
 export PATH="${KIT_DIR}/.venv/bin:${PREFIX_DIR}/bin:\$PATH"
 export PYTHONPATH="${KIT_DIR}:${KIT_DIR}/kit/scripts"
+export UV_OVERRIDE="$(android_overrides_file)"
+export ANDROID_API_LEVEL="${ANDROID_API_LEVEL:-}"
 cd "${KIT_DIR}" || exit 1
 exec ${KIT_DIR}/.venv/bin/python -m kit.app.hosted
 EOF

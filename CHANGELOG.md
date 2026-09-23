@@ -1,3 +1,9 @@
+## 3.0.11 — Updates on the phone stay fixed (2026-09-23)
+
+- Keep `hermes update` from trying to build nemo-relay on the phone. 3.0.10 left it out of the first install, but an update resolves Hermes's dependencies again and would have hit the same failure. The installer now writes an override that uv honours, exports it in the shell and in both background services, and installs uv so Hermes updates through it. An update may report one package as missing; that is this package, and the update still completes.
+- Remember `ANDROID_API_LEVEL` in the shell profile, so a later update that has to build a Rust package from source does not fail asking for it.
+- Apply both on upgrade as well, so a phone that is already installed picks them up by running the installer again.
+
 ## 3.0.10 — Phones Hermes does not recognise (2026-09-23)
 
 - Install Hermes on Android without `nemo-relay`. Hermes asks for that package everywhere except Android and recognises Android by the word "android" in the kernel's release string, which older phone kernels do not carry. On those phones pip set out to compile nemo-relay from Rust source and the install ended in "Failed to build nemo-relay" before Tamanitomo was ever downloaded. Hermes runs without it, so the installer now installs Hermes's own dependency list without that one package and then Hermes itself, which is the workaround Hermes suggests for these devices.
