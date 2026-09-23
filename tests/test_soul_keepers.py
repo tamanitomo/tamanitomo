@@ -125,4 +125,19 @@ class IdentityPageTests(KeeperTests):
         self.assertEqual(client.post('/api/identity/heart',json={'body':'## Heart and temper\n\nWarm.'},headers=h).status_code,200)
 
 
+class ImagePromptStaysVisibleTests(KeeperTests):
+    """The words sent to image providers sit under the appearance section, on the new layout too."""
+    def test_the_image_block_reads_the_new_appearance_section(self):
+        import companion_identity as ident
+        ident.replace(self.c,'appearance','## What Mira looks like\n\nMira is a 27-year-old adult with auburn hair.')
+        from kit.app.server import build
+        from fastapi.testclient import TestClient
+        client=TestClient(build(self.c.home,token='t',state_dir=Path(self.temp.name)/'state'));self.addCleanup(client.close)
+        d=client.get('/api/image-identity',headers={'x-companion-token':'t'}).json()
+        self.assertTrue(d['has_appearance']);self.assertIn('auburn hair',d['appearance'])
+        self.assertNotIn('What Mira looks like',d['appearance'])
+        page=(ROOT/'kit/app/static/index.html').read_text()
+        self.assertIn("s.name==='appearance'?'<div class=\"image-block\" id=\"image-block\"",page)
+
+
 if __name__=='__main__':unittest.main()
