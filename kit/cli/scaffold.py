@@ -227,6 +227,15 @@ def _install_jobs_locked(c,m,report):
                 updates+=['--prompt',prompt]
             if spec['key']=='pulse' and job.get('schedule',{}).get('expr')=='*/15 6-23 * * *':
                 updates+=['--schedule',spec['expr']]
+            # 3.0.12: the morning job moved from one fixed minute to a window gated by
+            # a fingerprint. Move only the schedule the kit itself rendered before.
+            if spec['key']=='wake' and job.get('schedule',{}).get('expr')==cr.cron_at(c.quiet_end,offset=10):
+                updates+=['--schedule',cr.render(spec['expr'],m)]
+            # A job whose spec gained a monitor since it was created gets one, so the
+            # gate reaches existing installs rather than only new ones.
+            if spec.get('monitor') and not spec.get('no_agent') and not job.get('monitor_script') \
+                    and hermes_supports(tuple(cp.hermes_command()),c.home,'--monitor-script'):
+                updates+=['--monitor-script',write_preread_script(c,spec,'fingerprint').name]
             if updates:
                 try:
                     result=subprocess.run(cp.hermes_command('cron','edit',job['id'],*updates),
