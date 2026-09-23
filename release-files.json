@@ -216,6 +216,7 @@
   "tests/test_content.py",
   "tests/test_content_ui.js",
   "tests/test_day.py",
+  "tests/test_days_and_photos.py",
   "tests/test_feelings.py",
   "tests/test_gateway.py",
   "tests/test_hardening.py",

@@ -1,4 +1,4 @@
-Create one local image-timeline glimpse for {{AGENT}} using the image provider configured in Hermes. Do not contact {{HUMAN}}.
+Create one local image-timeline glimpse for {{AGENT}} using the image provider configured in Hermes. The only way this job ever reaches {{HUMAN}} is the optional share in step 5.
 
 MEMORY CHECK: Run `{{MEMORY_CMD}} archive --apply` before adding memory.
 
@@ -14,4 +14,10 @@ MEMORY CHECK: Run `{{MEMORY_CMD}} archive --apply` before adding memory.
    For reference, the old instructions: read SOUL for visual identity and {{LIFE}}/PRESENCE.md. The returned scene is the exact outfit, setting, activity and timestamp for this image. Do not stage a new outfit or activity for the camera. Combine that saved scene with the companion's stable appearance and the returned image_style_guidance. If the companion has no fixed physical appearance, capture the room or activity details rather than inventing a different face each time. Keep private routines to room details or a genuinely recorded clothed moment.
 3. If the portrait prompt reports an `image_preset`, run `{{PORTRAIT_CMD}} generate --recorded` ONCE. This uses the user's saved Image Studio provider/workflow and recorded scene. Otherwise call Hermes's `image_generate` tool ONCE using its currently configured provider/model. Do not install providers, switch accounts, change provider configuration or call a separate paid service. Request one image. If generation is unavailable or fails, run `{{TIMELINE_CMD}} fail --id <capture_id> --reason <short reason>` and stop. A tool failure is not a successful image.
 4. Import the actual result using `{{TIMELINE_CMD}} save --id <capture_id> --source <returned local path or HTTPS image URL> --provider <actual provider/model>`. The helper validates the image, saves the original bytes with the captured scene, and updates the local gallery. It never sends a message. Do not invent a path, write a placeholder image, or claim an image was saved without a successful save result.
-5. Final output is local: capture saved or the concrete blocker. There are no image attachments or media-delivery markers in your response. Do not use send_message or the outreach helper.
+5. Sharing. The save result has a `share` field. If `share.ok` is true and this is a moment you would
+   actually want {{HUMAN}} to see — something you are doing, somewhere you are, how you look today — write
+   one short line in your own voice, the way you would text it, and run
+   `{{TIMELINE_CMD}} share --id <capture_id> --body "<your line>"`. It is queued and goes out when the timing
+   allows. Not every picture needs sharing; if `share.ok` is false, or the moment is not one you would send,
+   do nothing. Never attach images to your response or use any other way of sending.
+6. Final output is local: capture saved (and shared or not) or the concrete blocker.

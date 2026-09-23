@@ -39,7 +39,8 @@ DAILY RHYTHM GATES & ACTIVITY-APPROPRIATE DRESS:
 - Swimming & Beach Gate: For the beach, YMCA pool, or water outings -> change into swimwear and cover-up -> swim and enjoy -> change into dry casual clothes for lunch/walks (a full shower is NOT required after swimming unless you choose to rinse off).
 - Active/Workout Gate: For gym or running -> wear active clothes -> change into clean daytime clothes when done.
 - Day & Hobby Gate: Work, creative projects, cooking journeys (such as researching ramen at the library), lunch, shopping trips to surprise someone special, cafes, park, or friends. On days off or beach days, you are never locked into work!
-- Evening Wind-down Gate: Dinner -> unwind -> hamper check & laundry -> evening shower -> brush teeth -> clean pajamas -> sleep.
+- Evening Wind-down Gate: Dinner -> unwind -> evening shower -> brush teeth -> clean pajamas -> sleep.
+- Laundry: only when the care state below says LAUNDRY DUE, because clean clothes are running low. Otherwise the hamper can wait; laundry is not a nightly habit.
 
 Use care_actions for NEW completed actions in order: brush_teeth, shower, laundry_start,
 laundry_finish, shop. Each action is {kind, items: []}; laundry actions list clothing IDs.
@@ -214,6 +215,7 @@ def render(c,now,scene=None):
         lines.append('These pieces do not say what they cover; the camera guesses from their category. '
                      'Set covers (top, bottom, full or none) with a wardrobe update when convenient: '
                      +', '.join(unknown[:20]))
+    lines.append(laundry_status(state,closet))
     last=state['shopping_at'] or policy(c).get('shopping_baseline')
     if not last or now-day.timestamp(last)>=dt.timedelta(days=14):lines.append('Shopping opportunity available: optional browsing on an outing; choose only something you want or need.')
     if scene:
@@ -222,6 +224,24 @@ def render(c,now,scene=None):
             if now-day.timestamp(since)>=dt.timedelta(hours=20):lines.append(f'CLOTHING CHANGE DUE: {i} worn since {since}; choose clean clothes after brushing teeth, and shower before pajamas.')
         lines.append('Current items may stay on until changing; removed washable pieces need laundry: '+', '.join(i['id'] for i in worn))
     return '\n'.join(lines)
+
+
+def laundry_status(state,closet):
+    """LAUNDRY DUE only when a part of an outfit is running out of clean pieces."""
+    from companion_presence import covers_of
+    clothes=state.get('clothes',{})
+    groups={'tops':0,'bottoms':0,'underwear':0,'sleepwear':0}
+    for item in closet:
+        if not isinstance(item,dict) or clothes.get(item.get('id'),'clean')!='clean':continue
+        cat=item.get('category');cov=covers_of(item)
+        if cat=='sleep':groups['sleepwear']+=1
+        elif cat=='underwear':groups['underwear']+=1
+        elif cat in ('day','active'):
+            if cov in ('top','full'):groups['tops']+=1
+            if cov in ('bottom','full'):groups['bottoms']+=1
+    low=[k for k,n in groups.items() if n<2]
+    if low:return 'LAUNDRY DUE: running low on clean '+', '.join(low)+'. Start a load when it suits your day.'
+    return 'Laundry is not due: there are clean clothes for every part of an outfit. The hamper can wait.'
 
 
 def choose_palette(c, palette='auto'):
@@ -645,7 +665,7 @@ def default_daily_routine(c):
             dict(start='12:00', end='13:00', activity='hearty lunch break and rest', setting='mess hall, local diner, or tailgate lunch'),
             dict(start='13:30', end='16:30', activity='afternoon shift: complete project milestones, clean tools, and wrap up site', setting='workshop or project site; final safety checks'),
             dict(start='17:30', end='19:00', activity='dinner and unwinding from physical effort', setting='home or local spot with work crew'),
-            dict(start='19:30', end='21:00', activity='check the hamper; wash dusty work clothes, then take an evening shower and change into clean pajamas', setting='home; laundry running, relaxing muscle recovery'),
+            dict(start='19:30', end='21:00', activity='take an evening shower, change into clean pajamas and let the day go', setting='home; laundry only if it is due'),
             dict(start='21:00', end='22:30', activity='brush teeth, quiet wind-down reading or music, and restorative sleep', setting='home; early rest for tomorrow')
         ]
     elif agent_type == 'colleague':
@@ -655,7 +675,7 @@ def default_daily_routine(c):
             dict(start='12:00', end='13:00', activity='lunch and a midday mental break', setting='nearby cafe or quiet lunch spot'),
             dict(start='13:30', end='16:30', activity='afternoon collaborative block: meetings, reviews, and project wrap-up', setting='workspace or conference room; completing daily deliverables'),
             dict(start='17:30', end='19:00', activity='evening transition, dinner, and personal downtime', setting='home or meeting friends after work'),
-            dict(start='19:30', end='21:30', activity='check the hamper; run laundry if needed, take an evening shower, and change into clean pajamas', setting='home; allow 90 minutes for laundry, comfortable evening unwind'),
+            dict(start='19:30', end='21:30', activity='take an evening shower, change into clean pajamas and unwind', setting='home; laundry only if it is due'),
             dict(start='21:30', end='23:00', activity='brush teeth, read or listen to something thoughtful, and go to sleep', setting='home; restorative rest before the next workday')
         ]
     return [
@@ -664,7 +684,7 @@ def default_daily_routine(c):
         dict(start='12:00', end='13:00', activity='make or choose lunch', setting='home or a cafe, depending on the morning'),
         dict(start='14:00', end='16:00', activity='an interest, creative project, planned class or time with a friend', setting='choose a setting that fits the activity; existing weekly plans take priority'),
         dict(start='18:00', end='19:30', activity='dinner and an enjoyable evening', setting='home or an outing of your choosing'),
-        dict(start='20:30', end='22:00', activity='check the hamper; wash and dry a load when needed, then shower and change into clean pajamas', setting='home; allow 90 minutes for laundry, use another clean set while it runs'),
+        dict(start='20:30', end='22:00', activity='evening shower and change into clean pajamas; unwind', setting='home; laundry only if it is due'),
         dict(start='22:00', end='23:30', activity='brush teeth, enjoy a quiet bedtime ritual and go to sleep', setting='home; choose a book, music or something comforting')
     ]
 

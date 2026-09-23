@@ -29,8 +29,22 @@ def command(argv):
     """Quote an argv for the host shell used by Hermes hook commands."""
     return subprocess.list2cmdline([str(x) for x in argv]) if os.name=='nt' else shlex.join([str(x) for x in argv])
 
+def kit_python():
+    """The interpreter that has the kit's dependencies: the app's own venv when it has one.
+
+    Commands written into job prompts and hooks run later, from Hermes, long after
+    whoever rendered them has exited. Rendering them with sys.executable meant a
+    repair started from the `companion` launcher -- system python3 -- wrote the
+    system interpreter into every prompt, and image jobs then failed for hours
+    with "No module named 'PIL'".
+    """
+    root=pathlib.Path(__file__).resolve().parents[2]
+    for candidate in (root/'.venv'/'bin'/'python',root/'.venv'/'Scripts'/'python.exe'):
+        if candidate.is_file():return str(candidate)
+    return sys.executable
+
 def python_command(script,*args):
-    return command([sys.executable,script,*args])
+    return command([kit_python(),script,*args])
 
 def hermes_command(*args):
     # JSON argv permits test doubles and a Python module command without shell evaluation.
@@ -143,7 +157,7 @@ def terminal_command(argv):
     return shlex.join(parts)
 
 def terminal_python_command(script,*args):
-    return terminal_command([sys.executable,script,*args])
+    return terminal_command([kit_python(),script,*args])
 
 def is_terminal(stream=None):
     """True only when stream is attached to an interactive terminal, never for NUL or pipes."""

@@ -365,7 +365,9 @@ def save(c,ident,source,provider,now=None,prompts=None):
     path=capture_path(c,ident)
     with file_lock(root(c)/'.lock'):
         row=json.loads(path.read_text(encoding='utf-8'))
-        if row['status']=='saved':return row
+        if row['status']=='saved':
+            try:return {**row,'share':share_opportunity(c,row,now)}
+            except Exception as exc:return {**row,'share':{'ok':False,'why':f'could not check: {exc}'}}
         if row['status']!='pending':raise ValueError('Capture is not pending')
         if now-timestamp(row['created_at'])>dt.timedelta(minutes=15):raise ValueError('Capture expired; do not label a delayed image as current')
         if not isinstance(provider,str) or not provider.strip() or len(provider)>200:raise ValueError('Record the actual provider/model name')
@@ -402,7 +404,9 @@ def save(c,ident,source,provider,now=None,prompts=None):
         if meta_updated.get('active_prompt_type'):row['active_prompt_type']=meta_updated['active_prompt_type']
         row.update(status='saved',saved_at=now.isoformat(),provider=provider,sha256=hashlib.sha256(data).hexdigest())
         atomic_write(path,json.dumps(row,ensure_ascii=False,indent=2));render_gallery(c)
-    return row
+    try:share_info=share_opportunity(c,row,now)
+    except Exception as exc:share_info={'ok':False,'why':f'could not check: {exc}'}
+    return {**row,'share':share_info}
 
 
 def add_variant(c,ident,source,provider,prompts=None,now=None):
@@ -500,6 +504,32 @@ def latest(c):
         'outfit':[item['id'] if isinstance(item,dict) else item for item in scene.get('outfit',[])]
     }
 
+
+PHOTO_SHARES_PER_DAY=2
+
+def share_opportunity(c,row,now=None):
+    """Whether this capture may be offered to the human unprompted, and why not.
+
+    Photos set to "yes" used to depend entirely on a model deciding, unprompted, to
+    share one -- and none ever did: not one image entered either outbox. The photo
+    job now asks this after every save, so the choice is put in front of her with
+    the answer already known.
+    """
+    now=now or now_utc()
+    if c.may_send('image')!='yes' or c.outreach=='never':
+        return {'ok':False,'why':'photos are not sent unprompted for this companion'}
+    variant=(row.get('variants') or [{}])[0]
+    if variant.get('rating') in ('nsfw','unknown'):
+        import companion_media
+        if not companion_media.adult_ready(c)[0]:
+            return {'ok':False,'why':'this picture is rated adult and adult images are not available'}
+    import companion_outbox as outbox
+    local=now.astimezone(outbox._tz(c)).date().isoformat()
+    shared=[e for e in outbox.fold(c) if e.get('content')=='image'
+            and str(e.get('queued_at',''))[:10]==local]
+    left=max(0,min(PHOTO_SHARES_PER_DAY,c.outreach_per_day or PHOTO_SHARES_PER_DAY)-len(shared))
+    if not left:return {'ok':False,'why':'already shared the photos for today'}
+    return {'ok':True,'left_today':left}
 
 def share(c,body,ident=None,reason='',priority='normal',ttl_hours=6,now=None):
     body=(body or '').strip()

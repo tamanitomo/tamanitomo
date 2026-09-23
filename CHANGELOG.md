@@ -1,3 +1,10 @@
+## 3.0.19 — Varied days, laundry when due, photos that get sent (2026-09-23)
+
+- Put the activity-idea rotation and the people she has not seen lately into every pre-read (`day_ideas`), with how to mark one taken; the wind-down plans tomorrow from `suggest` and `themes`. The rotation was built to stop days collapsing into reading, but only the local-model writer ever asked for it, so every agent run saw the same seven anchors.
+- Make laundry need-based: the care state reports LAUNDRY DUE only when clean tops, bottoms, underwear or sleepwear drop below two, and no default daily routine schedules laundry.
+- Offer each saved timeline photo for sharing (`share_opportunity`, returned by `save`): photos set to yes, outreach on, adult ratings behind the adult gate, at most two a day. The photo job writes one line in her voice and queues it. Before this, no image had ever entered either companion's outbox.
+- Render prompt and hook commands with the app's own venv interpreter (`kit_python`) instead of whichever Python ran repair. A repair from the `companion` launcher wrote the system python3 into every prompt, and image jobs failed with "No module named 'PIL'" until the next repair.
+
 ## 3.0.18 — Their day, their words (2026-09-23)
 
 - Center the daily diary on the companion's own day, with the human in it only as part of that day, and an example of the register wanted; facts about the human are filed by the later steps, not written into the diary.

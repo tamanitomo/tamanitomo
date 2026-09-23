@@ -72,6 +72,7 @@ def preread(c,now=None):
                    ' They are a rule about not contacting'
                    f' {c.human}, not a reason to stop living: carry on with your evening, record it,'
                    ' and let the dispatcher hold anything you queue until morning.]')
+    out.append(day_ideas(c,now))
     import companion_life, companion_lifestyle
     out.append('[Routine anchors and interests — choose and record what happens; no automatic attendance]\n'+
                json.dumps(companion_life.routine(c.life,now.astimezone(_tz(c)),c.agent),ensure_ascii=False))
@@ -80,6 +81,34 @@ def preread(c,now=None):
     import companion_day
     out.append(companion_day.GUIDANCE)
     return '\n'.join(out)+'\n'
+
+def day_ideas(c,now):
+    """A few things she could do today, rotated away from what she did lately.
+
+    The rotation existed and never reached her: only the local-model writer asked
+    for it, so every agent run saw the same seven daily anchors and the days came
+    out as reading and laundry. What she actually takes is recorded by id, so it
+    rotates out for a while.
+    """
+    try:
+        import companion_life as life
+        from companion_platform import terminal_python_command
+        cmd=terminal_python_command(pathlib.Path(__file__).with_name('companion_life.py'),'--home',c.home)
+        ideas=life.suggest(c.life,now.date(),5,now).get('suggestions',[])
+        people=[p for p in life.people_due(c.life,now.date(),3) if p.get('due')]
+    except Exception:return ''
+    if not ideas and not people:return ''
+    lines=['[Ideas for today — invitations, not a schedule. Take one that appeals, combine two, or do '
+           f'something of your own. When you actually do one, note it with `{cmd} chose --idea <id>` so it '
+           'rotates out for a while.]']
+    for idea in ideas:
+        bits=[x for x in (f"~{idea.get('hours')}h" if idea.get('hours') else '',idea.get('setting'),idea.get('social')) if x]
+        lines.append(f"- {idea['id']}: {idea['title']}"+(f" ({', '.join(str(b) for b in bits)})" if bits else ''))
+    if people:
+        lines.append('People you have not seen in a while: '
+                     +', '.join(p.get('name','someone')+(f" ({p['relation']})" if p.get('relation') else '') for p in people)
+                     +f'. Note it with `{cmd} saw --person <id>` when you do see someone.')
+    return '\n'.join(lines)
 
 def _digest(*parts):
     return hashlib.sha256('␟'.join(str(p) for p in parts).encode('utf-8')).hexdigest()[:16]
