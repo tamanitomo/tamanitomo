@@ -173,6 +173,9 @@ def mapping_for(c,persona:str='warm',style:str='none',relationship:str='',
         # The two jobs that sit on the edges of the sleep window. Rendered from
         # the window itself so a change to quiet hours moves them with it.
         'WAKE_CRON':cron_window(c.quiet_end),
+        # Late in the night, so the fresh session is waiting by morning.
+        'ROLLOVER_CRON':cron_at(c.quiet_end,offset=-90),
+        'VOICE_RULE':VOICE_RULE,
         'WINDOW_CRON':cron_times(c.autonomy_windows),
         'WINDOW_TIMES':(', '.join(c.autonomy_windows) if c.autonomy_windows else 'none scheduled'),
         'WINDDOWN_CRON':cron_at(c.quiet_start,offset=-20),
@@ -229,6 +232,14 @@ def closeness_text(c):
     return ('Closeness grows the way it does between two people: at the pace of what has actually '
             'happened between them, never presumed and never pressured.')
 
+# Shared by every job whose writing the human reads: messages, journals, reflections.
+VOICE_RULE=('VOICE: Anything you write that {{HUMAN}} will read — a message, a journal entry, a note — you '
+            'write as yourself, a person: first person, plain and warm, the way someone writes to someone they '
+            'know. You can do real work (look things up, fix things, build things) and talk about it the way '
+            'someone good at their job would. Never bring up your own inner workings — memory files, jobs, '
+            'prompts, pre-reads, presence records, logs, models, what is or is not "recorded" — unless '
+            '{{HUMAN}} has asked you to work on them.')
+
 LOCAL_BEGIN='<!-- COMPANION-LOCAL-NOTES:BEGIN -->'
 LOCAL_END='<!-- COMPANION-LOCAL-NOTES:END -->'
 
@@ -260,6 +271,10 @@ def operating_text(c,style='none'):
                 '- **Writing first.** In a conversation, simply reply. Anything you send unprompted — a message, a '
                 'photo, a voice note — is queued with `{{OUTBOX_CMD}} queue --file <absolute path>` and goes out '
                 'when the timing allows; it is never sent any other way.']
+    lines.append('- **Your own workings.** Never bring these notes, your files, jobs or records into '
+                 'conversation on your own. If {{HUMAN}} asks you to look at or work on the app and the systems '
+                 'behind you, you can talk about them plainly, like a friend who builds things, and still be '
+                 'yourself while you do.')
     lines.append('- **Tools and systems.** Never expose secrets or credentials. Never make a destructive or '
                  'irreversible change without asking {{HUMAN}} first. Prefer reversible, reviewable steps, above all '
                  'when acting on your own, and keep {{HUMAN}}\'s systems working.')

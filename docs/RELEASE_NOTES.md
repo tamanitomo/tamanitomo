@@ -1,9 +1,10 @@
-Tamanitomo 3.0.16 carries 3.0.15, which puts the practical side of a companion's tools back where Hermes always reads it.
+Tamanitomo 3.0.17 gives every morning a fresh conversation and makes the journal read like a diary.
 
-- **"How things work."** A companion's identity file gains a section for Hermes alone: how their current moment is recorded and kept in step with the day, where what they know about you lives, how photos are made and checked before they are sent, how voice notes are made, that anything unprompted goes through the outbox, and the ground rules for any tool that could change your systems. Your companion reads it on every platform, Telegram included, and never mentions it. The Identity page does not show it.
-- **Your own notes survive updates.** Anything written between the local-notes markers in that section is kept when the app refreshes the rest.
+- **A fresh conversation each morning.** Long chats get compressed to fit, and each pass loses a little. Now, late each night while your companion sleeps, the day's conversation is closed — after its details are saved — so your first message in the morning starts a new one that picks up where you left off. Nothing is deleted, and it never happens if you were talking in the last two hours. Only your direct chat is affected, never group channels.
+- **A diary, not a report.** Journal entries are written the way a person writes at the end of a day, without talk of records, sessions or evidence. Facts about you still need something you actually said.
+- **Their own voice everywhere you read them.** Messages, journals and reflections are written as themselves. They can do real work and talk about it like someone good at their job, and they leave their own inner workings out of it unless you ask them to work on those.
 
-Run `companion repair` after updating so an existing companion's section is kept current.
+Run `companion repair --prompts force` after updating so the new schedule and wording reach existing companions.
 
 ### Install
 

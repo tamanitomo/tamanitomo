@@ -300,6 +300,24 @@
    ],
    "sensitivity": "sensitive",
    "sends": "Recent conversation — the human’s own words — turned into records."
+  },
+  {
+   "key": "rollover",
+   "name": "{{AGENT}} fresh morning conversation",
+   "file": "rollover.md.tmpl",
+   "expr": "{{ROLLOVER_CRON}}",
+   "toolsets": [],
+   "no_agent": true,
+   "script": {
+    "module": "companion_rollover",
+    "args": []
+   },
+   "types": [
+    "companion",
+    "colleague"
+   ],
+   "sensitivity": "none",
+   "sends": "Nothing. Ends last night's chat session so the morning starts fresh; skipped if you wrote in the last two hours."
   }
  ]
 }

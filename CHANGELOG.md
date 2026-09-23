@@ -1,3 +1,9 @@
+## 3.0.17 — A fresh morning, a real diary (2026-09-23)
+
+- Add a nightly rollover job (`companion_rollover.py`, 90 minutes before quiet hours end). This Hermes never starts a session on a clock — `session_reset` is inert — so long chats were compressed again and again until Hermes itself warned that accuracy degrades. The job ends the human's direct-message session (the newest link of its compression chain) through Hermes's own `SessionDB.end_session`; the gateway treats an ended routed session as over and starts a fresh one on the next message. It flags the check-in first, is skipped if the human wrote in the last two hours, never touches group channels or threads, and logs to `companion-life/rollover.jsonl`.
+- Rewrite the daily journal instructions as a diary: first person, past tense, no records, sessions, logs, evidence or "recorded". The weekly and monthly reflections and the local-model reflection follow.
+- Add one voice rule to every job whose writing the human reads (autonomy, morning, wind-down, window, daily, weekly, monthly): write as yourself; do real work and talk about it plainly; leave your own inner workings out unless asked to work on them. "How things work" says the same for conversation.
+
 ## 3.0.16 — Keep the image words in view (2026-09-23)
 
 - Add a test that the words sent to image models stay under the appearance section on the new identity layout, and that they read the appearance text without its heading.
