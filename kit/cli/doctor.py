@@ -107,7 +107,10 @@ def cmd_doctor(args):
             # A fresh session carries the vault map after the continuity block.
             # The map has its own budget; only the per-turn block is held to b.
             context,_,index=payload['context'].partition(vault_index.BEGIN)
-            n=len(context.rstrip())
+            # The budget covers what the hook writes, not the fence around it:
+            # counting the markers put every full block ~75 chars "over budget".
+            from companion_local_context import BEGIN as FENCE_BEGIN,END as FENCE_END
+            n=len(context.replace(FENCE_BEGIN,'').replace(FENCE_END,'').strip())
             print(f'  hook:    {"ok" if n else "EMPTY"}, {n} chars'+('' if n<=b['total'] else '  ! over budget'))
             if not n or n>b['total']:ok=False
             cap=vault_index.budget_chars(c)

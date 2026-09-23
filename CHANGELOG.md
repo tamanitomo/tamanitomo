@@ -1,3 +1,7 @@
+## 3.0.8 — A budget that counts what it budgets (2026-09-23)
+
+- Stop the doctor reporting every full continuity block as over budget. It was counting the two markers around the block, about seventy-five characters the budget never covered, so a block written exactly to size always read as too large and left the check marked incomplete.
+
 ## 3.0.7 — A map of the vault (2026-09-22)
 
 - Give the companion a map of the whole vault at the start of every session: every folder, how many notes it holds, and up to five of the files that say what it is, a folder's README first and then the newest. Before, she only knew the files something else happened to mention, and "is there a note about this" was a guess. `companion_vault_index.py show <folder>` lists any folder in full, with each note's sections.
