@@ -1,11 +1,10 @@
-Tamanitomo 3.0.19: more varied days, laundry only when it is needed, and photos that actually arrive.
+Tamanitomo 3.0.20: a calendar, a day and a timeline that are easy to read.
 
-- **Days that vary.** Every part of your companion's day now sees a few fresh ideas — rotated away from what they did lately — and the people they have not seen in a while. Bedtime planning draws on the same ideas, so tomorrow is less likely to be a copy of today.
-- **Laundry when it is due.** Laundry is no longer a nightly routine. It comes up only when clean clothes for some part of an outfit are running low.
-- **Unprompted photos.** With photos allowed, your companion is now offered each new picture and can send it with a line in their own voice — up to two a day, within quiet hours and the daily limit.
-- **A fix for missing photos.** Running repair from the command line could point background photo jobs at the wrong Python, and pictures then failed. Commands now always use the app's own.
-
-Run `companion repair --prompts force` after updating.
+- **Their day, at a glance.** Home and Plans & calendar show your companion's day as a timeline: what they are doing now and how far along, what is done, and what comes next.
+- **A cleaner calendar.** A compact month beside the day you pick, one place to add to your list, and your whole list below as an agenda.
+- **A timeline that reads like a story.** Each scene is one card with its photos, so a night's sleep is one entry rather than dozens.
+- **Clothes shopping.** Every two weeks your companion is offered a shopping trip, and anything they buy joins their wardrobe.
+- **No more photos while asleep.** With a local model, bedtime now properly starts the night, so the photo timeline rests until morning.
 
 ### Install
 

@@ -40,6 +40,21 @@ class DaysTests(unittest.TestCase):
             self.assertFalse(any('hamper' in a['activity'] for a in ls.default_daily_routine(c)),kind)
 
 
+    def test_a_shopping_trip_is_offered_once_due_and_only_with_the_lifestyle_on(self):
+        import companion_lifestyle as ls, companion_preread as pr
+        with tempfile.TemporaryDirectory() as tmp:
+            c=companion(tmp);now=dt.datetime(2026,9,27,9,tzinfo=dt.timezone.utc)
+            self.assertEqual(ls.shopping_offer(c,now),'')
+            (c.life/'routine.json').write_text(json.dumps({'lifestyle':{'enabled':True,
+                'shopping_baseline':'2026-09-20T09:00:00+00:00'}}))
+            self.assertEqual(ls.shopping_offer(c,now),'')
+            later=now+dt.timedelta(days=7)
+            offer=ls.shopping_offer(c,later)
+            self.assertIn(ls.SHOP_IDEA,offer);self.assertIn('wardrobe_additions',offer);self.assertIn('covers',offer)
+            self.assertIn(ls.SHOP_IDEA,pr.day_ideas(c,later))
+            self.assertNotIn(ls.SHOP_IDEA,pr.day_ideas(c,now))
+
+
 class PhotoShareTests(unittest.TestCase):
     def test_a_saved_photo_is_offered_within_the_daily_allowance(self):
         import companion_timeline as tl, companion_outbox as outbox

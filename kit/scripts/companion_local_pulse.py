@@ -92,6 +92,27 @@ def _settle_ids(data,previous,phase_id):
     return data
 
 
+def declare_night(c,now,tomorrow=None):
+    """The wind-down record is the start of her night, so the night is written down here.
+
+    The hosted wind-down job declares its own sleep window. The local variant tells
+    the model its record is already saved and to do nothing more, so nothing ever
+    declared the night: every overnight photo gate read "awake", and one night
+    produced ten pictures of her asleep. The wake time is when her quiet hours end,
+    or earlier when tomorrow's own plan starts earlier. A night she already declared
+    is left alone.
+    """
+    import companion_sleep
+    plan=companion_sleep.read(c,now)
+    if plan and now<plan['until']:return plan
+    wake=companion_sleep._minutes(c.quiet_end,8*60)
+    starts=[companion_sleep._minutes(str(r.get('start','')),None)
+            for r in ((tomorrow or {}).get('items') or []) if isinstance(r,dict)]
+    starts=[m for m in starts if m is not None and 4*60<=m<wake]
+    if starts:wake=min(starts)
+    return companion_sleep.declare(c,f'{wake//60:02d}:{wake%60:02d}',
+                                   'Declared at wind-down.',now=now)
+
 def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
           allow_remote=False,api_key_env='',tier='loops'):
     if phase not in ('pulse','morning','winddown'):raise ValueError('Unknown presence phase')
@@ -163,6 +184,10 @@ def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
                    'different thing from an idea: it is the overall shape of the day, chosen from '
                    'the listed day-shape names, and "custom" is correct whenever an idea does not '
                    'match one of them.')
+        shopping=lifestyle.shopping_offer(c,now+dt.timedelta(days=1),previous)
+        if shopping:
+            user+=('\nA CLOTHES-SHOPPING TRIP is open tomorrow. If you want it, give it hours in '
+                   f'`tomorrow.items` with kind "idea" and ref "{lifestyle.SHOP_IDEA}":\n'+shopping)
         due=companion_life.people_due(c.life,(now.date()+dt.timedelta(days=1)),3)
         if due:
             user+=('\nPEOPLE — who you have not seen in a while. Seeing someone is a real way to '
@@ -256,6 +281,10 @@ def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
             companion_plan.sync_commitments(c,presence.current(c)['state'].get('commitments'),now=now)
         except Exception as exc:
             print(f'note: commitments not folded into the plan ({exc})',file=sys.stderr)
+    if phase=='winddown':
+        try:declare_night(c,now,data.get('tomorrow'))
+        except (OSError,ValueError) as exc:
+            print(f'note: the night was not declared ({exc})',file=sys.stderr)
     if phase=='winddown' and isinstance(data.get('tomorrow'),dict):
         # What she means to do tomorrow, as she states it.
         #
@@ -272,7 +301,8 @@ def pulse(c,base_url='',model='',slot=1,now=None,apply=True,phase="pulse",
         plan=data['tomorrow']
         target=now.date()+dt.timedelta(days=1)
         rows=[r for r in (plan.get('items') or []) if isinstance(r,dict)]
-        taken=[str(r.get('ref')) for r in rows if r.get('kind')=='idea' and r.get('ref')]
+        taken=[str(r.get('ref')) for r in rows if r.get('kind')=='idea' and r.get('ref')
+               and r.get('ref')!=lifestyle.SHOP_IDEA]
         seeing=[str(r.get('ref')) for r in rows if r.get('kind')=='person' and r.get('ref')]
         # A theme is one of her day-shapes; an idea is a thing to do. A provider
         # that will not enforce an enum hands back whichever it thought of, and

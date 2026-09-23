@@ -70,6 +70,36 @@ def policy(c):
 def enabled(c):return policy(c).get('enabled') is True
 
 
+SHOP_EVERY_DAYS=14
+SHOP_IDEA='clothes-shopping'
+
+def shopping_due(c,when,scene=None):
+    """Is a clothes-shopping trip open to her at `when`? Only with the lifestyle on."""
+    if not enabled(c):return False
+    import companion_presence as presence
+    import companion_day as day
+    try:scene=scene or presence.current(c)
+    except (OSError,ValueError):scene=None
+    last=initial(scene,c)['shopping_at'] or policy(c).get('shopping_baseline')
+    return not last or when-day.timestamp(last)>=dt.timedelta(days=SHOP_EVERY_DAYS)
+
+def shopping_offer(c,when,scene=None):
+    """One line offering a clothes-shopping trip, or '' when none is open.
+
+    Buying clothes was possible -- a `shop` care action while she is out, with up
+    to three new pieces -- but nothing ever suggested going. It lived as a line in
+    the care state, read only in the middle of whatever she was already doing, so
+    no companion had ever bought anything. The day's ideas are where an outing is
+    actually chosen, so the offer goes there too.
+    """
+    if not shopping_due(c,when,scene):return ''
+    return (f'- {SHOP_IDEA}: Go clothes shopping -- browse a few shops and buy what you actually want '
+            'or need, up to three pieces (~2h, out). While you are in the shop, record care action `shop` '
+            'with the pieces in wardrobe_additions, each with id, description, use, category, covers and '
+            'condition "clean"; they join your closet, and that record is the note -- no `chose` for this one. '
+            'Open every '+str(SHOP_EVERY_DAYS)+' days.')
+
+
 def schema_fields():
     item={'type':'object','properties':{
         'id':{'type':'string','minLength':1,'maxLength':80},
@@ -158,7 +188,7 @@ def evolve(c,data,outfit,previous,closet,now):
         elif kind=='shower':result['shower_at']=now.isoformat()
         elif kind=='shop':
             last=result['shopping_at'] or policy(c).get('shopping_baseline')
-            if last and now-day.timestamp(last)<dt.timedelta(days=14):raise ValueError('Shopping opportunity is not due yet')
+            if last and now-day.timestamp(last)<dt.timedelta(days=SHOP_EVERY_DAYS):raise ValueError('Shopping opportunity is not due yet')
             result['shopping_at']=now.isoformat();result['acquired'].extend(additions)
         elif kind=='laundry_start':
             if result['laundry']:raise ValueError('Finish the existing laundry load first')
@@ -217,7 +247,7 @@ def render(c,now,scene=None):
                      +', '.join(unknown[:20]))
     lines.append(laundry_status(state,closet))
     last=state['shopping_at'] or policy(c).get('shopping_baseline')
-    if not last or now-day.timestamp(last)>=dt.timedelta(days=14):lines.append('Shopping opportunity available: optional browsing on an outing; choose only something you want or need.')
+    if not last or now-day.timestamp(last)>=dt.timedelta(days=SHOP_EVERY_DAYS):lines.append('Shopping opportunity available: if you are out at a shop, you may buy up to three pieces you want or need (care action shop, with wardrobe_additions).')
     if scene:
         worn=[i for i in scene['state'].get('outfit',[]) if state['clothes'].get(i['id'])=='wearing']
         for i,since in state.get('wearing_since',{}).items():

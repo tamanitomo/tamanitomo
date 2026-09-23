@@ -82,5 +82,23 @@ class LocalPulseTests(unittest.TestCase):
             result=worker.pulse(self.c,'http://127.0.0.1:11435/v1','test',now=self.now+dt.timedelta(hours=1),phase='morning')
             self.assertEqual(result['status'],'skipped');self.assertEqual(call.call_count,1)
 
+    def test_a_local_winddown_declares_the_night_so_no_photos_are_taken_asleep(self):
+        import companion_sleep
+        night=dt.datetime(2026,9,12,23,10,tzinfo=dt.timezone.utc)
+        self.data.update(activity='getting into bed',tomorrow=None)
+        with patch.object(worker.urllib.request,'urlopen',side_effect=lambda *a,**k:self.response()):
+            worker.pulse(self.c,'http://127.0.0.1:11435/v1','test',now=night,phase='winddown')
+        plan=companion_sleep.read(self.c)
+        self.assertEqual(plan['until'].strftime('%H:%M'),self.c.quiet_end)
+        self.assertTrue(companion_sleep.status(self.c,night+dt.timedelta(hours=3))['asleep'])
+
+    def test_an_earlier_start_tomorrow_wakes_her_earlier_and_a_declared_night_stands(self):
+        import companion_sleep
+        night=dt.datetime(2026,9,12,23,10,tzinfo=dt.timezone.utc)
+        worker.declare_night(self.c,night,{'items':[{'start':'06:30','end':'08:00'},{'start':'02:00'}]})
+        self.assertEqual(companion_sleep.read(self.c)['until'].strftime('%H:%M'),'06:30')
+        worker.declare_night(self.c,night+dt.timedelta(minutes=5),None)
+        self.assertEqual(companion_sleep.read(self.c)['until'].strftime('%H:%M'),'06:30')
+
 
 if __name__=='__main__':unittest.main()

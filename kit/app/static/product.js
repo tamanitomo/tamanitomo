@@ -542,32 +542,99 @@ async function expectedDay(day){
   catch(err){scheduleCache[day]={anchors:[],configured:false};}
   return scheduleCache[day];
 }
-function scheduleHtml(schedule){
-  const anchors=(schedule&&schedule.anchors)||[];
-  const ideas=(schedule&&schedule.ideas)||[];
-  const chosen=ideas.length?`<p class="dim small schedule-chose">She chose: ${ideas.map(i=>`<span class="pill schedule-tag">${esc(i.title)}</span>`).join(' ')}</p>`:'';
-  if(!anchors.length){
-    return chosen+`<p class="dim small" style="margin:8px 0 0">${schedule&&schedule.configured===false
-      ?'No daily routine has been set up for this companion yet.'
-      :'Nothing planned for this day.'}</p>`;
-  }
-  const intended=schedule.source==='intended';
-  return `${chosen}
-    <p class="dim small" style="margin:10px 0 6px">${intended
-      ?'What she intends to do this day.'
-      :'The usual shape of this day. Plans, not commitments.'}</p>
-    <ol class="schedule-list">
-      ${anchors.map(a=>`
-        <li class="schedule-row${a.recurrence==='weekly'?' is-weekly':''}">
-          <span class="schedule-time">${esc(a.start)}–${esc(a.end)}</span>
-          <span class="schedule-what">
-            <strong>${esc(a.activity||'Unnamed')}</strong>
-            ${a.setting?`<span class="dim small"> · ${esc(a.setting)}</span>`:''}
-          </span>
-          ${a.recurrence==='weekly'?'<span class="pill schedule-tag">weekly</span>':''}
-        </li>`).join('')}
-    </ol>`;
+
+/* ------------------------------------------------------------ her day, drawn
+   One component for "what her day looks like", used on Home and on the
+   calendar. It was a list of grey rows with a raw 09:00-10:30 in front of each:
+   nothing said which one was happening, which were over, or why a row read like
+   an instruction ("choose a specific route or destination"). Now it is a rail:
+   the hours on the left, each block with a kind, the one she is in lit up with
+   how far through it she is, and a now-line when she is between things. */
+const minutesOf=hhmm=>{const m=/^(\d{1,2}):(\d{2})/.exec(String(hhmm||''));return m?Number(m[1])*60+Number(m[2]):null;};
+function companionMinutes(){
+  try{
+    const parts=new Intl.DateTimeFormat('en-GB',{timeZone:profileTimezone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+    const get=t=>Number(parts.find(p=>p.type===t)?.value||0);
+    return get('hour')*60+get('minute');
+  }catch{const d=new Date();return d.getHours()*60+d.getMinutes();}
 }
+function clockLabel(hhmm){
+  const m=minutesOf(hhmm);if(m==null)return esc(hhmm||'');
+  const h=Math.floor(m/60)%24,min=m%60,h12=h%12||12;
+  return `${h12}${min?':'+String(min).padStart(2,'0'):''}<small>${h<12?'am':'pm'}</small>`;
+}
+function spanLabel(minutes){
+  if(!(minutes>0))return '';
+  const h=Math.floor(minutes/60),m=minutes%60;
+  return h?(m?`${h}h ${m}m`:`${h}h`):`${m}m`;
+}
+const sentenceCase=s=>{s=String(s||'').trim();return s?s[0].toUpperCase()+s.slice(1):s;};
+const PLAN_KINDS={
+  idea:['Her idea','is-idea'],person:['Seeing someone','is-person'],commitment:['Promised','is-promise'],
+  weekly:['Weekly','is-weekly'],daily:['Routine','is-routine'],anchor:['Routine','is-routine'],other:['Plan','is-other']
+};
+function dayPlanHtml(schedule,{day,now=null}={}){
+  const anchors=((schedule&&schedule.anchors)||[]).slice()
+    .sort((a,b)=>(minutesOf(a.start)??0)-(minutesOf(b.start)??0));
+  const plan=schedule&&schedule.intended_plan;
+  const status=new Map(((plan&&plan.items)||[]).map(i=>[i.id,i.status]));
+  const intended=schedule&&schedule.source==='intended';
+  const isToday=day===companionToday();
+  const past=day<companionToday();
+  const nowMin=isToday?companionMinutes():null;
+  const intro=intended&&plan&&plan.intent
+    ?`<p class="dayplan-intent">“${esc(plan.intent)}”</p>`
+    :(anchors.length?`<p class="dayplan-note">${intended?'What she means to do.':'Her usual rhythm. She settles the details the night before.'}</p>`:'');
+  if(!anchors.length){
+    return `<div class="dayplan is-empty">${intro}<p class="dim small">${schedule&&schedule.configured===false
+      ?'No daily routine has been set up yet.'
+      :'Nothing planned for this day.'}</p></div>`;
+  }
+  let nowPlaced=false;
+  const nowLine=()=>{
+    nowPlaced=true;
+    const doing=now&&now.activity?`<span>${esc(sentenceCase(now.activity))}</span>`:'<span>Between things</span>';
+    return `<li class="dayplan-now" aria-label="Now"><time>Now</time><div class="dayplan-now-body"><i></i>${doing}</div></li>`;
+  };
+  const rows=anchors.map(a=>{
+    const s=minutesOf(a.start),e=minutesOf(a.end);
+    let pre='';
+    if(isToday&&!nowPlaced&&s!=null&&nowMin<s)pre=nowLine();
+    const st=status.get(a.id);
+    const live=isToday&&s!=null&&e!=null&&nowMin>=s&&nowMin<e;
+    const over=past||(isToday&&e!=null&&nowMin>=e)||st==='done';
+    const dropped=st==='dropped'||st==='moved';
+    const kind=a.recurrence==='idea'&&a.source==='intended'?'idea':(a.recurrence||'other');
+    const [kindLabel,kindClass]=PLAN_KINDS[kind]||PLAN_KINDS.other;
+    // A routine's "setting" is guidance to her ("choose a route that fits"), not a
+    // place; only an intended item names somewhere she means to be.
+    const where=a.source==='intended'&&a.setting?a.setting:'';
+    const pct=live?Math.round((nowMin-s)/Math.max(1,e-s)*100):0;
+    if(live)nowPlaced=true;
+    return pre+`<li class="dayplan-item ${kindClass}${live?' is-live':''}${over&&!live?' is-over':''}${dropped?' is-dropped':''}">
+      <time>${clockLabel(a.start)}</time>
+      <div class="dayplan-card">
+        <div class="dayplan-top">
+          <strong>${esc(sentenceCase(a.activity||'Unnamed'))}</strong>
+          ${live?'<span class="dayplan-live">Now</span>':''}
+        </div>
+        <div class="dayplan-meta">
+          <span class="dayplan-kind">${esc(kindLabel)}</span>
+          <span>${clockLabel(a.start)} – ${clockLabel(a.end)}</span>
+          ${e!=null&&s!=null?`<span>${spanLabel(e-s)}</span>`:''}
+          ${where?`<span class="dayplan-where">${esc(where)}</span>`:''}
+          ${dropped?`<span>${st==='moved'?'moved':'skipped'}</span>`:''}
+        </div>
+        ${live?`<div class="dayplan-progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>`:''}
+      </div>
+    </li>`;
+  }).join('');
+  const tail=isToday&&!nowPlaced?nowLine():'';
+  return `<div class="dayplan">${intro}<ol class="dayplan-rail">${rows}${tail}</ol></div>`;
+}
+// Kept for anything that still asks for the old name.
+const scheduleHtml=schedule=>dayPlanHtml(schedule,{day:selectedCalDate||companionToday()});
+
 function calendarEvents(missions,commitments=[]){
   const missionEvents=(missions||[]).map(x=>({...x,isCommitment:false}));
   const commitmentEvents=(commitments||[]).filter(x=>x&&x.starts_at).map(x=>({
@@ -578,123 +645,111 @@ function calendarEvents(missions,commitments=[]){
   }));
   return [...missionEvents,...commitmentEvents];
 }
+const longDay=day=>stamp(day+'T12:00:00',{weekday:'long',month:'long',day:'numeric'});
 
+function listItemHtml(x,prefix){
+  const open=x.status==='open';
+  return `<li class="plan-entry${open?'':' is-closed'}">
+    <span class="plan-entry-dot ${x.isCommitment?'is-promise':''}" aria-hidden="true"></span>
+    <div class="plan-entry-body">
+      <strong>${esc(x.title)}</strong>
+      ${x.detail&&x.detail!=='Scheduled from calendar'?`<span class="dim small">${esc(x.detail)}</span>`:''}
+      ${x.detail_update?`<span class="plan-entry-update">${esc(x.detail_update)}</span>`:''}
+    </div>
+    ${open?'':`<span class="pill">${esc(x.status)}</span>`}
+    ${open&&!x.isCommitment?`<button class="quiet small-btn" data-${prefix}-drop="${esc(x.id)}" aria-label="Remove ${esc(x.title)}">Remove</button>`:''}
+  </li>`;
+}
+
+/* The month is a picker, not the page. It used to be a wall of empty boxes with
+   "1 event" pills, and everything useful sat under it. Now the grid is compact
+   with a dot for each kind of thing on a day, and the chosen day -- her plan and
+   your list, with one place to add to it -- sits beside it. */
 function buildCalendarHtml(agentName,missions,commitments=[],prefix='cal'){
   const events=calendarEvents(missions,commitments);
   const monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const monthTitle=`${monthNames[calMonth]} ${calYear}`;
-
   const firstDayIndex=new Date(calYear,calMonth,1).getDay();
   const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
   const todayStr=companionToday();
   selectedCalDate=selectedCalDate||todayStr;
 
-  let calendarCellsHtml='';
-  for(let i=0;i<firstDayIndex;i++){
-    calendarCellsHtml+=`<div class="calendar-cell is-other-month"></div>`;
-  }
+  let cells='';
+  for(let i=0;i<firstDayIndex;i++)cells+='<span class="mcal-cell is-pad" aria-hidden="true"></span>';
   for(let day=1;day<=daysInMonth;day++){
     const dayStr=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-    const isToday=dayStr===todayStr;
-    const isSelected=dayStr===selectedCalDate;
-    const dayMissions=events.filter(x=>x.wanted_by===dayStr);
-
-    calendarCellsHtml+=`
-      <div class="calendar-cell ${isToday?'is-today':''} ${isSelected?'is-selected':''}" data-${prefix}-date="${esc(dayStr)}">
-        <span class="calendar-cell-date">${day}</span>
-        <div class="calendar-indicators">
-          ${dayMissions.length?`<span class="cal-badge-pill" title="${esc(dayMissions.map(x=>x.title).join(', '))}">${dayMissions.length} event${dayMissions.length===1?'':'s'}</span>`:''}
-        </div>
-      </div>`;
+    const mine=events.filter(x=>x.wanted_by===dayStr);
+    const cls=['mcal-cell',dayStr===todayStr?'is-today':'',dayStr===selectedCalDate?'is-selected':'',dayStr<todayStr?'is-past':''].filter(Boolean).join(' ');
+    cells+=`<button type="button" class="${cls}" data-${prefix}-date="${esc(dayStr)}"
+      aria-label="${esc(longDay(dayStr))}${mine.length?`, ${mine.length} on your list`:''}"
+      ${mine.length?`title="${esc(mine.map(x=>x.title).join(', '))}"`:''}>
+      <span>${day}</span>${mine.length?'<i class="mcal-dot"></i>':''}</button>`;
   }
-
-  const selectedDayMissions=events.filter(x=>x.wanted_by===selectedCalDate);
-
+  const chosen=events.filter(x=>x.wanted_by===selectedCalDate);
+  const isToday=selectedCalDate===todayStr;
   return `
-  <div class="card calendar-card" id="${prefix}-card">
-    <div class="calendar-top-bar">
-      <div class="calendar-nav-group">
-        <button class="icon-button" id="${prefix}-prev" aria-label="Previous month">←</button>
-        <h2 class="calendar-month-title">${esc(monthTitle)}</h2>
-        <button class="icon-button" id="${prefix}-next" aria-label="Next month">→</button>
-        <button class="quiet small" id="${prefix}-today">Today</button>
+  <div class="plan-board" id="${prefix}-card">
+    <div class="mcal">
+      <div class="mcal-head">
+        <button class="icon-button" id="${prefix}-prev" aria-label="Previous month">${icon('chevron_left')}</button>
+        <h2>${esc(monthNames[calMonth])} <span class="dim">${calYear}</span></h2>
+        <button class="icon-button" id="${prefix}-next" aria-label="Next month">${icon('chevron_right')}</button>
       </div>
-      <div class="actions" style="margin:0">
-        <a class="quiet small" href="/api/calendar.ics" download="${esc(agentName)}-calendar.ics" style="text-decoration:none">📅 Export iCal (.ics)</a>
+      <div class="mcal-grid" role="grid">
+        ${['S','M','T','W','T','F','S'].map(d=>`<span class="mcal-dow" aria-hidden="true">${d}</span>`).join('')}
+        ${cells}
+      </div>
+      <div class="mcal-foot">
+        <button class="quiet small" id="${prefix}-today"${isToday?' disabled':''}>Today</button>
+        <span class="mcal-legend"><i class="mcal-dot"></i> on your list</span>
       </div>
     </div>
-
-    <div class="calendar-grid">
-      <div class="calendar-day-head">Sun</div>
-      <div class="calendar-day-head">Mon</div>
-      <div class="calendar-day-head">Tue</div>
-      <div class="calendar-day-head">Wed</div>
-      <div class="calendar-day-head">Thu</div>
-      <div class="calendar-day-head">Fri</div>
-      <div class="calendar-day-head">Sat</div>
-      ${calendarCellsHtml}
-    </div>
-
-    <div class="calendar-selected-day-pane">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-        <strong>Your list and shared notes for ${esc(selectedCalDate)}</strong>
-        <span class="pill">${selectedDayMissions.length} scheduled</span>
-      </div>
-      ${selectedDayMissions.length?`
-      <div class="cal-events-list" style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
-        ${selectedDayMissions.map(x=>`
-          <div class="cal-event-row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--surface);border:1px solid var(--edge);border-radius:8px">
-            <div>
-              <strong style="color:var(--ink)">${esc(x.title)}</strong>
-              ${x.detail?`<p style="margin:2px 0 0;color:var(--dim);font-size:13px">${esc(x.detail)}</p>`:''}
-            </div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <span class="pill ${x.status==='open'?'status-good':x.status==='dropped'?'status-bad':''}">${esc(x.status)}</span>
-              ${x.status==='open'&&!x.isCommitment?`<button class="quiet small-btn" data-${prefix}-drop="${esc(x.id)}">Drop</button>`:''}
-            </div>
-          </div>`).join('')}
-      </div>`:
-      '<p class="dim small" style="margin:8px 0 0">Nothing of yours on this date.</p>'
-      }
-      <div class="schedule-block" id="${prefix}-schedule">
-        <div class="schedule-heading"><strong>Her expected day</strong></div>
-        <p class="dim small" style="margin:6px 0 0">Loading…</p>
-      </div>
-      <div class="cal-add-event-box" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--edge)">
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <input id="${prefix}-new-title" placeholder="Add something of yours for this day…" style="flex:1;min-width:180px;padding:8px 12px;font-size:13px">
-          <button class="act small" id="${prefix}-add-btn">Add Event</button>
+    <div class="plan-day">
+      <div class="plan-day-head">
+        <div>
+          <p class="eyebrow">${isToday?'Today':selectedCalDate<todayStr?'Looking back':'Coming up'}</p>
+          <h2>${esc(longDay(selectedCalDate))}</h2>
         </div>
+        <a class="quiet small" href="/api/calendar.ics" download="${esc(agentName)}-calendar.ics" title="Export to your calendar app">${icon('download')} .ics</a>
       </div>
+      <section class="plan-section">
+        <h3>${esc(agentName)}'s day</h3>
+        <div id="${prefix}-schedule"><div class="dayplan-skeleton"><i></i><i></i><i></i></div></div>
+      </section>
+      <section class="plan-section">
+        <h3>Your list <span class="dim small">${chosen.length||''}</span></h3>
+        ${chosen.length?`<ul class="plan-entries">${chosen.map(x=>listItemHtml(x,prefix)).join('')}</ul>`:''}
+        <form class="plan-add" id="${prefix}-add-form">
+          <input id="${prefix}-new-title" placeholder="${isToday?'Add something for today…':'Add something for this day…'}" aria-label="Add to your list" autocomplete="off">
+          <button class="act small" id="${prefix}-add-btn" type="submit">Add</button>
+          <input id="${prefix}-new-detail" class="plan-add-detail" placeholder="Anything ${esc(agentName)} should know (optional)" aria-label="Details" autocomplete="off">
+        </form>
+      </section>
     </div>
   </div>`;
 }
 
-function wireCalendarComponent(root,events,agentName,refreshFn,prefix='cal'){
+function wireCalendarComponent(root,events,agentName,refreshFn,prefix='cal',now=null){
   const prevBtn=$(prefix+'-prev'),nextBtn=$(prefix+'-next'),todayBtn=$(prefix+'-today');
   // Filled in after the day's schedule arrives, so choosing a day never waits on
   // a request before it highlights.
-  const scheduleBox=$(prefix+'-schedule');
-  if(scheduleBox){
+  if($(prefix+'-schedule')){
     const day=selectedCalDate;
     expectedDay(day).then(schedule=>{
       // A slower answer for a day the user has already moved on from must not
       // overwrite the one they are looking at now.
       if(selectedCalDate!==day)return;
       const box=$(prefix+'-schedule');
-      if(box)box.innerHTML=`<div class="schedule-heading"><strong>Her expected day</strong></div>`+scheduleHtml(schedule);
+      if(box)box.innerHTML=dayPlanHtml(schedule,{day,now});
     });
   }
-  if(prevBtn)prevBtn.onclick=async()=>{
-    calMonth--;
+  const move=async delta=>{
+    calMonth+=delta;
     if(calMonth<0){calMonth=11;calYear--;}
-    await refreshFn();
-  };
-  if(nextBtn)nextBtn.onclick=async()=>{
-    calMonth++;
     if(calMonth>11){calMonth=0;calYear++;}
     await refreshFn();
   };
+  if(prevBtn)prevBtn.onclick=()=>move(-1);
+  if(nextBtn)nextBtn.onclick=()=>move(1);
   if(todayBtn)todayBtn.onclick=async()=>{
     const today=companionToday();
     calYear=Number(today.slice(0,4));calMonth=Number(today.slice(5,7))-1;
@@ -711,29 +766,29 @@ function wireCalendarComponent(root,events,agentName,refreshFn,prefix='cal'){
     b.onclick=async()=>{
       b.disabled=true;
       try{
-        await action('/missions/'+b.getAttribute(`data-${prefix}-drop`)+'/drop');
-        notice('Event dropped.');
+        await post('/missions/'+b.getAttribute(`data-${prefix}-drop`)+'/drop');
+        notice('Removed from your list.');
         await refreshFn();
-      }catch(err){notice('Failed to drop: '+err.message);b.disabled=false;}
+      }catch(err){notice('Could not remove it: '+err.message);b.disabled=false;}
     };
   }
-  const addBtn=$(prefix+'-add-btn');
-  if(addBtn){
-    addBtn.onclick=async()=>{
-      const titleInput=$(prefix+'-new-title');
-      const title=(titleInput?.value||'').trim();
-      if(!title){notice('Please enter an event title.');return;}
-      addBtn.disabled=true;
+  const form=$(prefix+'-add-form');
+  if(form){
+    form.onsubmit=async ev=>{
+      ev.preventDefault();
+      const title=($(prefix+'-new-title')?.value||'').trim();
+      if(!title){$(prefix+'-new-title')?.focus();return;}
+      const btn=$(prefix+'-add-btn');btn.disabled=true;
       try{
         await post('/missions',{
           title,
-          detail:'Scheduled from calendar',
-          wanted_by:selectedCalDate||new Date().toISOString().slice(0,10),
+          detail:($(prefix+'-new-detail')?.value||'').trim(),
+          wanted_by:selectedCalDate||companionToday(),
           status:'open'
         });
-        notice('Event saved to shared calendar.');
+        notice('Added to your list.');
         await refreshFn();
-      }catch(err){notice('Failed to add event: '+err.message);addBtn.disabled=false;}
+      }catch(err){notice('Could not add it: '+err.message);btn.disabled=false;}
     };
   }
 }
@@ -944,9 +999,12 @@ workspaceHandlers.now=async()=>{
 
     <div>
       <section class="home-block" data-block="calendar">
-      <div class="section-heading" style="margin-top:0"><h2>Calendar</h2>${jump('loops','Planner')}</div>
-      ${buildCalendarHtml(d.agent,d.missions,d.commitments,'home-cal')}
-
+      <div class="section-heading" style="margin-top:0"><h2>${esc(d.agent)}'s day</h2>${jump('loops','Calendar')}</div>
+      <div class="card today-card">
+        <div id="home-dayplan"><div class="dayplan-skeleton"><i></i><i></i><i></i></div></div>
+        ${(()=>{const mine=calendarEvents(d.missions,d.commitments).filter(x=>x.wanted_by===companionToday()&&x.status==='open');
+          return mine.length?`<div class="today-mine"><h3>On your list today</h3><ul class="plan-entries">${mine.map(x=>listItemHtml(x,'home-cal')).join('')}</ul></div>`:'';})()}
+      </div>
       </section>
 
       <section class="home-block" data-block="wardrobe">
@@ -958,6 +1016,8 @@ workspaceHandlers.now=async()=>{
 
   wireRoutes($('now'));
   if($('presence-switch'))$('presence-switch').onclick=openCompanionSwitchDialog;
+  scheduleCache={};
+  expectedDay(companionToday()).then(schedule=>{if(current==='now'&&$('home-dayplan'))$('home-dayplan').innerHTML=dayPlanHtml(schedule,{day:companionToday(),now:s});});
   wireCalendarComponent($('now'), calendarEvents(d.missions,d.commitments), d.agent, () => render('now'), 'home-cal');
   if($('read-latest'))$('read-latest').onclick=()=>{if(entry?.id)selectedJournal=entry.id;showTab('journals');};
   for(const b of $('now').querySelectorAll('[data-home-file]'))b.onclick=()=>openContent(content.items[Number(b.dataset.homeFile)]);
@@ -2114,56 +2174,61 @@ workspaceHandlers.timeline=async()=>{
     $('timeline-more').hidden=matching.length<=page.length;
     $('timeline-feed').innerHTML=page.map(d=>{
       const entry=journals.get(d);
-      /* Her presence loop rewrites the same scene every few minutes, so a single shower
-         arrived as six identical rows. Consecutive beats that say the same thing about the
-         same place are one beat spanning the time they actually covered. */
+      /* A day reads as scenes on a rail. Her presence loop rewrites the same scene every
+         few minutes, and the photos landed between those rewrites, so nothing ever merged:
+         a night's sleep was ten "sleeping" rows with a picture wedged between each. Photos
+         now belong to the scene they were taken in, which lets one scene be one card --
+         when it started, how long it lasted, where, and the pictures from it. */
       const raw=days.get(d).slice().sort((a,b)=>(Date.parse(a.at)||0)-(Date.parse(b.at)||0));
-      const items=[];
+      const scenes=[];
       for(const beat of raw){
-        const prev=items[items.length-1];
-        if(beat.kind==='moment'&&prev&&prev.kind==='moment'&&prev.title===beat.title&&prev.place===beat.place){
-          prev.until=beat.at;prev.text=beat.text||prev.text;prev.repeats=(prev.repeats||1)+1;
-          prev.unconfirmed=prev.unconfirmed&&beat.unconfirmed;
+        const last=scenes[scenes.length-1];
+        if(beat.kind==='photo'){
+          if(last)last.photos.push(beat.item);
+          else scenes.push({title:'',at:beat.at,photos:[beat.item],loose:true});
           continue;
         }
-        items.push({...beat});
+        if(last&&!last.loose&&last.title===beat.title&&last.place===beat.place){
+          last.text=beat.text||last.text;last.unconfirmed=last.unconfirmed&&beat.unconfirmed;continue;
+        }
+        scenes.push({...beat,photos:[]});
       }
-      const shots=items.filter(x=>x.kind==='photo').length,scenes=items.length-shots;
+      const clock=t=>stamp(t,{hour:'numeric',minute:'2-digit',month:undefined,day:undefined});
+      const isToday=d===companionToday();
+      const shots=scenes.reduce((n,x)=>n+x.photos.length,0),count=scenes.filter(x=>!x.loose).length;
       const dayTitle=stamp(d+'T12:00:00',{weekday:'long',month:'long',day:'numeric'});
-      const counts=[scenes?scenes+(scenes===1?' scene':' scenes'):'',shots?shots+(shots===1?' photo':' photos'):''].filter(Boolean).join(' · ');
+      const counts=[count?count+(count===1?' scene':' scenes'):'',shots?shots+(shots===1?' photo':' photos'):''].filter(Boolean).join(' · ');
+      const photo=x=>`<button class="tl-shot${x.blur?' is-private':''}" data-photo-id="${esc(x.content_id||x.path)}" aria-label="Open photo: ${esc(x.title||'')}">
+          <img ${mediaPrivacy(x)} src="${mediaUrl(x.url)}" loading="lazy" alt="${esc(x.title||'')}">
+          ${x.blur?'<span class="tl-shot-lock">Hidden · tap to view</span>':''}
+          <time>${esc(clock(x.at))}</time>
+        </button>`;
       return `<section class="day-group">
         <div class="day-head">
-          <h2>${esc(dayTitle)}</h2>
-          <span class="dim small">${esc(counts||'quiet day')}</span>
+          <div><h2>${esc(dayTitle)}</h2>${isToday?'<span class="tl-today">Today</span>':''}</div>
+          <span class="dim small">${esc(counts||'A quiet day')}</span>
         </div>
         ${entry?`<article class="day-lead">
-          <p>${esc(excerpt(entry.text,420))}</p>
-          <button class="link-button" data-journal="${esc(entry.id)}">Read the whole entry</button>
+          <p>${esc(excerpt(entry.text,320))}</p>
+          <button class="link-button" data-journal="${esc(entry.id)}">Read her diary for this day →</button>
         </article>`:''}
-        ${items.length?`<ol class="day-track">${items.map((x,bi)=>{
-          const prevTitle=bi?items[bi-1].title:'';
-          const clock=t=>stamp(t,{hour:'numeric',minute:'2-digit',month:undefined,day:undefined});
-          /* A range wrote the meridiem twice and wrapped the gutter onto two lines. When both
-             ends share it, it is said once at the end: 1:01-1:16 PM. */
-          const start=clock(x.at),stop=x.until?clock(x.until):'';
-          const half=t=>(t.match(/[AP]M$/)||[''])[0];
-          const time=stop&&stop!==start
-            ?(half(start)&&half(start)===half(stop)?start.replace(/\s*[AP]M$/,'')+'\u2013'+stop:start+'\u2009\u2013\u2009'+stop)
-            :start;
-          if(x.kind==='photo')return `<li class="day-beat is-photo">
-            <time>${esc(time)}</time>
-            <button class="day-shot" data-photo-id="${esc(x.item.content_id||x.item.path)}" aria-label="Open ${esc(x.title)}">
-              <img ${mediaPrivacy(x.item)} src="${mediaUrl(x.item.url)}" loading="lazy" alt="${esc(x.title)}">
-              ${x.title&&x.title!==prevTitle?`<span>${esc(x.title)}</span>`:''}
-            </button>
-          </li>`;
-          return `<li class="day-beat${x.unconfirmed?' is-unconfirmed':''}">
-            <time>${esc(time)}</time>
-            <div class="day-beat-body">
-              <p>${esc(x.title)}</p>
-              ${x.text?`<span class="dim small">${esc(x.text)}</span>`:''}
-              ${x.place?`<span class="dim small day-place">${esc(x.place)}</span>`:''}
-              ${x.unconfirmed?'<span class="pill">unconfirmed</span>':''}
+        ${scenes.length?`<ol class="tl-rail">${scenes.map((x,i)=>{
+          const next=scenes.slice(i+1).find(n=>!n.loose);
+          const end=next?next.at:(isToday?null:'');
+          const mins=end?Math.round(((Date.parse(end)||0)-(Date.parse(x.at)||0))/60000):(isToday?Math.round((Date.now()-(Date.parse(x.at)||0))/60000):0);
+          const ongoing=isToday&&!next&&!x.loose;
+          const sleep=/\b(sleep|sleeping|asleep|nap|napping)\b/i.test(x.title||'');
+          if(x.loose)return `<li class="tl-scene is-photos"><time>${esc(clock(x.at))}</time><div class="tl-card"><div class="tl-strip">${x.photos.map(photo).join('')}</div></div></li>`;
+          return `<li class="tl-scene${sleep?' is-sleep':''}${ongoing?' is-now':''}${x.unconfirmed?' is-unconfirmed':''}">
+            <time>${esc(clock(x.at))}</time>
+            <div class="tl-card">
+              <div class="tl-top">
+                <p class="tl-title">${sleep?'<span aria-hidden="true">☾ </span>':''}${esc(sentenceCase(x.title))}</p>
+                ${ongoing?'<span class="dayplan-live">Now</span>':(mins>=5?`<span class="tl-span">${spanLabel(mins)}</span>`:'')}
+              </div>
+              ${x.text?`<p class="tl-mood">${esc(sentenceCase(x.text))}</p>`:''}
+              ${x.place||x.unconfirmed?`<div class="tl-meta">${x.place?`<span class="tl-place">${esc(x.place)}</span>`:''}${x.unconfirmed?'<span class="pill">unconfirmed</span>':''}</div>`:''}
+              ${x.photos.length?`<div class="tl-strip">${x.photos.map(photo).join('')}</div>`:''}
             </div>
           </li>`;
         }).join('')}</ol>`:'<p class="dim small" style="padding:4px 0 6px">She wrote, but nothing else was recorded.</p>'}
@@ -2272,83 +2337,61 @@ workspaceHandlers.knows=async()=>{
 
 workspaceHandlers.loops=async()=>{
   const [d,m]=await Promise.all([api('/overview'),api('/missions')]);if(current!=='loops')return;
+  profileTimezone=d.timezone||profileTimezone;scheduleCache={};
   const missions=m.missions||[];
-  const openCount=missions.filter(x=>x.status==='open').length;
+  const today=companionToday();
+  /* Your whole list, as an agenda rather than a second copy of the form and a
+     "scheduled tasks" queue: what is overdue, what is coming, what has no date,
+     and what is finished tucked away underneath. */
+  const open=missions.filter(x=>x.status==='open');
+  const groups=[
+    ['Overdue',open.filter(x=>x.wanted_by&&x.wanted_by<today),'is-overdue'],
+    ['Coming up',open.filter(x=>x.wanted_by&&x.wanted_by>=today).sort((a,b)=>a.wanted_by.localeCompare(b.wanted_by)),''],
+    ['Any time',open.filter(x=>!x.wanted_by),''],
+  ].filter(g=>g[1].length);
+  const closed=missions.filter(x=>x.status!=='open');
+  const agendaRow=x=>`<li class="agenda-row">
+      ${x.wanted_by?`<button type="button" class="agenda-date" data-agenda-day="${esc(x.wanted_by)}" title="Show this day">
+        <span>${esc(stamp(x.wanted_by+'T12:00:00',{month:'short',day:undefined}))}</span><strong>${Number(x.wanted_by.slice(8,10))}</strong></button>`
+        :'<span class="agenda-date is-open" aria-hidden="true">—</span>'}
+      <div class="plan-entry-body">
+        <strong>${esc(x.title)}</strong>
+        ${x.detail&&x.detail!=='Scheduled from calendar'?`<span class="dim small">${esc(x.detail)}</span>`:''}
+        ${x.detail_update?`<span class="plan-entry-update">${esc(x.detail_update)}</span>`:''}
+      </div>
+      ${x.status==='open'?`<button class="quiet small-btn" data-drop="${esc(x.id)}" aria-label="Remove ${esc(x.title)}">Remove</button>`:`<span class="pill">${esc(x.status)}</span>`}
+    </li>`;
 
   $('loops').innerHTML=heading('Plans & calendar',
-    'Her days, your to-do list, and the things you have told her about. What she is carrying lives in Memories.')+
-  `<div class="stat-strip">
-    <div class="stat-item"><span>On your list</span><strong>${openCount}</strong></div>
-    <div class="stat-item"><span>Yours, all told</span><strong>${missions.length}</strong></div>
-  </div>
-
+    'Her days, your to-do list, and the things you have told her about. What she is carrying lives in Memories.')+`
   ${buildCalendarHtml(d.agent, missions, d.commitments, 'cal')}
-
-  <div class="planner-layout">
-    <div class="planner-column">
-      <div class="card">
-        <h2>Your list, and things you've told her</h2>
-        <p class="dim small" style="margin:-8px 0 14px">Nothing here goes into her diary. Your
-          to-do list is yours and she can help you finish it; something you have told her about —
-          your birthday, a trip, an exam — is context she may act on by marking it, or giving you
-          room, or not at all. Her own day is hers to plan.</p>
-        <div class="form-grid">
-          <label class="wide">What is it?
-            <input id="mtitle" placeholder="e.g. Book the flights, or I have an exam that morning" required>
-          </label>
-          <label class="wide">Anything she should know
-            <input id="mdetail" placeholder="Time, place, what would actually help">
-          </label>
-          <label>Date
-            <input id="mwhen" placeholder="YYYY-MM-DD" type="date" value="${esc(selectedCalDate)}">
-          </label>
-        </div>
-        <div class="actions" style="margin-top:14px">
-          <button class="act" id="madd">Add it</button>
-        </div>
-      </div>
-
+  <section class="agenda card">
+    <div class="agenda-head">
+      <h2>Your list</h2>
+      <span class="dim small">${open.length?`${open.length} open`:'Nothing open'}</span>
     </div>
+    <p class="dim small agenda-note">Your to-do list is yours, and ${esc(d.agent)} can help you finish it. Things you tell
+      her about here, like a birthday, a trip or an exam, are context she may act on. None of it goes into her diary,
+      and her own day is hers to plan.</p>
+    ${groups.map(([label,rows,cls])=>`<h3 class="agenda-group ${cls}">${label}</h3><ul class="agenda-list">${rows.map(agendaRow).join('')}</ul>`).join('')
+      ||'<p class="dim small agenda-empty">Pick a day above and add something to it, or add it without a date there.</p>'}
+    ${closed.length?`<details class="agenda-closed"><summary>Done and removed (${closed.length})</summary><ul class="agenda-list">${closed.map(agendaRow).join('')}</ul></details>`:''}
+  </section>`;
 
-    <div class="planner-column">
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-          <h2 style="margin:0">All Scheduled Tasks (${missions.length})</h2>
-          <span class="pill ${openCount>0?'status-good':''}">${openCount} active</span>
-        </div>
-        <div class="missions-container">
-          ${missions.length?missions.map(x=>`
-            <div class="mission-card ${x.status==='open'?'is-open':''}">
-              <div class="mission-header" style="display:flex;justify-content:space-between;align-items:center">
-                <strong style="font-size:14px;color:var(--ink)">${esc(x.title)}</strong>
-                <span class="pill ${x.status==='open'?'status-good':x.status==='dropped'?'status-bad':''}">${esc(x.status)}</span>
-              </div>
-              ${x.detail?`<p class="mission-details" style="margin:8px 0;font-size:13px;color:var(--dim)">${esc(x.detail)}</p>`:''}
-              ${x.detail_update?`<div class="mission-update-box" style="margin:8px 0"><strong>Update:</strong> ${esc(x.detail_update)}</div>`:''}
-              <div class="mission-footer" style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:8px;border-top:1px solid var(--surface-3)">
-                <span class="dim small">${x.wanted_by?'Target: '+esc(x.wanted_by):'No target date'}</span>
-                ${x.status==='open'?`<button class="quiet small-btn" data-drop="${esc(x.id)}">Drop task</button>`:''}
-              </div>
-            </div>`).join(''):'<p class="dim small" style="padding:20px;text-align:center">No active tasks in queue.</p>'}
-        </div>
-      </div>
-    </div>
-  </div>`;
-
-  wireCalendarComponent($('loops'), calendarEvents(missions,d.commitments), d.agent, () => workspaceHandlers.loops(), 'cal');
-  if($('mwhen'))$('mwhen').value=selectedCalDate;
-
-  $('madd').onclick=async()=>{
-    const title=$('mtitle').value.trim();if(!title)return;
-    await api('/missions',{method:'POST',body:JSON.stringify({title,detail:$('mdetail').value,wanted_by:$('mwhen').value})});
-    notice('Event saved to shared calendar.');
-    await workspaceHandlers.loops();
-  };
+  wireCalendarComponent($('loops'), calendarEvents(missions,d.commitments), d.agent, () => workspaceHandlers.loops(), 'cal', d.state?.state);
+  for(const b of $('loops').querySelectorAll('[data-agenda-day]')){
+    b.onclick=async()=>{
+      const day=b.dataset.agendaDay;selectedCalDate=day;
+      calYear=Number(day.slice(0,4));calMonth=Number(day.slice(5,7))-1;
+      await workspaceHandlers.loops();
+      $('cal-card')?.scrollIntoView({behavior:'smooth',block:'start'});
+    };
+  }
   for(const b of $('loops').querySelectorAll('[data-drop]')){
     b.onclick=async()=>{
-      await api(`/missions/${b.dataset.drop}/drop`,{method:'POST'});
-      notice('Task dropped.');
-      await workspaceHandlers.loops();
+      b.disabled=true;
+      try{await post(`/missions/${b.dataset.drop}/drop`);notice('Removed from your list.');await workspaceHandlers.loops();}
+      catch(err){notice('Could not remove it: '+err.message);b.disabled=false;}
     };
   }
 };
