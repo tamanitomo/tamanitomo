@@ -59,4 +59,32 @@ class RolloverTests(unittest.TestCase):
         self.assertIn('This is your diary',daily);self.assertIn('never mention records, sessions, logs',daily)
 
 
+class ThinkingAndDiaryTests(unittest.TestCase):
+    def test_setup_hides_model_thinking_unless_already_chosen(self):
+        import yaml
+        from kit.cli import scaffold
+        from kit.cli.common import mapping
+        with tempfile.TemporaryDirectory() as tmp:
+            c=cc.Companion(agent='Mira',human='Alex',profile='m',vault=Path(tmp)/'v',hermes_root=Path(tmp)/'h',context_mode='fixed')
+            c.home.mkdir(parents=True);c.soul_dir.mkdir(parents=True);c.save()
+            (c.home/'config.yaml').write_text('model: {}\n')
+            scaffold.install_hook(c,mapping(c,{}),[])
+            self.assertIs(yaml.safe_load((c.home/'config.yaml').read_text())['display']['show_reasoning'],False)
+            (c.home/'config.yaml').write_text('display: {show_reasoning: true}\n')
+            scaffold.install_hook(c,mapping(c,{}),[])
+            self.assertIs(yaml.safe_load((c.home/'config.yaml').read_text())['display']['show_reasoning'],True)
+
+    def test_the_web_chat_final_reply_drops_thinking(self):
+        src=(ROOT/'kit/app/hermes_stream.py').read_text()
+        self.assertIn("re.sub(r'<(think|thinking|reasoning)>",src)
+        import re
+        pat=r'<(think|thinking|reasoning)>[\s\S]*?(</\1>|$)'
+        self.assertEqual(re.sub(pat,'','<think>plan it</think>Hey you.',flags=re.I).strip(),'Hey you.')
+
+    def test_the_diary_is_her_day_and_facts_go_elsewhere(self):
+        daily=(ROOT/'kit/templates/cron/daily.md.tmpl').read_text()
+        self.assertIn('the story of YOUR day',daily)
+        self.assertIn('The diary is not where facts about {{HUMAN}} are kept',daily)
+
+
 if __name__=='__main__':unittest.main()

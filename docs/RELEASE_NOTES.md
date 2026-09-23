@@ -1,10 +1,10 @@
-Tamanitomo 3.0.17 gives every morning a fresh conversation and makes the journal read like a diary.
+Tamanitomo 3.0.18: the diary is their day, and thinking stays behind the scenes.
 
-- **A fresh conversation each morning.** Long chats get compressed to fit, and each pass loses a little. Now, late each night while your companion sleeps, the day's conversation is closed — after its details are saved — so your first message in the morning starts a new one that picks up where you left off. Nothing is deleted, and it never happens if you were talking in the last two hours. Only your direct chat is affected, never group channels.
-- **A diary, not a report.** Journal entries are written the way a person writes at the end of a day, without talk of records, sessions or evidence. Facts about you still need something you actually said.
-- **Their own voice everywhere you read them.** Messages, journals and reflections are written as themselves. They can do real work and talk about it like someone good at their job, and they leave their own inner workings out of it unless you ask them to work on those.
+- **A diary of their life.** The daily journal is the story of your companion's own day — what they did, where they went, how it felt — with you in it when you were part of it. What they learn about you is filed separately, not written into the diary.
+- **Thinking models, without the thinking.** Models that reason still reason, but you only see the reply: setup now turns off the reasoning display (unless you have chosen otherwise), and the web chat drops any thinking a model writes into its answer.
+- **Cleaner mornings and nights.** Older companions carried hand-made scripts that wrote their morning and bedtime state twice; repair replaces them with the standard ones and keeps a backup.
 
-Run `companion repair --prompts force` after updating so the new schedule and wording reach existing companions.
+Run `companion repair --prompts force` after updating.
 
 ### Install
 

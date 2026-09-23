@@ -1,3 +1,9 @@
+## 3.0.18 — Their day, their words (2026-09-23)
+
+- Center the daily diary on the companion's own day, with the human in it only as part of that day, and an example of the register wanted; facts about the human are filed by the later steps, not written into the diary.
+- Set `display.show_reasoning: false` on setup and repair when the profile has not chosen, and strip `<think>`/`<thinking>`/`<reasoning>` blocks from the web chat's final reply as the live stream already did. Hermes's CLI, which the web chat runs, shows reasoning by default; the Telegram gateway already did not.
+- On repair, replace hand-made `companion-local-*-preread.py` pre-reads on agent jobs with the kit's pre-read (old files kept in `scripts/legacy-backup/`). They ran the local-model presence writer before the job, so morning and wind-down states were written twice.
+
 ## 3.0.17 — A fresh morning, a real diary (2026-09-23)
 
 - Add a nightly rollover job (`companion_rollover.py`, 90 minutes before quiet hours end). This Hermes never starts a session on a clock — `session_reset` is inert — so long chats were compressed again and again until Hermes itself warned that accuracy degrades. The job ends the human's direct-message session (the newest link of its compression chain) through Hermes's own `SessionDB.end_session`; the gateway treats an ended routed session as over and starts a fresh one on the next message. It flags the check-in first, is skipped if the human wrote in the last two hours, never touches group channels or threads, and logs to `companion-life/rollover.jsonl`.

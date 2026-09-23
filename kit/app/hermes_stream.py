@@ -39,7 +39,10 @@ def main():
         from hermes_cli.main import main as hermes_main
         try:hermes_main()
         except SystemExit as exc:code=exc.code or 0
-    emit('final',text=output.getvalue()[-1000000:])
+    # Only the reply: a model that thinks out loud in <think> tags keeps its thinking.
+    import re
+    final=re.sub(r'<(think|thinking|reasoning)>[\s\S]*?(</\1>|$)','',output.getvalue(),flags=re.I)
+    emit('final',text=final[-1000000:])
     return code
 
 if __name__=='__main__':sys.exit(main())

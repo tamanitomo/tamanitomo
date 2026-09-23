@@ -225,6 +225,18 @@ def _install_jobs_locked(c,m,report):
             if additions:
                 prompt='\n\n'.join(additions)+'\n\n'+job.get('prompt','')
                 updates+=['--prompt',prompt]
+            # Hand-made pre-reads from before the kit wrote its own ran the local-model
+            # presence writer first, so a state was written twice (and by a prompt
+            # nobody maintained). Swap them for the kit's pre-read; keep the old file.
+            legacy_pre=str(job.get('script') or '')
+            if (not spec.get('no_agent') and spec.get('preread') and legacy_pre.startswith('companion-local-')
+                    and legacy_pre.endswith('-preread.py')):
+                old_file=c.home/'scripts'/legacy_pre
+                if old_file.exists():
+                    keep=c.home/'scripts/legacy-backup';keep.mkdir(parents=True,exist_ok=True)
+                    shutil.copy2(old_file,keep/legacy_pre)
+                updates+=['--script',write_preread_script(c,spec,'preread').name]
+                report.append(f'  {name}: legacy pre-read {legacy_pre} replaced (backed up in scripts/legacy-backup)')
             if spec['key']=='pulse' and job.get('schedule',{}).get('expr')=='*/15 6-23 * * *':
                 updates+=['--schedule',spec['expr']]
             # 3.0.12: the morning job moved from one fixed minute to a window gated by
@@ -520,6 +532,13 @@ def install_hook(c,m,report):
         spill['max_chars']=need;hooks['output_spill']=spill
         report.append(f'  hook output limit raised to {need:,} chars so the vault map is not spilled')
     data['hooks']=hooks
+    # Thinking models still think; the thinking is simply not shown. Hermes's CLI
+    # (which the web chat runs) displays it by default. A choice already made in
+    # config.yaml is left alone.
+    display=data.get('display') if isinstance(data.get('display'),dict) else {}
+    if 'show_reasoning' not in display:
+        display['show_reasoning']=False;data['display']=display
+        report.append('  display: model thinking hidden from replies (display.show_reasoning: false)')
     if cfg.exists():shutil.copy2(cfg,cfg.with_name('config.yaml.pre-companion-'+uuid.uuid4().hex[:8]))
     cp.atomic_write(cfg,yaml.safe_dump(data,sort_keys=False,allow_unicode=True))
     if any(isinstance(e,dict) and e.get('command')==cmd for e in pre):
