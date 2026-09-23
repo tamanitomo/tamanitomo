@@ -324,4 +324,30 @@ class ClosetReadOnlyTests(unittest.TestCase):
             self.assertFalse((c.life/'wardrobe.json').exists())
 
 
+class HookConsentTests(unittest.TestCase):
+    """Repair under a different Python must not rewrite the hook and lose its consent."""
+    def test_repair_keeps_a_working_hook_command(self):
+        import yaml
+        from kit.cli import scaffold
+        from kit.cli.common import mapping
+        with tempfile.TemporaryDirectory() as tmp:
+            c=companion(Path(tmp))
+            hook=c.home/'hooks/companion-context.py';end=c.home/'hooks/companion-session-end.py'
+            existing=f'{sys.executable} {hook}';existing_end=f'{sys.executable} {end}'
+            (c.home/'config.yaml').write_text(yaml.safe_dump({'hooks':{
+                'pre_llm_call':[{'command':existing}],'on_session_end':[{'command':existing_end}]}}))
+            report=[]
+            with patch.object(scaffold.cp,'python_command',side_effect=lambda h:f'/nonexistent/python {h}'):
+                scaffold.install_hook(c,mapping(c,{}),report)
+            hooks=yaml.safe_load((c.home/'config.yaml').read_text())['hooks']
+            self.assertEqual([e['command'] for e in hooks['pre_llm_call']],[existing])
+            self.assertEqual([e['command'] for e in hooks['on_session_end']],[existing_end])
+            self.assertIn('  hook: already registered; command unchanged',report)
+            # An interpreter that no longer exists is replaced.
+            (c.home/'config.yaml').write_text(yaml.safe_dump({'hooks':{'pre_llm_call':[{'command':f'/gone/python {hook}'}]}}))
+            scaffold.install_hook(c,mapping(c,{}),[])
+            hooks=yaml.safe_load((c.home/'config.yaml').read_text())['hooks']
+            self.assertNotIn('/gone/python',hooks['pre_llm_call'][0]['command'])
+
+
 if __name__=='__main__':unittest.main()

@@ -6,6 +6,7 @@
 - Keep a moment she marks private out of the camera, always. What she has on is now read from the outfit rather than stored as if she had asked for privacy, so the two can no longer be confused.
 - Add a `setting` field (`private` or `public`) to presence updates. It carries forward while she stays put and must be given again after a move; the rules about what she may wear where read it instead of guessing from the location's words, which counted "Home Depot" as home. The words are used only to ask about a record that contradicts itself.
 - Run the morning routine when her declared morning arrives. It looks every quarter hour around the end of quiet hours and a fingerprint lets it run once, at the time she declared at wind-down, or just after quiet hours with no declaration.
+- Keep a hook command that already works when `companion repair` runs under a different Python. Hermes records consent against the exact command, so rewriting it to the launcher's system Python withdrew consent and unattended turns ran without continuity.
 - Let `companion repair` move an existing morning job to the new schedule, and give any existing job the change gate its definition now carries, so installs made before this release get both.
 - Queue from `companion_outreach.py send` instead of delivering, and stop teaching a direct send in the prompts. A thought that was both queued and sent arrived twice.
 - Stop opening the Closet from switching on the clothing-care routine, and start a newly enabled routine with only the last two days' clothes in the hamper.

@@ -283,6 +283,24 @@ FINGERPRINT_FILE='cron/prompt-fingerprints.json'
 # Room above the vault map and continuity budget for labels and fences.
 SPILL_MARGIN=4_000
 
+def _registered(entries,hook:pathlib.Path,cmd:str)->str:
+    """The command to register: the one already there, if it runs this hook and its
+    interpreter still exists, else `cmd`.
+
+    Hermes records hook consent against the exact command string. Rewriting it to
+    whatever Python happened to run repair -- the system python3 behind the
+    launcher rather than the app's venv -- silently withdrew consent, and every
+    unattended turn after that ran without continuity.
+    """
+    import shlex
+    for entry in entries or []:
+        value=entry.get('command','') if isinstance(entry,dict) else ''
+        if not (value and _runs_hook(value,hook)):continue
+        try:interpreter=shlex.split(value,posix=os.name!='nt')[0].strip('"')
+        except (ValueError,IndexError):continue
+        if pathlib.Path(interpreter).is_file() or shutil.which(interpreter):return value
+    return cmd
+
 def _runs_hook(command:str,hook:pathlib.Path)->bool:
     """True when a configured hook command runs this hook file, under any interpreter."""
     tail=str(command or '').strip().rstrip('"\'')
@@ -442,7 +460,7 @@ def install_hook(c,m,report):
     if not isinstance(hooks,dict):raise ValueError('Invalid Hermes hooks configuration')
     pre=hooks.get('pre_llm_call') or []
     if not isinstance(hooks,dict) or not isinstance(pre,list):raise ValueError('Invalid Hermes hooks configuration')
-    cmd=cp.python_command(hook)
+    cmd=_registered(pre,hook,cp.python_command(hook))
     old=c.home/'hooks/inject-continuity.sh'
     # Migrate only the previous kit-owned script. An unrelated continuity hook
     # must be reviewed by its owner instead of silently running two injections.
@@ -485,7 +503,7 @@ def install_hook(c,m,report):
         "runpy.run_module('companion_checkin',run_name='__main__')\n")
     if not end_hook.exists() or end_hook.read_text(encoding='utf-8')!=end_source:
         cp.atomic_write(end_hook,end_source)
-    end_cmd=cp.python_command(end_hook)
+    end_cmd=_registered(hooks.get('on_session_end'),end_hook,cp.python_command(end_hook))
     ends=[e for e in (hooks.get('on_session_end') or [])
           if not (isinstance(e,dict) and (e.get('command')==end_cmd or _runs_hook(e.get('command',''),end_hook)))]
     ends.append({'command':end_cmd});hooks['on_session_end']=ends
@@ -504,9 +522,12 @@ def install_hook(c,m,report):
     data['hooks']=hooks
     if cfg.exists():shutil.copy2(cfg,cfg.with_name('config.yaml.pre-companion-'+uuid.uuid4().hex[:8]))
     cp.atomic_write(cfg,yaml.safe_dump(data,sort_keys=False,allow_unicode=True))
-    report.append('  hook: registered portable Python command')
-    report.append('  ! approve this hook when Hermes asks on the first interactive chat; unattended runs require that consent')
-    report.append("    with nobody at the keyboard: hermes -p <profile> chat -q 'hello' --oneshot --accept-hooks")
+    if any(isinstance(e,dict) and e.get('command')==cmd for e in pre):
+        report.append('  hook: already registered; command unchanged')
+    else:
+        report.append('  hook: registered portable Python command')
+        report.append('  ! approve this hook when Hermes asks on the first interactive chat; unattended runs require that consent')
+        report.append("    with nobody at the keyboard: hermes -p <profile> chat -q 'hello' --oneshot --accept-hooks")
 def offer_multiplex(c,report,answers=None):
     """Choose one gateway owner and optionally open native Hermes setup."""
     import companion_gateway as cg
