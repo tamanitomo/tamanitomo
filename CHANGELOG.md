@@ -1,3 +1,10 @@
+## 3.0.9 — Installing again is how you update (2026-09-23)
+
+- Ask what to do when the Linux or Android installer finds Tamanitomo already installed: upgrade, which keeps everything and moves the program to the newest release, or a fresh install, which sets the old program folder aside and installs a clean copy. Before, running the installer again quietly kept the old code, so someone who reinstalled to fix a problem was still running the version that had it. Your companion, your setup answers and your vault are kept either way, and an unattended run always upgrades.
+- Install the newest published release rather than whatever is on the main branch, so a new install gets exactly what was released and tested.
+- Leave a checkout with its own code changes, or one already past the newest release, exactly as it is, and say so.
+- Make the Android `--upgrade` option move to the newest release as well, instead of pulling the main branch.
+
 ## 3.0.8 — A budget that counts what it budgets (2026-09-23)
 
 - Stop the doctor reporting every full continuity block as over budget. It was counting the two markers around the block, about seventy-five characters the budget never covered, so a block written exactly to size always read as too large and left the check marked incomplete.

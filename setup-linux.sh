@@ -280,6 +280,71 @@ fi
 
 echo -e "${GREEN}✓ Prerequisites satisfied (Python: $("$PYTHON_BIN" --version))${RESET}"
 
+# Bring a git checkout to the newest published release. Running the installer
+# again is how people update, so a second run must not leave the first run's
+# code in place. A checkout with local changes, or already past the newest
+# release (someone working on Tamanitomo itself), is left exactly as it is.
+sync_to_release() {
+  local dir="$1" url="$2" fresh="${3:-0}" tag
+  if [[ ! -d "$dir/.git" ]]; then
+    if [[ -f "$dir/SHA256SUMS.json" ]]; then
+      echo -e "  ${DIM}Installed from a release ZIP: update it from Settings > Updates in the app.${RESET}"
+    fi
+    return 0
+  fi
+  if ! git -C "$dir" fetch --quiet --tags "$url" 2>/dev/null; then
+    echo -e "  ${YELLOW}Could not reach GitHub to check for a newer release; keeping the installed code.${RESET}"
+    return 0
+  fi
+  tag="$(git -C "$dir" tag -l 'v[0-9]*' --sort=-v:refname | head -n 1)"
+  [[ -n "$tag" ]] || return 0
+  if [[ "$fresh" -eq 1 ]]; then
+    git -C "$dir" reset --quiet --hard "$tag"
+    echo -e "  Installed release ${tag}."
+  elif [[ -n "$(git -C "$dir" status --porcelain)" ]]; then
+    echo -e "  ${YELLOW}${dir} has local changes, so it was not updated. Commit or move them and run the installer again.${RESET}"
+  elif git -C "$dir" merge-base --is-ancestor "$tag" HEAD; then
+    echo -e "  Already on release ${tag} or newer."
+  elif git -C "$dir" merge --quiet --ff-only "$tag" 2>/dev/null; then
+    echo -e "  Updated to release ${tag}."
+  else
+    echo -e "  ${YELLOW}${dir} has diverged from the published releases, so it was not updated.${RESET}"
+  fi
+}
+
+# An existing install was found: ask what the person wants instead of making
+# them know about a flag. Upgrade keeps everything and moves the program to the
+# newest release. A fresh install sets the old program folder aside (it is never
+# deleted) and installs a clean copy with a new Python environment. The
+# companion, the answers given at setup and the vault live in the Hermes folder
+# and vault, so neither choice repeats setup or loses a companion.
+choose_install_mode() {
+  local dir="$1" answer=""
+  INSTALL_MODE="upgrade"
+  if [[ "$NON_INTERACTIVE" -eq 1 || "$DRY_RUN" -eq 1 ]]; then return 0; fi
+  echo -e "${CYAN}Tamanitomo is already installed in ${dir}.${RESET}"
+  echo "  1) Upgrade: keep everything and update to the newest release (recommended)"
+  echo "  2) Fresh install: set this copy aside and install a clean one"
+  echo "  Your companion, your setup answers and your vault are kept either way."
+  read -u 3 -r -p "Choose 1 or 2 [1]: " answer || answer=""
+  case "${answer:-1}" in
+    2|f|F|fresh|Fresh) INSTALL_MODE="fresh" ;;
+    *) INSTALL_MODE="upgrade" ;;
+  esac
+}
+
+set_aside_install() {
+  local dir="$1" dest
+  dest="${dir%/}.old-$(date +%Y%m%d-%H%M%S)"
+  mv "$dir" "$dest"
+  echo -e "  Previous copy kept at ${dest} (delete it once the new install works)."
+}
+
+if [[ -f "$KIT_DIR/launch.py" ]]; then
+  choose_install_mode "$KIT_DIR"
+  if [[ "$INSTALL_MODE" == "fresh" ]]; then set_aside_install "$KIT_DIR"; fi
+fi
+
 # ------------------------------------------------------------------------------
 # Step 2: Interactive Prompts (if not non-interactive)
 # ------------------------------------------------------------------------------
@@ -367,9 +432,13 @@ else
     echo -e "${CYAN}→ Cloning repository to ${KIT_DIR}...${RESET}"
     mkdir -p "$(dirname "$KIT_DIR")"
     git clone https://github.com/tamanitomo/tamanitomo.git "$KIT_DIR"
+    sync_to_release "$KIT_DIR" https://github.com/tamanitomo/tamanitomo.git 1
   elif [[ ! -f "$KIT_DIR/launch.py" ]]; then
     echo -e "${RED}Error: ${KIT_DIR} exists but is not a Tamanitomo repository.${RESET}"
     exit 1
+  else
+    echo -e "${CYAN}→ Updating the existing install in ${KIT_DIR}...${RESET}"
+    sync_to_release "$KIT_DIR" https://github.com/tamanitomo/tamanitomo.git
   fi
 fi
 

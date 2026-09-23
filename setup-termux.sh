@@ -261,17 +261,86 @@ echo -e "${DIM}Hermes directory: ${HERMES_HOME}${RESET}"
 echo -e "${DIM}Tamanitomo:       ${KIT_DIR}${RESET}"
 echo ""
 
+# Bring a git checkout to the newest published release. Running the installer
+# again is how people update, so a second run must not leave the first run's
+# code in place. A checkout with local changes, or already past the newest
+# release (someone working on Tamanitomo itself), is left exactly as it is.
+sync_to_release() {
+  local dir="$1" url="$2" fresh="${3:-0}" tag
+  if [[ ! -d "$dir/.git" ]]; then
+    if [[ -f "$dir/SHA256SUMS.json" ]]; then
+      echo -e "  ${DIM}Installed from a release ZIP: update it from Settings > Updates in the app.${RESET}"
+    fi
+    return 0
+  fi
+  if ! git -C "$dir" fetch --quiet --tags "$url" 2>/dev/null; then
+    echo -e "  ${YELLOW}Could not reach GitHub to check for a newer release; keeping the installed code.${RESET}"
+    return 0
+  fi
+  tag="$(git -C "$dir" tag -l 'v[0-9]*' --sort=-v:refname | head -n 1)"
+  [[ -n "$tag" ]] || return 0
+  if [[ "$fresh" -eq 1 ]]; then
+    git -C "$dir" reset --quiet --hard "$tag"
+    echo -e "  Installed release ${tag}."
+  elif [[ -n "$(git -C "$dir" status --porcelain)" ]]; then
+    echo -e "  ${YELLOW}${dir} has local changes, so it was not updated. Commit or move them and run the installer again.${RESET}"
+  elif git -C "$dir" merge-base --is-ancestor "$tag" HEAD; then
+    echo -e "  Already on release ${tag} or newer."
+  elif git -C "$dir" merge --quiet --ff-only "$tag" 2>/dev/null; then
+    echo -e "  Updated to release ${tag}."
+  else
+    echo -e "  ${YELLOW}${dir} has diverged from the published releases, so it was not updated.${RESET}"
+  fi
+}
+
+# An existing install was found: ask what the person wants instead of making
+# them know about a flag. Upgrade keeps everything and moves the program to the
+# newest release. A fresh install sets the old program folder aside (it is never
+# deleted) and installs a clean copy with a new Python environment. The
+# companion, the answers given at setup and the vault live in the Hermes folder
+# and vault, so neither choice repeats setup or loses a companion.
+choose_install_mode() {
+  local dir="$1" answer=""
+  INSTALL_MODE="upgrade"
+  if [[ "$NON_INTERACTIVE" -eq 1 || "$DRY_RUN" -eq 1 ]]; then return 0; fi
+  echo -e "${CYAN}Tamanitomo is already installed in ${dir}.${RESET}"
+  echo "  1) Upgrade: keep everything and update to the newest release (recommended)"
+  echo "  2) Fresh install: set this copy aside and install a clean one"
+  echo "  Your companion, your setup answers and your vault are kept either way."
+  read -u 3 -r -p "Choose 1 or 2 [1]: " answer || answer=""
+  case "${answer:-1}" in
+    2|f|F|fresh|Fresh) INSTALL_MODE="fresh" ;;
+    *) INSTALL_MODE="upgrade" ;;
+  esac
+}
+
+set_aside_install() {
+  local dir="$1" dest
+  dest="${dir%/}.old-$(date +%Y%m%d-%H%M%S)"
+  mv "$dir" "$dest"
+  echo -e "  Previous copy kept at ${dest} (delete it once the new install works)."
+}
+
+if [[ "$UPGRADE_MODE" -eq 0 && -f "$KIT_DIR/kit/cli/main.py" ]]; then
+  choose_install_mode "$KIT_DIR"
+  if [[ "$INSTALL_MODE" == "upgrade" ]]; then
+    UPGRADE_MODE=1
+  elif [[ "$DRY_RUN" -eq 0 ]]; then
+    set_aside_install "$KIT_DIR"
+  fi
+fi
+
 if [[ "$UPGRADE_MODE" -eq 1 && "$DRY_RUN" -eq 0 ]]; then
   echo -e "${CYAN}→ Upgrading existing installation in $KIT_DIR...${RESET}"
   if [[ ! -d "$KIT_DIR" ]]; then
     echo -e "${RED}Error: Cannot find existing installation at $KIT_DIR${RESET}" >&2
     exit 1
   fi
-  if [[ -d "$KIT_DIR/.git" ]]; then
-    echo -e "  Pulling latest commits from git..."
-    git -C "$KIT_DIR" fetch origin main
-    git -C "$KIT_DIR" pull --ff-only origin main
+  UPGRADE_URL="https://github.com/tamanitomo/tamanitomo.git"
+  if [[ -n "$GITHUB_TOKEN" ]]; then
+    UPGRADE_URL="https://${GITHUB_TOKEN}@github.com/tamanitomo/tamanitomo.git"
   fi
+  sync_to_release "$KIT_DIR" "$UPGRADE_URL"
   VENV_DIR="$KIT_DIR/.venv"
   if [[ -f "$KIT_DIR/requirements.txt" ]]; then
     echo -e "  Updating Python dependencies..."
@@ -763,13 +832,13 @@ chmod 0600 "$CONFIG_YAML"
 echo -e "${CYAN}→ Setting up Companion Kit in $KIT_DIR...${RESET}"
 mkdir -p "$VAULT_DIR"
 
+REPO_URL="https://github.com/tamanitomo/tamanitomo.git"
+if [[ -n "$GITHUB_TOKEN" ]]; then
+  REPO_URL="https://${GITHUB_TOKEN}@github.com/tamanitomo/tamanitomo.git"
+fi
 if [[ ! -f "$KIT_DIR/kit/cli/main.py" ]]; then
   echo -e "  Cloning Companion Kit repository..."
   mkdir -p "$(dirname "$KIT_DIR")"
-  REPO_URL="https://github.com/tamanitomo/tamanitomo.git"
-  if [[ -n "$GITHUB_TOKEN" ]]; then
-    REPO_URL="https://${GITHUB_TOKEN}@github.com/tamanitomo/tamanitomo.git"
-  fi
   if ! git clone "$REPO_URL" "$KIT_DIR"; then
     echo -e "${RED}Error: Failed to clone tamanitomo repository.${RESET}" >&2
     if [[ -z "$GITHUB_TOKEN" ]]; then
@@ -778,6 +847,10 @@ if [[ ! -f "$KIT_DIR/kit/cli/main.py" ]]; then
     fi
     exit 1
   fi
+  sync_to_release "$KIT_DIR" "$REPO_URL" 1
+else
+  echo -e "  Updating the existing install..."
+  sync_to_release "$KIT_DIR" "$REPO_URL"
 fi
 
 VENV_DIR="$KIT_DIR/.venv"

@@ -1,8 +1,10 @@
-Tamanitomo 3.0.8 fixes a false warning in `companion doctor`.
+Tamanitomo 3.0.9 makes running the installer again a way to update.
 
-The doctor measured the per-turn continuity block including the two markers that fence it, which the budget does not cover. A block written exactly to its budget therefore always showed as "over budget", and the doctor reported itself incomplete on a healthy install. It now measures the block alone.
+Until now the Linux and Android installers skipped the download when Tamanitomo was already there, so installing again to fix a problem left the old code, and the problem, in place. Now the installer asks: **upgrade**, which keeps everything and moves to the newest release, or **fresh install**, which sets the old program folder aside and installs a clean copy with a new Python environment. Your companion, your setup answers and your vault live outside the program folder, so neither choice repeats setup.
 
-3.0.7, released just before this, gives each companion a map of the whole vault at the start of every session: every folder, how many notes it holds, and a few of the files that say what it is. If you are updating from 3.0.6 or earlier, run **companion repair** afterwards, which removes a duplicated continuity hook if repair ever ran under a second Python and raises Hermes's hook output limit so the map is read rather than written to disk.
+New installs now get the newest published release rather than the development branch. A checkout with its own code changes is never touched.
+
+On Windows or macOS, update from **Settings → Updates** in the app, or run `git pull` in the Tamanitomo folder.
 
 ### Install
 

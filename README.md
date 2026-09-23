@@ -90,6 +90,13 @@ The launcher provisions Python when needed and opens the workspace. Configure He
 
 ---
 
+### 🔄 Updating
+Your companion, answers and history live in your Hermes folder and vault, not in the Tamanitomo folder, so updating never repeats setup.
+- **Linux / Android:** run the same one-line installer again. It finds the existing install and asks whether to **upgrade** (keep everything, update to the newest release) or do a **fresh install** (set the old program folder aside and install a clean copy). Your companion is kept either way. A checkout with your own code changes is never overwritten.
+- **Windows / macOS / anywhere:** open **Settings → Updates** in the app, or run `git pull` in the Tamanitomo folder and start it again.
+
+---
+
 ### 🤝 Already using Hermes Agent?
 Adopt your existing agent seamlessly. Your `SOUL.md`, memories, and history are preserved byte-for-byte:
 ```bash
