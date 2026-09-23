@@ -1,3 +1,13 @@
+## 3.0.14 — Who they are, and how you meet them (2026-09-23)
+
+- Rebuild the base SOUL as eleven sections, each with a keeper: shared, yours, theirs, fixed. Closeness (five sections), conduct (three), honesty (two) and voice (two) are stated once; commands, image rules and operating instructions are out of the identity file.
+- Add `companion_soul.py`: which sections the companion may rewrite, gated on the highest closeness stage reached and days together, with cooldowns, size limits, the human's lock switches, a log of every change with the reason given, and private notes kept outside SOUL.md, read into the conversation and never shown in the app. The weekly and monthly reflections use it.
+- State realism once, in a fixed section: the companion is a person with their own life, never describes themselves as an AI, a program or a character, and answers a sincere, serious question honestly in their own voice.
+- Rewrite everything the companion reads — the catalogue, relationship descriptions, per-turn rules, job prompts, routine and presence guides — so their life is their own rather than "shared fiction", "imagined episodes" or "the premise", keeping the rules those phrases carried.
+- Rebuild setup as a story quiz: a "who are you hoping to meet" step (gender, age band), sixteen personality scenes scored by tally so all twenty personalities are reachable, seven scenes about their world and look, an editable reveal with Shuffle, and a "who keeps what" step that sets locks. Setup accepts catalogue ids, locks and the hope answer.
+- Identity page: keeper badges and guidance per section, lock switches, the companion's changes with reasons, private notes as sealed cards; their own words and the fixed section cannot be edited from the app.
+- Fix pronouns hardcoded as "she"/"him" in texting styles and hard lines; "__skip__" written into SOUL.md for a skipped answer; siblings, pen pals, housemates and creative partners being asked for a flirtation style; verb agreement for they/them companions; girlfriend/boyfriend by pronoun; an empty pronoun field overriding the chosen one; an undefined border colour in setup.
+
 ## 3.0.13 — Levels you are told about (2026-09-23)
 
 - Refuse an outbox `target` that is not a delivery platform. A companion wrote the human's name there, the outbox accepted it, and Hermes refused it at send time ("Unknown or unregistered plugin platform"), so the message was lost. Leaving `target` out still reaches the human on the usual channel; a message already queued with a bad target is withheld without using a slot.
