@@ -772,6 +772,34 @@ function renderHeroMetersContent(emotions,bars){
   }).join('');
 }
 
+/* A change of closeness level, announced once the next time the app is opened:
+   a big pop-up for a level never reached before or for a drop, a small note for
+   climbing back to one reached before. The server keeps what was last seen. */
+let levelShowing=false;
+async function showLevelEvent(ev,agent){
+  if(!ev||levelShowing)return;
+  const seen=()=>post('/closeness/seen',{stage:ev.stage}).catch(()=>{});
+  if(ev.size==='small'){
+    levelShowing=true;notice(`You and ${agent} are back at ${ev.name}.`);await seen();levelShowing=false;return;
+  }
+  // Never over something the person is doing; the next refresh tries again.
+  if($('product-dialog').open)return;
+  levelShowing=true;
+  const up=ev.kind==='new_high';
+  dialog(up?'A new level':'Things have cooled',
+    `<div class="level-popup ${up?'level-up':'level-down'}">
+      <div class="level-emblem" aria-hidden="true">${up?'✨':'🌙'}</div>
+      <h3>${esc(ev.name)}</h3>
+      <p>${up?`You and ${esc(agent)} have reached <strong>${esc(ev.name)}</strong> for the first time.`
+             :`You and ${esc(agent)} have drifted from ${esc(ev.from_name)} back to <strong>${esc(ev.name)}</strong>.`}</p>
+      <p class="dim">${esc(ev.description||'')}</p>
+      ${up?'':'<p class="dim small">Time spent talking together brings it back.</p>'}
+      <button class="act" id="level-ok">${up?'Wonderful':'Okay'}</button>
+    </div>`);
+  $('level-ok').onclick=()=>$('product-dialog').close();
+  await seen();levelShowing=false;
+}
+
 workspaceHandlers.now=async()=>{
   const [d,content,journal,timeline,closet,updateInfo,emotions]=await Promise.all([
     api('/overview'),
@@ -787,6 +815,7 @@ workspaceHandlers.now=async()=>{
   if($('companion-avatar-pill'))$('companion-avatar-pill').outerHTML=
     faceHtml(d.agent,'profile-avatar-pill').replace('class="avatar has-face','id="companion-avatar-pill" class="avatar has-face');
   setReviewBanner(d.problems.length,updateInfo);
+  showLevelEvent(d.level_event,d.agent);
 
   const s=d.state?.state;
   // The face on the home screen is the profile photo when one has been set --

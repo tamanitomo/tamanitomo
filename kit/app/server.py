@@ -240,10 +240,20 @@ def build(home=None,token='',state_dir=None):
                 'thread':thread.read(c,now),
                 'bars':(__import__('companion_bars').compute(c,now) if c.bars else None),
                 'intimacy':intimacy,
+                'level_event':(companion_intimacy.level_event(c,intimacy)
+                               if c.bars and c.relationship_progression!='off' else None),
                 'integrity_lockout':False,
                 'integrity_warning':None,
                 'problems':watch.problems(c,now),
                 'setup_pending':setup_pending}
+
+    @app.post('/api/closeness/seen')
+    def closeness_seen(payload:dict):
+        """The level-change pop-up was shown; do not show it again."""
+        import companion_intimacy
+        stage=payload.get('stage')
+        if not isinstance(stage,int) or not 0<=stage<=4:raise HTTPException(400,'stage must be 0 to 4')
+        return companion_intimacy.acknowledge_level(load(),stage)
 
     @app.get('/api/timeline')
     def timeline():
@@ -488,6 +498,8 @@ def build(home=None,token='',state_dir=None):
                 'relationship_pace':c.relationship_pace,'peer_interaction':c.peer_interaction,
                 'image_style':c.image_style,'image_styles':{k:v['label'] for k,v in render.load_styles().items()},
                 'explicit':c.explicit,'adult_images':c.adult_images,
+                # The choice exists only once the relationship has reached Bonded.
+                'adult_images_available':bool((intimacy or {}).get('can_intimate')),
                 'integrity_lockout':False,'integrity_warning':None,
                 'intimacy':intimacy,'remote_pin':c.remote_pin}
 
@@ -513,6 +525,12 @@ def build(home=None,token='',state_dir=None):
         # rather than leaving a permission behind that nothing can act on.
         if payload.get('explicit') is False or companion_integrity.is_nsfw_revoked(c):
             payload['adult_images']=False
+        # Adult images are a choice offered at Bonded, not before: the setting is hidden
+        # until then and cannot be switched on from here either.
+        if payload.get('adult_images') is True and not c.adult_images:
+            import companion_intimacy
+            if not companion_intimacy.compute(c).get('can_intimate'):
+                raise HTTPException(400,'Adult images become available once your relationship reaches Bonded.')
         adult_confirmed=payload.pop('adult_confirmed',False)
         if payload.get('explicit') is True and not c.explicit and adult_confirmed is not True:
             raise HTTPException(400,'Confirm that both you and the companion are adults before enabling adult themes')

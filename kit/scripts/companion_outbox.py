@@ -28,6 +28,20 @@ KINDS=('text','image','voice')
 PRIORITIES=('normal','high')
 STATUSES=('queued','sent','expired','failed','withheld')
 DEFAULT_TTL_HOURS=8
+# Hermes delivery platforms. A target is where a message goes, never who it is for:
+# a model that wrote "target": "<the human's name>" queued messages Hermes could only
+# refuse ("Unknown or unregistered plugin platform"), and they failed at send time.
+PLATFORMS=('telegram','discord','slack','signal','whatsapp','matrix','weixin','feishu',
+           'dingtalk','ntfy','simplex','qqbot','yuanbao','email','sms')
+
+def check_target(value,human='the human'):
+    """'telegram' when absent; a platform or platform:chat_id when given; else refused."""
+    target=str(value or '').strip() or 'telegram'
+    platform=target.split(':',1)[0].lower()
+    if platform not in PLATFORMS or len(target)>80:
+        raise ValueError(f'target must be a delivery platform such as "telegram", not a person. '
+                         f'Leave target out and it reaches {human} on the usual channel.')
+    return target
 MAX_QUEUED=20
 
 def _tz(c):
@@ -76,7 +90,7 @@ def queue(c,entry,now=None):
              'priority':priority,'reason':(entry.get('reason') or '')[:200],
              'not_before':_iso(entry.get('not_before'),tz,'not_before'),
              'expires_at':(now+dt.timedelta(hours=ttl)).isoformat(),
-             'target':(entry.get('target') or 'telegram')[:40],
+             'target':check_target(entry.get('target'),getattr(c,'human','the human')),
              'status':'queued','queued_at':now.isoformat()}
         return slf._append(path_for(c),row)
 

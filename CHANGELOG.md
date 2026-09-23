@@ -1,3 +1,12 @@
+## 3.0.13 — Levels you are told about (2026-09-23)
+
+- Refuse an outbox `target` that is not a delivery platform. A companion wrote the human's name there, the outbox accepted it, and Hermes refused it at send time ("Unknown or unregistered plugin platform"), so the message was lost. Leaving `target` out still reaches the human on the usual channel; a message already queued with a bad target is withheld without using a slot.
+- Keep Hermes's own reason when a send fails instead of only "failed or unconfirmed".
+- Announce a change of closeness level the next time the app is opened: a large pop-up for a level never reached before and for a drop, a small note for climbing back to a level reached before. The level a companion was at when this shipped is the baseline, so nothing is announced for it. Nothing is announced while the meters are hidden or progression is off.
+- Let closeness accrue past 100 to a ceiling of 120 while Bonded still begins at 90. The extra is reserve that decay has to use up before Bonded is lost. The shown score stays a 0-100 percentage; `points` and `reserve` carry the rest.
+- Offer the adult-image choice only once a relationship has reached Bonded: it is hidden in Settings before then and the server refuses to switch it on. A choice made at Bonded is kept if the relationship later dips below it; the picture gate still applies.
+- Make the idea-rotation test independent of the temporary folder's name.
+
 ## 3.0.12 — What she sends, when she wakes, what she keeps (2026-09-23)
 
 - Deliver the health watch's alert. Kit jobs are created to keep their output local, which Hermes treats as "deliver nowhere", so the watch recorded an alert as sent and then kept quiet about it for six hours while nobody had seen it. It now sends through the companion's own channel, waits out quiet hours, and only counts an alert as given once it was delivered. Looking with `--json` no longer counts as having told anyone.

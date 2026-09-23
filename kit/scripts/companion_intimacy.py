@@ -14,6 +14,12 @@ import companion_config as cc
 import companion_feelings as feelings
 from companion_render import NON_ROMANTIC
 
+# Bonded starts at 90, but closeness keeps accruing past 100 up to this ceiling. The
+# extra is a reserve: with the scale stopping at 100, a Bonded relationship sat right at
+# the top of a ten-point band and the first quiet week pushed it out. The shown score
+# stays a 0-100 percentage; `points` carries the whole scale and decides the stage.
+SCORE_CEILING = 120
+
 ROMANTIC_STAGES = [
     {
         'stage': 0,
@@ -71,7 +77,7 @@ ROMANTIC_STAGES = [
         'name': 'Bonded',
         'badge': 'Bonded',
         'min_score': 90,
-        'max_score': 100,
+        'max_score': SCORE_CEILING,
         'can_flirt': True,
         'can_tease': True,
         'can_intimate': True,
@@ -122,7 +128,7 @@ PLATONIC_STAGES = [
     },
     {
         'stage': 4, 'name': 'Bonded', 'badge': 'Bonded',
-        'min_score': 90, 'max_score': 100,
+        'min_score': 90, 'max_score': SCORE_CEILING,
         'can_flirt': False, 'can_tease': True, 'can_intimate': False,
         'desc': (
             'Settled, unguarded loyalty. Neither of you is auditioning any more; the relationship is '
@@ -376,7 +382,7 @@ def compute(c, now=None) -> Dict[str, Any]:
         # topped out at 88 and could not reach Bonded at all, however many years
         # went by. Scaling first and capping here leaves a healthy relationship
         # arithmetically unchanged and lets a cooler one arrive late instead of never.
-        earned_score = min(100.0, earned_score * trust_factor)
+        earned_score = min(float(SCORE_CEILING), earned_score * trust_factor)
 
         # Penalties for hurt & irritation
         hurt_mult = 1.4 if temperament == 'expressive' else 1.0
@@ -438,7 +444,8 @@ def compute(c, now=None) -> Dict[str, Any]:
     # Penalties for boundary violations (can drop score below 25)
     earned_score -= (violation_count * 30.0)
 
-    score = max(0, min(100, int(round(earned_score))))
+    points = max(0, min(SCORE_CEILING, int(round(earned_score))))
+    score = points
 
     # Cap stage if adult themes were not enabled at companion creation,
     # or if permanent friend lock is active, or if nsfw was revoked mid-relationship
@@ -502,7 +509,10 @@ def compute(c, now=None) -> Dict[str, Any]:
         'at': now.isoformat(),
         'romantic_progression':c.boundary not in NON_ROMANTIC and c.agent_type=='companion',
         'connection_label':'Collaboration' if c.agent_type in ('worker','colleague') else 'Friendship',
-        'score': score,
+        # The percentage people read, 0-100, and the whole scale behind it.
+        'score': min(100, score),
+        'points': score,
+        'reserve': max(0, score - 100),
         'stage': stage_info['stage'],
         'stage_name': stage_info['name'],
         'stage_badge': stage_info['badge'],
@@ -528,6 +538,73 @@ def compute(c, now=None) -> Dict[str, Any]:
         'intimacy_blockers': blockers,
         'meters': meters,
     }
+
+# ---- telling the human when the level changes --------------------------
+#
+# The app announces a change of level once, the next time someone opens it. Which
+# kind of announcement depends on history, so the highest level ever reached and
+# the last one the human has actually seen are kept per companion:
+#   new_high   a level never reached before      -> a big pop-up
+#   drop       lower than the last one seen       -> a big pop-up
+#   regained   back up to a level reached before  -> a small one
+LEVELS_FILE = 'state/closeness-levels.json'
+
+
+def _levels_path(c):
+    return c.home / LEVELS_FILE
+
+
+def _read_levels(c):
+    try:
+        data = json.loads(_levels_path(c).read_text(encoding='utf-8'))
+        return data if isinstance(data, dict) and isinstance(data.get('seen'), int) else None
+    except (OSError, ValueError):
+        return None
+
+
+def _write_levels(c, data):
+    from companion_platform import atomic_write
+    path = _levels_path(c)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(path, json.dumps(data, indent=2) + '\n')
+
+
+def level_event(c, state=None):
+    """The change of level the human has not been told about yet, or None.
+
+    The first time this is asked, the current level becomes the baseline and
+    nothing is announced: a companion that has been Friends for a month should not
+    greet the upgrade with "you are now Friends".
+    """
+    state = state or compute(c)
+    if getattr(c, 'agent_type', 'companion') == 'worker':
+        return None
+    stage = int(state.get('stage', 0))
+    known = _read_levels(c)
+    if known is None:
+        _write_levels(c, {'seen': stage, 'highest': stage,
+                          'at': dt.datetime.now(dt.timezone.utc).isoformat()})
+        return None
+    seen, highest = known['seen'], int(known.get('highest', known['seen']))
+    if stage == seen:
+        return None
+    kind = 'new_high' if stage > highest else 'regained' if stage > seen else 'drop'
+    ladder = stages_for(c)
+    before = next((s for s in ladder if s['stage'] == seen), ladder[0])
+    return {'kind': kind, 'size': 'small' if kind == 'regained' else 'big',
+            'stage': stage, 'name': state.get('stage_name'), 'badge': state.get('stage_badge'),
+            'description': state.get('description'), 'from_stage': seen, 'from_name': before['name'],
+            'romantic': state.get('romantic_progression', False)}
+
+
+def acknowledge_level(c, stage):
+    """The human has seen the announcement for `stage`."""
+    stage = int(stage)
+    known = _read_levels(c) or {'seen': stage, 'highest': stage}
+    _write_levels(c, {'seen': stage, 'highest': max(stage, int(known.get('highest', stage))),
+                      'at': dt.datetime.now(dt.timezone.utc).isoformat()})
+    return {'seen': stage}
+
 
 def render(c, intimacy_state: Optional[Dict[str, Any]] = None) -> str:
     """Render the intimacy instructions for prompt injection into Hermes context."""

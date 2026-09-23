@@ -1,14 +1,9 @@
-Tamanitomo 3.0.12 is a pass over the heart of the companion: what she may send, when she wakes, what she is wearing, and what she keeps to herself.
+Tamanitomo 3.0.13 is about the relationship itself, and one delivery bug.
 
-- **Health alerts reach you.** When a companion's own machinery stops working, you are now told, once, on her usual channel. Until now the alert was written where nobody would ever see it. Anything that comes up overnight waits for the end of quiet hours.
-- **One gate for what a companion may send.** Every picture she makes or sends is checked against the whole relationship as it stands today, not only the settings, and a picture cleared earlier is checked again at the moment it would go.
-- **Her privacy is hers.** A moment she marks private is never photographed, whatever else is switched on. She now says whether she is somewhere private or public instead of the app guessing it from the name of the place.
-- **Pictures show what she is wearing.** Each piece of clothing records what it covers, so the camera no longer mistakes socks or a cardigan for being dressed.
-- **Mornings keep the plan.** The morning routine runs when the morning she declared arrives — a lie-in or an early start — instead of at a fixed minute.
-- **One way out.** Everything she writes first goes through the outbox, with its expiry, pacing and daily limit. There is no second path that skips it.
-- Smaller fixes: opening the Closet no longer changes anything; a conversation that ends while she is reflecting on the last one is no longer missed; keepsakes only say "shared" when they were; a test run of the outbox and a picture held back no longer use up a day's messages; a profile's vault map no longer lists another companion's private folders.
-
-After updating, run `companion repair --prompts force` for each companion so her scheduled jobs pick up the new instructions (your old versions are backed up first).
+- **Messages a companion addressed to you by name now arrive.** A companion could queue a message with your name where the delivery channel belongs, and it failed at send time. The outbox now refuses that when the message is written, holds back any already waiting without using up a day's allowance, and keeps the channel's own reason when a send does fail.
+- **Level changes are announced.** The first time you open the app after your relationship reaches a new level, you are told with a pop-up. A drop gets one too. Coming back to a level you have reached before gets a smaller note.
+- **Bonded has room to breathe.** Closeness keeps building past the point where Bonded begins, so a quiet week no longer knocks a Bonded relationship straight back down. The meter still reads up to 100%.
+- **Some choices wait for Bonded.** The more personal picture settings only appear, and can only be switched on, once a relationship has reached Bonded.
 
 ### Install
 

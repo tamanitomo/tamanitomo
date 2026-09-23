@@ -382,8 +382,8 @@ const settingsPanels=[
     ? 'Adult images are allowed for this companion, so the check <strong>sorts and labels</strong> rather than blocks: '
       + 'a picture meant to be explicit is delivered as it was made, not regenerated with clothes put back on. '
       + 'It still gets a rating, and the blur settings below still decide whether you see it covered first.'
-    : 'Adult images are off for this companion, so anything the check rates sensitive is held rather than sent. '
-      + 'Allowing them is under Companion \u2192 Relationship.'}</p>
+    : 'Adult images are off for this companion, so anything the check rates sensitive is held rather than sent.'
+      + (s.adult_images_available?' Allowing them is under Companion \u2192 Relationship.':'')}</p>
   <div class="contact-settings">
     <div class="contact-row">
       <label class="switch-container compact-toggle" data-toggle-row title="Open one to reveal it">
@@ -448,7 +448,7 @@ const settingsPanels=[
       <div><dt>Progression</dt><dd>${esc(labels.progression[s.relationship_progression]||s.relationship_progression)}</dd></div>
       <div><dt>Pace</dt><dd>${esc(labels.pace[s.relationship_pace]||s.relationship_pace)}</dd></div>
       <div><dt>Intimacy &amp; romance</dt><dd>${s.explicit?'Romantic connection enabled':'Friendly / platonic only'}</dd></div>
-      <div><dt>Adult images</dt><dd>${s.explicit?(s.adult_images?'Allowed':'Not allowed'):'Not allowed (needs romance)'}</dd></div>
+      ${s.adult_images_available?`<div><dt>Adult images</dt><dd>${s.adult_images?'Allowed':'Not allowed'}</dd></div>`:''}
       <div><dt>Other companions</dt><dd>${s.peer_interaction?'May interact':'Kept apart'}</dd></div>
       <div><dt>Connection meters</dt><dd>${s.bars?'Shown':'Hidden'}</dd></div>
     </dl>
@@ -485,7 +485,7 @@ const settingsPanels=[
         <span class="dim small" style="margin-left:4px">(Permanent if turned off)</span>
       </div>
     </div>
-    <div class="contact-row">
+    ${s.adult_images_available?`<div class="contact-row">
       <label class="contact-label">Adult images:</label>
       <div class="contact-controls">
         <label class="switch-container compact-toggle" data-toggle-row>
@@ -497,7 +497,7 @@ const settingsPanels=[
           ? 'Separate from romance. A romantic companion sends nothing explicit unless this is on.'
           : 'Turn on Romance first.'}</span>
       </div>
-    </div>
+    </div>`:''}
     <div class="contact-row">
       <label class="contact-label" for="peer-interaction">Companions:</label>
       <div class="contact-controls">
@@ -519,6 +519,7 @@ const settingsPanels=[
   wireToggles(host);
   const romance=host.querySelector('#adult-themes'),adultImages=host.querySelector('#adult-images');
   romance.onchange=()=>{
+    if(!adultImages)return;
     const on=romance.value==='true';
     adultImages.disabled=!on;
     if(!on)adultImages.checked=false;
@@ -530,9 +531,11 @@ const settingsPanels=[
       relationship_pace:host.querySelector('#pace').value,
       peer_interaction:host.querySelector('#peer-interaction').value==='true',
       bars:host.querySelector('#bars').checked,
-      explicit:wantsAdult,
-      // Romance is the prerequisite, so this can never be sent on its own.
-      adult_images:wantsAdult&&host.querySelector('#adult-images').checked};
+      explicit:wantsAdult};
+    // Romance is the prerequisite, so this is never on without it. Offered only at
+    // Bonded; while hidden it is left as it is, so a relationship that dips below
+    // Bonded keeps the choice made there (the server still gates every picture).
+    if(adultImages)payload.adult_images=wantsAdult&&adultImages.checked;
     if(wantsAdult&&!s.explicit){
       if(!confirm('Enable romantic and adult themes? Confirm that you and this companion are both represented as adults.'))
         throw Error('Not changed.');

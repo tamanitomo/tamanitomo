@@ -59,6 +59,8 @@ def verdict(c,entry,now):
         return {'action':'expire','reason':'past its expiry; a stale message is never sent late'}
     if outbox.held_until(entry,now):
         return {'action':'hold','reason':f"not before {entry['not_before'][11:16]}"}
+    try:outbox.check_target(entry.get('target'),c.human)
+    except ValueError as exc:return {'action':'withhold','reason':str(exc)}
     permission=c.may_send(entry.get('content','text'))
     if permission=='no':
         return {'action':'withhold',
@@ -115,7 +117,12 @@ def hermes_send(c,body,target='telegram'):
         except ValueError:payload={}
         ok=(proc.returncode==0 and isinstance(payload,dict) and payload.get('success') is True
             and not payload.get('error') and not payload.get('skipped'))
-        return ok,('sent' if ok else 'delivery failed or unconfirmed; the slot is kept and it is not retried')
+        if ok:return True,'sent'
+        # Keep Hermes's own reason: "failed or unconfirmed" alone sent the last
+        # investigation into the logs to find a target Hermes had named plainly.
+        why=(payload.get('error') if isinstance(payload,dict) else '') or (proc.stderr or '').strip()[-200:] \
+            or ('skipped' if isinstance(payload,dict) and payload.get('skipped') else f'exit {proc.returncode}')
+        return False,f'delivery failed or unconfirmed ({str(why)[:200]}); the slot is kept and it is not retried'
     except (OSError,subprocess.SubprocessError) as exc:
         return False,f'delivery failed: {exc}; the slot is kept and it is not retried'
 

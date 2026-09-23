@@ -79,7 +79,12 @@ class SuggestionTests(unittest.TestCase):
 
     def test_something_done_long_ago_comes_back(self):
         life.record_choice(self.root, 'cafe-with-a-book', '2026-01-01')
-        found = any('cafe-with-a-book' in self.ids(f'2026-09-{n:02d}', 20) for n in range(10, 28))
+        # Suggestions are seeded by the companion's folder, which is a random temp
+        # path here, so eighteen days left roughly a 1-in-600 chance of never drawing
+        # it. A third of a year makes the test about eligibility, not luck.
+        start = dt.date(2026, 6, 1)
+        found = any('cafe-with-a-book' in self.ids((start + dt.timedelta(days=n)).isoformat(), 20)
+                    for n in range(120))
         self.assertTrue(found, 'an old favourite should be allowed round again')
 
     def test_a_refused_idea_stops_being_offered(self):

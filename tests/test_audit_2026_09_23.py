@@ -350,4 +350,100 @@ class HookConsentTests(unittest.TestCase):
             self.assertNotIn('/gone/python',hooks['pre_llm_call'][0]['command'])
 
 
+class DeliveryTargetTests(unittest.TestCase):
+    """A companion queued "target": "<its human's name>"; Hermes refused it at send time and the messages were lost."""
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        self.c=companion(Path(self.temp.name),quiet_start='00:00',quiet_end='00:00')
+        self.now=dt.datetime(2026,9,23,12,tzinfo=dt.timezone.utc)
+
+    def test_a_person_is_not_a_target(self):
+        import companion_outbox as outbox
+        with self.assertRaisesRegex(ValueError,'not a person'):
+            outbox.queue(self.c,{'body':'hi','target':'alex'},self.now)
+        self.assertEqual(outbox.queue(self.c,{'body':'hi'},self.now)['entry']['target'],'telegram')
+        self.assertEqual(outbox.queue(self.c,{'body':'yo','target':'telegram:123'},self.now)['entry']['target'],'telegram:123')
+
+    def test_a_bad_target_already_queued_is_withheld_without_a_slot(self):
+        import companion_outbox as outbox, companion_dispatch as dispatch, companion_outreach as outreach
+        import companion_self as slf
+        slf._append(outbox.path_for(self.c),{'id':'m1','kind':'outbox','content':'text','body':'hi','media_path':'',
+            'priority':'normal','reason':'','not_before':'','expires_at':(self.now+dt.timedelta(hours=2)).isoformat(),
+            'target':'alex','status':'queued','queued_at':self.now.isoformat()})
+        with patch.object(dispatch,'deliver') as deliver:
+            out=dispatch.run(self.c,self.now)
+        deliver.assert_not_called()
+        self.assertEqual(out['handled'][0]['action'],'withhold')
+        self.assertEqual(outreach.sent_today(self.c,self.now),0)
+
+    def test_hermes_reason_is_kept(self):
+        import subprocess, companion_dispatch as dispatch
+        done=subprocess.CompletedProcess([],1,'{"error":"Unknown or unregistered plugin platform: x"}','')
+        with patch.object(dispatch.subprocess,'run',return_value=done):
+            ok,detail=dispatch.hermes_send(self.c,'hi','telegram')
+        self.assertFalse(ok);self.assertIn('Unknown or unregistered plugin platform',detail)
+
+
+class LevelEventTests(unittest.TestCase):
+    """A change of level is announced once: big for a new high or a drop, small for a return."""
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        self.c=companion(Path(self.temp.name),boundary='girlfriend')
+
+    def at(self,stage):
+        import companion_intimacy as intimacy
+        ladder=intimacy.stages_for(self.c)
+        return {'stage':stage,'stage_name':ladder[stage]['name'],'stage_badge':ladder[stage]['badge'],
+                'description':ladder[stage]['desc'],'romantic_progression':True}
+
+    def test_the_sequence(self):
+        import companion_intimacy as intimacy
+        self.assertIsNone(intimacy.level_event(self.c,self.at(1)))          # baseline, silent
+        self.assertIsNone(intimacy.level_event(self.c,self.at(1)))
+        ev=intimacy.level_event(self.c,self.at(2))
+        self.assertEqual((ev['kind'],ev['size']),('new_high','big'))
+        self.assertEqual(ev['name'],'Chemistry')
+        self.assertEqual(intimacy.level_event(self.c,self.at(2))['kind'],'new_high')  # until seen
+        intimacy.acknowledge_level(self.c,2)
+        self.assertIsNone(intimacy.level_event(self.c,self.at(2)))
+        ev=intimacy.level_event(self.c,self.at(1))
+        self.assertEqual((ev['kind'],ev['size'],ev['from_name']),('drop','big','Chemistry'))
+        intimacy.acknowledge_level(self.c,1)
+        self.assertEqual(intimacy.level_event(self.c,self.at(2))['size'],'small')
+        intimacy.acknowledge_level(self.c,2)
+        self.assertEqual(intimacy.level_event(self.c,self.at(3))['kind'],'new_high')
+
+
+class BondedReserveTests(unittest.TestCase):
+    def test_bonded_has_room_above_the_threshold(self):
+        import companion_intimacy as intimacy
+        for ladder in (intimacy.ROMANTIC_STAGES,intimacy.PLATONIC_STAGES):
+            top=ladder[-1]
+            self.assertEqual((top['name'],top['min_score'],top['max_score']),('Bonded',90,intimacy.SCORE_CEILING))
+        self.assertEqual(intimacy.SCORE_CEILING,120)
+
+
+class AdultImagesOnlyAtBondedTests(unittest.TestCase):
+    def setUp(self):
+        from kit.app.server import build
+        from fastapi.testclient import TestClient
+        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        self.c=companion(Path(self.temp.name),boundary='girlfriend',explicit=True)
+        self.client=TestClient(build(self.c.home,token='t',state_dir=Path(self.temp.name)/'state'))
+        self.addCleanup(self.client.close)
+
+    def post(self,data):return self.client.post('/api/settings',json=data,headers={'x-companion-token':'t'})
+
+    def test_refused_and_hidden_before_bonded(self):
+        import companion_intimacy as intimacy
+        r=self.post({'adult_images':True})
+        self.assertEqual(r.status_code,400);self.assertIn('Bonded',r.text)
+        s=self.client.get('/api/settings',headers={'x-companion-token':'t'}).json()
+        self.assertFalse(s['adult_images_available'])
+        real=intimacy.compute
+        with patch.object(intimacy,'compute',side_effect=lambda c,now=None:{**real(c,now),'can_intimate':True}):
+            self.assertEqual(self.post({'adult_images':True}).status_code,200)
+            self.assertTrue(self.client.get('/api/settings',headers={'x-companion-token':'t'}).json()['adult_images_available'])
+
+
 if __name__=='__main__':unittest.main()
