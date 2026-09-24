@@ -37,7 +37,7 @@ Fix: `attempt_id` is the **immutable** identity of a launch attempt, separate fr
 | `pytest tests/test_phase1b_c1_core.py` | **100 passed**, 20 subtests; 11 clean runs, 8 of them four-way concurrent; 0 unclosed resources under `-X dev` |
 | full suite, pinned not configured, this host | **1575 passed, 39 skipped** (24 C0 + 15 C1 pinned, reasons printed), 496 subtests, 1 warning |
 | full suite, C0 and C1 pinned configured | **1614 passed, 0 skipped**, 500 subtests, 1 warning |
-| CI | see §9 |
+| CI | run `36023175886` at `5557208`: all 5 jobs passed (§9) |
 
 The lane interpreter is an existing, inventoried dependency environment (the local hermes-agent venv; `environment.json` lists its 134 distributions), not a clean dependency install; every Hermes import resolved inside the verified export; no profile data was read.
 
@@ -218,7 +218,7 @@ Then C2 (dispatcher, with the structured `attempt` field, O-H) and C3 (the minim
 | `36010308868` | `2f11faf` | Windows and macOS smoke **passed** (now including the C1 core file). Linux 3.11/3.13/3.14 **failed**: finding 5 (inode reuse) and a test that did not wait for a killed executor's lock release. Job logs need a signed-in viewer, so `6b4b2a4` added a failure-only step that publishes failed tests as check-run annotations. |
 | `36012008668` | `6b4b2a4` | same failures, now readable as annotations; fixed in `97bb3a1` |
 | `36015884514` | `84cc9d0` (code `97bb3a1`; not a separate full-suite run at `428bef7`) | **all 5 jobs passed**: Linux 3.11, 3.13, 3.14 (the 13 C1 pinned and 24 C0 pinned cases skip there with the reason printed; the lane is where they run), Windows and macOS smoke (C1 core: refusal, derivation, eligibility and recorder cases run; supervision cases skip). Detailed per-job pass/skip counts were not read: job logs need a signed-in viewer. |
-| CLOSURE_CI | `1e161c3` + report | recorded after the push |
+| `36023175886` | `5557208` (closure code `1e161c3`) | **all 5 jobs passed** (Linux 3.11/3.13/3.14; Windows and macOS smoke). As before, the 15 C1 pinned and 24 C0 pinned cases skip on Linux CI (the lane runs them) and supervision cases skip on Windows/macOS; per-job counts not read (logs need a signed-in viewer). |
 
 ---
 
