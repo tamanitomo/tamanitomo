@@ -643,8 +643,13 @@ class InstallationGuard(unittest.TestCase):
 
     def spawn(self, *args):
         proc = subprocess.Popen([sys.executable, str(PROC), *map(str, args)], cwd=str(ROOT),
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        self.addCleanup(lambda: proc.poll() is None and proc.kill())
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        def reap():
+            if proc.poll() is None:
+                proc.kill()
+            proc.wait(10)
+        self.addCleanup(reap)
         return proc
 
     def read(self, path, timeout=30):
