@@ -617,21 +617,10 @@ dialog.photo-viewer::backdrop{background:rgba(0,0,0,0.94)}
 .editor-leave-dialog .actions{display:flex;justify-content:flex-end;gap:10px;margin-top:0}
 
 /* Memory & Ledger Styles (#knows) */
-.memory-kpi-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
-.memory-kpi-card{background:var(--panel);border:1px solid var(--edge);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px}
-.memory-kpi-icon{font-size:22px;width:40px;height:40px;border-radius:8px;background:var(--surface-2);display:flex;align-items:center;justify-content:center}
-.memory-kpi-info strong{font-size:18px;color:#fff;display:block}
-.memory-kpi-info span{font-size:11.5px;color:var(--dim)}
-.memory-search-bar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
-.memory-search-bar input{flex:1;min-width:240px;background:var(--bg);border:1px solid var(--edge);border-radius:8px;padding:8px 12px;color:#fff}
 .memory-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
 .memory-card{background:var(--panel);border:1px solid var(--edge);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;position:relative;transition:border-color .15s}
 .memory-card:hover{border-color:var(--edge-2)}
-.memory-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
-.memory-tag{font-size:10.5px;padding:2px 7px;border-radius:6px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;background:var(--surface-2);color:var(--accent);border:1px solid var(--edge-2)}
 .memory-statement{font-size:14px;font-weight:600;color:var(--ink);line-height:1.45;margin:0}
-.memory-evidence{font-size:12px;color:var(--dim);background:var(--bg);border-left:2px solid var(--edge-2);padding:6px 10px;border-radius:0 6px 6px 0;margin:0}
-.memory-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
 
 /* Plans & Activities (#loops) */
 .planner-kpi-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px}
@@ -651,10 +640,6 @@ dialog.photo-viewer::backdrop{background:rgba(0,0,0,0.94)}
 /* Together / Relationship (#relationship) */
 .story-hero-card{background:linear-gradient(135deg,var(--surface-2),var(--panel));border:1px solid var(--edge);border-radius:14px;padding:22px;display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:20px;flex-wrap:wrap}
 .story-hero-text h3{margin:0 0 4px;font-size:19px;color:#fff}
-.milestone-badge-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin:14px 0}
-.milestone-card{background:var(--panel);border:1px solid var(--edge);border-radius:9px;padding:12px;display:flex;align-items:center;gap:10px;transition:all .15s}
-.milestone-card.is-earned{background:var(--surface-2);border-color:var(--faint);color:var(--ink-2)}
-.milestone-icon{font-size:18px;color:var(--warn)}
 .moment-timeline{display:flex;flex-direction:column;gap:12px;margin:16px 0}
 .moment-card{background:var(--panel);border:1px solid var(--edge);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
 .moment-card-meta{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim)}
@@ -2471,20 +2456,9 @@ body[data-page="chat"] main{padding:0}
 .model-picker input[data-model-custom]{font-size:13.5px}
 .model-picker small{line-height:1.4}
 
-/* ======================================================= how things are now
-   One card where there were two, so the stage, the feelings and what governs
-   them read as one answer rather than three restatements of it. */
-.rel-now .section-heading h2{margin:0}
-.rel-ladder{margin:18px 0 20px}
-.rel-ladder-track{height:8px;background:var(--surface-3);border-radius:5px;overflow:hidden}
-.rel-ladder-fill{height:100%;background:var(--accent);border-radius:5px;transition:width .3s ease}
-.rel-ladder-labels{display:flex;justify-content:space-between;gap:6px;margin-top:8px;
-  font-size:11px;letter-spacing:.04em;color:var(--faint)}
-.rel-ladder-labels .is-reached{color:var(--accent-ink);font-weight:650}
+/* Boundary states on the Us hero: real states, so they stay in the open. */
 .rel-standing{margin:16px 0}
 .rel-standing.is-firm{border-color:var(--bad-line);color:var(--bad)}
-.rel-explainer{margin:18px 0 0;padding-top:14px;border-top:1px solid var(--edge)}
-.rel-explainer p{margin:8px 0 0}
 
 /* The five feeling meters, one renderer for every surface that shows them. */
 .meter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:18px 0 0}
@@ -2585,12 +2559,11 @@ body[data-page="chat"] main{padding:0}
 .fact-list dt{font-size:12px;letter-spacing:0;text-transform:none;flex:1}
 .fact-list dd{font-size:13px;text-align:right;margin:0;max-width:65%;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
 .stat-strip button,.stat-strip .stat-item{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:10px 14px;min-width:0;text-align:left;background:var(--panel)}
-.stat-strip,.stat-strip.memory-kpi-strip{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0;margin:12px 0}
+.stat-strip{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0;margin:12px 0}
 .stat-strip .stat-item+ .stat-item{border-left:1px solid var(--edge)}
 .stat-strip strong{font-size:20px;margin:0;line-height:1.2}
 .stat-strip span{font-size:12px;margin:0}
 .stat-strip small{font-size:11px;flex-basis:100%;margin:0}
-.memory-kpi-card{padding:9px 12px;gap:8px}.memory-kpi-info{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.memory-kpi-info strong{font-size:17px}
 .model-tier{margin:10px 0}.model-tier>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0}.model-tier>summary:before{content:'▸'}.model-tier[open]>summary:before{content:'▾'}.model-tier>summary span{margin-left:auto;font-size:12px;overflow-wrap:anywhere}
 .model-picker [data-model-note]:empty{display:none}
 @media(max-width:600px){.fact-list{grid-template-columns:1fr}.model-tier>summary span{max-width:60%}}
@@ -2783,9 +2756,7 @@ body[data-page="chat"] main{padding:0}
   .vault-recent-filters select{flex:1 1 auto;width:100%}
 }
 
-/* Memories (#knows). The page used to be four cards of the same shape; the sections differ now,
-   so the layout says which is which: a wide grid for facts, a pair of columns for the two
-   short ledgers, one full-width list for what is still open. */
+/* Memory cards and filters: the full memory library on Us, and the timeline's search. */
 .memory-card-header{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .memory-filters{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:14px 0 18px}
 .memory-filters input[type=search]{flex:1 1 280px;min-width:0}
@@ -2793,16 +2764,8 @@ body[data-page="chat"] main{padding:0}
 .memory-filters .inline-label{flex:none;margin:0;color:var(--dim);font-size:14px;white-space:nowrap}
 .memory-filters select{flex:0 0 auto;width:auto;min-width:190px}
 .memory-filters button{flex:none}
-.memory-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:20px;align-items:start}
-.memory-columns .card{margin-bottom:20px}
-.memory-list{display:flex;flex-direction:column;gap:10px;max-height:560px;overflow-y:auto;padding-right:4px}
-.memory-list .memory-card{gap:0}
-.memory-card.pref-like{border-left:3px solid var(--accent)}
-.memory-card.pref-dislike{border-left:3px solid var(--bad-line)}
-.memory-card.pref-curious,.memory-card.pref-mixed{border-left:3px solid var(--edge-2)}
 @media(max-width:700px){
   .memory-filters select,.memory-filters button{flex:1 1 auto;width:100%}
-  .memory-list{max-height:none}
 }
 
 /* Timeline (#timeline) as days rather than rows. */
@@ -3032,4 +2995,124 @@ body[data-page="chat"] main{padding:0}
   .tl-scene::before{left:56px}
   .tl-scene>time{font-size:11.5px}
   .tl-shot{width:78px;height:98px}
+}
+
+/* Us / shared relationship story
+   One surface where Together and Memories used to be. Deliberately less boxed
+   than the rest of the workspace: one hero surface, then an open feed, and rows
+   separated by whitespace rather than borders. The Timeline's day rail is the
+   model for the story, drawn lighter, because this answers a different question. */
+.us-page{max-width:880px}
+.us-head{margin:0 0 20px}
+.us-head .intro{margin:0}
+.us-hero{background:var(--panel);border:1px solid var(--edge);border-radius:18px;padding:28px 30px;margin:0 0 8px;
+  background-image:radial-gradient(120% 90% at 0% 0%,color-mix(in srgb,var(--accent) 9%,transparent),transparent 60%)}
+.us-hero-identity{margin:0;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);font-weight:600}
+.us-hero-identity span:nth-child(2){color:var(--accent);margin:0 2px}
+.us-connection{margin:14px 0 0}
+.us-stage{font:600 34px/1.15 Georgia,serif;letter-spacing:-.5px;margin:10px 0 6px;color:var(--ink)}
+.us-state-summary{font-size:17px;line-height:1.55;color:var(--ink-2);margin:0 0 16px;max-width:60ch}
+.us-state-chips{list-style:none;display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px;padding:0}
+.us-state-chip{margin:0;padding:6px 12px;border-radius:999px;font-size:13px;background:var(--surface-2);border:1px solid var(--edge);color:var(--ink-2)}
+.us-state-chip.chip-hurt{border-color:var(--bad-line)}
+.us-state-chip.chip-irritation{border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+.us-mood{margin:0 0 6px}
+.us-stage-track{list-style:none;display:flex;margin:22px 0 0;padding:0;gap:0}
+.us-stage-track li{flex:1;margin:0;position:relative;padding-top:16px;font-size:11.5px;color:var(--faint);text-align:center;min-width:0}
+.us-stage-track li::before{content:'';position:absolute;top:5px;left:0;right:0;height:2px;background:var(--edge-2)}
+.us-stage-track li:first-child::before{left:50%}.us-stage-track li:last-child::before{right:50%}
+.us-stage-track li::after{content:'';position:absolute;top:1px;left:calc(50% - 5px);width:10px;height:10px;border-radius:50%;background:var(--panel);border:2px solid var(--edge-2);box-sizing:border-box}
+.us-stage-track li.is-reached::before,.us-stage-track li.is-current::before{background:var(--accent-line)}
+.us-stage-track li.is-reached::after{background:var(--accent-line);border-color:var(--accent-line)}
+.us-stage-track li.is-current{color:var(--accent-ink);font-weight:650}
+.us-stage-track li.is-current::after{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.us-stage-track li.is-current::before{background:linear-gradient(90deg,var(--accent-line) 50%,var(--edge-2) 50%)}
+.us-stage-track li.is-current:first-child::before{background:var(--edge-2)}
+.us-stage-track li.is-current:last-child::before{background:var(--accent-line)}
+.us-standing{margin:18px 0 0}
+
+.us-section{margin:40px 0 0}
+.us-section-heading{margin:0 0 14px}
+.us-section-heading h2{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:700;margin:0}
+.us-section-heading p{margin:6px 0 0;font-size:14px}
+.us-empty{margin:4px 0;font-size:14.5px}
+.us-page .link-button{margin-top:10px;font-weight:600}
+.us-page button:focus-visible,.us-page summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+
+/* Recently: an open rail, days as quiet headings, markers on the line. */
+.us-story-day{position:relative;padding-left:0}
+.us-story-date{font-size:14px;font-weight:650;color:var(--ink-2);margin:18px 0 8px}
+.us-story-day:first-child .us-story-date{margin-top:0}
+.us-story-events{list-style:none;margin:0;padding:0 0 0 14px;border-left:2px solid var(--edge)}
+.us-story-event{display:grid;grid-template-columns:30px minmax(0,1fr);gap:10px;margin:0 0 0 -15px;padding:8px 0 14px}
+.us-story-marker{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:13px;background:var(--panel);border:1px solid var(--edge-2);color:var(--accent)}
+.us-story-event.is-rupture .us-story-marker{border-color:var(--bad-line)}
+.us-story-event.is-connection .us-story-marker,.us-story-event.is-repair .us-story-marker{color:#f43f5e}
+.us-story-content{min-width:0;padding-top:3px}
+.us-story-title{margin:0;font-weight:600;font-size:14.5px;color:var(--ink)}
+.us-story-text{margin:4px 0 0;color:var(--ink-2);line-height:1.55;overflow-wrap:anywhere}
+.us-story-evidence,.us-evidence{margin:6px 0 0}
+.us-story-evidence summary,.us-evidence summary{font-size:12.5px;color:var(--dim);display:inline-block}
+.us-story-evidence p,.us-evidence p{margin:6px 0 0;font-size:13px;color:var(--dim);border-left:2px solid var(--edge-2);padding-left:10px;overflow-wrap:anywhere}
+.us-page [data-us-action="story-more"]{margin:6px 0 0 14px}
+
+/* Things that became ours: the only tiles on the page. */
+.us-keepsakes{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.us-keepsake{background:var(--surface-2);border:1px solid var(--edge);border-radius:14px;padding:16px 18px;min-width:0}
+.us-keepsake p{margin:0}
+.us-keepsake-kind{font-size:12px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:var(--accent-ink)}
+.us-keepsake-text{margin:8px 0 10px!important;font:15.5px/1.5 Georgia,serif;color:var(--ink);overflow-wrap:anywhere}
+
+/* Remembered about you: rows that open in place. */
+.us-memory-preview{display:flex;flex-direction:column}
+.us-memory-row{margin:0;border-bottom:1px solid var(--edge)}
+.us-memory-row:first-child{border-top:1px solid var(--edge)}
+.us-memory-row>summary{display:flex;align-items:baseline;gap:12px;padding:13px 4px;list-style:none;font-size:15px;color:var(--ink)}
+.us-memory-row>summary::-webkit-details-marker{display:none}
+.us-memory-row>summary::after{content:'›';margin-left:auto;color:var(--faint);transition:transform .15s}
+.us-memory-row[open]>summary::after{transform:rotate(90deg)}
+.us-memory-icon{flex:none;width:22px;text-align:center;color:var(--accent)}
+.us-memory-text{min-width:0;overflow-wrap:anywhere}
+.us-memory-detail{padding:0 4px 14px 38px}
+.us-memory-meta{margin:0 0 4px;font-size:14px}
+.us-memory-detail .small-btn{margin-top:10px}
+
+/* Things they've discovered: soft rows, lightly marked by feeling. */
+.us-discoveries,.us-open-threads,.us-standing-list{list-style:none;margin:0;padding:0}
+.us-discovery{display:grid;grid-template-columns:30px minmax(0,1fr);gap:10px;margin:0;padding:10px 0}
+.us-discovery p{margin:0}
+.us-discovery .dim{margin-top:2px}
+.us-discovery-subject{font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.us-discovery-mark{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--surface-2);color:var(--dim);font-size:14px}
+.us-discovery.pref-like .us-discovery-mark{color:var(--accent)}
+.us-discovery.pref-dislike .us-discovery-mark{color:var(--faint)}
+
+/* Still between you: conversation openers, not tasks. */
+.us-thread{margin:0;padding:12px 0;border-bottom:1px solid var(--edge)}
+.us-thread:last-child{border-bottom:0}
+.us-thread p{margin:0}
+.us-thread-kind{font-size:12px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:var(--dim)}
+.us-thread-text{margin:4px 0 2px!important;font-size:15px;color:var(--ink);overflow-wrap:anywhere}
+.us-thread .link-button{margin-top:6px}
+
+/* The details, kept: everything exact, one step further in. */
+.us-advanced{margin-top:44px}
+.us-standing-line{margin:0 0 6px}
+.us-standing-line .link-button{margin:0 0 0 6px;padding:0}
+.us-standing-list{margin:6px 0 14px}
+.us-standing-list li{margin:0;padding:10px 0;border-bottom:1px solid var(--edge)}
+.us-standing-list li p{margin:0}
+.us-details{margin:10px 0 0;border-top:1px solid var(--edge);padding-top:14px}
+.us-details>summary{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:700}
+.us-details[open]>summary{margin-bottom:14px}
+
+@media(max-width:700px){
+  .us-hero{padding:22px 18px;border-radius:14px}
+  .us-stage{font-size:28px}
+  .us-state-summary{font-size:16px}
+  .us-stage-track li span{display:none}
+  .us-stage-track li.is-current span{display:inline;white-space:nowrap}
+  .us-section{margin-top:32px}
+  .us-keepsakes{grid-template-columns:1fr}
+  .us-memory-detail{padding-left:4px}
 }

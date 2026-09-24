@@ -1,10 +1,10 @@
-Tamanitomo 3.0.20: a calendar, a day and a timeline that are easy to read.
+Tamanitomo 3.0.21: Together and Memories become one page, Us.
 
-- **Their day, at a glance.** Home and Plans & calendar show your companion's day as a timeline: what they are doing now and how far along, what is done, and what comes next.
-- **A cleaner calendar.** A compact month beside the day you pick, one place to add to your list, and your whole list below as an agenda.
-- **A timeline that reads like a story.** Each scene is one card with its photos, so a night's sleep is one entry rather than dozens.
-- **Clothes shopping.** Every two weeks your companion is offered a shopping trip, and anything they buy joins their wardrobe.
-- **No more photos while asleep.** With a local model, bedtime now properly starts the night, so the photo timeline rests until morning.
+- **Us.** How things are between you, what has happened, what is remembered, and what is still open, on one page that reads like a shared story rather than a dashboard.
+- **How it feels, in words.** The top of the page says how things feel right now. Exact scores and meters are still there, one tap further in.
+- **Only what really happened.** Shared moments appear as keepsakes once they happen; there is no checklist of ones still to earn.
+- **Memories you can check.** A few things remembered about you, each with why it is remembered and a way to mark it wrong. Search and filter every memory from "View all memories".
+- **Talk about this.** Open questions and loose threads can start a conversation: Chat opens with a draft you can edit, and nothing is sent until you send it.
 
 ### Install
 

@@ -1,3 +1,12 @@
+## 3.0.21 — Us (2026-09-23)
+
+- Merge the Together and Memories pages into one page, Us (internal route `relationship`). Memories is no longer a destination; `knows` in a link, a `#knows` URL or a saved bottom-bar pin resolves to Us before the route is committed, and navigation search for memories, together, feelings or milestones finds it.
+- Lead with a hero that says how things feel: the stage name, a sentence chosen by threshold from the existing meters (no model call), and chips for the notable meters only. The progression track has no percentage. Friendship-established, stepped-back and boundary-violation notices stay on the hero. Non-romantic connections show their own stage and no romantic stages.
+- Make shared history the body: a Recently feed of shared moments and connection, rupture and repair experiences (corrected experiences and corrections excluded; evidence folded away), then "Things that became ours" with only moments that happened. The earned/unearned milestone grid is removed.
+- Show five memories across categories, each opening to its category, why it is remembered, and Mark incorrect (still a superseding correction). The full library keeps search, category filter, paging and correction, in a dialog. The KPI strip is removed, and standing instructions are listed apart from memories.
+- Give the companion's own preferences their own read-only section, and combine open questions with carried threads under "Still between you", each with Talk about this: Chat opens with an editable draft (an existing unsent draft is kept) and nothing is sent.
+- Keep the exact score, the five meters, pace, temperament, mood, violation count and the paged emotional history under "How things work between you". The page lives in `static/us.js`; `tests/test_us_ui.js` covers it.
+
 ## 3.0.20 — A day you can read at a glance (2026-09-23)
 
 - Redraw the companion's day as one component used on Home and on Plans & calendar: a time rail with a card per block, its kind (routine, her idea, seeing someone, promised, weekly), start, end and length, finished blocks dimmed, the current one highlighted with its progress, and a now-line with what she is doing when she is between blocks. Her own intention for the day leads it. Routine "settings" were guidance to the model ("choose a route that fits") and are no longer shown as places.

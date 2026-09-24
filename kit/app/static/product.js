@@ -8,7 +8,7 @@ const tabLabel=id=>({chat:'Chat',photos:'Photos',journals:'Journal',now:'Home'}[
    directory. Anything added here appears in all three. */
 const primaryDestinations=['now','chat','photos','journals'];
 const navGroups=[
-  ['Life & memories', ['identity','timeline','relationship','knows','loops','vault']],
+  ['Life & memories', ['identity','timeline','relationship','loops','vault']],
   ['Studios',         ['image-studio','voice','local-models']],
   ['Setup & system',  ['settings','roster']]
 ];
@@ -16,8 +16,8 @@ const navGroups=[
 const navBlurb={
   now:'Today at a glance',chat:'Talk with your companion',timeline:'Their day, hour by hour',
   photos:'Every picture and album',journals:'The reflections they write',
-  creations:'Files and things they have made',relationship:'Feelings, milestones and repair',
-  loops:'Tasks, plans and open threads',knows:'What they remember about you',
+  creations:'Files and things they have made',relationship:'Your shared history, memories and connection',
+  loops:'Tasks, plans and open threads',
   vault:'Shared notes and documents',identity:'Who they are — persona and soul',
   settings:'Companion, app and Hermes — all in one place',roster:'All of your companions',
   'image-studio':'Compose and generate images',voice:'Voice, speech and cloning',
@@ -25,7 +25,7 @@ const navBlurb={
 };
 /* The bottom bar has room for one word. */
 const navShort={now:'Home',chat:'Chat',timeline:'Timeline',photos:'Photos',journals:'Journal',
-  creations:'Files',relationship:'Together',loops:'Tasks',knows:'Memory',vault:'Vault',
+  creations:'Files',relationship:'Us',loops:'Tasks',vault:'Vault',
   identity:'Identity',settings:'Settings',roster:'Companions',
   'image-studio':'Images',voice:'Voice','local-models':'Models',more:'More'};
 const shortLabel=id=>navShort[id]||tabLabel(id);
@@ -282,7 +282,8 @@ window.openFinishCustomizingDialog=openFinishCustomizingDialog;
 const NAV_FREE_SLOTS=4;
 const navPins=()=>{
   const saved=(window.Appearance&&window.Appearance.state.nav_pins)||[];
-  const chosen=saved.filter(id=>id!=='now'&&id!=='more'&&navDestinations.includes(id));
+  // Memories folded into Us: a saved Memories pin becomes Us rather than vanishing.
+  const chosen=[...new Set(saved.map(id=>TAB_ALIASES[id]||id))].filter(id=>id!=='now'&&id!=='more'&&navDestinations.includes(id));
   // An older setting counted Home as one of the four. Dropping it here just
   // frees the slot it used to occupy.
   return chosen.slice(0,NAV_FREE_SLOTS);
@@ -403,7 +404,7 @@ if($('companion-switch-trigger'))$('companion-switch-trigger').onclick=openCompa
 $('close-dialog').onclick=async()=>{if(await confirmEditorLeave('dialog'))$('product-dialog').close();};
 $('product-dialog').addEventListener('cancel',async e=>{e.preventDefault();if(await confirmEditorLeave('dialog'))$('product-dialog').close();});
 function dialog(title,html){$('dialog-title').textContent=title;$('dialog-body').innerHTML=html;if(!$('product-dialog').open)$('product-dialog').showModal();}
-$('open-search').onclick=async()=>{if(!await confirmEditorLeave('dialog'))return;dialog('Go to page',`<input id="command-search" aria-label="Find a page" placeholder="Photos, providers, memories…"><div id="command-results" class="search-results"></div>`);const update=()=>{$('command-results').innerHTML=TABS.filter(t=>t[0]!=='more').filter(t=>(t[1]+' '+t[0]+' '+({knows:'facts memories',vault:'files notes',settings:'preferences contact quiet hours relationship awareness sensors network pin appearance updates diagnostics hermes providers models gateway credentials cron jobs schedules comfyui voice','image-studio':'images workflows','voice':'audio cloning speech','local-models':'local models llama gguf hardware vulkan server'}[t[0]]||'')).toLowerCase().includes($('command-search').value.toLowerCase())).map(([id,label])=>`<button class="quiet" data-go="${id}">${icon(id)}${label}</button>`).join('');for(const b of $('command-results').querySelectorAll('button'))b.onclick=()=>{$('product-dialog').close();showTab(b.dataset.go);};};$('command-search').oninput=update;update();$('command-search').focus();};
+$('open-search').onclick=async()=>{if(!await confirmEditorLeave('dialog'))return;dialog('Go to page',`<input id="command-search" aria-label="Find a page" placeholder="Photos, providers, memories…"><div id="command-results" class="search-results"></div>`);const update=()=>{$('command-results').innerHTML=TABS.filter(t=>t[0]!=='more').filter(t=>(t[1]+' '+t[0]+' '+({relationship:'us together memory memories remembered facts relationship feelings milestones moments story',vault:'files notes',settings:'preferences contact quiet hours relationship awareness sensors network pin appearance updates diagnostics hermes providers models gateway credentials cron jobs schedules comfyui voice','image-studio':'images workflows','voice':'audio cloning speech','local-models':'local models llama gguf hardware vulkan server'}[t[0]]||'')).toLowerCase().includes($('command-search').value.toLowerCase())).map(([id,label])=>`<button class="quiet" data-go="${id}">${icon(id)}${label}</button>`).join('');for(const b of $('command-results').querySelectorAll('button'))b.onclick=()=>{$('product-dialog').close();showTab(b.dataset.go);};};$('command-search').oninput=update;update();$('command-search').focus();};
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();$('open-search').click();}});
 let profileTimezone;
 const stamp=(value,opts={})=>{if(!value)return 'Not recorded';const d=new Date(value);return Number.isNaN(d.getTime())?value:new Intl.DateTimeFormat(undefined,{timeZone:profileTimezone,month:'short',day:'numeric',...opts}).format(d);};
@@ -795,7 +796,7 @@ function wireCalendarComponent(root,events,agentName,refreshFn,prefix='cal',now=
 
 function renderHeroMetersContent(emotions,bars){
   const meters=emotions?.state?.meters||bars?.feelings?.meters||{};
-  // Home is a glance and Together is the page, so they keep different
+  // Home is a glance and Us is the page, so they keep different
   // treatments — but they must not describe the same meter in different words.
   // The labels and the explanations come from one place; the colour, the glow
   // and the resting value are the hero's own.
@@ -2245,96 +2246,6 @@ workspaceHandlers.timeline=async()=>{
   $('timeline-more-btn').onclick=()=>{shownDays+=DAYS;filter();};
   filter();
 };
-workspaceHandlers.knows=async()=>{
-  const [d,o]=await Promise.all([api('/ledgers'),api('/overview')]);if(current!=='knows')return;
-  const facts=d.facts||[],standing=d.standing||[],prefs=(d.preferences||[]).slice().reverse();
-  /* Two lists were asking the same question in two places: the ledger's open questions and the
-     overview's carried threads. They are one section now, tagged by where they came from. */
-  const open=[...(d.questions||[]).map(q=>({kind:'question',text:q.text,detail:''})),
-              ...(o.loops||[]).map(l=>({kind:'thread',text:l.title,detail:l.detail||l.gentle_use||''}))];
-  const categories=['all',...new Set(facts.map(f=>f.category).filter(Boolean))];
-  const PAGE=24;let shown=PAGE;
-
-  $('knows').innerHTML=heading('Memories','What she has learned about you, the rules you have set for her, what she has noticed she likes, and what she is still carrying.')+
-  `<div class="stat-strip memory-kpi-strip">
-    <div class="stat-item"><span>About you</span><strong>${facts.length}</strong></div>
-    <div class="stat-item"><span>Rules you set</span><strong>${standing.length}</strong></div>
-    <div class="stat-item"><span>Her own tastes</span><strong>${prefs.length}</strong></div>
-    <div class="stat-item"><span>Still open</span><strong>${open.length}</strong></div>
-  </div>
-  <div class="card">
-    <div class="section-heading" style="margin:0 0 4px">
-      <h2>About you</h2>
-      <span class="dim small" id="memory-fact-count"></span>
-    </div>
-    <div class="memory-filters">
-      <input type="search" id="memory-search" placeholder="Search statements and evidence…" aria-label="Search what she knows">
-      <select id="memory-category" aria-label="Category">${categories.map(c=>`<option value="${esc(c)}">${c==='all'?'All categories':esc(c[0].toUpperCase()+c.slice(1))}</option>`).join('')}</select>
-      <button class="quiet" id="memory-clear">Clear</button>
-    </div>
-    <div class="memory-grid" id="memory-facts-grid"></div>
-    <div class="vault-recent-more" id="memory-more" hidden><button class="quiet" id="memory-more-btn">Show more</button></div>
-    <p class="dim small" style="margin-top:14px">Marking something incorrect records a superseding correction. The original evidence is kept.</p>
-  </div>
-  <div class="memory-columns">
-    <div class="card">
-      <h2>Rules you set (${standing.length})</h2>
-      <div class="memory-list">
-        ${standing.length?standing.map(r=>`<div class="memory-card"><p class="memory-statement" style="margin:0 0 6px">${esc(r.instruction)}</p><p class="memory-evidence" style="margin:0">${esc(r.evidence)}</p></div>`).join(''):'<p class="dim small">Nothing standing yet. Tell her how you want something done and it lands here.</p>'}
-      </div>
-    </div>
-    <div class="card">
-      <h2>Her own tastes (${prefs.length})</h2>
-      <p class="dim small" style="margin:-10px 0 14px">Things she noticed about herself, not about you. She writes these; you cannot.</p>
-      <div class="memory-list">
-        ${prefs.length?prefs.map(r=>`<div class="memory-card pref-${esc(r.valence||'mixed')}"><div class="memory-card-header"><span class="pill">${esc(r.valence||'noted')}</span><span class="dim small">${r.recorded_at?stamp(r.recorded_at,{month:'short',day:'numeric'}):''}</span></div><p class="memory-statement" style="margin:6px 0 4px">${esc(r.subject||'')}</p><p class="memory-evidence" style="margin:0">${esc(r.text||'')}</p></div>`).join(''):'<p class="dim small">She has not written down any preferences of her own yet.</p>'}
-      </div>
-    </div>
-  </div>
-  <div class="card">
-    <h2>Still open (${open.length})</h2>
-    <p class="dim small" style="margin:-10px 0 14px">Questions she has not asked you yet, and threads she is carrying between sessions.</p>
-    <div class="memory-list">
-      ${open.length?open.map(x=>`<div class="memory-card"><div class="memory-card-header"><span class="pill">${x.kind==='question'?'Wants to ask':'Carrying'}</span></div><p class="memory-statement" style="margin:6px 0 ${x.detail?'4px':'0'}">${esc(x.text)}</p>${x.detail?`<p class="memory-evidence" style="margin:0">${esc(x.detail)}</p>`:''}</div>`).join(''):'<p class="dim small">Nothing open. She is not sitting on a question.</p>'}
-    </div>
-  </div>`;
-
-  const filterFacts=()=>{
-    const q=($('memory-search')?.value||'').toLowerCase();
-    const cat=$('memory-category')?.value||'all';
-    const matches=facts.filter(f=>(cat==='all'||f.category===cat)&&
-      (!q||(f.statement+' '+(f.evidence||'')+' '+(f.category||'')).toLowerCase().includes(q)));
-    const page=matches.slice(0,shown);
-    $('memory-fact-count').textContent=matches.length===facts.length
-      ?`${facts.length} recorded`:`${matches.length} of ${facts.length}`;
-    const grid=$('memory-facts-grid');
-    grid.innerHTML=page.length?page.map(f=>`
-      <div class="memory-card">
-        <div class="memory-card-header">
-          <span class="pill">${esc(f.category||'fact')}</span>
-          <button class="quiet small-btn" data-forget="${esc(f.id)}" title="Mark this as incorrect">Not true</button>
-        </div>
-        <div class="memory-statement">${esc(f.statement)}</div>
-        ${f.evidence?`<div class="memory-evidence">“${esc(f.evidence)}”</div>`:''}
-      </div>`).join(''):'<div class="dim small" style="grid-column:1/-1;padding:24px;text-align:center">Nothing matches this filter.</div>';
-    $('memory-more').hidden=matches.length<=page.length;
-    for(const b of grid.querySelectorAll('[data-forget]')){
-      b.onclick=async()=>{
-        b.disabled=true;
-        await api(`/facts/${b.dataset.forget}/forget`,{method:'POST'});
-        notice('Marked incorrect.');
-        await workspaceHandlers.knows();
-      };
-    }
-  };
-  const reset=()=>{shown=PAGE;filterFacts();};
-  $('memory-search').oninput=reset;
-  $('memory-category').onchange=reset;
-  $('memory-clear').onclick=()=>{$('memory-search').value='';$('memory-category').value='all';reset();};
-  $('memory-more-btn').onclick=()=>{shown+=PAGE;filterFacts();};
-  filterFacts();
-};
-
 workspaceHandlers.loops=async()=>{
   const [d,m]=await Promise.all([api('/overview'),api('/missions')]);if(current!=='loops')return;
   profileTimezone=d.timezone||profileTimezone;scheduleCache={};
@@ -2363,7 +2274,7 @@ workspaceHandlers.loops=async()=>{
     </li>`;
 
   $('loops').innerHTML=heading('Plans & calendar',
-    'Her days, your to-do list, and the things you have told her about. What she is carrying lives in Memories.')+`
+    'Her days, your to-do list, and the things you have told her about. What she is carrying lives in Us.')+`
   ${buildCalendarHtml(d.agent, missions, d.commitments, 'cal')}
   <section class="agenda card">
     <div class="agenda-head">

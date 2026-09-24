@@ -74,7 +74,7 @@ if [ -z "$changed" ]; then say "already current"; else printf '%s\n' "$changed" 
 # it sent. This is the check whose absence caused the problem.
 echo "Verifying:"
 fail=0
-for f in index.html settings.js product.js product.css workspace.js studios.js; do
+for f in index.html settings.js product.js product.css workspace.js us.js studios.js; do
   [ -f "$LOCAL_DIR/$f" ] || continue
   local_sum="$(sha256sum "$LOCAL_DIR/$f" | cut -d' ' -f1)"
   remote_sum="$(ssh "$REMOTE" "sha256sum '$REMOTE_DIR/$f' 2>/dev/null | cut -d' ' -f1" || true)"

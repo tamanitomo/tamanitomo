@@ -124,7 +124,6 @@
   <section id="journals" hidden></section>
   <section id="creations" hidden></section>
   <section id="loops" hidden></section>
-  <section id="knows" hidden></section>
   <section id="settings" hidden></section>
   <section id="identity" hidden></section>
   <section id="more" hidden></section>
@@ -132,7 +131,7 @@
 <nav id="tabbar" class="tabbar" aria-label="Primary"></nav>
 
 <script>
-const TABS=[['now','Home'],['chat','Conversation'],['timeline','Timeline'],['photos','Photos & albums'],['journals','Journal'],['relationship','Together'],['loops','Plans & calendar'],['knows','Memories'],['vault','Vault'],['identity','Identity'],['settings','Settings'],['roster','Companions'],['more','More']];
+const TABS=[['now','Home'],['chat','Conversation'],['timeline','Timeline'],['photos','Photos & albums'],['journals','Journal'],['relationship','Us'],['loops','Plans & calendar'],['vault','Vault'],['identity','Identity'],['settings','Settings'],['roster','Companions'],['more','More']];
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const params=new URLSearchParams(location.search);
@@ -269,7 +268,11 @@ function initPinModal(){
 }
 document.addEventListener('DOMContentLoaded',()=>initPinModal());
 let current='now';
+/* Retired destinations and where they live now. Resolved before anything is
+   committed, so an old link or a saved pin lands on the page, never on a blank. */
+const TAB_ALIASES={knows:'relationship'};
 async function showTab(name){
+  name=TAB_ALIASES[name]||name;
   if(typeof confirmEditorLeave==='function'&&!await confirmEditorLeave(current))return;
   if(name!=='chat'&&window.stopBrowserVoice)stopBrowserVoice();
   current=name;history.replaceState(null,'',location.pathname+location.search+'#'+name);
@@ -299,7 +302,6 @@ async function render(name){
     if(name==='now')return await renderNow();
     if(name==='timeline')return await renderTimeline();
     if(name==='loops')return await renderLoops();
-    if(name==='knows')return await renderKnows();
     if(name==='identity')return await renderIdentity();
   }catch(e){$(name).innerHTML=`<div class="card bad">Could not load this: ${esc(e.message)}</div>`;}
 }
@@ -410,26 +412,6 @@ async function renderLoops(){
     renderLoops();};
   for(const b of $('loops').querySelectorAll('[data-drop]'))
     b.onclick=async()=>{await api(`/missions/${b.dataset.drop}/drop`,{method:'POST'});renderLoops();};
-}
-
-async function renderKnows(){
-  const d=await api('/ledgers');
-  $('knows').innerHTML=`
-  <div class="card"><h2>Standing Guidelines (${d.standing.length})</h2>
-    <ul>${d.standing.map(r=>`<li>${esc(r.instruction)}<br><span class="dim">Evidence: ${esc(r.evidence)}</span></li>`).join('')||'<li class="dim">None recorded.</li>'}</ul></div>
-  <div class="card"><h2>Personal Facts (${d.facts.length})</h2>
-    <table><tr><th>Fact</th><th>Evidence</th><th></th></tr>
-    ${d.facts.map(f=>`<tr><td>${esc(f.statement)}<br><span class="pill">${esc(f.category)}</span></td>
-      <td class="dim">${esc(f.evidence)}</td>
-      <td><button class="quiet" data-forget="${f.id}">Mark incorrect</button></td></tr>`).join('')
-      ||'<tr><td class="dim" colspan="3">No facts recorded yet.</td></tr>'}</table>
-    <p class="dim">Marking a fact incorrect records a superseding correction without deleting original evidence.</p></div>
-  <div class="card"><h2>Shared History & Milestones (${d.relationship.length})</h2>
-    <ul>${d.relationship.map(r=>`<li><span class="pill">${esc(r.moment)}</span> ${esc(r.text)}</li>`).join('')||'<li class="dim">No milestones recorded yet.</li>'}</ul></div>
-  <div class="card"><h2>Open Questions</h2>
-    <ul>${d.questions.map(q=>`<li>${esc(q.text)}</li>`).join('')||'<li class="dim">No open questions.</li>'}</ul></div>`;
-  for(const b of $('knows').querySelectorAll('[data-forget]'))
-    b.onclick=async()=>{await api(`/facts/${b.dataset.forget}/forget`,{method:'POST'});renderKnows();};
 }
 
 async function uploadPortrait(file){
@@ -821,6 +803,7 @@ setInterval(()=>{if(current==='now'&&!$('product-dialog').open)render('now').cat
 <script src="/static/editing.js"></script>
 <script src="/static/feelings.js"></script>
 <script src="/static/workspace.js"></script>
+<script src="/static/us.js"></script>
 <script src="/static/product.js"></script>
 <script src="/static/onboarding.js"></script>
 <script src="/static/studios.js"></script>

@@ -191,7 +191,7 @@ async function boot(){
   $('who').textContent=selected?.name||'Welcome home';$('sub').textContent=selected?.installed?'A continuing life, together.':'Your companion workspace';
   // Adopt this companion's saved palette and pinned bar before the first page draws.
   if(window.Appearance)await window.Appearance.load();
-  let initial=location.hash.slice(1);
+  let initial=location.hash.slice(1);initial=TAB_ALIASES[initial]||initial;
   if(!TABS.some(([id])=>id===initial))initial=selected?.installed?'now':'roster';
   showTab(initial);
   const pending=sessionStorage.getItem(operationKey());
@@ -505,131 +505,6 @@ function chatMessagesHtml(messages){
 
 function inlineMedia(item){const url=mediaUrl(item.url);const p=item.path?` data-photo-path="${esc(item.path)}"`:'';const u=` data-photo-url="${esc(item.url)}"`;if(item.kind==='image'&&item.blur)return `<details class="media-reveal"><summary><img class="chat-media concealed-media" src="${url}" alt="Concealed image"><span>Reveal sensitive or unreviewed image</span></summary><div class="chat-media-card" onclick="openChatPhoto(this.querySelector('img'))"${p}${u}><img class="chat-media" src="${url}" alt="${esc(item.title)}" loading="lazy"></div></details>`;return item.kind==='image'?`<div class="chat-media-card" onclick="openChatPhoto(this.querySelector('img'))"${p}${u}><img class="chat-media" src="${url}" alt="${esc(item.title)}" loading="lazy"><div class="chat-media-bar"><span class="chat-media-caption">${esc(item.title||'Photo')}</span><button type="button" class="chat-media-zoom">Zoom 🔍</button></div></div>`:item.kind==='audio'?`<div class="chat-audio-card"><audio class="chat-media" controls preload="metadata" src="${url}"></audio><div class="chat-audio-caption">🎵 ${esc(item.title||'Voice note')}</div></div>`:item.kind==='video'?`<video class="chat-media" controls preload="none" src="${url}"></video>`:'';}
 function openChatPhoto(imgEl){if(!imgEl)return;const card=imgEl.closest('.chat-media-card');const path=card?.dataset.photoPath||'';const url=card?.dataset.photoUrl||imgEl.src;const title=imgEl.alt||'Photo';if(typeof openPhotoViewer==='function'){openPhotoViewer({url,path,title,at:new Date().toISOString()});}else{window.open(url,'_blank');}}
-/* How things are between you, in one card.
-
-   This was two: an "Emotional Atmosphere" card with five meters and a mood, and
-   a "Relationship & Connection Dynamic" card with the stage ladder — both
-   answering the same question, one above the other, with the stage name printed
-   twice inside the second. The meters live on Home as well, so the page was the
-   third place to read the same numbers. One card now: where you are, how it
-   feels, and what governs it. */
-function relationshipNow(bars,intimacy,companionName){
-  const feelings=bars&&bars.feelings;
-  if(!feelings&&!intimacy)return '';
-  if(intimacy?.romantic_progression===false){
-    return `<div class="card rel-now"><h2>${esc(intimacy.connection_label||'Familiarity')}</h2>
-      <p class="dim">Shared experience builds familiarity and trust. This connection has no romantic milestones to complete.</p>
-      ${feelings?.mood?`<p>${esc(feelings.mood)}</p>`:''}
-      ${feelings?feelingMeters(feelings.meters):''}</div>`;
-  }
-  const stages=['Just Met','Friends','Chemistry','Intimacy','Bonded'];
-  const stage=intimacy?(intimacy.stage||0):0;
-  const score=intimacy?(intimacy.score||0):0;
-  const paceLabel=intimacy?({slow:'Gradual',natural:'Natural',quick:'Quick'}[intimacy.pace]||intimacy.pace):'';
-
-  // Real state, kept. Boundaries that have actually been crossed are not a detail.
-  const standing=intimacy&&intimacy.permanent_friend?
-    `<div class="notice-strip rel-standing is-firm"><p><strong>Friendship established.</strong>
-      After repeated boundary violations, ${esc(companionName)} has stepped back to friendship. This does not reopen.</p></div>`
-    :intimacy&&intimacy.nsfw_revoked?
-    `<div class="notice-strip rel-standing"><p><strong>Stepped back to friendship.</strong>
-      Your relationship is rooted in friendship and affectionate companionship.</p></div>`:'';
-
-  const facts=[
-    intimacy?['Stage',esc(intimacy.stage_name||stages[stage]||'Just Met')]:null,
-    intimacy?['Pace',esc(paceLabel)]:null,
-    feelings?['Temperament',esc(feelings.personality||'—')]:null,
-    feelings&&feelings.mood?['Mood',esc(feelings.mood)+(feelings.mood_at?` · ${esc(ago(feelings.mood_at))}`:'')]:null,
-    intimacy&&intimacy.violations_count?['Boundary violations',String(intimacy.violations_count)]:null,
-  ].filter(Boolean);
-
-  return `<div class="card rel-now">
-    <div class="section-heading" style="margin-top:0">
-      <h2>How things are between you</h2>
-      ${intimacy?`<span class="pill ${stage>=3?'status-good':''}">${esc(intimacy.stage_name||stages[stage])} · ${score}%</span>`:''}
-    </div>
-    ${intimacy&&intimacy.description?`<p class="dim">${esc(intimacy.description)}</p>`:''}
-    ${intimacy?`<div class="rel-ladder">
-      <div class="rel-ladder-track"><div class="rel-ladder-fill" style="width:${score}%"></div></div>
-      <div class="rel-ladder-labels">${stages.map((name,i)=>
-        `<span class="${stage>=i?'is-reached':''}">${name}</span>`).join('')}</div>
-    </div>`:''}
-    ${standing}
-    ${feelings?feelingMeters(feelings.meters):''}
-    ${facts.length?`<dl class="fact-list">${facts.map(([k,v])=>
-      `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`:''}
-    <details class="rel-explainer">
-      <summary class="small dim">How closeness works here</summary>
-      <p class="dim small">Companions banter, tease and reciprocate affection as mutual trust deepens; at Bonded, warmth is expressed freely and naturally.</p>
-      <p class="dim small">${esc(companionName)} holds genuine agency. Mutual respect is the condition of all of it — repeated boundary violations step the relationship back to friendship permanently.</p>
-    </details>
-  </div>`;
-}
-workspaceHandlers.relationship=async()=>{
-  const d=await api('/relationship');const s=d.settings;
-  const companionName=chatName()||'Your companion';
-  $('relationship').innerHTML=heading('Your story together','Small firsts, familiar rituals, and jokes that only make sense between you. A shared history grows through experience.')+
-  relationshipNow(d.bars,d.intimacy,companionName)+
-  (s.relationship_progression==='milestones'?`
-  <div class="card">
-    <div class="section-heading" style="margin-top:0">
-      <h2>Milestones</h2>
-      <span class="pill">${d.milestones?d.milestones.filter(m=>m.earned).length:0} of ${d.milestones.length} earned</span>
-    </div>
-    <div class="milestone-badge-grid">
-      ${d.milestones.map(m=>`
-        <div class="milestone-card ${m.earned?'is-earned':''}">
-          <span class="milestone-icon">${m.earned?'✦':'○'}</span>
-          <div style="min-width:0">
-            <div style="font-size:13px;font-weight:600">${esc(m.label)}</div>
-            <div class="dim small">${m.earned?'Achieved':'In progress'}</div>
-          </div>
-        </div>`).join('')}
-    </div>
-  </div>`:'')+
-  '<div id="feelings-controls"></div>'+
-  `<div class="card">
-    <div class="section-heading" style="margin-top:0">
-      <h2>Moments</h2>
-      <span class="pill">${d.moments.length} recorded</span>
-    </div>
-    <p class="dim">Things worth keeping, written down as they happened.</p>
-    <div class="memory-filters" ${d.moments.length>8?'':'hidden'}>
-      <input type="search" id="moment-search" placeholder="Search moments…" aria-label="Search moments">
-      <button class="quiet" id="moment-clear">Clear</button>
-    </div>
-    <div class="moment-timeline" id="moment-timeline"></div>
-    <div class="vault-recent-more" id="moment-more" hidden><button class="quiet" id="moment-more-btn">Show earlier moments</button></div>
-  </div>`;
-
-  /* Every moment ever recorded used to print at once. They are newest first, in pages. */
-  const MOMENTS=20;let momentsShown=MOMENTS;
-  const paintMoments=()=>{
-    const q=($('moment-search')?.value||'').toLowerCase();
-    const all=d.moments.slice().reverse().filter(m=>!q||(m.text+' '+(d.kinds[m.moment]||m.moment)).toLowerCase().includes(q));
-    const page=all.slice(0,momentsShown);
-    $('moment-more').hidden=all.length<=page.length;
-    $('moment-timeline').innerHTML=page.length?page.map(m=>`
-        <div class="moment-card">
-          <div class="moment-card-meta">
-            <span class="pill">${esc(d.kinds[m.moment]||m.moment)}</span>
-            <span class="dim small">📅 ${esc(m.happened_on||m.recorded_at.slice(0,10))}</span>
-            <div style="flex:1"></div>
-            ${m.status==='active'?`<button class="quiet small-btn" data-retire="${esc(m.id)}">Retire</button>`:'<span class="dim small">Retired</span>'}
-          </div>
-          <p style="margin:0;font-size:13.5px;line-height:1.5;color:var(--ink)">${esc(m.text)}</p>
-        </div>`).join(''):'<p class="dim small" style="padding:20px;text-align:center">'+(q?'No moment matches that.':'There is room here for your firsts. Meaningful shared moments will be preserved authentically as you interact together.')+'</p>';
-    for(const b of $('moment-timeline').querySelectorAll('[data-retire]'))b.onclick=async()=>{if(!await confirmEditorLeave('relationship'))return;await post('/relationship/'+encodeURIComponent(b.dataset.retire)+'/retire');notice('Moment retired.');await render('relationship');};
-  };
-  if($('moment-search')){
-    $('moment-search').oninput=()=>{momentsShown=MOMENTS;paintMoments();};
-    $('moment-clear').onclick=()=>{$('moment-search').value='';momentsShown=MOMENTS;paintMoments();};
-  }
-  $('moment-more-btn').onclick=()=>{momentsShown+=MOMENTS;paintMoments();};
-  paintMoments();
-  for(const b of $('relationship').querySelectorAll('[data-retire]'))b.onclick=async()=>{if(!await confirmEditorLeave('relationship'))return;await post('/relationship/'+encodeURIComponent(b.dataset.retire)+'/retire');notice('Moment retired.');await render('relationship');};
-  await mountFeelings();
-};
 let vaultPath='',openNote=null;
 workspaceHandlers.vault=async()=>{
   $('vault').innerHTML=heading('Your vault','Browse the vault, follow links between notes, and write in your own notebook. The files stay ordinary Markdown and JSON, ready for Obsidian too.')+

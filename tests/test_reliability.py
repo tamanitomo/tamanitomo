@@ -221,6 +221,17 @@ class ReliabilityTests(unittest.TestCase):
             self.skipTest('Node is needed for the workflow import regression')
         subprocess.run([node, str(Path(__file__).with_name('test_import_ui.js'))], check=True)
 
+    def test_us_page(self):
+        """Together and Memories became one page, Us. Scores and ledgers stay
+        reachable but secondary; boundary states stay in the open; friendship
+        never shows romantic stages; Talk about this drafts and never sends."""
+        import shutil
+        import subprocess
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('Node is needed for the Us page regressions')
+        subprocess.run([node, str(Path(__file__).with_name('test_us_ui.js'))], check=True)
+
     def test_media_urls_keep_their_profile(self):
         """A URL escaped for an HTML attribute must not be assigned to a
         property: the entities stay literal, `profile` arrives as `amp;profile`,
