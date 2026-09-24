@@ -29,7 +29,8 @@ class _Ledger:
 
 def connect(database, *args, **kwargs):
     con = _connect(database, *args, **kwargs)
-    if str(database).endswith('ledger.sqlite3'):
+    name = str(database)
+    if 'ledger.sqlite3' in name and 'mode=ro' not in name:     # the executor's fact writer
         return _Ledger(con)
     return con
 
