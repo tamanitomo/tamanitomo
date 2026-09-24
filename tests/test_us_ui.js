@@ -156,10 +156,23 @@ await click('discoveries-all');
 assert.equal((element('us-discoveries').innerHTML.match(/class="us-discovery /g)||[]).length,12);
 
 // 18: questions and carried threads together.
-const threadHtml=page.slice(page.indexOf('id="us-threads"'),page.indexOf('id="us-advanced"'));
+const threadHtml=element('us-threads').innerHTML;
 assert.match(threadHtml,/Wants to ask[\s\S]*Why did you stop playing guitar/);assert.match(threadHtml,/Still carrying[\s\S]*Show the old photograph/);
 assert.equal((threadHtml.match(/class="us-thread /g)||[]).length,5);
 assert.match(threadHtml,/data-us-action="threads-all"/);
+
+// Plain notes lead with their own words, not a repeated label.
+assert.doesNotMatch(storyHtml,/A moment worth keeping/);
+assert.match(storyHtml,/class="us-story-text is-lead">Moment m4</);
+
+// The preview prefers statements about a person to verbatim quotes and dated episodes.
+const picked=sandbox.usMemoryPreview([
+  {id:'q1',category:'likes',statement:'Robin said: "nah"',recorded_at:day(0)},
+  {id:'q2',category:'other',statement:'On 2026-09-21 Robin cleaned',recorded_at:day(0)},
+  {id:'g1',category:'likes',statement:'Robin likes Fire Emblem',recorded_at:day(9)},
+  {id:'g2',category:'people',statement:'Robin has a sister',recorded_at:day(9)}],2).map(f=>f.id);
+same(picked,['g1','g2'],'readable facts first');
+assert.equal(sandbox.usMemoryPreview([{id:'q',category:'other',statement:'Robin said: "hi"'}],5).length,1,'quotes still fill an otherwise empty preview');
 
 // Standing instructions are not memories.
 assert.doesNotMatch(page.slice(page.indexOf('id="us-memories"'),page.indexOf('id="us-discoveries"')),/before 8am/);
@@ -202,6 +215,21 @@ assert.equal(calls.filter(([p])=>p.includes('chat')).length,0);
 store.set('chat-draft','half a thought');box.value='';
 await click('talk',{draft:'Can we come back to “x”?'});
 assert.equal(store.get('chat-draft'),'half a thought\n\nCan we come back to “x”?','an unsent draft is kept, not overwritten');
+
+// The page draws before the slow /overview arrives, then fills in carried threads.
+{
+  const data=dataset({questions:1,loops:1});let release;
+  const slow=new Promise(r=>release=r);
+  for(const k of Object.keys(elements))delete elements[k];
+  Object.assign(sandbox,{api:async p=>p==='/overview'?slow:data[p]});
+  run("current='relationship'");
+  const done=run('workspaceHandlers.relationship()');
+  for(let i=0;i<20&&!element('relationship').innerHTML.includes('Our story');i++)await new Promise(r=>setImmediate(r));
+  assert.match(element('relationship').innerHTML,/Our story/,'drawn without waiting for /overview');
+  assert.doesNotMatch(element('us-threads').innerHTML,/Show the old photograph/);
+  release(data['/overview']);await done;
+  assert.match(element('us-threads').innerHTML,/Still carrying[\s\S]*Show the old photograph/,'threads arrive after');
+}
 
 // 20: a brand-new companion reads as new, not broken.
 await renderPage(dataset({intimacy:{...romantic,stage:0,stage_name:'Just Met'}}));

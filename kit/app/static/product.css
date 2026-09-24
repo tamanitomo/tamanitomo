@@ -3051,6 +3051,7 @@ body[data-page="chat"] main{padding:0}
 .us-story-content{min-width:0;padding-top:3px}
 .us-story-title{margin:0;font-weight:600;font-size:14.5px;color:var(--ink)}
 .us-story-text{margin:4px 0 0;color:var(--ink-2);line-height:1.55;overflow-wrap:anywhere}
+.us-story-text.is-lead{margin:0;color:var(--ink);font-size:14.5px}
 .us-story-evidence,.us-evidence{margin:6px 0 0}
 .us-story-evidence summary,.us-evidence summary{font-size:12.5px;color:var(--dim);display:inline-block}
 .us-story-evidence p,.us-evidence p{margin:6px 0 0;font-size:13px;color:var(--dim);border-left:2px solid var(--edge-2);padding-left:10px;overflow-wrap:anywhere}

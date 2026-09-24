@@ -142,7 +142,10 @@ function normalizeUsStory({moments=[],experiences=[],exclude=new Set()}={}){
   for(const m of moments){
     if(m.status!=='active'||exclude.has(m.id))continue;
     const at=usWhen(m);if(!at)continue;
-    events.push({id:'moment:'+m.id,type:'moment',at,label:'✦',title:MOMENT_TITLE[m.moment]||'A moment worth keeping',
+    // Most moments are plain notes; a label repeated down the feed says nothing,
+    // so a note's own words are its headline.
+    const note=!MOMENT_TITLE[m.moment]||m.moment==='note';
+    events.push({id:'moment:'+m.id,type:'moment',at,label:'✦',title:note?'':MOMENT_TITLE[m.moment],
       text:m.text,evidence:'',source:'moment',photos:[]});
   }
   const corrected=new Set(experiences.filter(x=>x.kind==='correction').map(x=>x.related));
@@ -167,8 +170,8 @@ function renderUsStory(events,shown=US_LIMITS.story){
       <ol class="us-story-events">${day.items.map(e=>`<li class="us-story-event is-${esc(e.type)}">
         <span class="us-story-marker" aria-hidden="true">${e.label}</span>
         <div class="us-story-content">
-          <p class="us-story-title">${esc(e.title)}</p>
-          ${e.text?`<p class="us-story-text">${esc(e.text)}</p>`:''}
+          ${e.title?`<p class="us-story-title">${esc(e.title)}</p>`:''}
+          ${e.text?`<p class="us-story-text${e.title?'':' is-lead'}">${esc(e.text)}</p>`:''}
           ${e.evidence?`<details class="us-story-evidence"><summary>Context &amp; evidence</summary><p>${esc(e.evidence)}</p></details>`:''}
         </div>
       </li>`).join('')}</ol>
@@ -180,9 +183,21 @@ function renderUsStory(events,shown=US_LIMITS.story){
 /* A handful, not the ledger: the newest from each category in turn, so the
    preview says a little about several parts of a life rather than five things
    about one. */
+/* Many facts are verbatim quotes ("X said: …") or one dated episode. They are
+   kept, and the library shows them, but a preview of five reads better from
+   statements about a person than from transcript. Deterministic, no model. */
+const PREVIEW_CATEGORY_BONUS={likes:1,dislikes:1,people:1,places:1,history:1,health:.5,school:.5};
+function memoryPreviewScore(f){
+  const text=String(f.statement||'');let score=PREVIEW_CATEGORY_BONUS[f.category]||0;
+  if(/\bsaid:|^["“']/i.test(text))score-=3;
+  if(/\d{4}-\d{2}-\d{2}/.test(text))score-=2;
+  if(text.length>140)score-=1;
+  return score;
+}
 function usMemoryPreview(facts,limit=US_LIMITS.memories){
   const byCat=new Map();
-  for(const f of (facts||[]).slice().sort((a,b)=>String(b.recorded_at||'').localeCompare(String(a.recorded_at||'')))){
+  const ranked=(facts||[]).map(f=>[memoryPreviewScore(f),f]).sort((a,b)=>b[0]-a[0]||String(b[1].recorded_at||'').localeCompare(String(a[1].recorded_at||''))).map(([,f])=>f);
+  for(const f of ranked){
     const key=f.category||'other';if(!byCat.has(key))byCat.set(key,[]);byCat.get(key).push(f);
   }
   const lanes=[...byCat.values()],out=[];
@@ -372,19 +387,23 @@ function openSharedMoments(relationship){
 }
 
 /* ------------------------------------------------------------------ the page */
+let usGeneration=0;
 workspaceHandlers.relationship=async()=>{
-  const [relationship,ledgers,overview,experiences]=await Promise.all([
+  // Carried threads come from /overview, which is by far the slowest of these
+  // (it assembles all of Home). The page draws without it and fills them in.
+  const overviewLoad=api('/overview').catch(()=>({loops:[]}));
+  const [relationship,ledgers,experiences]=await Promise.all([
     api('/relationship'),
     api('/ledgers'),
-    api('/overview').catch(()=>({loops:[]})),
     api('/feelings/experiences').catch(()=>({experiences:[],total:0,next_cursor:null}))
   ]);
   if(current!=='relationship')return;
+  const generation=++usGeneration;
   const companionName=chatName()||'Your companion';
   const feelings=relationship.bars?.feelings||null;
   let facts=(ledgers.facts||[]).slice();
   const prefs=(ledgers.preferences||[]).slice().reverse();
-  const threads=usOpenThreads(ledgers.questions,overview.loops);
+  let threads=usOpenThreads(ledgers.questions,[]);
   const keep=usKeepsakes(relationship.moments);
   const story=normalizeUsStory({moments:relationship.moments||[],experiences:experiences.experiences||[],
     exclude:new Set(keep.shown.map(m=>m.id))});
@@ -427,4 +446,8 @@ workspaceHandlers.relationship=async()=>{
     else if(act==='history')openEmotionalHistory();
     else if(act==='standing'){const list=$('us-standing-list'),open=list.hidden;list.hidden=!open;b.setAttribute('aria-expanded',String(open));}
   };
+  const overview=await overviewLoad;
+  if(current!=='relationship'||generation!==usGeneration||!$('us-threads'))return;
+  threads=usOpenThreads(ledgers.questions,overview.loops);
+  $('us-threads').innerHTML=usOpenThreadsHTML(threads);
 };

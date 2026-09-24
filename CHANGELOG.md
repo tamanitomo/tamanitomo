@@ -1,3 +1,9 @@
+## 3.0.22 — Us, tuned on real data (2026-09-23)
+
+- Draw Us without waiting for `/overview` (about 2.7s on a lived-in profile, against 0.1–1.7s for the others) and fill in carried threads when it arrives; a later page render discards a stale fill.
+- Let untyped moments lead with their own text. On a real profile 66 of 70 active moments are notes, so the feed repeated "A moment worth keeping" on nearly every row.
+- Rank the memory preview before spreading it across categories: verbatim quotes ("… said:"), statements carrying an ISO date, and very long statements rank lower; likes, dislikes, people, places and history rank higher. 58 of 84 real facts were quotes and filled the preview. The library is unchanged.
+
 ## 3.0.21 — Us (2026-09-23)
 
 - Merge the Together and Memories pages into one page, Us (internal route `relationship`). Memories is no longer a destination; `knows` in a link, a `#knows` URL or a saved bottom-bar pin resolves to Us before the route is committed, and navigation search for memories, together, feelings or milestones finds it.

@@ -1,10 +1,8 @@
-Tamanitomo 3.0.21: Together and Memories become one page, Us.
+Tamanitomo 3.0.22: the Us page, tuned on a real relationship.
 
-- **Us.** How things are between you, what has happened, what is remembered, and what is still open, on one page that reads like a shared story rather than a dashboard.
-- **How it feels, in words.** The top of the page says how things feel right now. Exact scores and meters are still there, one tap further in.
-- **Only what really happened.** Shared moments appear as keepsakes once they happen; there is no checklist of ones still to earn.
-- **Memories you can check.** A few things remembered about you, each with why it is remembered and a way to mark it wrong. Search and filter every memory from "View all memories".
-- **Talk about this.** Open questions and loose threads can start a conversation: Chat opens with a draft you can edit, and nothing is sent until you send it.
+- **Faster to open.** Us no longer waits for the slowest part of the workspace; loose threads fill in a moment after the rest of the page.
+- **A story, not a list of labels.** Everyday moments lead with their own words instead of repeating "A moment worth keeping" down the page.
+- **Better memories up front.** The preview favours things that describe you over word-for-word quotes and one-off dated events. Every memory is still in "View all memories".
 
 ### Install
 
