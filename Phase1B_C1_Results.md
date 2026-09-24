@@ -172,7 +172,7 @@ Then C2 (dispatcher, with the structured `attempt` field, O-H) and C3 (the minim
 |---|---|---|
 | `36010308868` | `2f11faf` | Windows and macOS smoke **passed** (now including the C1 core file). Linux 3.11/3.13/3.14 **failed**: finding 5 (inode reuse) and a test that did not wait for a killed executor's lock release. Job logs need a signed-in viewer, so `6b4b2a4` added a failure-only step that publishes failed tests as check-run annotations. |
 | `36012008668` | `6b4b2a4` | same failures, now readable as annotations; fixed in `97bb3a1` |
-| CI_FINAL | | |
+| `36015884514` | `84cc9d0` (code `97bb3a1`) | **all 5 jobs passed**: Linux 3.11, 3.13, 3.14 (the 13 C1 pinned and 24 C0 pinned cases skip there with the reason printed; the lane is where they run), Windows and macOS smoke (C1 core: refusal, derivation, eligibility and recorder cases run; supervision cases skip). Detailed per-job pass/skip counts were not read: job logs need a signed-in viewer. |
 
 ---
 
