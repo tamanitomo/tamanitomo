@@ -60,7 +60,7 @@ So the boundary is:
 - Output of a cron (or any internal) session is never conversation.
 - No outbox entry is projected, and none is joined to a transcript row, by text or otherwise. Queued, withheld, failed and expired entries never appear.
 - A **companion** row in a trusted session is shown as that session's transcript recorded it, with `correlation: null`. No row is labelled or counted as a verified delivered outreach, whether it came from a model reply or a delivery mirror, and the gate stays **not passed**.
-- An **owner** row in a Telegram session must carry the `platform_message_id` that Hermes records for every inbound gateway turn (`gateway/run_turn.py`). A user row without one was not received from the platform. That covers the cron-brief delivery mirror, which Hermes writes as `role="user"`, and rows written before the column existed. Such a row is excluded as `unverified_sender`. This is structural, not a text-prefix match, and the source row is untouched.
+- An **owner** row in a Telegram session must carry the `platform_message_id` that Hermes records for every inbound gateway turn (`gateway/run_turn.py`). Without one, the sender of a user row is not established under this adapter's rule. That covers the cron-brief delivery mirror, which Hermes writes as `role="user"`, and genuine owner messages written before the column existed: a missing id does **not** prove the owner never sent the message. Such a row is excluded from the trusted conversation as `unverified_sender`; the source row is kept and the exclusion counted. A future opt-in archive view could show such rows labelled unverified, but that is a separately reviewed visibility feature: showing a row would not make it trusted owner evidence, reflection input or model context. This is structural, not a text-prefix match, and the source row is untouched.
 
 Recording the delivery id at dispatch would make proactive delivery verifiable. That is a send-path change and belongs to Phase 1B.
 
@@ -80,15 +80,20 @@ Recording the delivery id at dispatch would make proactive delivery verifiable. 
 | `reply_to` | Always `null`: Hermes stores no reply link. |
 | `correlation` | `{platform_message_id}` when Hermes stored one (Telegram user turns); otherwise `null`. Outgoing provisional/final correlation is reserved for 1B. |
 
-**Source identity and generation** (review R1 F3). Every projected row stores a fingerprint of what must not change for a source row to still be the same message: `(id, session_id, role, timestamp)`. Content may change; that is an edit. Hermes has no store-instance id (checked in `state_meta`), so continuity rests on these checks:
-- **Every apply.** When a source id is read, in the incremental pull or in reconciliation, its fingerprint is compared with the stored one. A mismatch means the id now names a different message. It is never folded in as an edit (`source_identity_changed`).
-- **Every sync.** An evenly spread sample of up to 64 indexed rows is re-checked. So is the AUTOINCREMENT sequence (it must not go backwards) and the anchor row (it must not hold a different row). Any failure means `source_replaced`. A missing row is a deletion, not a replacement, and a missing anchor is replaced by a new one.
+**Source identity and generation** (review R1 F3, R2). Every projected row stores a fingerprint of what must not change for a source row to still be the same message: `(id, session_id, role, timestamp)`, plus its known `platform_message_id`. Content may change; that is an edit.
+
+**Platform message ids** (review R2). Telegram numbers a message within its chat, so an id is compared only for the same source row, whose session fixes the account/chat. It is never matched across chats: the same bare id in two chats is two messages.
+- **Known -> a different known id:** a different message. Never an edit or a replay, even with identical text (`source_identity_changed` / `source_replaced`). The new content never inherits the old correlation.
+- **Missing -> known:** enrichment. The same message gains `correlation`, as a new revision (`edit`).
+- **Known -> missing:** the stored id is kept, not erased, so a later different id still conflicts with it. For a Telegram owner row, losing the id also makes it `unverified_sender`, so it is projected as deleted; it is not restored under its old id if a different id appears. Hermes has no store-instance id (checked in `state_meta`), so continuity rests on these checks:
+- **Every apply.** When a source id is read, in the incremental pull or in reconciliation, its fingerprint and platform id are compared with the stored ones. A mismatch means the id now names a different message. It is never folded in as an edit (`source_identity_changed`).
+- **Every sync.** An evenly spread sample of up to 64 indexed rows is re-checked. So is the AUTOINCREMENT sequence (it must not go backwards) and the anchor row (it must not hold a different row or a different known platform id). Any failure means `source_replaced`. A missing row is a deletion, not a replacement, and a missing anchor is replaced by a new one.
 
 Either result rebuilds the projection in the same transaction, with a new `projection_id` and generation. Old cursors answer `resync_required`, and no old opaque id is ever given to a different message.
 
 A replaced row outside the sample is found when reconciliation reaches it (at most 10,000 ids per call, every 30 s). Until then the old message is served as last read: stale, never aliased.
 
-Limit: a replacement that keeps a row's id, session, role and timestamp and changes only its content cannot be told apart from an edit.
+Limit: a replacement that keeps a row's id, session, role, timestamp and platform id (or has none) and changes only its content cannot be told apart from an edit.
 
 A Hermes `replace_messages()` (a transcript rewrite) gives surviving turns new ids. It is projected as deletions plus inserts, not as the same messages; this is a documented limit, and nothing is merged by text.
 

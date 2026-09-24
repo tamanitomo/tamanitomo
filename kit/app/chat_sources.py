@@ -10,7 +10,9 @@ conversation is decided here, from structural provenance only:
              not started by this app, when the binding trusts the terminal
   telegram   a direct-message session whose Telegram user ID is bound to the
              owner; a user turn counts as the owner only when Hermes recorded
-             the platform message id it was received as
+             the platform message id it was received as. That id is part of
+             the row's identity: another known id in the same chat is another
+             message (see platform_conflict)
 
 Everything else -- another participant, a group or channel, a platform this
 phase has not verified, a scheduled run, a sub-agent, an internal notification
@@ -33,11 +35,12 @@ LOCAL_SOURCES = ('cli', 'desktop', 'tui')
 # installed Hermes schema. Anything else is excluded as unverified.
 VERIFIED_CHANNELS = ('telegram',)
 # Gateway sources whose inbound user turns Hermes records with the platform's
-# own message id (gateway/run_turn.py _hmwa_user_transcript_entry). A user row
-# in such a session WITHOUT one was not received from the platform: Hermes's
+# own message id (gateway/run_turn.py _hmwa_user_transcript_entry). For a user
+# row in such a session WITHOUT one, the sender is not established: Hermes's
 # delivery mirror (gateway/mirror.py) writes cron briefs as role="user" rows with
-# no id, and rows from releases before the column existed have none either. The
-# sender of such a row is not established, so it stays out of the private feed.
+# no id, and genuine owner messages from releases before the column existed have
+# none either. Missing metadata does not prove the owner never sent it; it only
+# means this adapter cannot say so, so the row stays out of the private feed.
 PLATFORM_ID_SOURCES = ('telegram',)
 
 
@@ -182,17 +185,21 @@ class _HermesReader:
         return {'sequence': seq, 'max_id': high}
 
     def anchor(self, ident):
-        """A fingerprint of one row, to tell "the same row" from "a row that
-        happens to have the same id in a different file"."""
-        return self.fingerprints([ident]).get(ident)
+        """[fingerprint, platform id] of one row, to tell "the same row" from
+        "a row that happens to have the same id in a different file"."""
+        found = self.identities([ident]).get(ident)
+        return list(found) if found else None
 
-    def fingerprints(self, ids):
-        """{id: fingerprint} for those of `ids` that still exist (<= 500)."""
+    def identities(self, ids):
+        """{id: (fingerprint, platform_message_id)} for those of `ids` that
+        still exist (<= 500)."""
         ids = [int(i) for i in ids][:500]
         if not ids:
             return {}
-        rows = self.con.execute(f"SELECT id,session_id,role,timestamp FROM messages WHERE id IN ({','.join('?' * len(ids))})", ids)
-        return {r[0]: fingerprint(*r) for r in rows}
+        pid = 'platform_message_id' if 'platform_message_id' in self.message_cols else 'NULL'
+        rows = self.con.execute(f"SELECT id,session_id,role,timestamp,{pid} FROM messages "
+                                f"WHERE id IN ({','.join('?' * len(ids))})", ids)
+        return {r[0]: (fingerprint(*r[:4]), str(r[4]) if r[4] else None) for r in rows}
 
     def _select(self):
         sc, mc = self.session_cols, self.message_cols
@@ -298,6 +305,15 @@ def fingerprint(ident, session, role, timestamp):
     return hashlib.sha256(json.dumps([ident, session, role, timestamp]).encode()).hexdigest()[:24]
 
 
+def platform_conflict(stored, current):
+    """True when two KNOWN platform message ids differ. Telegram numbers
+    messages within one chat, so for the same source row (same session, hence
+    the same account/chat) two different ids are two different messages. A
+    missing id on either side is not evidence either way: missing -> known is
+    enrichment, known -> missing keeps the known id (see the projection)."""
+    return bool(stored) and bool(current) and str(stored) != str(current)
+
+
 def capabilities():
     """What each source can and cannot establish in this phase. Shown by
     /api/chat/sources and docs/CHAT_CONTRACT.md."""
@@ -312,8 +328,10 @@ def capabilities():
         'terminal': {**common, 'status': 'supported', 'identity': 'local cli/desktop/tui session with no gateway chat',
                      'tested': 'fixture'},
         'telegram': {**common, 'status': 'supported', 'identity': 'sessions.user_id bound to the owner; DM by chat_type=dm or chat_id=user_id',
-                     'platform_message_id': 'required on user turns: a user row without one (a cron-brief delivery '
-                                            'mirror, or a row older than the column) is excluded as unverified_sender',
+                     'platform_message_id': 'required on user turns: without one the sender is not established (a '
+                                            'cron-brief delivery mirror, or a genuine message older than the column), '
+                                            'so the row is excluded as unverified_sender. Part of identity: a different '
+                                            'known id in the same chat is a different message, never an edit',
                      'edits': 'Hermes does not record Telegram edits of past messages', 'tested': 'fixture'},
         'discord': {'status': 'unsupported', 'reason': 'identity/DM semantics not verified in this phase'},
         'signal': {'status': 'unsupported', 'reason': 'identity/DM semantics not verified in this phase'},

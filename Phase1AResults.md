@@ -13,6 +13,61 @@ The contract, the API and the capability table are in [`docs/CHAT_CONTRACT.md`](
 
 ---
 
+## Review R2 closure
+
+Separate commit on top of `f5ede20` (the reviewed code is `5fbc33c`; `f5ede20` changed only this report), answering `PHASE1A_REVIEW_R2.md`. Earlier commits are unchanged. Where this section and the sections below disagree, this section is current.
+
+**The reviewer's test file was not available.** The review mentions a supplied `test_phase1a_r2_platform_identity.py`. It was not in the review bundle or anywhere on this machine. `tests/test_phase1a_r2_platform_identity.py` was written here from the review's description. It uses the same synthetic fixtures and includes the review's three cases. No claim is made that it matches the reviewer's file.
+
+**Reproductions first.** The six new tests were run against the unchanged reviewed code (`5fbc33c`'s `kit/app`, working tree at `f5ede20`):
+- **4 failed**, each on the defect itself:
+  - `test_a_different_platform_id_with_different_text_is_not_an_edit`: 400 rows, target 251 outside the identity sample, platform id changed and text changed. `None not found in ('source_replaced', 'source_identity_changed')`: folded in as an edit under the old opaque id.
+  - `test_a_different_platform_id_with_identical_text_is_not_a_replay`: the same failure. Equal text hid a different message.
+  - `test_missing_to_known_enriches_and_loss_keeps_the_known_id`: the missing-to-known step produced no change (`expected 1, got 0`). The stored platform id was never updated.
+  - `test_an_owner_row_that_loses_its_id_then_gains_another_is_not_restored`: the row was restored under its old id with a different platform id.
+- **2 controls passed**: an ordinary edit with the same platform id, and the same bare platform id in two chats staying two messages.
+
+All six pass at the closure commit. They also pass with the sample and anchor checks stubbed out, so the per-apply check alone refuses the conflict.
+
+### F3: a known platform message id is part of identity
+
+- `chat_sources.platform_conflict(stored, current)`: true only when both ids are known and differ. The comparison is only ever for the same source row. Its session is part of the fingerprint, so the account/chat namespace is fixed. Nothing is matched across rows or chats on a bare platform id.
+- **Every apply** (`_apply`, used by the pull, reconciliation and push records): a conflict raises `IdentityChanged`, the same as a fingerprint mismatch. The sync rebuilds in the same transaction (`source_identity_changed`): a new generation and new opaque ids, and old cursors answer `resync_required`. The new content never inherits the old correlation.
+- **Every sync:** the identity sample now also compares the stored platform id with the source's. The anchor is now `[fingerprint, platform id]`, with the same rule. Either mismatch gives `source_replaced`.
+- **Enrichment and loss:**
+  - **Missing -> known:** stored, as a new revision (`edit`) of the same message. Previously the `UPDATE` never wrote `platform_message_id`.
+  - **Known -> missing:** the known id is kept, never erased, so a later different id still conflicts. For a Telegram owner row, loss also makes it `unverified_sender`, so it is projected as deleted, and it is not restored under its old id when another id appears.
+  - A null field change is not turned into a new message by itself.
+- **Projection schema v3.** A v2 projection may already hold a conflicting id folded in as an edit, so v2 projections rebuild once.
+
+The stated limit is narrower: a replacement that keeps id, session, role, timestamp **and** platform id (or has none) and changes only content is still indistinguishable from an edit.
+
+### F4: wording corrected; decision recorded
+
+- The rule stays as reviewed: Telegram user rows without a platform id stay out of the trusted conversation as `unverified_sender`. Originals and exclusion counts are preserved. No opt-in was implemented.
+- The unconditional wording is corrected in `chat_sources.py` and in section 2 of the contract. "A user row without one was not received from the platform" now reads: the sender is **not established**, and a missing id does not prove the owner never sent the message. Genuine older messages can lack it.
+- The contract records that a future unverified archive view would be separately reviewed, and would not make a row trusted owner evidence, reflection input or model context.
+- Proactive delivery provenance stays **unsupported**. Companion rows in trusted sessions are still shown as recorded, with `correlation: null`, and are not suppressed.
+
+### Commands and results
+
+```text
+.venv/bin/python -m pytest tests/test_phase1a_r2_platform_identity.py   (reviewed code)
+-> 4 failed, 2 passed
+env PATH=/usr/local/bin:/usr/bin:/bin TAMANITOMO_REQUIRE_NODE=1 .venv/bin/python -m pytest -q -rs   (closure)
+-> 1451 passed, 464 subtests passed, 0 skipped, 1 warning (existing Starlette/httpx deprecation)
+python -X dev -W always::ResourceWarning -m pytest tests/test_chat_projection.py tests/test_chat_routes.py tests/test_phase1a_r2_platform_identity.py
+-> 0 unclosed-database warnings
+```
+
+At 50,000 messages, a sync with nothing new took 7.4–7.8 ms both before and after the change (3 runs each), and a full reconcile 0.59–0.61 s. These are desktop, projection-only numbers. The new test file was added to the Windows/macOS smoke job.
+
+**CI for the closure commit:** CI_PENDING
+
+Unchanged: the send path, the UI, the legacy `/api/feed`, and the request-driven reconciliation (no background polling). There was no browser, phone, live-adapter or live-data testing. `ASTRA_PHASE0_REVIEW_R2.md` is still not available here, and nothing is claimed about its contents. Phase 1B has not started.
+
+---
+
 ## Review R1 closure
 
 Separate commit on top of the reviewed head `438312e`, answering `PHASE1A_REVIEW_R1.md`. Earlier commits are unchanged. Where this section and the original report below disagree, this section is current.

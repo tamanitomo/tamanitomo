@@ -35,9 +35,11 @@ import time
 import uuid
 from pathlib import Path
 
-from .chat_sources import SourceUnavailable
+from .chat_sources import SourceUnavailable, platform_conflict
 
-SCHEMA_VERSION = 2
+# v3: a known platform message id is part of identity (review R2); v2 projections
+# may hold a conflicting id folded in as an edit, so they rebuild.
+SCHEMA_VERSION = 3
 PAGE_DEFAULT, PAGE_MAX = 60, 200
 CHANGES_DEFAULT, CHANGES_MAX = 200, 1000
 # Change rows kept for incremental readers; older cursors must resync.
@@ -53,8 +55,9 @@ IDENTITY_SAMPLE = 64
 
 
 class IdentityChanged(Exception):
-    """A source id now names a different message (another session, role or
-    authored time): the store was replaced. Never folded in as an edit."""
+    """A source id now names a different message (another session, role,
+    authored time, or a different known platform message id): the store was
+    replaced. Never folded in as an edit."""
 
 
 class ResyncRequired(Exception):
@@ -284,7 +287,7 @@ class Projection:
             return True
         if known.get('anchor_id') and known.get('anchor'):
             now = reader.anchor(known['anchor_id'])
-            if now is not None and now != known['anchor']:
+            if now is not None and (now[0] != known['anchor'][0] or platform_conflict(known['anchor'][1], now[1])):
                 return True
         return False
 
@@ -293,16 +296,17 @@ class Projection:
         """Re-check a bounded, evenly spread sample of indexed rows: any whose
         id now names a different message means the store was replaced, even
         when its sequence and anchor look continuous. A missing row is a
-        deletion, not a replacement."""
+        deletion, not a replacement; a missing platform id is not a conflict."""
         total = con.execute("SELECT count(*) FROM messages WHERE source_fp IS NOT NULL").fetchone()[0]
         if not total:
             return False
         step = max(1, total // IDENTITY_SAMPLE)
-        sample = {r[0]: r[1] for r in con.execute(
-            "SELECT source_id, source_fp FROM messages WHERE source_fp IS NOT NULL AND (pk % ?)=0 "
+        sample = {r[0]: (r[1], r[2]) for r in con.execute(
+            "SELECT source_id, source_fp, platform_message_id FROM messages WHERE source_fp IS NOT NULL AND (pk % ?)=0 "
             "ORDER BY pk LIMIT ?", (step, IDENTITY_SAMPLE + 1))}
-        current = reader.fingerprints(sample)
-        return any(current[i] != fp for i, fp in sample.items() if i in current)
+        current = reader.identities(sample)
+        return any(current[i][0] != fp or platform_conflict(pid, current[i][1])
+                   for i, (fp, pid) in sample.items() if i in current)
 
     def _message_id(self, con, source_key):
         meta = self._meta(con)
@@ -328,6 +332,12 @@ class Projection:
         fp = getattr(record, 'fingerprint', None)
         if row is not None and fp and row['source_fp'] and fp != row['source_fp']:
             raise IdentityChanged(record.source_key)
+        if row is not None and platform_conflict(row['platform_message_id'], record.platform_message_id):
+            # Another known platform message in the same chat: a different
+            # message, whatever the text says. Never an edit or a replay.
+            raise IdentityChanged(record.source_key)
+        # Missing -> known is enrichment; known -> missing keeps the known id.
+        pid = row['platform_message_id'] if row is not None and row['platform_message_id'] else record.platform_message_id
         if row is None:
             if not record.visible:
                 return self._count('ignored_never_public')
@@ -349,7 +359,7 @@ class Projection:
             kind, status = 'restore', 'public'
         elif _hash(record.content) != row['content_hash']:
             kind, status = 'edit', 'edited'
-        elif record.speaker != row['speaker']:
+        elif record.speaker != row['speaker'] or pid != row['platform_message_id']:
             kind, status = 'edit', row['status']
         else:
             if rev is not None and rev != row['source_revision']:
@@ -357,8 +367,9 @@ class Projection:
             return self._count('unchanged')
         revision = row['revision'] + 1
         seq = self._change(con, row['message_id'], revision, kind, now)
-        con.execute('UPDATE messages SET content=?,content_hash=?,speaker=?,note=?,status=?,revision=?,observed_seq=?,source_revision=? WHERE pk=?',
-                    (record.content, _hash(record.content), record.speaker, record.note, status, revision, seq, rev, row['pk']))
+        con.execute('UPDATE messages SET content=?,content_hash=?,speaker=?,note=?,status=?,revision=?,observed_seq=?,source_revision=?,'
+                    'platform_message_id=? WHERE pk=?',
+                    (record.content, _hash(record.content), record.speaker, record.note, status, revision, seq, rev, pid, row['pk']))
         return self._count('restored' if kind == 'restore' else 'edited')
 
     def _mark_deleted(self, con, row, now, rev=None):
