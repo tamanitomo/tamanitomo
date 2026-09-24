@@ -6,11 +6,73 @@ Report for review of **Phase 0** of `TAMANITOMO_BUILD_PLAN.md` ("persistent Chat
 |---|---|
 | Base | `e28197ce1849922d463052643ca617a80ad6e58e` (3.0.24, equal to `origin/main` at start) |
 | Implementation commit | `103eee5` on `test/phase0-memory-correctness` |
-| Scope | Phase 0 only. Phase 1 has not started. |
+| Scope | Phase 0 only, plus the R2 closure patch (next section). Phase 1A is on the child branch `test/phase1-conversation-contract`. |
 | Released / tagged / deployed | **No.** There is no version bump or CHANGELOG entry, and nothing was installed on any live host. |
 | Live data touched | **None.** No live ledger was read, migrated or edited. All verification used temporary directories and synthetic profiles. |
 
 Plan sections are referred to by their numbers (0.2 to 0.6). File paths are relative to the repository root.
+
+---
+
+## Closure patch (revision 2 of the plan)
+
+Separate commit on top of `fa04f08`, addressing R2 sections 0.2 to 0.6. The reviewed commits are unchanged. No live data, merge, version bump or release. Where this section and the original report below disagree, this section is current.
+
+### 0.2 Canonical matching: NFC and whitespace only
+
+`canonical_statement()` (Python) and `usFactKey()` (JS) now do exactly two things: NFC composition, and trimming/collapsing a named set of ordinary whitespace (space, tab, LF, CR, FF, VT, no-break space; named rather than `\s` so both languages agree). First-letter lowercasing, final `.`/`!` removal, curly-quote folding and space-before-mark removal are gone. There is no list of exceptions.
+
+- `Robin wrote 5!` / `Robin wrote 5` and `Polish is familiar to Robin.` / `polish is familiar to Robin.` are now `different` cases (plus `May visits…` / `may visits…`).
+- The seven old `same` pairs that relied on the removed folds are moved to an explicit `revised` list in `tests/canonical_statement_cases.json` and asserted as different in both Python and JS, at the function and at write time.
+- `same` now holds 5 pairs (whitespace runs, tab, newline, no-break space, decomposed accent).
+
+### 0.3 Held-fact decisions: a recoverable protocol
+
+`decide_held()` in `companion_self.py`:
+
+- **Serialized** per human store by `.facts-held.decide.lock`. Lock order: decide lock → `facts.jsonl` lock → `facts-held.jsonl` lock; nothing takes them in another order.
+- **Intent first.** An `held_fact_intent` row with a stable `op_id` (hash of held ID + decision) is appended before any effect. It fixes which decision wins.
+- **Effect.** `accept` calls `record_fact` with a deterministic ID, so a retry finds the row it wrote. If an equal fact is already active the decision records `duplicate_of` and writes nothing.
+- **Decision.** `held_fact_decision` records `decision`, `op_id`, `origin`, and `fact_id` or `duplicate_of`.
+- **Recovery.** A crash at any boundary leaves an intent; `held_facts()` shows it as `pending_decision` (read-only, no recovery on read). Deciding the same way again resumes with the same `op_id`.
+- **Conflicts.** The opposite decision after an intent or a decision raises `HeldDecisionConflict` before any effect (HTTP 409).
+- **Idempotence.** Repeating a finished decision returns it unchanged (`already_decided`), including after the fact was retracted. It is not re-recorded, and nothing else is retracted to compensate.
+- **Override, not verification.** An accepted fact carries `held_decision: {held_id, op_id, origin, note}`; the note says it is an owner override. The held row, reasons and evidence are never rewritten.
+
+Tests (`HeldDecisionProtocolTests`, 8): override marking and byte-identical held row; idempotent repeat; opposite decision conflicts with the file unchanged; retry after retraction; `duplicate_of` with an unrelated equal fact left active; **every interruption boundary** (before intent, after intent/before fact, after fact/before decision) × both decisions, including an opposite decision while pending; 8 threads behind a barrier; 6 concurrent OS processes. Plus API tests in `tests/test_app.py`.
+
+### 0.4 Transcript-wrapper facts are held
+
+`PLAN_CONTRACT` is now 3. Under contract 3, a fact whose statement has the `X said: …` shape is a `held` diagnostic with reason `transcript_wrapper`; `apply_plan` puts it in `facts-held.jsonl` exactly as written, and its siblings are applied. It is not re-worded and no second request is made. Untrusted or bad evidence is still fatal. A contract-2 plan keeps the wrapper fatal on resume, as it was when it was saved.
+
+**Stable diagnostics.** A resumed plan is now applied with the diagnostics saved beside it, not recomputed ones, so a retry commits the same subset even if the rules change. The plan is still re-validated for fatal errors. Contract-1 plans (no saved diagnostics) recompute as before. A run with omissions, warnings or holds reports `clean: false`.
+
+### 0.5 Bounded retries and the Needs review queue
+
+- **The whole attempt counts.** The count is written to `<budget>.attempts.json` *before* the request. Connection errors, truncation, JSON decode errors and validation failures are recorded against the attempt, and a process killed mid-generation has still spent it.
+- **Backoff.** After a failure, the next attempt waits 15 minutes, then 1 hour. Until then `reflect()` returns `status: waiting` with `retry_after`.
+- **Budget identity.** A daily/weekly/monthly budget is its period. A **check-in's budget belongs to the evidence after its watermark** (`last_reflected` + `last_reflected_id`), so a new conversation, which changes the batch key, no longer gets fresh attempts. The watermark and `pending` are unchanged while held.
+- **Audited reset.** `reset_attempts()` / `--reset-attempts <budget> --reason "…"` requires a reason and keeps the spent count and errors under `resets`.
+- **Needs review UI.** Us → "Remembered about you" shows `Needs review (N)` only when N > 0. It opens the existing memory library in a review mode, which shows the candidate, the exact quote, the source and the reasons, with Accept and Dismiss. There is no new navigation destination, notification, auto-accept or chat send. A failed load says "Could not load memories that need review", never an empty queue. Viewing does not accept. Routes: `GET /api/facts/held`, `POST /api/facts/held/{id}/decide`.
+
+### 0.6 Similarity tokens and bounded groups
+
+- `usFactWords` keeps a `+`/`#` suffix on its word, so C, C++ and C# are never grouped as similar.
+- A similar group renders 3 rows. Further rows come 3 at a time from a "Show N more" button, so later evidence is not in the initial markup.
+
+Restored CI is unchanged. Smoke jobs remain smoke jobs: no browser, mobile, light theme, keyboard or touch claim is made here.
+
+### Closure commands and results
+
+```text
+env PATH=/usr/local/bin:/usr/bin:/bin TAMANITOMO_REQUIRE_NODE=1 .venv/bin/python -m pytest -q -rs
+-> 1396 passed, 464 subtests passed, 0 skipped, 1 warning (existing Starlette/httpx deprecation)
+node tests/test_us_ui.js -> passed
+```
+
+Environment: Linux (CachyOS, kernel 7.2), Python 3.14 (repo venv), Node 26.7.0. CI for the closure commit: see below once run.
+
+Not re-verified in a browser for the closure. The Needs review UI is covered by the Node VM test only.
 
 ---
 

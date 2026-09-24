@@ -3082,6 +3082,9 @@ body[data-page="chat"] main{padding:0}
 .us-similar>summary{font-size:12.5px;color:var(--dim);cursor:pointer}
 .us-similar-row{border-left:2px solid var(--edge-2);padding:4px 0 4px 10px;margin-top:8px}
 .us-similar-row .us-memory-text{margin:0}
+.us-review-link{margin:8px 0 0}
+.us-held-quote{margin:8px 0 4px;font-size:13px}
+.us-held-reasons{margin:4px 0 8px;padding-left:18px;font-size:12.5px;color:var(--dim)}
 
 /* Things they've discovered: soft rows, lightly marked by feeling. */
 .us-discoveries,.us-open-threads,.us-standing-list{list-style:none;margin:0;padding:0}

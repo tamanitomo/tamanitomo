@@ -1,35 +1,145 @@
 {
-  "_about": "Pairs for canonical_statement (kit/scripts/companion_self.py) and usFactKey (kit/app/static/us.js). 'same' pairs differ only in formatting; 'different' pairs may mean different things and must never be refused as a duplicate or collapsed in a preview.",
+  "_about": "Pairs for canonical_statement (kit/scripts/companion_self.py) and usFactKey (kit/app/static/us.js). The rule is NFC plus trimming/collapsing ordinary whitespace, nothing else. 'same' pairs differ only in that; 'different' pairs may mean different things and must never be refused as a duplicate or collapsed in a preview. 'revised' pairs were 'same' before the Phase 0 closure (first-letter case, final ./!, quote style, space before a mark were folded); they are now kept apart on purpose -- a duplicate is clutter, a refused write is a lost memory.",
   "same": [
-    ["Robin likes tea.", "Robin likes tea"],
-    ["Robin likes tea!", "Robin likes tea"],
-    ["  Robin   likes\ttea. ", "Robin likes tea"],
-    ["robin likes tea", "Robin likes tea"],
-    ["Robin likes tea , coffee and cocoa .", "Robin likes tea, coffee and cocoa"],
-    ["Robin's sister is Bee.", "Robin’s sister is Bee."],
-    ["Robin's favourite game is “Fire Emblem”.", "Robin's favourite game is \"Fire Emblem\"."],
-    ["Robin lives near the café.", "Robin lives near the café."],
-    ["Robin writes C++.", "Robin writes C++"]
+    [
+      "  Robin   likes\ttea. ",
+      "Robin likes tea."
+    ],
+    [
+      "Robin likes\ntea.",
+      "Robin likes tea."
+    ],
+    [
+      "Robin likes tea.",
+      "Robin likes tea."
+    ],
+    [
+      "Robin lives near the café.",
+      "Robin lives near the café."
+    ],
+    [
+      "Robin writes C++. ",
+      "Robin writes C++."
+    ]
   ],
   "different": [
-    ["Robin writes C++.", "Robin writes C."],
-    ["Robin writes C#.", "Robin writes C."],
-    ["Robin measured -5 degrees.", "Robin measured +5 degrees."],
-    ["Robin measured -5 degrees.", "Robin measured 5 degrees."],
-    ["Robin earned 5%.", "Robin earned 5."],
-    ["Robin paid $5.", "Robin paid 5."],
-    ["Robin's card has 4.5 GB.", "Robin's card has 45 GB."],
-    ["Robin's rule is x > 5.", "Robin's rule is x 5."],
-    ["Robin uses x².", "Robin uses x2."],
-    ["Robin's locker is ５.", "Robin's locker is 5."],
-    ["Robin introduced Alice to Kit.", "Robin introduced Kit to Alice."],
-    ["Robin likes tea.", "Robin does not like tea."],
-    ["Robin likes tea.", "Robin dislikes tea."],
-    ["Robin is from the US.", "Robin is from the us."],
-    ["Robin likes Polish food.", "Robin likes polish food."],
-    ["Robin's \"friend\" visited.", "Robin's friend visited."],
-    ["Robin's sister's dog is Kit.", "Robin's sisters' dog is Kit."],
-    ["Robin likes tea, not coffee.", "Robin likes tea not coffee."],
-    ["Robin likes tea?", "Robin likes tea"]
+    [
+      "Robin writes C++.",
+      "Robin writes C."
+    ],
+    [
+      "Robin writes C#.",
+      "Robin writes C."
+    ],
+    [
+      "Robin measured -5 degrees.",
+      "Robin measured +5 degrees."
+    ],
+    [
+      "Robin measured -5 degrees.",
+      "Robin measured 5 degrees."
+    ],
+    [
+      "Robin earned 5%.",
+      "Robin earned 5."
+    ],
+    [
+      "Robin paid $5.",
+      "Robin paid 5."
+    ],
+    [
+      "Robin's card has 4.5 GB.",
+      "Robin's card has 45 GB."
+    ],
+    [
+      "Robin's rule is x > 5.",
+      "Robin's rule is x 5."
+    ],
+    [
+      "Robin uses x².",
+      "Robin uses x2."
+    ],
+    [
+      "Robin's locker is ５.",
+      "Robin's locker is 5."
+    ],
+    [
+      "Robin introduced Alice to Kit.",
+      "Robin introduced Kit to Alice."
+    ],
+    [
+      "Robin likes tea.",
+      "Robin does not like tea."
+    ],
+    [
+      "Robin likes tea.",
+      "Robin dislikes tea."
+    ],
+    [
+      "Robin is from the US.",
+      "Robin is from the us."
+    ],
+    [
+      "Robin likes Polish food.",
+      "Robin likes polish food."
+    ],
+    [
+      "Robin's \"friend\" visited.",
+      "Robin's friend visited."
+    ],
+    [
+      "Robin's sister's dog is Kit.",
+      "Robin's sisters' dog is Kit."
+    ],
+    [
+      "Robin likes tea, not coffee.",
+      "Robin likes tea not coffee."
+    ],
+    [
+      "Robin likes tea?",
+      "Robin likes tea"
+    ],
+    [
+      "Robin wrote 5!",
+      "Robin wrote 5"
+    ],
+    [
+      "Polish is familiar to Robin.",
+      "polish is familiar to Robin."
+    ],
+    [
+      "May visits on Sunday.",
+      "may visits on Sunday."
+    ]
+  ],
+  "revised": [
+    [
+      "Robin likes tea.",
+      "Robin likes tea"
+    ],
+    [
+      "Robin likes tea!",
+      "Robin likes tea"
+    ],
+    [
+      "robin likes tea",
+      "Robin likes tea"
+    ],
+    [
+      "Robin likes tea , coffee and cocoa .",
+      "Robin likes tea, coffee and cocoa"
+    ],
+    [
+      "Robin's sister is Bee.",
+      "Robin’s sister is Bee."
+    ],
+    [
+      "Robin's favourite game is “Fire Emblem”.",
+      "Robin's favourite game is \"Fire Emblem\"."
+    ],
+    [
+      "Robin writes C++.",
+      "Robin writes C++"
+    ]
   ]
 }

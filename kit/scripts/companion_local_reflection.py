@@ -23,11 +23,17 @@ import companion_loops as loops
 from companion_platform import file_lock,atomic_write
 
 KINDS=('daily','weekly','monthly','checkin')
-# Plans refused as malformed for one period before the model is no longer asked.
+# Generation attempts for one batch of evidence before the model is no longer
+# asked. An attempt is the whole thing -- request, decode, truncation and
+# validation -- and is counted on disk before the request is sent.
 MAX_ATTEMPTS=3
-# Plans saved before facts carried their own statement lack one; a resumed plan
-# from then is applied the way it was authored.
-PLAN_CONTRACT=2
+# Wait after a failed attempt before the next one: BACKOFF[n-1] after n failures.
+BACKOFF=(dt.timedelta(minutes=15),dt.timedelta(hours=1))
+# Contract of a saved plan; a resumed plan is applied the way its contract said.
+#   1  facts carried no statement
+#   2  facts carry a statement; a transcript-wrapper statement is a fatal error
+#   3  a transcript-wrapper statement is held for review with its siblings kept
+PLAN_CONTRACT=3
 FACT_EXISTING_CHARS=6000
 
 def journal_period(c,target,start,end,limit=10000):
@@ -210,16 +216,19 @@ def question_concern(question,human):
         return ('warn',f'names {name} in the third person and never says "you"')
     return None
 
-def validate(plan,kind,sources,question_ids,human='',legacy=False):
+def validate(plan,kind,sources,question_ids,human='',legacy=False,contract=PLAN_CONTRACT):
     """Refuse a plan whose structure or evidence is wrong; that is fatal.
 
     Returns the optional parts that are merely below standard, as
-    {'omitted': [...], 'warnings': [...]}: a question in `omitted` is left
-    out when the plan is applied, and the run reports it rather than calling
-    itself clean. `legacy` is only for resuming a plan saved under the
-    previous contract, whose facts carried no statement and whose questions
-    were never checked."""
-    diagnostics={'omitted':[],'warnings':[]}
+    {'omitted': [...], 'warnings': [...], 'held': [...]}: a question in
+    `omitted` is left out when the plan is applied; a fact in `held` is kept
+    for a person to review instead of becoming a memory. Either way the run
+    reports it rather than calling itself clean. `legacy` is only for resuming
+    a contract-1 plan, whose facts carried no statement and whose questions
+    were never checked; `contract` 2 keeps a transcript-wrapper statement fatal,
+    as it was when such a plan was saved."""
+    if legacy:contract=1
+    diagnostics={'omitted':[],'warnings':[],'held':[]}
     expected={'reflection','preferences','questions','facts','standing','moments','answers','open_loops','soul_append'}
     if not isinstance(plan,dict) or set(plan)!=expected:raise ValueError('unexpected reflection fields')
     def text(value,limit,empty=False):
@@ -249,15 +258,25 @@ def validate(plan,kind,sources,question_ids,human='',legacy=False):
             if key=='facts' and not legacy:
                 text(p['statement'],400)
                 if _transcript_wrapper(p['statement'],human):
-                    raise ValueError('a fact statement is a proposition about the human, not a transcript ("X said: ...")')
+                    if contract<3:raise ValueError('a fact statement is a proposition about the human, not a transcript ("X said: ...")')
+                    # The quote is trusted and the entry is well formed; only the wording is
+                    # off. Held as written -- never re-worded, never re-requested for style.
+                    diagnostics['held'].append({'kind':'fact','quote_id':p['quote_id'],'statement':p['statement'],
+                                                'reason':'transcript_wrapper'})
             if key=='answers' and p['question_id'] not in question_ids:raise ValueError('unknown question')
             if key=='open_loops':text(p['title'],120)
     return diagnostics
 
 def usable(plan,diagnostics):
-    """The plan as applied: omitted questions taken out, nothing else changed."""
+    """The plan as applied: omitted questions taken out and held facts marked
+    `_hold` with their reasons; nothing else changed."""
     dropped={d['text'] for d in diagnostics['omitted'] if d['kind']=='question'}
-    return {**plan,'questions':[q for q in plan['questions'] if q not in dropped]}
+    held={}
+    for d in diagnostics.get('held',()):
+        if d['kind']=='fact':held.setdefault((d['quote_id'],d['statement']),[]).append(d['reason'])
+    facts=[{**f,'_hold':held[(f['quote_id'],f.get('statement'))]} if (f['quote_id'],f.get('statement')) in held else f
+           for f in plan['facts']]
+    return {**plan,'questions':[q for q in plan['questions'] if q not in dropped],'facts':facts}
 
 def apply_plan(c,kind,day,plan,sources,now):
     results=[]
@@ -279,7 +298,7 @@ def apply_plan(c,kind,day,plan,sources,now):
                 # quote and held for a person when it obviously says something else.
                 if 'statement' in p:
                     statement=p['statement'].strip()
-                    concerns=slf.paraphrase_concerns(statement,quote,(c.human,c.agent))
+                    concerns=p.get('_hold',[])+slf.paraphrase_concerns(statement,quote,(c.human,c.agent))
                     out=(slf.hold_fact(c.human_dir,statement,evidence,now,p['category'],source,concerns,c.human) if concerns else
                          slf.record_fact(c.human_dir,statement,evidence,now,p['category'],'stated',source,human=c.human,
                                          statement_origin='model_paraphrase'))
@@ -311,30 +330,53 @@ def reflect(c,kind,base_url,model,human_id='',slot=1,now=None,planner=None,
         rows,more,through,through_id=messages(c,start,end,human_id,after_id=int((flag or {}).get('last_reflected_id',0)),end_inclusive=kind=='checkin')
         if kind=='checkin' and not human_id:raise ValueError('configure the trusted human user ID before reflecting conversations')
         sources=quotation_sources(rows)
+        after_id=int((flag or {}).get('last_reflected_id',0))
         key=(kind+'-'+day) if kind!='checkin' else 'checkin-'+hashlib.sha256((start.isoformat()+end.isoformat()+through+str(through_id)).encode()).hexdigest()[:20]
+        # A check-in batch grows when a conversation arrives, which changes its key (and,
+        # before the first reflection, its start). Its attempt budget belongs to the
+        # unprocessed evidence: everything after the watermark, which does not move.
+        watermark=(flag or {}).get('last_reflected') or 'never-reflected'
+        budget_key=key if kind!='checkin' else 'checkin-from-'+hashlib.sha256((watermark+'|'+str(after_id)).encode()).hexdigest()[:20]
         path=folder/(key+'.json')
         saved=json.loads(path.read_text()) if path.exists() else None
         if saved and saved.get('complete'):return {'status':'skipped','reason':'this reflection was already committed','id':key}
         data=context(c,kind,start,end,day,rows);data['more_conversation_messages']=more
         data['evidence_quotes']=[{'quote_id':key,'quote':value['content']} for key,value in sources.items()]
-        attempts_path=folder/(key+'.attempts.json')
-        attempts=json.loads(attempts_path.read_text()) if attempts_path.exists() else {'count':0,'errors':[]}
+        attempts_path=folder/(budget_key+'.attempts.json')
+        attempts=read_attempts(attempts_path)
         question_ids=[q['id'] for q in data['existing_questions']]
         if saved:
             plan=saved['plan'];sources=saved['sources'];usage=saved.get('usage')
-            legacy=saved.get('contract',1)<PLAN_CONTRACT
-            diagnostics=validate(plan,kind,sources,question_ids,c.human,legacy)
+            contract=saved.get('contract',1)
+            recomputed=validate(plan,kind,sources,question_ids,c.human,contract<2,contract)
+            # Apply what was decided when the plan was saved, so a retry commits the
+            # same subset even if the diagnostic rules have changed since.
+            diagnostics={'omitted':[],'warnings':[],'held':[],**saved['diagnostics']} if 'diagnostics' in saved else recomputed
         else:
             if attempts['count']>=MAX_ATTEMPTS:
-                return {'status':'held','id':key,'attempts':attempts['count'],'errors':attempts['errors'],
-                        'reason':f'{attempts["count"]} plans for this period were refused; the model is not asked again. '
+                return {'status':'held','id':key,'budget':budget_key,'attempts':attempts['count'],'errors':attempts['errors'],
+                        'reason':f'{attempts["count"]} attempts for this evidence failed; the model is not asked again '
+                                 f'until the budget is reset (--reset-attempts {budget_key}). '
                                  f'Rejected plans are kept beside {attempts_path.name} for review.'}
-            plan,usage=(planner or request_plan)(c,kind,data,sources,base_url,model,slot,
-                                                 allow_remote,api_key_env)
-            try:diagnostics=validate(plan,kind,sources,question_ids,c.human)
-            except ValueError as exc:
-                attempts['count']+=1;attempts['errors'].append({'at':now.isoformat(),'error':str(exc)})
-                atomic_write(folder/f'{key}.rejected-{attempts["count"]}.json',json.dumps({'error':str(exc),'plan':plan},ensure_ascii=False,indent=2))
+            if attempts['count'] and attempts.get('last_at'):
+                wait=BACKOFF[min(attempts['count'],len(BACKOFF))-1]
+                ready=dt.datetime.fromisoformat(attempts['last_at'])+wait
+                if now<ready:
+                    return {'status':'waiting','id':key,'budget':budget_key,'attempts':attempts['count'],
+                            'retry_after':ready.isoformat(),'reason':'the last attempt failed; waiting before asking again'}
+            # Counted before the request: a crash, timeout or kill mid-generation still spends it.
+            attempts['count']+=1;attempts['last_at']=now.isoformat();attempt=attempts['count']
+            attempts.setdefault('batches',[]).append({'attempt':attempt,'at':now.isoformat(),'plan_id':key})
+            atomic_write(attempts_path,json.dumps(attempts,ensure_ascii=False,indent=2))
+            plan=None
+            try:
+                plan,usage=(planner or request_plan)(c,kind,data,sources,base_url,model,slot,
+                                                     allow_remote,api_key_env)
+                diagnostics=validate(plan,kind,sources,question_ids,c.human)
+            except Exception as exc:
+                attempts['errors'].append({'at':now.isoformat(),'attempt':attempt,'error':str(exc) or type(exc).__name__})
+                if plan is not None:
+                    atomic_write(folder/f'{budget_key}.rejected-{attempt}.json',json.dumps({'error':str(exc),'plan':plan},ensure_ascii=False,indent=2))
                 atomic_write(attempts_path,json.dumps(attempts,ensure_ascii=False,indent=2))
                 raise
             saved={'id':key,'kind':kind,'day':day,'plan':plan,'sources':sources,'usage':usage,'authored_at':now.isoformat(),
@@ -351,16 +393,43 @@ def reflect(c,kind,base_url,model,human_id='',slot=1,now=None,planner=None,
                 atomic_write(checkin.path_for(c),json.dumps(state,ensure_ascii=False,indent=2))
         saved.update(complete=True,results=results);atomic_write(path,json.dumps(saved,ensure_ascii=False,indent=2))
         held=[r for r in results if r.get('held')]
-        return {'status':'recorded','id':key,'results':results,'usage':usage,'more_conversation_messages':more,
+        return {'status':'recorded','id':key,'attempts':attempts['count'],'results':results,'usage':usage,'more_conversation_messages':more,
                 'clean':not (diagnostics['omitted'] or diagnostics['warnings'] or held),
                 'omitted':diagnostics['omitted'],'warnings':diagnostics['warnings'],'held_facts':len(held)}
 
+def read_attempts(path):
+    try:return json.loads(pathlib.Path(path).read_text(encoding='utf-8'))
+    except FileNotFoundError:return {'count':0,'errors':[]}
+
+def reset_attempts(c,budget_key,reason,now=None):
+    """Give a held batch a fresh attempt budget. Audited: the spent count and
+    its errors stay in the file under `resets`, with the reason given."""
+    if not re.fullmatch(r'[a-z]+-[\w-]+',budget_key or ''):raise ValueError('unknown attempt budget')
+    reason=(reason or '').strip()
+    if not reason:raise ValueError('a reason is required to reset an attempt budget')
+    now=now or dt.datetime.now(ZoneInfo(c.timezone))
+    folder=c.life/'local-reflections';path=folder/(budget_key+'.attempts.json')
+    if not path.exists():raise ValueError('unknown attempt budget')
+    kind=budget_key.split('-',1)[0]
+    with file_lock(folder/(kind+'.lock')):
+        attempts=read_attempts(path)
+        attempts.setdefault('resets',[]).append({'at':now.isoformat(),'reason':reason[:500],
+                                                 'spent':attempts['count'],'errors':attempts['errors']})
+        attempts.update(count=0,errors=[]);attempts.pop('last_at',None)
+        atomic_write(path,json.dumps(attempts,ensure_ascii=False,indent=2))
+    return {'status':'reset','budget':budget_key,'resets':len(attempts['resets'])}
+
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--home',type=pathlib.Path)
-    p.add_argument('--kind',choices=KINDS,required=True);p.add_argument('--base-url',required=True);p.add_argument('--model',required=True)
+    p.add_argument('--kind',choices=KINDS,required=True);p.add_argument('--base-url');p.add_argument('--model')
+    p.add_argument('--reset-attempts',metavar='BUDGET',help='give a held batch a fresh attempt budget (needs --reason)')
+    p.add_argument('--reason',default='')
     p.add_argument('--human-user-id',default='');p.add_argument('--slot',type=int,default=1)
     companion_endpoint.add_arguments(p)
     a=p.parse_args()
+    if a.reset_attempts:
+        print(json.dumps(reset_attempts(cc.load(a.home),a.reset_attempts,a.reason),indent=2));return
+    if not (a.base_url and a.model):p.error('--base-url and --model are required')
     print(json.dumps(reflect(cc.load(a.home),a.kind,a.base_url,a.model,a.human_user_id,a.slot,
                              allow_remote=a.allow_remote,api_key_env=a.api_key_env),
                      ensure_ascii=False,indent=2))

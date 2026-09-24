@@ -50,7 +50,7 @@ def _read(path,kind=None):
 
 # Describe how a row was written, not what it claims; a retry written by a
 # newer release may describe the same row differently.
-_ROW_METADATA=frozenset({'recorded_at','provenance','statement_origin','statement_check'})
+_ROW_METADATA=frozenset({'recorded_at','provenance','statement_origin','statement_check','held_decision'})
 
 def _append(path,row,dedupe_id=True,guard=None):
     """Append one row. `guard` runs under the same lock after the ID check; a
@@ -81,33 +81,30 @@ def _text(value,limit,label):
 _QUOTES=str.maketrans({'\u2018':"'",'\u2019':"'",'\u201a':"'",'\u201b':"'",'\u2032':"'",
                        '\u201c':'"','\u201d':'"','\u201e':'"','\u201f':'"','\u2033':'"'})
 
-_SPACE_BEFORE_MARK=re.compile(r'\s+(?=[,;:.!?](?:\s|$))')
-_FINAL_STOP=re.compile(r'(?<=\S)[.!]+$')
+# Ordinary prose whitespace. Named, not \s, so Python and us.js agree exactly.
+_PROSE_SPACE=re.compile('[ \t\n\r\f\v\u00a0]+')
 
 def canonical_statement(text):
     """The form two fact statements must share to be refused as the same one.
 
     A refused write is a lost memory while a duplicate is only clutter, so this
-    erases formatting alone -- the policy, in full:
+    erases the least it can -- the policy, in full:
 
-      * Unicode composition (NFC): a composed and a decomposed "é" are one
-        letter. Compatibility forms are NOT folded: NFKC turns "x²" into "x2"
-        and "５" into "5", which are different text.
-      * Curly and straight quote marks. The marks themselves stay: "friend"
-        in quotation marks can mean something plain friend does not.
-      * Runs of whitespace, and whitespace before , ; : . ! ?
-      * One run of "." or "!" ending the statement.
-      * The case of the first letter only; sentence case is formatting. Case
-        elsewhere is kept ("US"/"us", "Polish"/"polish", "May"/"may").
+      * Unicode composition (NFC): a composed and a decomposed "e" with an
+        accent are one letter. Compatibility forms are NOT folded: NFKC turns
+        "x\u00b2" into "x2", which is different text.
+      * Leading/trailing ordinary whitespace, and runs of it inside
+        (space, tab, newline, carriage return, form feed, vertical tab,
+        no-break space) collapsed to one space.
 
-    Everything else is kept, including signs (-5/+5/5), % and currency and
-    unit symbols, "C++"/"C#"/"C", operators, apostrophes, word order and
-    negation. duplicate_facts() is the looser, report-only comparison.
+    Everything else is kept: case anywhere (including the first letter),
+    every punctuation mark (a final "!" or ".", quotation marks and their
+    style, spacing before a comma), signs, % and currency and unit symbols,
+    "C++"/"C#"/"C", operators, apostrophes, word order and negation. There is
+    no list of exceptions to grow; duplicate_facts() is the looser,
+    report-only comparison.
     """
-    text=unicodedata.normalize('NFC',str(text or '')).translate(_QUOTES)
-    text=' '.join(text.split())
-    text=_FINAL_STOP.sub('',_SPACE_BEFORE_MARK.sub('',text))
-    return text[:1].lower()+text[1:]
+    return _PROSE_SPACE.sub(' ',unicodedata.normalize('NFC',str(text or ''))).strip(' ')
 
 # The statement of a fact written from a reflection is the model's wording; only
 # its evidence is the human's. A screen for obvious mismatches is not a proof.
@@ -116,7 +113,7 @@ PARAPHRASE_CHECK=('screened for changed numbers, negation, certainty, names and 
                   'the statement is not otherwise verified against its quote')
 
 def record_fact(root,statement,evidence,now,category='other',confidence='stated',
-                source='',supersedes='',human='the human',statement_origin='recorded'):
+                source='',supersedes='',human='the human',statement_origin='recorded',held_decision=None):
     """Append one fact.
 
     A statement equal (by canonical_statement) to an active fact is refused
@@ -144,6 +141,7 @@ def record_fact(root,statement,evidence,now,category='other',confidence='stated'
                        f'Recorded from stated or observed evidence about {human}; not imagined')}
     if statement_origin=='model_paraphrase':
         row['statement_origin']=statement_origin;row['statement_check']=PARAPHRASE_CHECK
+    if held_decision:row['held_decision']=dict(held_decision)
     key=canonical_statement(statement);equal=[]
     def guard():
         active=facts(root)
@@ -221,24 +219,70 @@ def hold_fact(root,statement,evidence,now,category,source,reasons,human='the hum
     return {**_append(pathlib.Path(root)/'facts-held.jsonl',row),'held':True,'reasons':list(reasons)}
 
 def held_facts(root):
-    """Held statements that have not been accepted or dismissed."""
+    """Held statements that have not been decided. One whose decision was
+    started but not finished carries `pending_decision`; deciding it again
+    (the same way) finishes it. Read-only: nothing is recovered here."""
     rows=_read(pathlib.Path(root)/'facts-held.jsonl')
     done={r['held_id'] for r in rows if r.get('kind')=='held_fact_decision'}
-    return [r for r in rows if r.get('kind')=='held_fact' and r['id'] not in done]
+    intents={r['held_id']:r for r in rows if r.get('kind')=='held_fact_intent'}
+    return [{**r,'pending_decision':intents[r['id']]['decision']} if r['id'] in intents else r
+            for r in rows if r.get('kind')=='held_fact' and r['id'] not in done]
 
-def decide_held(root,held_id,decision,now,human='the human'):
-    """`accept` records the statement as an ordinary fact; `dismiss` drops it.
-    Either way the held row stays in its file."""
-    if decision not in ('accept','dismiss'):raise ValueError('decision must be accept or dismiss')
-    row=next((r for r in held_facts(root) if r['id']==held_id),None)
-    if not row:raise ValueError('unknown or already decided held fact')
-    out={}
-    if decision=='accept':
-        out=record_fact(root,row['statement'],row['evidence'],now,row['category'],'stated',row['source'],
-                        human=human,statement_origin='model_paraphrase')
-    _append(pathlib.Path(root)/'facts-held.jsonl',{'id':_mkid('decide',held_id),'kind':'held_fact_decision',
-            'held_id':held_id,'decision':decision,'recorded_at':now.isoformat()})
-    return {'decision':decision,**out}
+HELD_DECISIONS=('accept','dismiss')
+HELD_OVERRIDE_NOTE=('Accepted by a person after the paraphrase screen held it; this is an owner override, '
+                    'not a machine verification of the statement')
+
+class HeldDecisionConflict(ValueError):
+    """A different decision was already taken, or started, for this held fact."""
+
+def _decision_lock(root):return pathlib.Path(root)/'.facts-held.decide.lock'
+
+def decide_held(root,held_id,decision,now,human='the human',origin='owner'):
+    """Settle one held fact: `accept` records it as an ordinary fact (marked as
+    an owner override), `dismiss` records only the decision. The held row, its
+    reasons and exact evidence are never changed.
+
+    Recoverable protocol, serialized per human store:
+      lock order: .facts-held.decide.lock -> facts.jsonl lock -> facts-held.jsonl lock
+      1. intent   {held_id, decision, op_id} appended; it fixes which decision wins
+      2. effect   accept: record_fact with a deterministic ID (a retry finds the
+                  row it wrote; an equal active fact is reported as duplicate_of)
+      3. decision {held_id, decision, op_id, fact_id|duplicate_of} appended
+    A crash between steps leaves an intent; deciding the same way again resumes
+    it with the same op_id. A different decision after an intent or decision is
+    refused (HeldDecisionConflict) before any effect. Repeating a finished
+    decision returns it unchanged, even if the fact was later retracted -- it is
+    not re-recorded, and nothing else is retracted to compensate."""
+    if decision not in HELD_DECISIONS:raise ValueError('decision must be accept or dismiss')
+    path=pathlib.Path(root)/'facts-held.jsonl'
+    with file_lock(_decision_lock(root)):
+        rows=_read(path)
+        row=next((r for r in rows if r.get('kind')=='held_fact' and r.get('id')==held_id),None)
+        if not row:raise ValueError('unknown held fact')
+        op_id=_mkid('decide-op',held_id,decision)
+        done=next((r for r in rows if r.get('kind')=='held_fact_decision' and r.get('held_id')==held_id),None)
+        if done:
+            if done['decision']!=decision:
+                raise HeldDecisionConflict(f'held fact was already decided: {done["decision"]}')
+            return {'decision':decision,'op_id':done.get('op_id',op_id),'already_decided':True,
+                    **{k:done[k] for k in ('fact_id','duplicate_of') if done.get(k)}}
+        intent=next((r for r in rows if r.get('kind')=='held_fact_intent' and r.get('held_id')==held_id),None)
+        if intent and intent['decision']!=decision:
+            raise HeldDecisionConflict(f'a {intent["decision"]} decision is already in progress for this held fact')
+        resumed=bool(intent)
+        if not intent:
+            _append(path,{'id':op_id,'kind':'held_fact_intent','held_id':held_id,'decision':decision,
+                          'op_id':op_id,'origin':origin,'recorded_at':now.isoformat()})
+        out={}
+        if decision=='accept':
+            out=record_fact(root,row['statement'],row['evidence'],now,row['category'],'stated',row['source'],
+                            human=human,statement_origin='model_paraphrase',
+                            held_decision={'held_id':held_id,'op_id':op_id,'origin':origin,'note':HELD_OVERRIDE_NOTE})
+        result={'fact_id':out['entry']['id']} if out.get('entry') else {'duplicate_of':out['duplicate_of']} if out.get('duplicate_of') else {}
+        _append(path,{'id':_mkid('decide',held_id),'kind':'held_fact_decision','held_id':held_id,'decision':decision,
+                      'op_id':op_id,'origin':origin,**result,'recorded_at':now.isoformat()})
+        return {'decision':decision,'op_id':op_id,'resumed':resumed,**result,
+                **({'written':out['written']} if decision=='accept' else {})}
 
 def record_pref(root,text,now,valence='like',subject='',agent='the companion'):
     if valence not in VALENCE:raise ValueError(f'valence must be one of {VALENCE}')

@@ -81,7 +81,7 @@ assert.match(outsideDetails(sandbox.relationshipHero({intimacy:{...romantic,viol
 /* -------------------------------------------------------------- the page */
 const day=n=>new Date(Date.UTC(2026,8,23-n,12)).toISOString();
 const moment=(id,kind,n,status='active')=>({id,kind:'moment',moment:kind,text:'Moment '+id,happened_on:'',status,recorded_at:day(n)});
-function dataset({facts=0,moments=[],experiences=[],prefs=0,questions=0,loops=0,standing=0,intimacy=romantic}={}){
+function dataset({facts=0,moments=[],experiences=[],prefs=0,questions=0,loops=0,standing=0,intimacy=romantic,held=[]}={}){
   const cats=['likes','people','places','work','history','other'];
   return {
     '/relationship':{bars:{feelings:warm},pronoun_set:'she',intimacy,moments,kinds:{first:'Firsts'},milestones:[{label:'A first to remember',earned:true},{label:'An inside joke',earned:false}],settings:{relationship_progression:'milestones'}},
@@ -90,7 +90,8 @@ function dataset({facts=0,moments=[],experiences=[],prefs=0,questions=0,loops=0,
       questions:Array.from({length:questions},(_,i)=>({text:'Why did you stop playing guitar? '+i})),
       preferences:Array.from({length:prefs},(_,i)=>({valence:['like','dislike','curious','mixed'][i%4],subject:'Subject '+i,text:'Detail '+i,recorded_at:day(i)}))},
     '/overview':{loops:Array.from({length:loops},(_,i)=>({title:'Show the old photograph '+i,detail:'promised'}))},
-    '/feelings/experiences':{experiences,total:experiences.length,next_cursor:null}};
+    '/feelings/experiences':{experiences,total:experiences.length,next_cursor:null},
+    '/facts/held':{held}};
 }
 let calls=[],page;
 const elements={};
@@ -98,7 +99,7 @@ const element=id=>elements[id]||(elements[id]={id,innerHTML:'',hidden:true,value
 async function renderPage(data){
   calls=[];for(const k of Object.keys(elements))delete elements[k];
   Object.assign(sandbox,{$:element,chatName:()=>'Nova',
-    api:async(p,opts)=>{calls.push([p,opts&&opts.method||'GET']);if(p.includes('/forget'))return {};if(!(p in data))throw Error('unexpected '+p);return data[p];},
+    api:async(p,opts)=>{calls.push([p,opts&&opts.method||'GET',opts&&opts.body]);if(p.includes('/forget')||p.endsWith('/decide'))return {};if(!(p in data))throw Error('unexpected '+p);return data[p];},
     notice:()=>{},dialog:(title,html)=>{element('dialog-body').innerHTML=html;element('dialog-title').textContent=title;}});
   run("current='relationship'");
   await run('workspaceHandlers.relationship()');
@@ -199,9 +200,9 @@ assert.equal(sandbox.usMemoryPreview([{id:'q',category:'other',statement:'Robin 
   const cases=JSON.parse(fs.readFileSync(path.join(__dirname,'canonical_statement_cases.json'),'utf8'));
   for(const [a,b] of cases.same)
     assert.equal(sandbox.usFactKey({statement:a}),sandbox.usFactKey({statement:b}),`same: ${a} / ${b}`);
-  for(const [a,b] of cases.different)
+  for(const [a,b] of [...cases.different,...cases.revised])
     assert.notEqual(sandbox.usFactKey({statement:a}),sandbox.usFactKey({statement:b}),`different: ${a} / ${b}`);
-  same(sandbox.usMemoryPreview([{id:'a',category:'likes',statement:'Robin likes tea.'},{id:'b',category:'other',statement:'robin likes tea'}],5).map(f=>f.id).length,1);
+  same(sandbox.usMemoryPreview([{id:'a',category:'likes',statement:'Robin likes tea.'},{id:'b',category:'other',statement:' Robin  likes tea.'}],5).map(f=>f.id).length,1);
 }
 // Pairs that only open alike are separate memories, each in its own slot.
 for(const [a,b] of [['Robin likes Fire Emblem.','Robin dislikes Fire Emblem.'],
@@ -235,7 +236,7 @@ assert.match(page,/<ul class="us-standing-list" id="us-standing-list" hidden>/);
 
 // 15: marking a memory incorrect still calls the correction endpoint.
 await click('forget',{fact:'f3'});
-assert.deepEqual(calls.at(-1),['/facts/f3/forget','POST'],'15: correction endpoint');
+assert.deepEqual(calls.at(-1).slice(0,2),['/facts/f3/forget','POST'],'15: correction endpoint');
 assert.match(element('us-memories').innerHTML,/View all 39 memories/);
 
 // 13 and 14: the full library searches and filters.
@@ -336,6 +337,50 @@ const usCss=css.slice(css.indexOf('/* Us / shared relationship story'));
 assert.doesNotMatch(usCss,/:hover/,'24: no hover-only affordances');
 assert.doesNotMatch(us,/title="/,'24: no tooltip-only explanations');
 assert.doesNotMatch(us,/<div[^>]*onclick|<div[^>]*data-us-action/,'actions are buttons, not clickable divs');
+
+// Similar grouping keeps symbol suffixes: C, C++ and C# are different languages.
+for(const [a,b] of [['Robin writes C.','Robin writes C++.'],['Robin writes C#.','Robin writes C.'],['Robin writes C++.','Robin writes C#.']])
+  assert.equal(sandbox.usLikelySameFact({statement:a},{statement:b}),false,`not similar: ${a} / ${b}`);
+assert.equal(sandbox.usLikelySameFact({statement:'Robin writes C++ at work.'},{statement:'Robin writes C++ at work'}),true);
+// A big similar group is paged, not dumped into the first markup.
+{
+  const group={id:'g',category:'other',statement:'Robin has a GTX 1050 Ti for the spare PC.',
+    similar:Array.from({length:8},(_,i)=>({id:'s'+i,category:'other',statement:'Similar '+i,evidence:'quote '+i}))};
+  const html=sandbox.memoryRowHTML(group);
+  assert.equal((html.match(/class="us-similar-row"/g)||[]).length,3,'first page only');
+  assert.doesNotMatch(html,/quote 5/,'later evidence is not in the initial markup');
+  assert.match(html,/Similar memories \(8\)/);assert.match(html,/data-us-action="similar-more"[^>]*data-shown="3"/);
+  assert.equal((sandbox.usSimilarRowsHTML(group,6).match(/class="us-similar-row"/g)||[]).length,6);
+  assert.doesNotMatch(sandbox.usSimilarRowsHTML(group,8),/similar-more/);
+}
+
+// Needs review: a count, a queue that says when it failed, and explicit decisions.
+{
+  const held=[{id:'held-1',statement:'Robin loves hiking.',evidence:'2026-09-20: My sister loves hiking.',source:'session:a message:2',
+               category:'likes',reasons:['the quote is about someone else']},
+              {id:'held-2',statement:'Robin said: "I like tea."',evidence:'2026-09-20: I like tea.',source:'session:a message:3',
+               category:'likes',reasons:['transcript_wrapper']}];
+  await renderPage(dataset({facts:4,held}));
+  assert.match(page,/data-us-action="review">Needs review \(2\)</,'the count is on the page');
+  assert.doesNotMatch(page,/Robin loves hiking/,'held statements are not in the preview');
+  await click('review');
+  const queue=element('memory-library-results').innerHTML;
+  assert.match(queue,/Robin loves hiking\./);assert.match(queue,/Your exact words<\/span><br>“2026-09-20: My sister loves hiking\.”/);
+  assert.match(queue,/Source: session:a message:2/);assert.match(queue,/about someone else/);
+  assert.match(queue,/worded as a transcript/);
+  const lib=element('memory-library');
+  await lib.onclick({target:{closest:()=>({dataset:{usAction:'held-dismiss',held:'held-2'},disabled:false})}});
+  same(calls.at(-1).slice(0,3),['/facts/held/held-2/decide','POST',JSON.stringify({decision:'dismiss'})]);
+  assert.doesNotMatch(element('memory-library-results').innerHTML,/I like tea/,'a decided item leaves the queue');
+  assert.match(element('us-memories').innerHTML,/Needs review \(1\)/);
+
+  const broken=dataset({facts:4});delete broken['/facts/held'];
+  await renderPage(broken);
+  assert.match(page,/Could not load memories that need review/,'a failed load is not an empty queue');
+  assert.doesNotMatch(page,/Needs review \(0\)/);
+  await renderPage(dataset({facts:4}));
+  assert.doesNotMatch(page,/Needs review|need review/,'an empty queue is quiet');
+}
 
 console.log('Us page regressions passed');
 })().catch(error=>{console.error(error);process.exit(1);});

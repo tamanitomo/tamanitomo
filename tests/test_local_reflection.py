@@ -126,13 +126,48 @@ class FactQualityTests(unittest.TestCase):
             plan=self.plan(statement='Robin enjoys playing Fire Emblem.');plan['facts'][0]['quote_id']=quote
             with self.assertRaises(ValueError):reflection.validate(plan,'daily',self.source,[],'Robin')
 
-    def test_transcript_wrappers_are_refused(self):
-        for bad in ('Robin said: "I play Fire Emblem all the time."','Robin said that he plays Fire Emblem.',
-                    'robin mentioned: Fire Emblem','Robin told me he plays Fire Emblem.','The human said: I play Fire Emblem',
-                    'The user said he plays Fire Emblem.'):
-            with self.assertRaises(ValueError,msg=bad):reflection.validate(self.plan(statement=bad),'daily',self.source,[],'Robin')
+    WRAPPERS=('Robin said: "I play Fire Emblem all the time."','Robin said that he plays Fire Emblem.',
+              'robin mentioned: Fire Emblem','Robin told me he plays Fire Emblem.','The human said: I play Fire Emblem',
+              'The user said he plays Fire Emblem.')
+    def test_transcript_wrappers_are_held_not_fatal(self):
+        for bad in self.WRAPPERS:
+            found=reflection.validate(self.plan(statement=bad),'daily',self.source,[],'Robin')
+            self.assertEqual(found['held'],[{'kind':'fact','quote_id':'7','statement':bad,'reason':'transcript_wrapper'}],bad)
+            # A contract-2 plan was saved when this was fatal, and stays so on resume.
+            with self.assertRaises(ValueError,msg=bad):reflection.validate(self.plan(statement=bad),'daily',self.source,[],'Robin',contract=2)
         # Only that shape: the human's name leading an ordinary proposition is fine.
-        reflection.validate(self.plan(statement='Robin saids nothing; Robin plays Fire Emblem often.'),'daily',self.source,[],'Robin')
+        found=reflection.validate(self.plan(statement='Robin saids nothing; Robin plays Fire Emblem often.'),'daily',self.source,[],'Robin')
+        self.assertEqual(found['held'],[])
+
+    def test_a_wrapper_fact_is_held_as_written_and_its_siblings_are_kept(self):
+        quotes=self.converse('I play Fire Emblem all the time.','I have three cats.')
+        plan=empty()
+        plan['facts']=[{'quote_id':quotes[0],'category':'likes','statement':'Robin said: "I play Fire Emblem all the time."'},
+                       {'quote_id':quotes[1],'category':'other','statement':'Robin has 3 cats.'}]
+        calls=[]
+        result=self.run_daily(None,planner=lambda *a:(calls.append(1),(plan,None))[1])
+        self.assertEqual(result['status'],'recorded');self.assertFalse(result['clean']);self.assertEqual(result['held_facts'],1)
+        self.assertEqual(len(calls),1,'no second request is made for style')
+        self.assertEqual([f['statement'] for f in slf.facts(self.c.human_dir)],['Robin has 3 cats.'])
+        [held]=slf.held_facts(self.c.human_dir)
+        self.assertEqual(held['statement'],'Robin said: "I play Fire Emblem all the time."','not re-worded')
+        self.assertIn('transcript_wrapper',held['reasons'])
+        self.assertTrue(held['evidence'].endswith('I play Fire Emblem all the time.'))
+
+    def test_a_saved_plan_resumes_with_its_saved_diagnostics(self):
+        [quote]=self.converse('I play Fire Emblem all the time.')
+        plan=self.plan(statement='Robin plays Fire Emblem.');plan['facts'][0]['quote_id']=quote
+        plan['questions']=['Which Fire Emblem did you play first?']
+        folder=self.c.life/'local-reflections';folder.mkdir(parents=True)
+        day=(self.now-dt.timedelta(days=1)).date().isoformat()
+        sources=reflection.quotation_sources(reflection.messages(self.c,self.now-dt.timedelta(days=1),self.now,'robin')[0])
+        # Saved with a diagnostic today's rules would not produce: that decision stands.
+        (folder/f'daily-{day}.json').write_text(json.dumps({'id':f'daily-{day}','kind':'daily','day':day,'plan':plan,
+            'sources':sources,'usage':None,'authored_at':self.now.isoformat(),'contract':3,'complete':False,
+            'diagnostics':{'omitted':[{'kind':'question','text':plan['questions'][0],'reason':'saved'}],'warnings':[],'held':[]}}))
+        result=self.run_daily(None,planner=lambda *a:self.fail('a saved plan is not re-requested'))
+        self.assertEqual(result['status'],'recorded');self.assertEqual(slf.questions(self.c.life),[])
+        self.assertEqual([d['reason'] for d in result['omitted']],['saved'])
 
     def test_the_prompt_asks_for_propositions_and_sees_what_is_known(self):
         slf.record_fact(self.c.human_dir,'Robin has a sister.','2026-09-01: my sister',self.now,'people',human='Robin')
@@ -170,10 +205,10 @@ class FactQualityTests(unittest.TestCase):
         for good in ('Why did you stop playing guitar?','What happened next?','Did your sister like the gift she got?',
                      'What was he like, your old roommate?','Robin, how was the trip?','How was the trip, Robin?',
                      'Did Robin the cat ever come home to you?',"Is robin's sister older?"):
-            self.assertEqual(check(good),{'omitted':[],'warnings':[]},good)
+            self.assertEqual(check(good),{'omitted':[],'warnings':[],'held':[]},good)
         # A name that is also a word is not the person.
-        self.assertEqual(check('What will you do tomorrow?','Will'),{'omitted':[],'warnings':[]})
-        self.assertEqual(check('May I ask about your trip?','May'),{'omitted':[],'warnings':[]})
+        self.assertEqual(check('What will you do tomorrow?','Will'),{'omitted':[],'warnings':[],'held':[]})
+        self.assertEqual(check('May I ask about your trip?','May'),{'omitted':[],'warnings':[],'held':[]})
         # Machine wording is left out; a question about the human in the third person is kept and reported.
         for bad in ('How does the human feel about moving again?','Why did the user stop playing guitar?','q-0123abcd'):
             found=check(bad);self.assertEqual([d['text'] for d in found['omitted']],[bad]);self.assertEqual(found['warnings'],[])
@@ -202,19 +237,99 @@ class FactQualityTests(unittest.TestCase):
         self.assertTrue(result['clean']);self.assertEqual(result['held_facts'],0)
 
     def test_refused_plans_are_retried_a_bounded_number_of_times(self):
-        [quote]=self.converse('I play Fire Emblem all the time.')
-        bad=self.plan(statement='Robin said: "I play Fire Emblem all the time."');bad['facts'][0]['quote_id']=quote
+        self.converse('I play Fire Emblem all the time.')
+        bad=self.plan(statement='Robin plays Fire Emblem.');bad['facts'][0]['quote_id']='not-a-quote'
         calls=[]
         def planner(*a):calls.append(1);return bad,None
         for _ in range(reflection.MAX_ATTEMPTS):
             with self.assertRaises(ValueError):
                 self.run_daily(None,planner=planner)
+            self.now+=dt.timedelta(hours=2)
         held=self.run_daily(None,planner=planner)
         self.assertEqual(held['status'],'held');self.assertEqual(len(calls),reflection.MAX_ATTEMPTS,'the model is not asked again')
         self.assertEqual(len(held['errors']),reflection.MAX_ATTEMPTS)
         folder=self.c.life/'local-reflections'
         self.assertEqual(len(list(folder.glob(held['id']+'.rejected-*.json'))),reflection.MAX_ATTEMPTS,'each refused plan is kept for review')
         self.assertEqual(slf.facts(self.c.human_dir),[])
+
+    def attempts(self,key=None):
+        folder=self.c.life/'local-reflections'
+        [path]=[folder/f'{key}.attempts.json'] if key else list(folder.glob('*.attempts.json'))
+        return json.loads(path.read_text())
+
+    def test_the_whole_attempt_is_counted_before_the_request(self):
+        self.converse('I play Fire Emblem all the time.')
+        seen=[]
+        def planner(*a):
+            seen.append(self.attempts()['count'])
+            raise OSError('connection refused')
+        with self.assertRaises(OSError):self.run_daily(None,planner=planner)
+        self.assertEqual(seen,[1],'accounted on disk before inference')
+        self.assertEqual(self.attempts()['errors'][0]['error'],'connection refused')
+        # A truncated or undecodable reply is an attempt too.
+        for exc in (ValueError('reflection was truncated; nothing recorded'),json.JSONDecodeError('bad','x',0)):
+            self.now+=dt.timedelta(hours=2)
+            def fail(*a,exc=exc):raise exc
+            with self.assertRaises(ValueError):self.run_daily(None,planner=fail)
+        self.now+=dt.timedelta(hours=2)
+        held=self.run_daily(None,planner=lambda *a:self.fail('budget spent'))
+        self.assertEqual((held['status'],held['attempts']),('held',3))
+
+    def test_a_crash_mid_generation_still_spends_the_attempt(self):
+        self.converse('I play Fire Emblem all the time.')
+        class Killed(BaseException):pass
+        def planner(*a):raise Killed()
+        with self.assertRaises(Killed):self.run_daily(None,planner=planner)
+        self.assertEqual(self.attempts()['count'],1)
+
+    def test_failed_attempts_back_off(self):
+        self.converse('I play Fire Emblem all the time.')
+        def fail(*a):raise OSError('down')
+        with self.assertRaises(OSError):self.run_daily(None,planner=fail)
+        waiting=self.run_daily(None,planner=lambda *a:self.fail('too soon'))
+        self.assertEqual(waiting['status'],'waiting')
+        self.assertEqual(waiting['retry_after'],(self.now+reflection.BACKOFF[0]).isoformat())
+        self.now+=reflection.BACKOFF[0]
+        [quote]=['1:0'];plan=self.plan(statement='Robin plays Fire Emblem.');plan['facts'][0]['quote_id']=quote
+        self.assertEqual(self.run_daily(plan)['status'],'recorded')
+
+    def test_a_reset_is_explicit_and_audited(self):
+        self.converse('I play Fire Emblem all the time.')
+        def fail(*a):raise OSError('down')
+        for _ in range(reflection.MAX_ATTEMPTS):
+            with self.assertRaises(OSError):self.run_daily(None,planner=fail)
+            self.now+=dt.timedelta(hours=2)
+        held=self.run_daily(None,planner=fail)
+        self.assertEqual(held['status'],'held')
+        with self.assertRaises(ValueError):reflection.reset_attempts(self.c,held['budget'],'')
+        with self.assertRaises(ValueError):reflection.reset_attempts(self.c,'../escape','why')
+        out=reflection.reset_attempts(self.c,held['budget'],'model server was down all night',self.now)
+        self.assertEqual(out['resets'],1)
+        audit=self.attempts(held['budget'])
+        self.assertEqual((audit['count'],audit['resets'][0]['spent'],len(audit['resets'][0]['errors'])),(0,3,3))
+        plan=self.plan(statement='Robin plays Fire Emblem.');plan['facts'][0]['quote_id']='1:0'
+        self.assertEqual(self.run_daily(plan)['status'],'recorded')
+
+    def test_a_new_checkin_arrival_does_not_reset_the_budget(self):
+        self.converse('I play Fire Emblem all the time.')
+        checkin.flag(self.c,self.now-dt.timedelta(hours=1))
+        def fail(*a):raise OSError('down')
+        run=lambda planner:reflection.reflect(self.c,'checkin','http://127.0.0.1:1','m','robin',now=self.now,planner=planner)
+        for i in range(reflection.MAX_ATTEMPTS):
+            # Every attempt sees a batch the next conversation has grown, so a new plan key.
+            checkin.flag(self.c,self.now);db=sqlite3.connect(self.c.home/'state.db')
+            db.execute('INSERT INTO messages VALUES (?,?,?,?,?,1,0,0)',(10+i,'chat','user',f'more {i}',self.now.timestamp()-5))
+            db.commit();db.close()
+            with self.assertRaises(OSError):run(fail)
+            self.now+=dt.timedelta(hours=2)
+        before=checkin.read(self.c)
+        held=run(lambda *a:self.fail('budget spent across arrivals'))
+        self.assertEqual(held['status'],'held')
+        after=checkin.read(self.c)
+        self.assertEqual((after.get('last_reflected'),after.get('last_reflected_id'),after['pending']),
+                         (before.get('last_reflected'),before.get('last_reflected_id'),before['pending']),
+                         'the watermark does not move past unprocessed evidence')
+        self.assertGreater(after['pending'],0)
 
     def test_a_plan_saved_under_the_old_contract_still_applies(self):
         (self.c.life/'local-reflections').mkdir(parents=True)
@@ -241,7 +356,7 @@ class FactLedgerTests(unittest.TestCase):
 
     def test_the_same_proposition_is_one_fact_whatever_its_category_source_or_evidence(self):
         first=self.fact('Robin enjoys playing Fire Emblem.')
-        again=self.fact('  robin enjoys   playing Fire Emblem!  ',evidence='2026-09-24T09:00:00+00:00: Fire Emblem again',
+        again=self.fact('  Robin enjoys   playing Fire Emblem.  ',evidence='2026-09-24T09:00:00+00:00: Fire Emblem again',
                         category='other',source='session:b message:9')
         self.assertTrue(first['written'])
         self.assertEqual(again,{'written':False,'reason':'fact already recorded','duplicate_of':first['entry']['id']})
@@ -260,10 +375,11 @@ class FactLedgerTests(unittest.TestCase):
         cases=json.loads((ROOT/'tests/canonical_statement_cases.json').read_text(encoding='utf-8'))
         for a,b in cases['same']:
             self.assertEqual(slf.canonical_statement(a),slf.canonical_statement(b),(a,b))
-        for a,b in cases['different']:
+        # 'revised' pairs were folded before the closure; case and punctuation are now kept.
+        for a,b in cases['different']+cases['revised']:
             self.assertNotEqual(slf.canonical_statement(a),slf.canonical_statement(b),(a,b))
         # ...and at write time: the second of each different pair is a new memory, not a duplicate.
-        for i,(a,b) in enumerate(cases['different']):
+        for i,(a,b) in enumerate(cases['different']+cases['revised']):
             root=self.root.parent/f'pair-{i}'
             slf.record_fact(root,a,'2026-09-23: said so',self.now,human='Robin')
             self.assertTrue(slf.record_fact(root,b,'2026-09-23: said so',self.now,human='Robin')['written'],(a,b))
@@ -464,7 +580,123 @@ class HeldFactTests(unittest.TestCase):
         out=slf.decide_held(self.c.human_dir,held['id'],'accept',self.now,'Robin')
         self.assertTrue(out['written']);self.assertEqual(slf.held_facts(self.c.human_dir),[])
         self.assertIn('Robin loves hiking.',[f['statement'] for f in slf.facts(self.c.human_dir)])
-        with self.assertRaises(ValueError):slf.decide_held(self.c.human_dir,held['id'],'dismiss',self.now)
+        with self.assertRaises(slf.HeldDecisionConflict):slf.decide_held(self.c.human_dir,held['id'],'dismiss',self.now)
+
+class HeldDecisionProtocolTests(unittest.TestCase):
+    """decide_held: one serialized, recoverable decision per held fact."""
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
+        self.root=pathlib.Path(self.tmp.name)/'robin'
+        self.now=dt.datetime(2026,9,23,11,tzinfo=dt.timezone.utc)
+        self.held=slf.hold_fact(self.root,'Robin loves hiking.','2026-09-20: My sister loves hiking.',self.now,'likes',
+                                'session:a message:2',['the quote is about someone else'])['entry']
+    def decide(self,decision,**kw):return slf.decide_held(self.root,self.held['id'],decision,self.now,'Robin',**kw)
+    def rows(self,kind,name='facts-held.jsonl'):return slf._read(self.root/name,kind=kind)
+    def active_from_held(self):return [f for f in slf.facts(self.root) if f.get('statement')=='Robin loves hiking.']
+
+    def test_accept_keeps_the_held_record_and_marks_an_override(self):
+        before=self.held
+        out=self.decide('accept')
+        [fact]=self.active_from_held()
+        self.assertEqual(out['fact_id'],fact['id'])
+        self.assertEqual(fact['held_decision']['held_id'],self.held['id'])
+        self.assertIn('not a machine verification',fact['held_decision']['note'])
+        self.assertEqual(fact['statement_origin'],'model_paraphrase')
+        [kept]=self.rows('held_fact');self.assertEqual(kept,before,'held row, reasons and exact evidence unchanged')
+        [decision]=self.rows('held_fact_decision')
+        self.assertEqual((decision['decision'],decision['fact_id'],decision['op_id']),('accept',fact['id'],out['op_id']))
+
+    def test_the_same_decision_repeated_is_idempotent(self):
+        first=self.decide('accept');again=self.decide('accept')
+        self.assertTrue(again['already_decided']);self.assertEqual(again['fact_id'],first['fact_id'])
+        self.assertEqual(len(self.active_from_held()),1)
+        self.assertEqual(len(self.rows('held_fact_decision')),1)
+        self.assertEqual(self.decide('accept')['op_id'],first['op_id'])
+
+    def test_an_opposite_later_decision_conflicts_before_any_effect(self):
+        self.decide('dismiss')
+        before=(self.root/'facts-held.jsonl').read_bytes()
+        with self.assertRaises(slf.HeldDecisionConflict):self.decide('accept')
+        self.assertEqual(self.active_from_held(),[],'dismissed stays dismissed')
+        self.assertFalse((self.root/'facts.jsonl').exists())
+        self.assertEqual((self.root/'facts-held.jsonl').read_bytes(),before)
+
+    def test_a_retry_after_the_fact_was_retracted_does_not_resurrect_it(self):
+        out=self.decide('accept')
+        slf.retract_fact(self.root,out['fact_id'],'Not me, my sister',self.now)
+        again=self.decide('accept')
+        self.assertTrue(again['already_decided']);self.assertEqual(self.active_from_held(),[])
+        self.assertEqual(len(self.rows('human_fact','facts.jsonl')),1,'no second row written')
+
+    def test_accepting_when_an_equal_fact_is_active_records_duplicate_of(self):
+        equal=slf.record_fact(self.root,'Robin loves hiking.','2026-09-19: I love hiking',self.now,'likes',human='Robin')['entry']
+        other=slf.record_fact(self.root,'Robin likes tea.','2026-09-19: tea',self.now,'likes',human='Robin')['entry']
+        out=self.decide('accept')
+        self.assertEqual(out['duplicate_of'],equal['id']);self.assertNotIn('fact_id',out)
+        self.assertEqual({f['id'] for f in slf.facts(self.root)},{equal['id'],other['id']},'nothing retracted to compensate')
+        self.assertEqual(self.decide('accept')['duplicate_of'],equal['id'])
+
+    def test_every_interruption_boundary_recovers_to_one_outcome(self):
+        from unittest import mock
+        real_append,real_record=slf._append,slf.record_fact
+        class Crash(Exception):pass
+        def crash_on(kind):
+            def append(path,row,*a,**k):
+                if row.get('kind')==kind:raise Crash(kind)
+                return real_append(path,row,*a,**k)
+            return mock.patch.object(slf,'_append',append)
+        def crash_record(*a,**k):raise Crash('fact')
+        boundaries={'before intent':crash_on('held_fact_intent'),
+                    'after intent, before fact':mock.patch.object(slf,'record_fact',crash_record),
+                    'after fact, before decision':crash_on('held_fact_decision')}
+        for name,patch in boundaries.items():
+            for decision in ('accept','dismiss'):
+                if decision=='dismiss' and name=='after intent, before fact':continue  # dismiss writes no fact
+                with self.subTest(boundary=name,decision=decision):
+                    self.tmp.cleanup();self.setUp()
+                    with patch,self.assertRaises(Crash):self.decide(decision)
+                    pending=slf.held_facts(self.root)
+                    self.assertEqual(len(pending),1,'still undecided after the crash')
+                    if name!='before intent':
+                        self.assertEqual(pending[0]['pending_decision'],decision)
+                        opposite='dismiss' if decision=='accept' else 'accept'
+                        with self.assertRaises(slf.HeldDecisionConflict):self.decide(opposite)
+                    out=self.decide(decision)
+                    self.assertEqual(out['resumed'],name!='before intent')
+                    self.assertEqual(slf.held_facts(self.root),[])
+                    self.assertEqual(len(self.active_from_held()),1 if decision=='accept' else 0)
+                    self.assertEqual(len(self.rows('human_fact','facts.jsonl')),1 if decision=='accept' else 0)
+                    self.assertEqual(len(self.rows('held_fact_intent')),1)
+                    [done]=self.rows('held_fact_decision');self.assertEqual(done['op_id'],out['op_id'])
+
+    def test_concurrent_threads_settle_one_decision(self):
+        import threading
+        barrier=threading.Barrier(8);outcomes=[]
+        def run(decision):
+            barrier.wait()
+            try:outcomes.append(('ok',self.decide(decision)['decision']))
+            except slf.HeldDecisionConflict:outcomes.append(('conflict',decision))
+        threads=[threading.Thread(target=run,args=('accept' if i%2 else 'dismiss',)) for i in range(8)]
+        for t in threads:t.start()
+        for t in threads:t.join()
+        [winner]={d for kind,d in outcomes if kind=='ok'}
+        self.assertEqual(sum(1 for kind,d in outcomes if kind=='conflict'),4,'every opposite decision conflicted')
+        self.assertEqual(len(self.rows('held_fact_decision')),1)
+        self.assertEqual(len(self.active_from_held()),1 if winner=='accept' else 0)
+
+    def test_concurrent_processes_settle_one_decision(self):
+        import subprocess
+        script=('import sys,json,datetime as dt;sys.path.insert(0,sys.argv[1]);import companion_self as slf\n'
+                'try:print(json.dumps(slf.decide_held(sys.argv[2],sys.argv[3],sys.argv[4],dt.datetime(2026,9,23,11,tzinfo=dt.timezone.utc),"Robin")["decision"]))\n'
+                'except slf.HeldDecisionConflict:print(json.dumps("conflict"))')
+        procs=[subprocess.Popen([sys.executable,'-c',script,str(ROOT/'kit/scripts'),str(self.root),self.held['id'],
+                                 'accept' if i%2 else 'dismiss'],stdout=subprocess.PIPE,text=True) for i in range(6)]
+        answers=[json.loads(p.communicate(timeout=60)[0]) for p in procs]
+        self.assertTrue(all(p.returncode==0 for p in procs))
+        [winner]={a for a in answers if a!='conflict'}
+        self.assertEqual(answers.count('conflict'),3)
+        self.assertEqual(len(self.rows('held_fact_decision')),1)
+        self.assertEqual(len(self.active_from_held()),1 if winner=='accept' else 0)
 
 class ReadOnlyTests(unittest.TestCase):
     """Reading and reporting never change a byte of the history they read."""

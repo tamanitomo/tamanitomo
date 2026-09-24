@@ -87,13 +87,30 @@ is stored with `statement_origin: model_paraphrase`, and it is screened for
 obvious mismatches (a number, negation, certainty, name or time the quote lacks,
 or a quote about someone else). A statement that fails the screen is held in
 `facts-held.jsonl` rather than remembered: `companion_self.py held-facts` lists
-them and `decide-held --id ID --decision accept|dismiss` settles one. The screen
+them and `decide-held --id ID --decision accept|dismiss` settles one; the Us
+memory library shows the same queue under **Needs review**. A decision is
+written as an intent, then its effect, then the decision, under one lock per
+person, so an interrupted decision is finished by making it again and the
+opposite decision afterwards is refused. Accepting is the owner's override,
+recorded on the fact as `held_decision`; it is not a verification. The screen
 has known misses, listed in `tests/test_local_reflection.py`.
 
 A badly worded new question (one calling the person "the human") is left out
-and reported; it no longer costs the rest of the reflection. A plan refused as
-malformed is kept as `<id>.rejected-N.json`, and after three refusals for one
-period the model is not asked again (`status: held`).
+and reported; a fact worded as a transcript ("Robin said: ...") is held with
+reason `transcript_wrapper`. Neither costs the rest of the reflection, and
+neither makes the run `clean`.
+
+Each batch of evidence gets three generation attempts. An attempt -- request,
+decode, truncation and validation -- is counted on disk before the request is
+sent, so a crash or timeout spends it too; after a failure the next attempt
+waits 15 minutes, then an hour (`status: waiting`). A refused plan is kept as
+`<budget>.rejected-N.json`. After three the model is not asked again
+(`status: held`) and the evidence watermark stays where it was, until someone
+resets the budget with a reason:
+`companion_local_reflection.py --kind daily --reset-attempts <budget> --reason "..."`
+(the spent attempts stay in the file under `resets`). A check-in's budget
+belongs to the evidence after its watermark, so a new conversation arriving
+does not give it fresh attempts.
 
 Use `--phase morning` or `--phase winddown` on the pulse worker for a daily
 checkpoint with a code-owned unique ID. It can run as a pre-read script before

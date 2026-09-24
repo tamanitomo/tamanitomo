@@ -108,6 +108,31 @@ class AppTests(unittest.TestCase):
         self.assertEqual(self.client.get('/api/ledgers').json()['facts'],[])
         self.assertEqual(path.read_bytes(),before,'the old row is read around, never rewritten')
 
+    def test_held_facts_are_listed_and_decided_without_becoming_memories_on_view(self):
+        import companion_self as slf
+        import datetime as dt
+        now=dt.datetime.now(dt.timezone.utc)
+        held=slf.hold_fact(self.c.human_dir,'Robin loves hiking.','2026-09-20: My sister loves hiking.',now,'likes',
+                           'session:a message:2',['the quote is about someone else'])['entry']
+        other=slf.hold_fact(self.c.human_dir,'Robin said: "I like tea."','2026-09-20: I like tea.',now,'likes',
+                            'session:a message:3',['transcript_wrapper'])['entry']
+        listed=self.client.get('/api/facts/held').json()['held']
+        self.assertEqual([h['id'] for h in listed],[held['id'],other['id']])
+        self.assertEqual(listed[0]['evidence'],'2026-09-20: My sister loves hiking.')
+        self.assertEqual(listed[0]['reasons'],['the quote is about someone else'])
+        self.assertEqual(slf.facts(self.c.human_dir),[],'viewing does not accept')
+        self.assertEqual(self.client.post(f"/api/facts/held/{held['id']}/decide",json={'decision':'maybe'}).status_code,400)
+        self.assertEqual(self.client.post('/api/facts/held/held-nope/decide',json={'decision':'accept'}).status_code,404)
+        r=self.client.post(f"/api/facts/held/{held['id']}/decide",json={'decision':'accept'})
+        self.assertEqual(r.status_code,200)
+        [fact]=slf.facts(self.c.human_dir)
+        self.assertEqual((fact['statement'],fact['held_decision']['origin']),('Robin loves hiking.','owner-app'))
+        self.assertEqual(self.client.post(f"/api/facts/held/{held['id']}/decide",json={'decision':'accept'}).status_code,200)
+        self.assertEqual(self.client.post(f"/api/facts/held/{held['id']}/decide",json={'decision':'dismiss'}).status_code,409)
+        self.assertEqual(self.client.post(f"/api/facts/held/{other['id']}/decide",json={'decision':'dismiss'}).status_code,200)
+        self.assertEqual(self.client.get('/api/facts/held').json()['held'],[])
+        self.assertEqual(len(slf.facts(self.c.human_dir)),1)
+
     def test_a_mission_can_be_added_and_dropped(self):
         r=self.client.post('/api/missions',json={'title':'price a new kettle'})
         self.assertEqual(r.status_code,200)

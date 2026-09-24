@@ -10,7 +10,7 @@
    Everything is composed from existing endpoints and nothing on this page calls
    a model: the summary sentence is picked by threshold from the same meters the
    prompt already carries, so it can never say more than they do. */
-const US_LIMITS={story:12,keepsakes:6,memories:5,discoveries:5,threads:5,library:24,moments:20};
+const US_LIMITS={story:12,keepsakes:6,memories:5,discoveries:5,threads:5,library:24,moments:20,similar:3,review:10};
 const KEEPSAKE_KINDS=['first','joke','ritual','nickname','milestone'];
 const MOMENT_TITLE={first:'A first',joke:'An inside joke',ritual:'A shared ritual',
   nickname:'A name between you',milestone:'A milestone',note:'A moment worth keeping'};
@@ -202,22 +202,22 @@ function memoryPreviewScore(f){
   return score;
 }
 /* The preview never hides a memory because it looks like another one. Two
-   statements that are the same text (usFactKey, the same formatting-only rule
-   the ledger uses to refuse a duplicate) show once -- the library keeps both
+   statements that are the same text (usFactKey, the same NFC-and-whitespace
+   rule the ledger uses to refuse a duplicate) show once -- the library keeps both
    records. Statements that only share their words ("introduced Alice to Kit"
    and "introduced Kit to Alice") both stay: the later one is listed under the
    first as a Similar memory, open to read, and does not take a preview slot.
    Display only; the ledger is never touched. */
-const US_QUOTES={'‘':"'",'’':"'",'‚':"'",'‛':"'",'′':"'",'“':'"','”':'"','„':'"','‟':'"','″':'"'};
 function usFactKey(f){
-  const t=String(f.statement||'').normalize('NFC').replace(/[‘’‚‛′“”„‟″]/g,c=>US_QUOTES[c])
-    .split(/\s+/).filter(Boolean).join(' ').replace(/\s+(?=[,;:.!?](?:\s|$))/g,'').replace(/(?<=\S)[.!]+$/,'');
-  return t.slice(0,1).toLowerCase()+t.slice(1);
+  return String(f.statement||'').normalize('NFC').replace(/[ \t\n\r\f\v\u00a0]+/g,' ').replace(/^ | $/g,'');
 }
 const US_FILLER=new Set(['a','an','the','to','in','into','for','of','on','at','by','from','with','and','his','her','their','its','my','your']);
 const US_DISTINCT=/^(\d.*|no|not|never|none|nor|doesn|don|didn|isn|wasn|won|can|cannot|t|first|second|third|fourth|fifth|last|next|previous|other|another|former|latter|one|two|three|four|five|six|seven|eight|nine|ten)$/;
-const usFactWords=f=>new Set(String(f.statement||'').toLowerCase().normalize('NFKC').replace(/[’']s\b/g,'').split(/[^\p{L}\p{N}.]+/u)
-  .map(w=>w.replace(/^\.+|\.+$/g,'')).filter(w=>w&&!US_FILLER.has(w)));
+/* A symbol that is part of a name stays with it: C, C++ and C# are three words,
+   not one, and F# is not F. */
+const usFactWords=f=>new Set((String(f.statement||'').toLowerCase().normalize('NFKC').replace(/[’']s\b/g,'')
+  .match(/[\p{L}\p{N}.]+[+#]*/gu)||[])
+  .map(w=>w.replace(/^\.+|\.+(?=[+#]*$)/g,'')).filter(w=>w&&!US_FILLER.has(w)));
 /* Word-bag likeness: only ever a reason to group, never to hide. */
 function usLikelySameFact(a,b){
   const x=usFactWords(a),y=usFactWords(b);
@@ -249,12 +249,19 @@ function memoryDetailHTML(f){
     ${f.evidence?`<details class="us-evidence"><summary>Why this is remembered</summary>${usOriginNote(f)}<p>“${esc(f.evidence)}”</p></details>`:''}
     <button type="button" class="quiet small-btn" data-us-action="forget" data-fact="${esc(f.id)}">Mark incorrect</button>
     ${(f.similar||[]).length?`<details class="us-similar"><summary>Similar ${f.similar.length===1?'memory':'memories'} (${f.similar.length})</summary>
-      ${f.similar.map(g=>`<div class="us-similar-row"><p class="us-memory-text">${esc(g.statement)}</p>
-        <p class="us-memory-meta"><span class="dim small">Category</span> ${esc(usCap(g.category||'other'))}</p>
-        ${g.evidence?`<details class="us-evidence"><summary>Why this is remembered</summary>${usOriginNote(g)}<p>“${esc(g.evidence)}”</p></details>`:''}
-        <button type="button" class="quiet small-btn" data-us-action="forget" data-fact="${esc(g.id)}">Mark incorrect</button></div>`).join('')}
+      <div class="us-similar-rows" data-group="${esc(f.id)}">${usSimilarRowsHTML(f,US_LIMITS.similar)}</div>
     </details>`:''}
   </div>`;
+}
+/* Similar memories arrive a few at a time: a large group is not an unlimited
+   hidden archive in the page's first markup. */
+function usSimilarRowsHTML(f,shown){
+  const rows=(f.similar||[]).slice(0,shown);
+  return rows.map(g=>`<div class="us-similar-row"><p class="us-memory-text">${esc(g.statement)}</p>
+        <p class="us-memory-meta"><span class="dim small">Category</span> ${esc(usCap(g.category||'other'))}</p>
+        ${g.evidence?`<details class="us-evidence"><summary>Why this is remembered</summary>${usOriginNote(g)}<p>“${esc(g.evidence)}”</p></details>`:''}
+        <button type="button" class="quiet small-btn" data-us-action="forget" data-fact="${esc(g.id)}">Mark incorrect</button></div>`).join('')+
+    (f.similar.length>rows.length?`<button type="button" class="quiet small-btn" data-us-action="similar-more" data-group="${esc(f.id)}" data-shown="${rows.length}">Show ${Math.min(US_LIMITS.similar,f.similar.length-rows.length)} more of ${f.similar.length-rows.length}</button>`:'');
 }
 /* A statement written from a quote is the companion's wording; the quote is
    the record. Said plainly, without claiming the wording was checked. */
@@ -267,11 +274,38 @@ function memoryRowHTML(f){
     ${memoryDetailHTML(f)}
   </details>`;
 }
-function usMemoryPreviewHTML(facts){
+function usMemoryPreviewHTML(facts,review){
   const rows=usMemoryPreview(facts);
-  if(!rows.length)return '<p class="dim us-empty">Nothing has been written down about you yet.</p>';
+  const queue=usReviewLinkHTML(review);
+  if(!rows.length)return '<p class="dim us-empty">Nothing has been written down about you yet.</p>'+queue;
   return `<div class="us-memory-preview">${rows.map(memoryRowHTML).join('')}</div>
-    <button type="button" class="link-button" data-us-action="library">View all ${facts.length} ${facts.length===1?'memory':'memories'} →</button>`;
+    <button type="button" class="link-button" data-us-action="library">View all ${facts.length} ${facts.length===1?'memory':'memories'} →</button>${queue}`;
+}
+/* Held statements: the reflection wrote them but they did not pass its screen.
+   A small count, never a nag; a queue that failed to load says so rather than
+   reading as empty. Looking at one never makes it a memory. */
+function usReviewLinkHTML(review){
+  if(!review)return '';
+  if(review.error)return '<p class="dim small us-review-link" role="status">Could not load memories that need review.</p>';
+  if(!review.held.length)return '';
+  return `<p class="us-review-link"><button type="button" class="link-button" data-us-action="review">Needs review (${review.held.length})</button></p>`;
+}
+function usHeldReviewHTML(review,shown=US_LIMITS.review){
+  if(review.error)return '<p class="dim small" role="status">Could not load memories that need review. Nothing has been accepted or dismissed.</p>';
+  if(!review.held.length)return '<p class="dim small" role="status">Nothing needs review.</p>';
+  const page=review.held.slice(0,shown);
+  return `<p class="dim small" role="status">${review.held.length} held for review. These were written from something you said but did not pass a check against your exact words, so they are not remembered unless you accept them.</p>
+    <div class="memory-grid">${page.map(h=>`<div class="memory-card us-held-card">
+      <div class="memory-card-header"><span class="pill">${esc(h.category||'other')}</span></div>
+      <div class="memory-statement">${esc(h.statement)}</div>
+      <p class="us-held-quote"><span class="dim small">Your exact words</span><br>“${esc(h.evidence)}”</p>
+      ${h.source?`<p class="dim small">Source: ${esc(h.source)}</p>`:''}
+      <ul class="us-held-reasons">${(h.reasons||[]).map(r=>`<li>${esc(r==='transcript_wrapper'?'worded as a transcript (“… said …”) rather than a statement':r)}</li>`).join('')}</ul>
+      ${h.pending_decision?`<p class="dim small">A ${esc(h.pending_decision)} decision was started and not finished; choosing it again finishes it.</p>`:''}
+      <div class="actions"><button type="button" class="quiet small-btn" data-us-action="held-accept" data-held="${esc(h.id)}">Accept</button>
+        <button type="button" class="quiet small-btn" data-us-action="held-dismiss" data-held="${esc(h.id)}">Dismiss</button></div>
+    </div>`).join('')}</div>
+    ${review.held.length>page.length?'<div class="vault-recent-more"><button type="button" class="quiet" data-us-action="review-more">Show more</button></div>':''}`;
 }
 /* The full library: the old Memories page's search, category filter, paging
    and correction, in a dialog for when you mean to audit rather than browse. */
@@ -291,24 +325,37 @@ function renderMemoryLibrary(facts,{query='',category='all',shown=US_LIMITS.libr
       </div>`).join('')||'<p class="dim small" style="grid-column:1/-1;padding:24px;text-align:center">Nothing matches this filter.</p>'}</div>
     ${matches.length>page.length?'<div class="vault-recent-more"><button type="button" class="quiet" data-us-action="library-more">Show more</button></div>':''}`};
 }
-function openMemoryLibrary(facts,onForget){
+function openMemoryLibrary(facts,onForget,review=null,onDecide=null,startInReview=false){
   const categories=['all',...new Set(facts.map(f=>f.category).filter(Boolean))];
-  const state={query:'',category:'all',shown:US_LIMITS.library};
+  const state={query:'',category:'all',shown:US_LIMITS.library,review:startInReview&&!!review,reviewShown:US_LIMITS.review};
   dialog('All memories',`<div id="memory-library">
     <div class="memory-filters">
       <input type="search" id="memory-search" placeholder="Search memories and why they are remembered…" aria-label="Search memories">
       <select id="memory-category" aria-label="Category">${categories.map(c=>`<option value="${esc(c)}">${c==='all'?'All categories':esc(usCap(c))}</option>`).join('')}</select>
+      ${review?`<button type="button" class="quiet small-btn" id="memory-review-toggle" data-us-action="review-toggle" aria-pressed="false"></button>`:''}
     </div>
     <div id="memory-library-results"></div>
     <p class="dim small">Marking something incorrect records a superseding correction. The original evidence is kept.</p>
   </div>`);
-  const paint=()=>{$('memory-library-results').innerHTML=renderMemoryLibrary(facts,state).html;};
+  const paint=()=>{
+    const toggle=$('memory-review-toggle');
+    if(toggle){toggle.textContent=state.review?'All memories':`Needs review (${review.error?'?':review.held.length})`;toggle.setAttribute('aria-pressed',String(state.review));}
+    $('memory-library-results').innerHTML=state.review?usHeldReviewHTML(review,state.reviewShown):renderMemoryLibrary(facts,state).html;
+  };
   $('memory-search').oninput=()=>{state.query=$('memory-search').value;state.shown=US_LIMITS.library;paint();};
   $('memory-category').onchange=()=>{state.category=$('memory-category').value;state.shown=US_LIMITS.library;paint();};
   $('memory-library').onclick=async e=>{
     const b=e.target.closest?.('[data-us-action]');if(!b)return;
     if(b.dataset.usAction==='library-more'){state.shown+=US_LIMITS.library;paint();}
     if(b.dataset.usAction==='forget'){b.disabled=true;await onForget(b.dataset.fact);facts=facts.filter(f=>f.id!==b.dataset.fact);paint();}
+    if(b.dataset.usAction==='review-toggle'){state.review=!state.review;paint();}
+    if(b.dataset.usAction==='review-more'){state.reviewShown+=US_LIMITS.review;paint();}
+    if(b.dataset.usAction==='held-accept'||b.dataset.usAction==='held-dismiss'){
+      b.disabled=true;
+      const made=await onDecide(b.dataset.held,b.dataset.usAction==='held-accept'?'accept':'dismiss');
+      if(made)facts=made;
+      paint();
+    }
   };
   paint();
   return {paint,state};
@@ -448,11 +495,13 @@ workspaceHandlers.relationship=async()=>{
   // Carried threads come from /overview, which is by far the slowest of these
   // (it assembles all of Home). The page draws without it and fills them in.
   const overviewLoad=api('/overview').catch(()=>({loops:[]}));
-  const [relationship,ledgers,experiences]=await Promise.all([
+  const [relationship,ledgers,experiences,heldLoad]=await Promise.all([
     api('/relationship'),
     api('/ledgers'),
-    api('/feelings/experiences').catch(()=>({experiences:[],total:0,next_cursor:null}))
+    api('/feelings/experiences').catch(()=>({experiences:[],total:0,next_cursor:null})),
+    api('/facts/held').then(r=>({held:r.held||[],error:false}),()=>({held:[],error:true}))
   ]);
+  const review=heldLoad;
   if(current!=='relationship')return;
   const generation=++usGeneration;
   const companionName=chatName()||'Your companion';
@@ -477,7 +526,7 @@ workspaceHandlers.relationship=async()=>{
     ${relationshipHero(relationship,feelings,companionName)}
     ${section('us-recent','Recently','',renderUsStory(story,storyShown))}
     ${section('us-keepsakes','Things that became ours','',usKeepsakesHTML(keep,relationship.moments))}
-    ${section('us-memories','Remembered about you','',usMemoryPreviewHTML(facts))}
+    ${section('us-memories','Remembered about you','',usMemoryPreviewHTML(facts,review))}
     ${section('us-discoveries',`Things ${esc(companionName)} has discovered`,'Preferences and little opinions that have emerged along the way.',usDiscoveriesHTML(prefs,US_LIMITS.discoveries,companionName,relationship.pronoun_set))}
     ${section('us-threads','Still between you','Questions, promises, and loose threads that have carried into another conversation.',usOpenThreadsHTML(threads))}
     <div class="us-section us-advanced" id="us-advanced">${relationshipDetails(relationship,feelings,ledgers.standing||[],companionName)}</div>
@@ -487,14 +536,30 @@ workspaceHandlers.relationship=async()=>{
     await api('/facts/'+encodeURIComponent(id)+'/forget',{method:'POST'});
     notice('Marked incorrect. The original is kept as history.');
     facts=facts.filter(f=>f.id!==id);
-    if($('us-memories'))$('us-memories').innerHTML=usMemoryPreviewHTML(facts);
+    if($('us-memories'))$('us-memories').innerHTML=usMemoryPreviewHTML(facts,review);
+  };
+  // Accept or dismiss one held statement; the library then shows the ledger as it now is.
+  const decide=async(id,decision)=>{
+    try{await api('/facts/held/'+encodeURIComponent(id)+'/decide',{method:'POST',body:JSON.stringify({decision})});}
+    catch(e){notice('That decision was not saved: '+(e.message||e));return null;}
+    review.held=review.held.filter(h=>h.id!==id);
+    notice(decision==='accept'?'Accepted. It is remembered now, marked as your call.':'Dismissed. The held statement is kept as history.');
+    if(decision==='accept'){const fresh=await api('/ledgers').catch(()=>null);if(fresh)facts=(fresh.facts||[]).slice();}
+    if($('us-memories'))$('us-memories').innerHTML=usMemoryPreviewHTML(facts,review);
+    return facts;
   };
   $('relationship').onclick=async e=>{
     const b=e.target.closest?.('[data-us-action]');if(!b)return;
     const act=b.dataset.usAction;
     if(act==='story-more'){storyShown+=US_LIMITS.story;$('us-recent').innerHTML=renderUsStory(story,storyShown);}
     else if(act==='moments')openSharedMoments(relationship);
-    else if(act==='library')openMemoryLibrary(facts,forget);
+    else if(act==='library')openMemoryLibrary(facts,forget,review,decide);
+    else if(act==='review')openMemoryLibrary(facts,forget,review,decide,true);
+    else if(act==='similar-more'){
+      const group=usMemoryPreview(facts).find(g=>g.id===b.dataset.group);
+      const box=b.closest('.us-similar-rows');
+      if(group&&box)box.innerHTML=usSimilarRowsHTML(group,Number(b.dataset.shown||0)+US_LIMITS.similar);
+    }
     else if(act==='forget'){b.disabled=true;await forget(b.dataset.fact);}
     else if(act==='discoveries-all')$('us-discoveries').innerHTML=usDiscoveriesHTML(prefs,Infinity,companionName,relationship.pronoun_set);
     else if(act==='threads-all')$('us-threads').innerHTML=usOpenThreadsHTML(threads,Infinity);

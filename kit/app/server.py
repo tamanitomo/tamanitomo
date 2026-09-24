@@ -474,6 +474,28 @@ def build(home=None,token='',state_dir=None):
         slf.retract_fact(c.human_dir,fact_id,'Marked incorrect by '+c.human+' in the app',dt.datetime.now(dt.timezone.utc))
         return {'retired':fact_id,'note':'Retracted, not deleted. The original stays in the ledger.'}
 
+    @app.get('/api/facts/held')
+    def held_facts_list():
+        """Statements the reflection held for a person to review. Viewing one
+        never makes it a memory."""
+        c=load()
+        import companion_self as slf
+        return {'held':[{k:r.get(k) for k in ('id','statement','evidence','source','category','reasons','recorded_at','pending_decision')}
+                        for r in slf.held_facts(c.human_dir)]}
+
+    @app.post('/api/facts/held/{held_id}/decide')
+    def held_fact_decide(held_id:str,body:dict=Body(...)):
+        """Accept (record as a memory, marked as the owner's override) or
+        dismiss one held statement. Repeating a decision is safe; the opposite
+        decision afterwards is a conflict."""
+        c=load()
+        import companion_self as slf
+        decision=(body or {}).get('decision')
+        if decision not in slf.HELD_DECISIONS:raise HTTPException(400,'decision must be accept or dismiss')
+        try:return slf.decide_held(c.human_dir,held_id,decision,dt.datetime.now(dt.timezone.utc),c.human,origin='owner-app')
+        except slf.HeldDecisionConflict as exc:raise HTTPException(409,str(exc))
+        except ValueError as exc:raise HTTPException(404,str(exc))
+
     @app.get('/api/settings')
     def get_settings():
         c=load()
