@@ -99,7 +99,13 @@ env PATH=/usr/local/bin:/usr/bin:/bin TAMANITOMO_REQUIRE_NODE=1 .venv/bin/python
 python tools/build_release.py --output <scratch>/p1a.zip -> built, 292 source files (not published)
 ```
 
-Environment: Python 3.14.7 (repo venv), Node 26.7.0. CI for this branch: see the commit that records it.
+Environment: Python 3.14.7 (repo venv), Node 26.7.0.
+
+**CI**:
+- Run 35958848173 on `a4ae50f`: Linux ×3 and macOS passed. **Windows smoke failed** in the ledgers/locks step, which now includes the chat tests. The log was not readable from here. Two Windows-only hazards were fixed in `db950d9`:
+  - test SQLite connections opened with `with sqlite3.connect()` were never closed, so temp-dir cleanup cannot delete them (reproduced locally as `ResourceWarning`, now 0)
+  - the reference SSE reader read past `[DONE]` into the server's abrupt close
+- Run 35959348237 on `db950d9`: **all 5 jobs passed**. That is `linux (3.11)`, `linux (3.13)` and `linux (3.14)` on the full suite with Node required, plus `smoke (windows-latest)` and `smoke (macos-latest)`, which now include `test_chat_projection.py` and `test_mock_provider.py`.
 
 ## Known limits and open questions
 
