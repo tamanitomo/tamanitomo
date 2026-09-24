@@ -177,8 +177,8 @@ class PinnedTurns(unittest.TestCase):
                          [('user', None), ('assistant', 'length'), ('user', None), ('assistant', 'stop')])
         committed = [r for k, d in self.facts(svc, row['send_id']) if k == 'write_committed' for r in d['rows']]
         self.assertEqual([r['class'] for r in committed if r['role'] == 'user'], ['user_turn', 'user_turn'])
-        self.assertEqual((row['state'], row['owner_turn'], row['correlation'], row['error_code']),
-                         ('unknown', 'ambiguous', 'ambiguous', 'owner_turn_not_established'))
+        self.assertEqual((row['state'], row['owner_turn'], row['reply'], row['correlation'], row['error_code']),
+                         ('unknown', 'ambiguous', 'partial', 'ambiguous', 'owner_turn_not_established'))
         self.assertEqual([k for k, _ in self.facts(svc, row['send_id'])].count('executor_started'), 1)
 
     def test_truncated_and_disconnected_replies_fail_as_incomplete(self):
@@ -264,6 +264,9 @@ class PinnedTurns(unittest.TestCase):
         self.record('receipt_gap_turn', svc, row)
         self.assertIn('receipt_gap', kinds)
         self.assertNotEqual(row['state'], 'complete')
+        # Observed: the pinned CLI still exits 0 after its reply write was refused, so exit 0
+        # is again not evidence of a persisted reply; the receipt stays `unknown`.
+        self.assertEqual((row['state'], row['error_code']), ('unknown', 'receipts_incomplete'))
         self.assertEqual((row['owner_turn'], row['reply'], row['coverage']), ('unknown', 'unknown', 'incomplete'))
         self.assertIsNotNone(row['settled_at'])
         roles = [r['role'] for r in state_rows(self.env.home)]

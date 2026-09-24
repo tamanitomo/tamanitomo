@@ -166,6 +166,15 @@ class Derivation(unittest.TestCase):
         self.assertEqual(d.owner_turn, 'ambiguous')
         self.assertEqual(d.owner_rows, [])
 
+    def test_a_finished_reply_is_final_only_under_the_complete_rule(self):
+        """4.3.2: `final` is the complete rule. A stop-finished reply after an ambiguous owner turn
+        (O-12) or before any finish fact is `partial`."""
+        second = _row('user', 'user_turn', row_id=3)
+        d = cs.derive(SEND, _turn(committed(USER), committed(second), committed(REPLY), finished=OK))
+        self.assertEqual((d.owner_turn, d.reply, d.outcome), ('ambiguous', 'partial', 'unknown'))
+        d = cs.derive(SEND, _turn(committed(USER), committed(REPLY)))
+        self.assertEqual((d.coverage, d.reply, d.outcome), ('bounded', 'partial', None))
+
     def test_owner_rows_outside_the_session_set_make_coverage_incomplete(self):
         d = cs.derive(SEND, _turn(committed(_row('user', 'user_turn', sid='OTHER'))))
         self.assertEqual((d.coverage, d.owner_turn), ('incomplete', 'unknown'))

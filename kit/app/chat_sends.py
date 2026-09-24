@@ -225,12 +225,12 @@ def derive(send, facts):
         out.owner_turn = 'possible'
     else:
         out.owner_turn = 'absent'
-    # reply
+    # reply (`final` is exactly the `complete` rule; decided after the outcome below)
     final_reply = bool(public_rows) and public_rows[-1].get('finish_reason') == 'stop'
     if out.coverage == 'unavailable' or hard:
         out.reply = 'unknown'
     elif public_rows:
-        out.reply = 'final' if final_reply and out.coverage == 'complete' else 'partial'
+        out.reply = 'partial'
     elif unresolved or unsettled:
         out.reply = 'unknown'
     else:
@@ -265,6 +265,8 @@ def derive(send, facts):
             out.outcome, out.error_code = 'failed', 'timeout'
         else:
             out.outcome, out.error_code = 'failed', 'hermes_failed'
+    if out.outcome == 'complete':
+        out.reply = 'final'
     return out
 
 
