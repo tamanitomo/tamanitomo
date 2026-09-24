@@ -12,7 +12,10 @@ The scenario comes from $HERMES_HOME/fake_scenario.json (a synthetic test home):
   fail_receipt_for  write number whose write_committed receipt fails (receipt gap)
   child        'group' | 'escape': start a sleeping descendant before replying
   child_pid_file    where to write the descendant's pid
+  child_ack_file    the DESCENDANT writes its pid here after it is set up (for 'escape': after
+                    os.setsid()); the double does not continue until the file exists
   ignore_interrupt  True: the hang swallows KeyboardInterrupt (only a kill ends it)
+  hang_ready_file   written from INSIDE the hang loop, once its interrupt handling is armed
   note         True: after the owner row, a partial `length` reply, then a continuation note
                created through agent.turn_truncation.append_message with the
                `_length_continuation_nudge` tag and persisted by
@@ -92,10 +95,17 @@ def main():
         if scenario.get('kill_at') == 'after_owner_row':
             _die()
         if scenario.get('child'):
-            code = 'import os,time\n' + ('os.setsid()\n' if scenario['child'] == 'escape' else '') + 'time.sleep(60)'
-            child = subprocess.Popen([sys.executable, '-c', code], close_fds=True)
+            code = 'import os,sys,time\n' + ('os.setsid()\n' if scenario['child'] == 'escape' else '')
+            if scenario.get('child_ack_file'):
+                code += 'open(sys.argv[1], "w").write(str(os.getpid()))\n'
+            code += 'time.sleep(60)'
+            child = subprocess.Popen([sys.executable, '-c', code, scenario.get('child_ack_file', '')], close_fds=True)
             if scenario.get('child_pid_file'):
                 Path(scenario['child_pid_file']).write_text(str(child.pid))
+            if scenario.get('child_ack_file'):
+                ack = Path(scenario['child_ack_file'])
+                while not (ack.exists() and ack.read_text().strip()):
+                    time.sleep(0.01)
         if scenario.get('note'):
             from agent import session_persistence, turn_truncation
             db.append_message(session, 'assistant', 'A partial', finish_reason='length')
@@ -108,8 +118,12 @@ def main():
             note.pop('_length_continuation_nudge', None)     # as Hermes does when the reply finishes
         if scenario.get('hang'):
             end = time.monotonic() + float(scenario['hang'])
+            ready = scenario.get('hang_ready_file')
             while time.monotonic() < end:
                 try:
+                    if ready:
+                        Path(ready).write_text('in-loop')    # the handler below is now in force
+                        ready = None
                     time.sleep(0.05)
                 except KeyboardInterrupt:
                     if not scenario.get('ignore_interrupt'):

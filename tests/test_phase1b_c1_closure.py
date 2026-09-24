@@ -346,30 +346,65 @@ class F3ReceiptPaths(Base):
         self.assertEqual(self.a.launches(send_id), 1)
 
     def test_open_receipts_for_a_paused_unsettled_turn(self):
-        """Links are recorded when the controller resolves an outcome, not mid-generation, so a
-        paused `generating` turn has none (by design). The deterministic unsettled turn WITH
-        links is a finished turn whose process group still has a live member: the outcome
-        and links are recorded, settlement waits for quiescence."""
-        pid_file = self.a.tmp / 'child.pid'
-        self.a.scenario(child='group', child_pid_file=str(pid_file))
-        ident, send_id = self.start()
-        direct = wait_for(lambda: (lambda d: d if d.get('owner_message_id') and not d['settled'] else None)(
-            self.a.get(f'/chat/sends/{send_id}').json()), 30)
-        self.assertIsNotNone(direct, 'no unsettled receipt with links appeared')
+        """Links are recorded when the controller resolves an outcome, not mid-generation. The
+        deterministic unsettled turn WITH links (review of b94caf2, R3): a finished turn whose
+        group still holds a child, with a TEST-OWNED barrier on this app's own SendService
+        instance at `_kill` -- reached only after `_finalize` resolved the outcome and recorded
+        the links, and before descendant cleanup and settlement. (Reads never reach `_kill`
+        while the send is being supervised: `recover` returns early for an active send.) All
+        five paths are compared under the current binding and again after revocation while
+        the SAME send is still unsettled; the barrier is released in `finally`."""
+        import threading
+        pid_file, ack = self.a.tmp / 'child.pid', self.a.tmp / 'child.ack'
+        self.a.scenario(child='group', child_pid_file=str(pid_file), child_ack_file=str(ack))
+        self.a.bootstrap()
+        svc = self.a.app.state.chat_sends._services[os.path.realpath(self.a.home())]
+        reached, release, original = threading.Event(), threading.Event(), svc._kill
+
+        def barrier(send_id, row):
+            reached.set()
+            release.wait(60)
+            return original(send_id, row)
+        svc._kill = barrier
+        self.addCleanup(setattr, svc, '_kill', original)
+        body = self.a.body(OWNER)
+        r = self.a.post('/chat/sends', body)
+        self.assertEqual(r.status_code, 202, r.text)
+        send_id, ident = r.json()['send']['send_id'], r.json()['operation']['id']
         try:
-            listed = self.a.get('/chat/sends', open=1).json()['sends']
-            self.assertEqual([s['send_id'] for s in listed], [send_id])
-            self.assertEqual(self.fields(listed[0]), self.fields(direct))
-            self.assertEqual(listed[0]['links'], 'linked')
+            self.assertTrue(reached.wait(60), 'finalize never reached descendant cleanup')
+
+            def paths():
+                return {'direct': self.a.get(f'/chat/sends/{send_id}').json(),
+                        'lookup': self.a.get('/chat/sends', key=body['client_key']).json(),
+                        'open': self.a.get('/chat/sends', open=1).json()['sends'],
+                        'operation': self.op(ident).json()['send'],
+                        'replay': self.a.post('/chat/sends', body).json()['send']}
+            now = paths()
+            self.assertEqual([x['send_id'] for x in now['open']], [send_id])
+            now['open'] = now['open'][0]
+            direct = now['direct']
+            self.assertEqual((direct['settled'], direct['links']), (False, 'linked'))
+            self.assertIsNotNone(direct['owner_message_id'])
+            for name, receipt in now.items():
+                with self.subTest(path=name, binding='current'):
+                    self.assertEqual(self.fields(receipt), self.fields(direct))
+                    self.assertFalse(receipt['settled'])
             self.revoke()
-            for key in LINK_FIELDS:
-                self.assertNotIn(key, self.a.get('/chat/sends', open=1).json()['sends'][0])
+            later = paths()
+            self.assertEqual([x['send_id'] for x in later['open']], [send_id])   # still the same unsettled send
+            later['open'] = later['open'][0]
+            for name, receipt in later.items():
+                with self.subTest(path=name, binding='revoked'):
+                    self.assertFalse(receipt['settled'])
+                    for key in LINK_FIELDS:
+                        self.assertNotIn(key, receipt)
         finally:
-            try:
-                os.kill(int(pid_file.read_text()), 9)
-            except (OSError, ValueError):
-                pass
-        self.a.settle(send_id)
+            release.set()
+        final = self.a.settle(send_id)
+        self.assertTrue(final['settled'])
+        self.assertEqual(self.a.launches(send_id), 1)
+        self.assertEqual(self.a.get('/chat/sends', open=1).json()['sends'], [])
 
     def test_two_profiles_same_key_and_lost_response_retry(self):
         key = cs.new_ulid()

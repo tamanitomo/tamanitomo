@@ -766,11 +766,25 @@ class Launch(unittest.TestCase):
         self.assertEqual((row['state'], row['error_code']), ('interrupted', 'timeout'), h.facts(svc, row['send_id']))
 
     def test_a_missed_interrupt_reaches_the_kill_fallback(self):
-        """M-13 kill leg: the turn swallows KeyboardInterrupt; the owner kills the group."""
-        svc = self.env.service(turn_timeout=1.0, stop_grace=1.0, watchdog_interval=0.1)
-        _, row, _ = self.run_send(svc=svc, hang=60, ignore_interrupt=True)
+        """M-12/M-13 kill leg: the turn swallows KeyboardInterrupt; the owner kills the group.
+        Phase-aware (review of b94caf2, R3): the interrupt is requested only after the double
+        acknowledged from INSIDE its interrupt-swallowing loop. (A 1-second deadline could fire
+        before the double reached that loop; the interrupt then ended the turn normally.)"""
+        svc = self.env.service(turn_timeout=120, stop_grace=1.0, watchdog_interval=0.1)
+        ready = self.env.root / 'hang.ready'
+        h.scenario(self.env.home, hang=60, ignore_interrupt=True, hang_ready_file=str(ready))
+        body, (status, payload) = h.send(svc, self.scope)
+        send_id, result = payload['send']['send_id'], {}
+        t = threading.Thread(target=lambda: result.update(row=svc.launch(send_id, body['message'])))
+        t.start()
+        self.assertTrue(_wait(lambda: ready.exists(), 60), 'the double never reached its hang loop')
+        svc.stop(self.scope, send_id)
+        t.join(90)
+        row = result['row']
         kinds = [k for k, _ in h.facts(svc, row['send_id'])]
+        self.assertIn('stop_seen', kinds)
         self.assertIn('kill_sent', kinds)
+        self.assertEqual(kinds.count('executor_started'), 1)
         self.assertEqual((row['state'], row['error_code'], row['liveness']), ('unknown', 'executor_lost', 'quiescent'))
         self.assertIsNotNone(row['settled_at'])
 
@@ -787,12 +801,16 @@ class Launch(unittest.TestCase):
 
     def test_an_escaped_descendant_is_outside_the_stated_boundary(self):
         """M-7e setsid leg: not contained, not detected; stated, not hidden (O-10)."""
-        pid_file = self.env.root / 'child.pid'
-        _, row, _ = self.run_send(child='escape', child_pid_file=str(pid_file))
+        pid_file, ack = self.env.root / 'child.pid', self.env.root / 'child.ack'
+        # Phase-aware (review R3): the double continues only after the CHILD acknowledged that
+        # it left the group (written after os.setsid()); a parent-reported pid proved nothing.
+        _, row, _ = self.run_send(child='escape', child_pid_file=str(pid_file), child_ack_file=str(ack))
         child = int(pid_file.read_text())
         self.addCleanup(_kill, child)
+        self.assertEqual(int(ack.read_text()), child)
         self.assertEqual((row['state'], row['liveness']), ('complete', 'quiescent'))
         self.assertTrue(_alive(child))
+        self.assertEqual(os.getsid(child), child)            # its own session: outside the group
 
     def test_spawn_failure_is_not_started_and_an_identical_retry_rearms(self):
         """4.8 'Popen raised' row, re-arm (5.3), and no unsafe re-arm of a settled outcome."""
@@ -1249,6 +1267,33 @@ class AttemptLifecycle(unittest.TestCase):
         b, row = self.rearm_after_stale('after_popen', hang=1.0, release_a_when='generating')
         self.assertEqual((row['state'], row['liveness']), ('complete', 'quiescent'))
 
+    def injection_prerequisite(self, ex):
+        """The S1 gate is a test-only sitecustomize on the executor's PYTHONPATH. If the host
+        interpreter loads another sitecustomize first (observed in the review environment),
+        the gate never engages: that is a missing TEST PREREQUISITE, reported as such -- not a
+        timeout, not a skip, and never a reason to change production fencing."""
+        probe = subprocess.run([ex.python, '-c', 'import os, sitecustomize; '
+                                'print(getattr(os.open, "__name__", "?"), sitecustomize.__file__)'],
+                               env={**ex.env, 'C1_TEST_S1_GATE': ''}, cwd=ex.cwd, capture_output=True, text=True,
+                               timeout=60)
+        found = (proc_out := probe.stdout.strip().split(' ', 1)) and proc_out[0]
+        if probe.returncode != 0 or found != 'gated_open':
+            self.fail('TEST PREREQUISITE MISSING: the S1 gate injection did not load in the executor '
+                      f'interpreter (os.open={found!r}, sitecustomize={proc_out[-1] if proc_out else "?"!r}, '
+                      f'stderr={probe.stderr.strip()[-200:]!r}). Fix the test environment; do not skip.')
+
+    def test_a_shadowed_injection_is_reported_as_a_missing_prerequisite(self):
+        """The review environment's own sitecustomize shadowed inject_delay: the probe must say
+        so explicitly (a prerequisite failure), not time out or skip."""
+        shadow = self.env.root / 'shadow'
+        shadow.mkdir()
+        (shadow / 'sitecustomize.py').write_text('# a host sitecustomize that wins on sys.path\n')
+        ex = h.fake_executor(self.env.home, extra_path=[shadow, HERE / 'phase1b_c1' / 'inject_delay'])
+        with self.assertRaises(AssertionError) as caught:
+            self.injection_prerequisite(ex)
+        self.assertIn('TEST PREREQUISITE MISSING', str(caught.exception))
+        self.injection_prerequisite(h.fake_executor(self.env.home, extra_path=[HERE / 'phase1b_c1' / 'inject_delay']))
+
     def gated_stale(self, release_when, hang=None):
         """The review's exact interleaving: E1 has received `go` and is held just before S1."""
         h.scenario(self.env.home, **({'hang': hang} if hang else {}))
@@ -1256,6 +1301,7 @@ class AttemptLifecycle(unittest.TestCase):
         gate.mkdir()
         self.addCleanup(lambda: (gate / 'release').touch())
         ex = h.fake_executor(self.env.home, extra_path=[HERE / 'phase1b_c1' / 'inject_delay'])
+        self.injection_prerequisite(ex)
         ex.env['C1_TEST_S1_GATE'] = str(gate)
         a = _Paused(self.env.home, self.env.state, ex, turn_timeout=60, stop_grace=60, watchdog_interval=0.1)
         body, (_, p) = h.send(a, self.scope)
