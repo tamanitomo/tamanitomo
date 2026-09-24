@@ -1508,6 +1508,7 @@ def register(app, select, load, operations):
                 if copy:row['attachments'].append({**item,**copy})
                 if len(row['attachments'])==12:break
         return rows
+    app.state.attach_media=_attach_media
 
     @app.get('/api/sessions/{ident}')
     def session_messages(ident:str,before:str|None=None,limit:int=200):

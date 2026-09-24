@@ -54,19 +54,54 @@ def seed(tmp: Path) -> tuple[Path, cc.Companion]:
                         statement_origin='model_paraphrase' if written else 'recorded')
     slf.hold_fact(c.human_dir, 'Robin loves hiking.', f'{start.isoformat()}: My sister loves hiking.', start,
                   'likes', 'fixture message:99', ['the quote is about someone else'], c.human)
+    seed_conversation(c, start)
     return root, c
+
+
+def seed_conversation(c, start):
+    """A Hermes-schema state.db for the chat contract: the owner on the
+    workspace, a terminal and Telegram; a stranger, a group and a cron run
+    that must stay out; an edit and a deletion to reconcile."""
+    sys.path.insert(0, str(ROOT / 'tests'))
+    from chat_fixtures import HermesStore, OWNER_TELEGRAM, standard_sessions
+    from kit.app import runtime as hr
+    store = HermesStore(c.home); standard_sessions(store)
+    hr.note_workspace_session(c, 'web')
+    (c.home / '.tamanitomo-chat-owner.json').write_text(json.dumps({'telegram': [OWNER_TELEGRAM]}))
+    t = start.timestamp()
+    store.say('tg', 'user', 'Morning! On the train again.', t + 60, platform_message_id='101')
+    store.say('tg', 'assistant', 'Safe travels. Did you bring the book?', t + 90)
+    store.say('web', 'user', 'Back at my desk now.', t + 3600)
+    store.say('web', 'assistant', 'Welcome back. Tea first?', t + 3620)
+    store.say('term', 'user', 'quick question from the terminal', t + 7200)
+    store.say('stranger', 'user', 'a stranger writes (must not appear)', t + 7300)
+    store.say('group', 'user', 'group chatter (must not appear)', t + 7400)
+    store.say('job', 'assistant', 'nightly cron output (must not appear)', t + 7500)
+    for i in range(3):store.say('tg', 'user', 'hi', t + 8000)   # identical text and time, three messages
+
+
+
 
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--port', type=int, default=38500)
     p.add_argument('--keep', action='store_true', help='leave the temporary directory behind')
+    p.add_argument('--mock-provider', action='store_true',
+                   help='also serve tests/mock_provider.py and point the synthetic Hermes home at it (no fallbacks)')
     a = p.parse_args()
     tmp = Path(tempfile.mkdtemp(prefix='tamanitomo-preview-'))
     # A plain kill must still remove the synthetic data.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     try:
-        root, _ = seed(tmp)
+        root, c = seed(tmp)
+        if a.mock_provider:
+            sys.path.insert(0, str(ROOT / 'tests'))
+            from mock_provider import MockProvider
+            provider = MockProvider().__enter__()
+            (c.home / 'config.yaml').write_text(provider.hermes_config())
+            (c.home / '.env').write_text(f'MOCK_PROVIDER_KEY={provider.token}\n')
+            print(f'Mock provider: {provider.url} (scenario = model name)', flush=True)
         os.environ['COMPANION_HERMES_COMMAND'] = json.dumps([sys.executable, str(ROOT / 'tests/fake_hermes.py')])
         from kit.app.server import build
         import uvicorn

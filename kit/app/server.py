@@ -99,6 +99,8 @@ def build(home=None,token='',state_dir=None):
     app.state.write_locks={key:threading.Lock() for key in runtimes}
     from .manage import register
     register(app,select,load,Operations(state/'operations'))
+    from . import chat_routes
+    chat_routes.register(app,state,selection.get,load,lambda c,rows:app.state.attach_media(c,rows))
     from .content import register as register_content
     register_content(app,load)
     from .dashboard import register as register_dashboard
