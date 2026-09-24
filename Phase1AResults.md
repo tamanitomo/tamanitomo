@@ -62,7 +62,7 @@ python -X dev -W always::ResourceWarning -m pytest tests/test_chat_projection.py
 
 At 50,000 messages, a sync with nothing new took 7.4–7.8 ms both before and after the change (3 runs each), and a full reconcile 0.59–0.61 s. These are desktop, projection-only numbers. The new test file was added to the Windows/macOS smoke job.
 
-**CI for the closure commit:** CI_PENDING
+**CI for the closure commit** `7e616d2` (run 35984924540): all 5 jobs passed. `linux (3.11)`, `linux (3.13)` and `linux (3.14)` ran the full suite with Node required. `smoke (windows-latest)` and `smoke (macos-latest)` passed too, and these now include the R2 platform-identity tests.
 
 Unchanged: the send path, the UI, the legacy `/api/feed`, and the request-driven reconciliation (no background polling). There was no browser, phone, live-adapter or live-data testing. `ASTRA_PHASE0_REVIEW_R2.md` is still not available here, and nothing is claimed about its contents. Phase 1B has not started.
 
