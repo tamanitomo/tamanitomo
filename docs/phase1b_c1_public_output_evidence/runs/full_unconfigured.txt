@@ -1,0 +1,85 @@
+............................................................ [  3%]
+.......................................... [  6%]
+........................................................................ [ 10%]
+........................................................................ [ 14%]
+.............................................................. [ 18%]
+.................................................................... [ 22%]
+........................................................................ [ 26%]
+........................................................................ [ 30%]
+................................................. [ 33%]
+....................................... [ 35%]
+........................................................................ [ 40%]
+................................................................... [ 44%]
+................................................ssssssssssss [ 47%]
+ssssssssssss...................................... [ 50%]
+.......................................................... [ 54%]
+...........................................................sssss [ 57%]
+ssssssssssssssssssssss............................................... [ 61%]
+.................................................................................................................. [ 68%]
+..................................................................................................... [ 74%]
+........................................................................ [ 78%]
+........................................................... [ 82%]
+................................................................ [ 86%]
+............................................................... [ 89%]
+........................................................................ [ 94%]
+................................................ [ 96%]
+....................................................                     [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.14/site-packages/fastapi/testclient.py:1
+  <repo>/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:85: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:56: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:64: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:71: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:76: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:49: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:124: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:150: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:163: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:119: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:171: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:154: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:102: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:136: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:141: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:113: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:130: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:107: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:208: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:241: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:224: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:218: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:248: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c0_receipts.py:230: pinned Hermes not configured (TAMANITOMO_C0_HERMES_SRC / TAMANITOMO_C0_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:182: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:219: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:156: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:208: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:279: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:272: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:112: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:243: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:302: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:141: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:251: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:229: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:380: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:357: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:413: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:404: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:466: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:484: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:476: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:652: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:625: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:632: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:784: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:683: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:610: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:832: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+SKIPPED [1] tests/test_phase1b_c1_pinned.py:559: pinned Hermes not configured (TAMANITOMO_C1_HERMES_SRC / TAMANITOMO_C1_HERMES_PYTHON)
+1642 passed, 51 skipped, 1 warning, 591 subtests passed in 181.51s (0:03:01)

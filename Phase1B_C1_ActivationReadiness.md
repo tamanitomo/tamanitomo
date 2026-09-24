@@ -1,5 +1,7 @@
 # Phase 1B C1 activation readiness: integration closure (F1–F3) and Linux activation evidence
 
+> **Status update (review of `b94caf2`):** the review reopened F2 (two public-output failures, R1/R2) and found fixture and evidence-export defects (R3/R4). They are addressed in [`Phase1B_C1_PublicOutputClosure.md`](Phase1B_C1_PublicOutputClosure.md), which supersedes this report's F2 status. The `junit.xml` in `docs/phase1b_c1_activation_evidence/lane/` does not parse; a format-only derivative is in `docs/phase1b_c1_evidence_derivatives/`. The rest of this report is kept as recorded.
+
 Prepared 2026-09-24 for the continuation handoff of the same date (sections 4–7). **Keyed sends remain NOT ACTIVATED.** Stop for review: no merge, release, version bump, tag, deployment, push or live-data change was made.
 
 ## 1. Commits, files, what stays disabled

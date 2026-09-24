@@ -1,0 +1,52 @@
+{
+  "files": {
+    "phase1b_c1_activation_evidence_lane/junit.xml": {
+      "bytes": 3843,
+      "format": "xml",
+      "junit_cases": 27,
+      "junit_status_counts": {
+        "passed": 27
+      },
+      "repaired": [
+        "<host>"
+      ],
+      "sha256": "3da7d3c6917db0529503301fd897244a3e214519a7e38aadfb2ea0ce564b7a07",
+      "source": "docs/phase1b_c1_activation_evidence/lane/junit.xml",
+      "source_sha256": "e0723a7211cb26e8db0ae28ed0c0a563b6f8c8621767b37ab2f25869a6e76245",
+      "validated": true
+    },
+    "phase1b_c1_evidence/junit.xml": {
+      "bytes": 2252,
+      "format": "xml",
+      "junit_cases": 15,
+      "junit_status_counts": {
+        "passed": 15
+      },
+      "repaired": [
+        "<host>"
+      ],
+      "sha256": "f43b4046fb8217b36b18662381b793ad7aa356e14e424dffac9f108f40d1ce7b",
+      "source": "docs/phase1b_c1_evidence/junit.xml",
+      "source_sha256": "b92b9da46e6accc2ab2e9c5b37d7c7f21532e809e215f31376dfbd97aa5702b1",
+      "validated": true
+    },
+    "phase1b_c1_integration_evidence/junit.xml": {
+      "bytes": 2796,
+      "format": "xml",
+      "junit_cases": 19,
+      "junit_status_counts": {
+        "passed": 19
+      },
+      "repaired": [
+        "<host>"
+      ],
+      "sha256": "e19f92d753e1c353b9c4451de6875c09e806cabb092e396388084b3f26a07d09",
+      "source": "docs/phase1b_c1_integration_evidence/junit.xml",
+      "source_sha256": "66dca93faac7edb24f0ec971f413ea4e9c6fcb75b6e2e492a73b8e1ea6e96815",
+      "validated": true
+    }
+  },
+  "kind": "derivative",
+  "note": "format-only derivative of earlier evidence: NOT a test rerun",
+  "source_note": "Format-only repair of junit.xml from docs/phase1b_c1_evidence (R4 round), docs/phase1b_c1_integration_evidence (R5 round) and docs/phase1b_c1_activation_evidence/lane (b94caf2 round): the earlier text redaction wrote a raw hostname=\"<host>\" attribute. Originals are kept unchanged. NOT a rerun."
+}
