@@ -176,7 +176,14 @@ node tests/test_us_ui.js                      -> passed
 python tools/build_release.py --output <tmp>  -> built, 284 source files + integrity manifest (not published)
 ```
 
-Environment: Linux (CachyOS, kernel 7.2), Python 3.14 in the repo venv, Node 26.7.0. **Not run:** Windows or macOS (CI covers them from this push onward), and Python 3.11/3.13 locally.
+Environment: Linux (CachyOS, kernel 7.2), Python 3.14 in the repo venv, Node 26.7.0.
+
+**CI, first run of the restored workflow** (commit `8996bb4`, GitHub-hosted runners, Node 22): all 5 jobs passed.
+
+- `linux (3.11)`, `linux (3.13)` and `linux (3.14)` ran the full suite with Node required.
+- `smoke (windows-latest)` and `smoke (macos-latest)` ran on Python 3.13.
+
+This covers the lock and ledger tests (including the 8-thread correction race) on Windows `msvcrt` and macOS `flock`.
 
 ## Browser verification
 
@@ -197,7 +204,7 @@ Environment: Linux (CachyOS, kernel 7.2), Python 3.14 in the repo venv, Node 26.
    Held facts are recoverable with `decide-held`, but there is **no UI for held facts yet**, only the CLI. Is a Us/library affordance wanted in Phase 0, or later?
 4. **Transcript-wrapper fact statements remain fatal** (now retry-capped). Should they be held or omitted like questions instead?
 5. **Retry cap of 3** per period is a constant. Should it be configurable?
-6. **CI reversal** of the owner's earlier decision: the owner should confirm, since this push is the first run.
+6. **CI reversal** of the owner's earlier decision: the owner should confirm. The first run was green on every job.
 7. **Mock streaming provider** deferred (see 0.6).
 
 ## Files changed
