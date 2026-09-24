@@ -4,7 +4,8 @@ Imported by the app (kit/app/chat_sends.py) AND by the executor, which runs
 under Hermes's own interpreter (kit/app/send_executor.py). So: no third-party
 imports, no app imports, nothing newer than Python 3.11.
 
-NOT ACTIVATED. No route or UI uses this yet; see Phase1B_C1_Results.md.
+NOT ACTIVATED: used only by the keyed-send routes, which exist only in an app built
+with `chat_sends=` (no shipped entry point); see Phase1B_C1_Results.md.
 
 What lives here:
   * the ledger location, schema and connection settings (PHASE1B_DESIGN.md 4.1, 4.2);
@@ -34,7 +35,7 @@ LEDGER_DIRNAME = '.tamanitomo-sends'
 LEDGER_FILE = 'ledger.sqlite3'
 LEDGER_ID_FILE = 'ledger.id'
 GUARD_FILE = 'guard.lock'
-SCHEMA_VERSION = '2'
+SCHEMA_VERSION = '3'   # 3: send_links + provenance (C1 integration, review R5)
 
 SCHEMA = """
 CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -87,6 +88,30 @@ CREATE TABLE lease(
   home_key TEXT PRIMARY KEY,
   send_id TEXT NOT NULL REFERENCES sends,
   acquired_at REAL NOT NULL);
+-- (R6) Verified source links of a send, rewritten by the claim owner at each resolution from the
+-- committed receipts: ids and an identity fingerprint only, never text. Pruned with the send.
+CREATE TABLE send_links(
+  send_id TEXT NOT NULL REFERENCES sends ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK(role IN ('owner','reply')),
+  part INTEGER NOT NULL,
+  session_id TEXT NOT NULL,
+  row_id INTEGER NOT NULL,
+  fingerprint TEXT NOT NULL,
+  PRIMARY KEY(send_id, role, part));
+CREATE INDEX send_links_row ON send_links(session_id, row_id);
+-- (R6) Attribution and visibility provenance that must OUTLIVE send retention: a workspace
+-- session this app's executor created, and a committed row an executor proved to be Hermes's
+-- own machinery (O-12). Not cascaded, not pruned; carried across an explicit reset when the
+-- old ledger is readable, otherwise its loss is recorded (meta provenance_lost_at).
+CREATE TABLE provenance(
+  kind TEXT NOT NULL CHECK(kind IN ('workspace_session','internal_row')),
+  session_id TEXT NOT NULL,
+  row_id INTEGER NOT NULL DEFAULT 0,
+  fingerprint TEXT,
+  detail TEXT,
+  send_id TEXT NOT NULL,
+  recorded_at REAL NOT NULL,
+  PRIMARY KEY(kind, session_id, row_id));
 """
 
 # Fact kinds. Executor facts carry the launch token that authorised them.
@@ -97,6 +122,15 @@ CONTROLLER_FACTS = ('spawn_failed', 'kill_sent', 'recovery')
 
 class Busy(Exception):
     """A non-blocking lock was held by someone else."""
+
+
+def fingerprint(ident, session, role, timestamp):
+    """What must not change for a source row to still be the same message: its id, session,
+    role and authored time (Phase 1A, chat_sources.fingerprint, which re-exports this). A send
+    receipt records these four for every committed row, so a link or a provenance entry is
+    bound to the row's identity, not to a row key another message could later hold."""
+    import hashlib
+    return hashlib.sha256(json.dumps([ident, session, role, timestamp]).encode()).hexdigest()[:24]
 
 
 def ledger_dir(home):

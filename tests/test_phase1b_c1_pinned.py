@@ -311,6 +311,107 @@ class PinnedTurns(unittest.TestCase):
 
 
 @unittest.skipUnless(h.LINUX, 'the C1 supervision is established on Linux only (O-8, O-9, O-11)')
+class PinnedHttp(unittest.TestCase):
+    """The C1 integration through the app (review R5 section 5) with the PINNED Hermes and the mock
+    provider: keyed HTTP acceptance, execution, receipt/operation, the Phase 1A reads with the
+    send join, and the O-12 read-side exclusion of the real continuation note."""
+
+    STUB = ('[System: The previous response was cut off by a network error mid-stream. Continue exactly '
+            'where you left off. Do not restart or repeat prior text. Finish the answer directly.]')
+
+    def setUp(self):
+        self.src, self.python = pl.pinned_or_skip(self)
+        self.provider = MockProvider().__enter__()
+        self.addCleanup(self.provider.__exit__, None, None, None)
+
+    def app(self, scenario, inject=False):
+        from tests.test_phase1b_c1_integration import App
+
+        def executor(rt, home):
+            env = pl.executor_env(self.src, home)
+            if inject:
+                env['PYTHONPATH'] = os.pathsep.join([str(INJECT_PROVENANCE), env['PYTHONPATH']])
+            return cs.ExecutorSpec(python=self.python, env=env, cwd=str(home))
+        a = App(self, executor=executor)
+        pl.synthetic_home(a.home(), self.provider, scenario)
+        return a
+
+    def reads(self, a):
+        snap = a.snapshot()
+        first = a.get('/chat/snapshot', limit=1).json()
+        older = a.get('/chat/history', before=first['history']['before'], limit=200).json() \
+            if first['history']['before'] else {'messages': []}
+        return snap, older
+
+    def test_http_fresh_turn_links_reads_and_replays(self):
+        a = self.app('deltas')
+        before = a.snapshot()
+        body, accepted, receipt = a.send()
+        send_id = accepted['send']['send_id']
+        rows = state_rows(a.home())
+        pl.evidence('http_fresh_turn', {'receipt': {k: receipt[k] for k in ('state', 'owner_turn', 'reply', 'links')},
+                                        'state_rows': rows, 'provider_requests': list(self.provider.requests)})
+        self.assertEqual((receipt['state'], receipt['owner_turn'], receipt['reply'], receipt['links']),
+                         ('complete', 'recorded', 'final', 'linked'))
+        snap = a.snapshot()
+        parts = {m['message_id']: m['correlation']['send_part'] for m in snap['messages'] if m['correlation']}
+        self.assertEqual(parts[receipt['owner_message_id']], 'owner')
+        self.assertEqual({m['source']['kind'] for m in snap['messages']}, {'workspace'})
+        changes = a.get('/chat/changes', after=before['changes']['after']).json()
+        self.assertEqual(len(changes['changes']), len(rows))
+        requests = len(self.provider.requests)
+        again = a.post('/chat/sends', body)
+        self.assertEqual((again.status_code, again.json()['send']['send_id']), (200, send_id))
+        self.assertEqual((a.launches(send_id), len(self.provider.requests)), (1, requests))
+        op = a.get('/operations/' + accepted['operation']['id']).json()
+        self.assertEqual((op['status'], op['result']['content_retained']), ('complete', True))
+
+    def test_http_dropped_stream_note_is_excluded_from_reads(self):
+        """O-12 read side on the real note: snapshot, history and changes never carry it; the
+        owner row is the real owner row; the send completes."""
+        a = self.app('recover_stream')
+        before = a.snapshot()
+        body, accepted, receipt = a.send()
+        rows = state_rows(a.home())
+        self.assertEqual([(r['role'], r['finish_reason']) for r in rows],
+                         [('user', None), ('assistant', 'length'), ('user', None), ('assistant', 'stop')])
+        note = rows[2]
+        snap, older = self.reads(a)
+        changes = a.get('/chat/changes', after=before['changes']['after']).json()
+        pl.evidence('http_dropped_stream_reads', {
+            'receipt': {k: receipt[k] for k in ('state', 'owner_turn', 'reply', 'links')},
+            'snapshot_sources': [m['source']['message'] for m in snap['messages']],
+            'excluded': snap['excluded'], 'note_row': note['row_id']})
+        self.assertEqual((receipt['state'], receipt['owner_turn'], receipt['reply']), ('complete', 'recorded', 'final'))
+        for page in (snap['messages'], older['messages'], [c['message'] for c in changes['changes']]):
+            self.assertNotIn(str(note['row_id']), {m['source']['message'] for m in page})
+        owners = [m for m in snap['messages'] if m['speaker'] == 'owner']
+        self.assertEqual([(m['content'], m['source']['message']) for m in owners],
+                         [(body['message'], str(rows[0]['row_id']))])
+        self.assertEqual(snap['excluded'].get('internal_turn_machinery'), 1)
+
+    def test_http_owner_text_equal_to_the_note_stays_owner_speech(self):
+        a = self.app('deltas')
+        _, _, receipt = a.send(self.STUB)
+        snap = a.snapshot()
+        owners = [m for m in snap['messages'] if m['speaker'] == 'owner']
+        self.assertEqual([m['content'] for m in owners], [self.STUB])
+        self.assertEqual(owners[0]['correlation']['send_part'], 'owner')
+        self.assertEqual(snap['excluded'].get('internal_turn_machinery'), None)
+
+    def test_http_note_without_provenance_reads_as_recorded(self):
+        """Failed provenance write: nothing is hidden by guesswork. Both user rows read as the
+        session recorded them, and the receipt is not complete (ambiguous owner turn)."""
+        a = self.app('recover_stream', inject=True)
+        _, _, receipt = a.send()
+        self.assertEqual((receipt['state'], receipt['owner_turn']), ('unknown', 'ambiguous'))
+        self.assertNotIn('owner_message_id', {k for k, v in receipt.items() if v})
+        owners = [m for m in a.snapshot()['messages'] if m['speaker'] == 'owner']
+        self.assertEqual(len(owners), 2)
+        self.assertTrue(all(m['correlation'] is None for m in owners))
+
+
+@unittest.skipUnless(h.LINUX, 'the C1 supervision is established on Linux only (O-8, O-9, O-11)')
 class PinnedSeams(unittest.TestCase):
     """The production recorder on the real pinned SessionDB, for paths a CLI turn in this lane
     does not reach. SessionDB-level evidence; it does not certify a full compressed CLI turn."""

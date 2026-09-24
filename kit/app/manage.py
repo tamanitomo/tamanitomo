@@ -252,7 +252,10 @@ def register(app, select, load, operations):
     def open_terminal(payload:dict):
         rt,p,h=context()
         if str(rt.root) in operations.busy:raise ValueError('Wait for the running action to finish first')
-        return consoles.open(rt,h,payload.get('action')).read()
+        # Keyed sends enabled (Phase 1B): the native console is an installation mutation and
+        # holds the cross-process guard for as long as it runs. Otherwise guard is None.
+        hold=operations.guard(str(rt.root)) if operations.guard else None
+        return consoles.open(rt,h,payload.get('action'),hold=hold).read()
 
     @app.get('/api/terminal/{ident}')
     def read_terminal(ident:str):
@@ -298,6 +301,11 @@ def register(app, select, load, operations):
 
     @app.get('/api/operations/{ident}')
     def operation(ident:str):
+        sends=getattr(app.state,'chat_sends',None)
+        if sends is not None:
+            # A keyed send's reserved operation id: the ledger is authoritative (Phase 1B 5.6).
+            view=sends.operation_view(ident,select,load,app.state.chat_selection)
+            if view is not None:return view
         row=operations.get(ident)
         rt,profile=select()
         application_root=str(Path(__file__).resolve().parents[2])

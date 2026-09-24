@@ -165,6 +165,19 @@ class Runtime:
                 if proc.poll() is None:proc.kill();proc.wait()
                 proc.stdout.close()
 
+    def executor_spec(self, home):
+        """(Phase 1B, R6) How the keyed-send executor would start for this installation: the
+        same interpreter, environment and working directory as chat() above, or None when
+        that interpreter cannot be found (sends are then refused, never run another way)."""
+        from .chat_sends import ExecutorSpec
+        try:command=self.command()
+        except ValueError:return None
+        binary=Path(command[0])
+        python=binary.parent/('python.exe' if os.name=='nt' else 'python')
+        if not python.is_file():python=binary.resolve().parent/'python'
+        if len(command)!=1 or not python.is_file():return None
+        return ExecutorSpec(python=str(python),env=self.env(home),cwd=str(KIT))
+
     def home(self, profile):
         if profile in ('', 'default', None): return self.root
         path = cp.profile_path(self.root,profile)
@@ -258,22 +271,49 @@ class Runtime:
 
 
 class Operations:
-    """Bounded, durable status records; one mutation per installation at a time."""
+    """Bounded, durable status records; one mutation per installation at a time.
+
+    Phase 1B (R6), used only when keyed sends are enabled:
+      * `claim(scope)`/`release(scope)` take the in-process installation slot ahead of a
+        send's acceptance; `submit(..., claimed=True)` then uses it.
+      * `submit(..., ident=)` uses an operation id reserved in the send ledger.
+      * `submit(..., persist=)` writes only what persist(row) returns (the chat allowlist);
+        everything else, e.g. streamed text and the in-memory result, stays in memory.
+      * `guard(scope)`, when set, is the cross-process installation guard: every non-chat
+        action takes it before it starts and keeps it until it finishes, or is refused."""
     def __init__(self, directory):
         self.directory=Path(directory)
         self.pool=ThreadPoolExecutor(max_workers=4,thread_name_prefix='companion')
         self.lock=threading.Lock()
         self.rows={}
         self.busy=set()
+        self.persist={}
+        self.guard=None
 
-    def submit(self, scope, label, action, *, profile="default", kind="runtime"):
+    def claim(self, scope):
         with self.lock:
-            if scope in self.busy: raise ValueError('Another action is still running for this installation.')
-            self.busy.add(scope)
-            ident=uuid.uuid4().hex
+            if scope in self.busy:return False
+            self.busy.add(scope);return True
+
+    def release(self, scope):
+        with self.lock:self.busy.discard(scope)
+
+    def submit(self, scope, label, action, *, profile="default", kind="runtime", ident=None, claimed=False, persist=None):
+        with self.lock:
+            if not claimed:
+                if scope in self.busy: raise ValueError('Another action is still running for this installation.')
+                self.busy.add(scope)
+        hold=None
+        if kind!='chat' and self.guard is not None:
+            try:hold=self.guard(scope)
+            except BaseException:
+                self.release(scope);raise
+        with self.lock:
+            ident=ident or uuid.uuid4().hex
             row={'id':ident,'scope':scope,'profile':profile or 'default','kind':kind,
                  'label':label,'status':'running','progress':'Starting',
                  'started_at':dt.datetime.now(dt.timezone.utc).isoformat()}
+            if persist is not None:self.persist[ident]=persist
             self.rows[ident]=row
             self._save(row)
         def report(message):
@@ -306,12 +346,44 @@ class Operations:
                 with self.lock:
                     row['finished_at']=dt.datetime.now(dt.timezone.utc).isoformat()
                     self.busy.discard(scope); self._save(row)
+                if hold is not None:hold.release()
+                if persist is not None:
+                    try:self.prune_chat_records()
+                    except OSError:pass
         self.pool.submit(work)
         return dict(row)
 
     def _save(self,row):
         self.directory.mkdir(parents=True,exist_ok=True)
-        cp.atomic_write(self.directory/(row['id']+'.json'),json.dumps(row,ensure_ascii=False))
+        persist=self.persist.get(row['id'])
+        data=persist(dict(row)) if persist is not None else row
+        cp.atomic_write(self.directory/(row['id']+'.json'),json.dumps(data,ensure_ascii=False))
+
+    def prune_chat_records(self, now=None, keep_days=7, keep=500, batch=500):
+        """Retention for allowlisted (`format: 2`) terminal records only (PHASE1B_DESIGN 5.7):
+        remove one iff finished more than `keep_days` ago OR not among the newest `keep`.
+        `running` records and every record without `format: 2` (pre-1B chat records, all
+        other operations) are never touched here. Returns the number removed (<= batch)."""
+        now=time.time() if now is None else now
+        rows=[]
+        for path in self.directory.glob('*.json'):
+            try:data=json.loads(path.read_text(encoding='utf-8'))
+            except (OSError,ValueError):continue
+            if not isinstance(data,dict) or data.get('format')!=2 or data.get('status')=='running':continue
+            try:finished=dt.datetime.fromisoformat(str(data.get('finished_at'))).timestamp()
+            except ValueError:continue
+            rows.append((finished,path))
+        rows.sort(reverse=True)
+        doomed=[(t,p) for i,(t,p) in enumerate(rows) if i>=keep or t<now-keep_days*86400]
+        doomed=[p for t,p in sorted(doomed)[:batch]]                  # oldest first
+        with self.lock:
+            live={ident+'.json' for ident in self.rows if self.rows[ident].get('status')=='running'}
+        removed=0
+        for path in doomed:
+            if path.name in live:continue
+            try:path.unlink();removed+=1
+            except OSError:pass
+        return removed
 
     def get(self, ident):
         if not re.fullmatch('[a-f0-9]{32}',ident): raise ValueError('Unknown operation')

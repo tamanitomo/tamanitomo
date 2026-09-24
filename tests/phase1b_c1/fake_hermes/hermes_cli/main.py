@@ -13,6 +13,12 @@ The scenario comes from $HERMES_HOME/fake_scenario.json (a synthetic test home):
   child        'group' | 'escape': start a sleeping descendant before replying
   child_pid_file    where to write the descendant's pid
   ignore_interrupt  True: the hang swallows KeyboardInterrupt (only a kill ends it)
+  note         True: after the owner row, a partial `length` reply, then a continuation note
+               created through agent.turn_truncation.append_message with the
+               `_length_continuation_nudge` tag and persisted by
+               agent.session_persistence._db_flush_write (the O-12 shape), then the final reply
+  note_text    the note's words (default: the pinned note sentence)
+  note_pause_file   wait for this file after the note commits, before its provenance is written
 """
 import json
 import os
@@ -25,6 +31,10 @@ from pathlib import Path
 
 import cli
 import hermes_state
+
+
+NOTE_TEXT = ('[System: The previous response was cut off by a network error mid-stream. Continue exactly '
+             'where you left off. Do not restart or repeat prior text. Finish the answer directly.]')
 
 
 class Agent:
@@ -81,6 +91,16 @@ def main():
             child = subprocess.Popen([sys.executable, '-c', code], close_fds=True)
             if scenario.get('child_pid_file'):
                 Path(scenario['child_pid_file']).write_text(str(child.pid))
+        if scenario.get('note'):
+            from agent import session_persistence, turn_truncation
+            db.append_message(session, 'assistant', 'A partial', finish_reason='length')
+            note = {'role': 'user', 'content': scenario.get('note_text', NOTE_TEXT), '_length_continuation_nudge': True}
+            live = []
+            turn_truncation.append_message(live, note)
+            agent.db, agent.session_id = db, session
+            agent.pause_file = scenario.get('note_pause_file')
+            session_persistence._db_flush_write(agent, [{'role': 'user', 'content': note['content']}], [note])
+            note.pop('_length_continuation_nudge', None)     # as Hermes does when the reply finishes
         if scenario.get('hang'):
             end = time.monotonic() + float(scenario['hang'])
             while time.monotonic() < end:

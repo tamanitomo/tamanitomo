@@ -123,11 +123,15 @@ def _hash(text):
 
 
 class Projection:
-    def __init__(self, state_dir, scope, clock=time.time):
+    def __init__(self, state_dir, scope, clock=time.time, overlay=None):
         self.scope = scope
         self.path = scope.path(state_dir)
         self.clock = clock
         self._counts = {}
+        # overlay(rows) -> {message_id: {...}}: read-time correlation added to a
+        # message's `correlation` (the send join, computed by the routes). The
+        # projection's stored rows and schema are unchanged.
+        self.overlay = overlay
 
     # ---------------------------------------------------------------- storage
     @contextlib.contextmanager
@@ -261,6 +265,7 @@ class Projection:
             last = highest
             if len(records) + sum(skipped.values()) < SYNC_BATCH:
                 break
+        self._withdraw_internal(con, reader, now)
         stats.update(self._counts)
         stats['caught_up'] = stats['read'] < SYNC_MAX_ROWS
         anchor_id = (known or {}).get('anchor_id')
@@ -372,13 +377,28 @@ class Projection:
                     (record.content, _hash(record.content), record.speaker, record.note, status, revision, seq, rev, pid, row['pk']))
         return self._count('restored' if kind == 'restore' else 'edited')
 
-    def _mark_deleted(self, con, row, now, rev=None):
+    def _mark_deleted(self, con, row, now, rev=None, note=None):
         revision = row['revision'] + 1
         seq = self._change(con, row['message_id'], revision, 'delete', now)
         # The projection keeps no copy of deleted content.
-        con.execute("UPDATE messages SET status='deleted',content='',content_hash=?,revision=?,observed_seq=?,source_revision=coalesce(?,source_revision) WHERE pk=?",
-                    (_hash(''), revision, seq, rev, row['pk']))
+        con.execute("UPDATE messages SET status='deleted',content='',content_hash=?,revision=?,observed_seq=?,source_revision=coalesce(?,source_revision),"
+                    "note=coalesce(?,note) WHERE pk=?",
+                    (_hash(''), revision, seq, rev, note, row['pk']))
         return self._count('deleted')
+
+    def _withdraw_internal(self, con, reader, now):
+        """A row already projected as a message, then proven by send provenance to be
+        Hermes's own machinery (the proof can arrive after the row was read): withdraw it
+        now, as a deletion carrying note `internal_turn_machinery`, instead of waiting for
+        the bounded reconcile. Only a row whose stored identity fingerprint equals the
+        receipt's is touched; the source row itself is never changed."""
+        internal = getattr(getattr(reader, 'source', None), 'internal', None) or {}
+        for (session, ident), fp in internal.items():
+            row = con.execute("SELECT * FROM messages WHERE source_key=? AND source_session=? AND status<>'deleted'",
+                              (f'hermes:{ident}', str(session))).fetchone()
+            if row is not None and row['source_fp'] and row['source_fp'] == fp:
+                self._mark_deleted(con, row, now, note='internal_turn_machinery')
+                self._count('withdrawn_internal')
 
     def _reconcile(self, con, reader, now, last, full):
         """Compare indexed rows with the source's current state, a bounded
@@ -468,6 +488,18 @@ class Projection:
             raise ResyncRequired('projection_rebuilt')
         return meta
 
+    def _render(self, rows):
+        """Messages for projection rows, with the read-time overlay applied."""
+        extra = self.overlay(rows) if self.overlay and rows else {}
+        out = []
+        for row in rows:
+            message = self._message(row)
+            more = extra.get(row['message_id'])
+            if more:
+                message['correlation'] = {**(message['correlation'] or {}), **more}
+            out.append(message)
+        return out
+
     @staticmethod
     def _message(row):
         deleted = row['status'] == 'deleted'
@@ -494,7 +526,7 @@ class Projection:
         rows = rows[:limit]
         cursor = self._sign(meta['secret'], {'k': 'h', 'c': self.scope.conversation_id, 'p': meta['projection_id'],
                                              't': rows[-1]['sort_at'], 'i': rows[-1]['message_id']}) if more else None
-        return [self._message(r) for r in reversed(rows)], cursor
+        return self._render(list(reversed(rows))), cursor
 
     @staticmethod
     def _limit(limit, default, maximum):
@@ -566,12 +598,37 @@ class Projection:
                 more = len(rows) > limit
                 rows = rows[:limit]
                 high = rows[-1]['seq'] if rows else mark
+                rendered = self._render(rows)
                 return {'conversation_id': self.scope.conversation_id, 'projection_id': meta['projection_id'],
                         'as_of': meta.get('synced_at'),
                         'changes': [{'seq': r['seq'], 'kind': r['kind'], 'revision': r['change_revision'],
-                                     'message': self._message(r)} for r in rows],
+                                     'message': m} for r, m in zip(rows, rendered)],
                         'after': self._sign(meta['secret'], {'k': 'c', 'c': self.scope.conversation_id,
                                                              'p': meta['projection_id'], 's': high}),
                         'more': more}
+            finally:
+                con.execute('COMMIT')
+
+    def by_source(self, keys):
+        """{(source session, source row id): {'message', 'fingerprint', 'kind', 'account',
+        'status'}} for projected Hermes rows among `keys` (<= 500), as of the last sync. Used
+        to resolve a send's receipted links to opaque message ids under the current scope;
+        a key with no projected row is simply absent (the caller says `lost`)."""
+        keys = [(str(s), int(r)) for s, r in keys][:500]
+        if not keys:
+            return {}
+        with self._db() as con:
+            con.execute('BEGIN')
+            try:
+                self._read_meta(con)
+                out = {}
+                for session, ident in keys:
+                    row = con.execute('SELECT * FROM messages WHERE source_key=? AND source_session=?',
+                                      (f'hermes:{ident}', session)).fetchone()
+                    if row is not None:
+                        out[(session, ident)] = {'message': self._message(row), 'fingerprint': row['source_fp'],
+                                                 'kind': row['source_kind'], 'account': row['source_account'],
+                                                 'status': row['status']}
+                return out
             finally:
                 con.execute('COMMIT')

@@ -18,6 +18,13 @@ Everything else -- another participant, a group or channel, a platform this
 phase has not verified, a scheduled run, a sub-agent, an internal notification
 -- is excluded and counted by reason. Nothing is matched by display name or
 message text. See docs/CHAT_CONTRACT.md for the capability table.
+
+Send provenance (Phase 1B, R6), when a keyed send ledger exists for the profile
+(chat_sends.read_model): a session an executor's committed receipts show it
+created for a workspace send is a workspace session, and a committed row an
+executor proved to be Hermes's own continuation note is excluded
+(`internal_turn_machinery`). Both are bound to the row's identity fingerprint;
+neither is inferred from text, and rows without such provenance are unchanged.
 """
 from __future__ import annotations
 
@@ -130,10 +137,17 @@ class HermesSource:
     name = 'hermes'
     REQUIRED_MESSAGE_COLUMNS = {'id', 'session_id', 'role', 'content', 'timestamp'}
 
-    def __init__(self, c, binding, workspace_sessions=None):
+    def __init__(self, c, binding, workspace_sessions=None, provenance=None):
         self.c = c
         self.binding = binding
         self.workspace = set(workspace_sessions if workspace_sessions is not None else hr.read_workspace_sessions(c))
+        # Send provenance (chat_sends.ReadModel): receipted workspace sessions and
+        # rows proven to be Hermes's own machinery, {(session, row id): fingerprint}.
+        self.provenance = provenance
+        self.internal = {}
+        if provenance is not None:
+            self.workspace |= set(provenance.workspace_sessions)
+            self.internal = provenance.internal_map
 
     # -- opening -------------------------------------------------------------
     def _open(self):
@@ -230,7 +244,7 @@ class _HermesReader:
         out, excluded, highest = [], {}, 0
         for row in rows:
             highest = max(highest, row['id'])
-            record, reason = classify(dict(row), self.source.binding, self.source.workspace)
+            record, reason = classify(dict(row), self.source.binding, self.source.workspace, self.source.internal)
             if record is None:
                 excluded[reason] = excluded.get(reason, 0) + 1
             else:
@@ -269,17 +283,24 @@ def session_kind(row, binding, workspace):
     return None, 'unverified_source:' + (source or 'none'), None
 
 
-def classify(row, binding, workspace):
+def classify(row, binding, workspace, internal=None):
     """A SourceRecord for one row, or (None, reason). Visibility follows
     Hermes's own structural markers: role, display_kind, the compression
     summary flag and active/compacted. A row that fails them after it was
-    public becomes `visible=False` (the projection records a deletion)."""
+    public becomes `visible=False` (the projection records a deletion).
+
+    `internal`: {(session, row id): fingerprint} of rows a send executor proved
+    to be Hermes's own machinery. Such a row is excluded only while its
+    identity still matches the receipt; the same words anywhere else are
+    untouched."""
     kind, account, channel = session_kind(row, binding, workspace)
     if kind is None:
         return None, account
     role = row.get('role')
     if role not in ('user', 'assistant'):
         return None, 'non_public_role'
+    if internal and internal_row(row, internal):
+        return None, 'internal_turn_machinery'
     content = row.get('content')
     if not isinstance(content, str):
         content = '' if content is None else json.dumps(content, ensure_ascii=False)
@@ -299,10 +320,26 @@ def classify(row, binding, workspace):
         fingerprint=fingerprint(row['id'], row['session_id'], role, stamp)), None
 
 
+
+
 def fingerprint(ident, session, role, timestamp):
     """What must not change for a source row to still be the same message:
-    its id, session, role and authored time. Content may change (an edit)."""
+    its id, session, role and authored time. Content may change (an edit).
+    send_protocol.fingerprint computes the same value for send receipts (a
+    test keeps the two equal; this module does not import the send code)."""
     return hashlib.sha256(json.dumps([ident, session, role, timestamp]).encode()).hexdigest()[:24]
+
+
+def internal_row(row, internal):
+    """True when a send receipt proved this exact source row internal: same
+    session and id, and the same identity fingerprint (a replaced store's row
+    that merely reuses the id is not it)."""
+    try:
+        key = (str(row['session_id']), int(row['id']))
+    except (KeyError, TypeError, ValueError):
+        return False
+    expected = internal.get(key)
+    return bool(expected) and expected == fingerprint(row['id'], row['session_id'], row.get('role'), row.get('timestamp'))
 
 
 def platform_conflict(stored, current):
@@ -314,15 +351,16 @@ def platform_conflict(stored, current):
     return bool(stored) and bool(current) and str(stored) != str(current)
 
 
-def capabilities():
+def capabilities(send_provenance=False):
     """What each source can and cannot establish in this phase. Shown by
-    /api/chat/sources and docs/CHAT_CONTRACT.md."""
+    /api/chat/sources and docs/CHAT_CONTRACT.md. `send_provenance`: the app
+    was built with keyed sends enabled (Phase 1B, not activated)."""
     common = {'schema': 'Hermes state.db sessions/messages (hermes_state_common.SCHEMA_SQL, schema_version 30)',
               'message_id': 'messages.id (AUTOINCREMENT) within one store generation',
               'edits': 'no revision column; a changed content hash is projected as an edit',
               'deletions': 'row removed, deactivated or hidden -> projected deletion',
               'reply_to': 'not stored by Hermes', 'deltas': 'completed messages only (stream deltas are not persisted)'}
-    return {
+    table = {
         'workspace': {**common, 'status': 'supported', 'identity': 'session registry written by this app when it sends',
                       'tested': 'fixture'},
         'terminal': {**common, 'status': 'supported', 'identity': 'local cli/desktop/tui session with no gateway chat',
@@ -345,3 +383,14 @@ def capabilities():
                        'presented as a verified delivered outreach, and nothing is joined by text.'),
             'tested': 'fixture'},
     }
+    if send_provenance:
+        table['send provenance'] = {
+            'status': 'supported for keyed workspace sends only',
+            'identity': ('a keyed send\'s executor records, at Hermes\'s commit point, the rows and sessions it '
+                         'committed; a session it created is a workspace session, and a row it proved to be '
+                         'Hermes\'s own continuation note is excluded (internal_turn_machinery). Bound to the '
+                         'row\'s id, session, role and time, never to its text'),
+            'limitation': ('rows written outside a keyed send (terminal, Telegram, earlier app versions, history) '
+                           'carry no provenance: a continuation note there shows as that session recorded it'),
+            'tested': 'fixture and pinned Hermes'}
+    return table

@@ -53,8 +53,12 @@ def get_network_ips():
         pass
     return sorted(ips)
 
-def build(home=None,token='',state_dir=None):
-    """Create a workspace; profile selection is local to each request."""
+def build(home=None,token='',state_dir=None,chat_sends=None):
+    """Create a workspace; profile selection is local to each request.
+
+    `chat_sends`: a chat_send_routes.Options enables the Phase 1B keyed-send routes. NOT
+    ACTIVATED: no shipped entry point passes it, so ordinary and live profiles never get
+    them (review R5: integration disabled pending review)."""
     from fastapi import Body, FastAPI, HTTPException, Request
     from fastapi.responses import FileResponse, JSONResponse, HTMLResponse, Response
     from fastapi.staticfiles import StaticFiles
@@ -100,7 +104,15 @@ def build(home=None,token='',state_dir=None):
     from .manage import register
     register(app,select,load,Operations(state/'operations'))
     from . import chat_routes
-    chat_routes.register(app,state,selection.get,load,lambda c,rows:app.state.attach_media(c,rows))
+    provenance=None
+    if chat_sends is not None:
+        # Keyed sends (Phase 1B) are imported only here: shipped builds never load them.
+        from .chat_sends import read_model as provenance
+    chat_routes.register(app,state,selection.get,load,lambda c,rows:app.state.attach_media(c,rows),provenance)
+    app.state.chat_selection=selection.get
+    if chat_sends is not None:
+        from . import chat_send_routes
+        chat_send_routes.register(app,state,select,load,selection.get,app.state.operations,chat_sends)
     from .content import register as register_content
     register_content(app,load)
     from .dashboard import register as register_dashboard
@@ -177,9 +189,12 @@ def build(home=None,token='',state_dir=None):
                 from starlette.concurrency import run_in_threadpool
                 await run_in_threadpool(write_lock.acquire)
                 runtime=runtimes[installation]
-                if str(runtime.root) in app.state.operations.busy:
+                # Keyed sends (registered only when enabled) do their own admission: an
+                # identical retry must replay and a stop must reach a running turn.
+                keyed=request.url.path.startswith('/api/chat/sends') and hasattr(app.state,'chat_sends')
+                if str(runtime.root) in app.state.operations.busy and not keyed:
                     return JSONResponse({'detail':'An action is running for this installation. Wait for it to finish.'},status_code=409)
-                if request.url.path!='/api/terminal' and any(row.scope[0]==str(runtime.root) and not row.finished for row in list(app.state.consoles.rows.values())):
+                if request.url.path!='/api/terminal' and not keyed and any(row.scope[0]==str(runtime.root) and not row.finished for row in list(app.state.consoles.rows.values())):
                     return JSONResponse({'detail':'Close the native Hermes setup console before changing settings.'},status_code=409)
             response=await call_next(request)
         finally:
