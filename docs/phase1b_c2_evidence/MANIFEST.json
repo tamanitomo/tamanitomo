@@ -1,0 +1,375 @@
+{
+  "files": {
+    "lane/controller_death_turn.json": {
+      "bytes": 1507,
+      "format": "json",
+      "repaired": [],
+      "sha256": "07b8155562e74fa5565b1c3525433b20744eaf46f6405af10844e687ea7c0966",
+      "source": "lane/controller_death_turn.json",
+      "source_sha256": "9237aaa3981cc20e8543473472964b41ef88886c0c150e29a7f82a7935098227",
+      "validated": true
+    },
+    "lane/deadline_turn.json": {
+      "bytes": 1307,
+      "format": "json",
+      "repaired": [],
+      "sha256": "a0d9da4436fc89da7e5ed40b97b98314c0d69c336ad3dacc52e50d3111bb600a",
+      "source": "lane/deadline_turn.json",
+      "source_sha256": "6f5a01bfb948004704895ef902b37c7f401e0360e8aee7ede1e908ee07d368fb",
+      "validated": true
+    },
+    "lane/disconnect_before_done_turn.json": {
+      "bytes": 1969,
+      "format": "json",
+      "repaired": [],
+      "sha256": "ad7261622058431d695a325264842f75cc490699f6b1a56cc3f39ab6cd210349",
+      "source": "lane/disconnect_before_done_turn.json",
+      "source_sha256": "db7bf1ed11a0d04553ef62fbc06bd563f8af10390c008426304b6726c3f04112",
+      "validated": true
+    },
+    "lane/dropped_main_stream_turn.json": {
+      "bytes": 1825,
+      "format": "json",
+      "repaired": [],
+      "sha256": "364a1c679b145c82138925ed5e16ae99240df36f50e55e4522780fea897ab401",
+      "source": "lane/dropped_main_stream_turn.json",
+      "source_sha256": "9583f5683a7af0213e31010a442810ebd81ed13d9ece2ea34801f953ab58bc65",
+      "validated": true
+    },
+    "lane/environment.json": {
+      "bytes": 3968,
+      "format": "json",
+      "repaired": [],
+      "sha256": "5f1c72710127362033bd77760b7c4dd49a1dbf92f2f822e7ca44bab6011d9099",
+      "source": "lane/environment.json",
+      "source_sha256": "bc6e4c24b948e5c958a89f76bb29a03fc31325d48e9a9c777267c0dc22ea9fcc",
+      "validated": true
+    },
+    "lane/equal_text_owner_turn.json": {
+      "bytes": 1465,
+      "format": "json",
+      "repaired": [],
+      "sha256": "eaddbc04228fe3d8057e30d7b85c2250f1f6c576af3d6e39e1bc0fdee853030d",
+      "source": "lane/equal_text_owner_turn.json",
+      "source_sha256": "32f421274832f611409916fde33187669e4746e00375aafa34e2c58b917c6629",
+      "validated": true
+    },
+    "lane/foreign_writers_turn.json": {
+      "bytes": 3426,
+      "format": "json",
+      "repaired": [],
+      "sha256": "1e86c363cefb7ddd95d3e975ceb86fcfe3f6aaec97075efdb1cc8180caca32e8",
+      "source": "lane/foreign_writers_turn.json",
+      "source_sha256": "ef1316dacdb8a310a8321d1084d258b4e331d5cffc1e8a274aea721714ec35cb",
+      "validated": true
+    },
+    "lane/fresh_turn.json": {
+      "bytes": 1480,
+      "format": "json",
+      "repaired": [],
+      "sha256": "1617dd4d09344dfd3e987516dbc2cb5203bdf7d024f2e196cba7440255fd3938",
+      "source": "lane/fresh_turn.json",
+      "source_sha256": "60e1d27695400c33ff0574a806f8ca9a1bacd57c1e91a32e8a46aab3304e9b29",
+      "validated": true
+    },
+    "lane/http_dropped_stream_reads.json": {
+      "bytes": 248,
+      "format": "json",
+      "repaired": [],
+      "sha256": "93be06ff77acd59b3859ef9f9f5d3db5042363fd184cd4f555fdc681006e802d",
+      "source": "lane/http_dropped_stream_reads.json",
+      "source_sha256": "28a98f9f575d41d02e043ad4a6dfc5417e13a2260670c511eaf9540943580cff",
+      "validated": true
+    },
+    "lane/http_fresh_turn.json": {
+      "bytes": 535,
+      "format": "json",
+      "repaired": [],
+      "sha256": "a1940428a8dc3158a79d505bab0861927360c14afe64fbc4184f7f60961d9fd0",
+      "source": "lane/http_fresh_turn.json",
+      "source_sha256": "222e4587d74962416f687b533f802fe3f266836f2c81beafeb82d7fe1f74d3c7",
+      "validated": true
+    },
+    "lane/junit.xml": {
+      "bytes": 3843,
+      "format": "xml",
+      "junit_cases": 27,
+      "junit_status_counts": {
+        "passed": 27
+      },
+      "repaired": [],
+      "sha256": "bb74bd6e8522f7ec8c3ab349341991062f2e1d2589f420be9a853b84457df6d3",
+      "source": "lane/junit.xml",
+      "source_sha256": "02e6fdc8ac21043151e6d9c4c8a5612833531328da49f2a7dc11187a0b5f29fe",
+      "validated": true
+    },
+    "lane/lane.json": {
+      "bytes": 5257,
+      "format": "json",
+      "repaired": [],
+      "sha256": "7fef1b7a8bf55e7abf1e8227b590fe089ecf8e77def3f01ef418efeb12b657e6",
+      "source": "lane/lane.json",
+      "source_sha256": "2891b020137f85050830303a3d64c703887c2e50a34d492e9af06be39023fd56",
+      "validated": true
+    },
+    "lane/note_without_provenance_turn.json": {
+      "bytes": 1832,
+      "format": "json",
+      "repaired": [],
+      "sha256": "afde2f47aeee7e63cc4ad706359675ca6443782f75bd63c5ae67ba7a0d7c035f",
+      "source": "lane/note_without_provenance_turn.json",
+      "source_sha256": "94f2664ea044ce28d6087ffd9fead32a5e799d894a8356a02f763e6185e4fa71",
+      "validated": true
+    },
+    "lane/provider_error_turn.json": {
+      "bytes": 1595,
+      "format": "json",
+      "repaired": [],
+      "sha256": "2b6f637c86820d12a7d2995030ecd6330e3b74a1f6cbc2d94e978e01d7a54798",
+      "source": "lane/provider_error_turn.json",
+      "source_sha256": "e6a550fb21db6c42a6730d698d7fb4d51a8705a20d0e5a211cca7830e5ee1be5",
+      "validated": true
+    },
+    "lane/provider_retry_turn.json": {
+      "bytes": 1839,
+      "format": "json",
+      "repaired": [],
+      "sha256": "a125da12462e599b5fd6e0ef0ce8b4549901949b973b68dc1973812fc12e02a3",
+      "source": "lane/provider_retry_turn.json",
+      "source_sha256": "4a8d8b57c452219c744d3d227858729a248489e40f33a0330515fd6659f823e0",
+      "validated": true
+    },
+    "lane/real_compression_turn.json": {
+      "bytes": 1776,
+      "format": "json",
+      "repaired": [],
+      "sha256": "3f3586bf9ed3bf711c5cd951617d181404b993e2a39b0e157d2194d7c59992f1",
+      "source": "lane/real_compression_turn.json",
+      "source_sha256": "bf576a435e718f869f6e51930822a75769b7dfee1513ddb9c9d45f8062834d26",
+      "validated": true
+    },
+    "lane/receipt_gap_turn.json": {
+      "bytes": 1090,
+      "format": "json",
+      "repaired": [],
+      "sha256": "a6bc721afcf6bd51318df05a7d63d9f1a8f00b743d23139b1098b6d369a3c58b",
+      "source": "lane/receipt_gap_turn.json",
+      "source_sha256": "edb63564c4158b41866fde6c5cd73ebce01691e08250a1e3587a790b53b81eb6",
+      "validated": true
+    },
+    "lane/resume_turn.json": {
+      "bytes": 1390,
+      "format": "json",
+      "repaired": [],
+      "sha256": "e7e5d492fa78cc2bc18f663bbd4fe9a909619cef64726fa1a91e900f62dd875e",
+      "source": "lane/resume_turn.json",
+      "source_sha256": "05900986ded3af144309f30eedddf7c8e7766dbe2ecf61a50a5a0192e7e34ad5",
+      "validated": true
+    },
+    "lane/seam_clone_then_death.json": {
+      "bytes": 895,
+      "format": "json",
+      "repaired": [],
+      "sha256": "3fc13619c6dc13fc8ef12840a5e2dff07f2c0ad5fcd659ae4717561455c82e5d",
+      "source": "lane/seam_clone_then_death.json",
+      "source_sha256": "5092279aba456824ae723cdb1f4d3cb937066de7cc6b89b501ef1a897b087145",
+      "validated": true
+    },
+    "lane/seam_gap_after_owner_commit.json": {
+      "bytes": 580,
+      "format": "json",
+      "repaired": [],
+      "sha256": "7ebd37036cf2151062f5f80bfb09e18124a3df975c55112eec21b52e56ccb789",
+      "source": "lane/seam_gap_after_owner_commit.json",
+      "source_sha256": "46ef0773451e48a1b6b85d9b7fa15936eb780698b86b36c8e7eda27878edb12e",
+      "validated": true
+    },
+    "lane/seam_hidden_and_summary_owner_rows.json": {
+      "bytes": 758,
+      "format": "json",
+      "repaired": [],
+      "sha256": "59931717059534b212046b4dc93f7ee12d01bfbfa176a301dcd9f0abd5438f10",
+      "source": "lane/seam_hidden_and_summary_owner_rows.json",
+      "source_sha256": "5d5ccfae34149dc4b636d781c82f91db1dadf4e3f4ab7066658d24509be8597c",
+      "validated": true
+    },
+    "lane/stop_turn.json": {
+      "bytes": 1307,
+      "format": "json",
+      "repaired": [],
+      "sha256": "49999227cbda5f1afe716d055557739db51870442d57d4a1302caf77f9124991",
+      "source": "lane/stop_turn.json",
+      "source_sha256": "b8852eb158a8df95b6ee0b979de9b33e82ae053f6023b7c5b1dc2de57bdc0536",
+      "validated": true
+    },
+    "lane/tool_controller_death_turn.json": {
+      "bytes": 2116,
+      "format": "json",
+      "repaired": [],
+      "sha256": "0893b2a7b47f5a341b9c75ffcae1ebb3d7337b79975110161e92facd7bb49388",
+      "source": "lane/tool_controller_death_turn.json",
+      "source_sha256": "fb873653943a311b3ed9b81fe095df605c02cadff463e387d9b0752fb11d61e7",
+      "validated": true
+    },
+    "lane/tool_deadline_turn.json": {
+      "bytes": 1860,
+      "format": "json",
+      "repaired": [],
+      "sha256": "0bde30aeb03f9fb754f7012caf4835a0dc3573e4b1e70ceadc2c9a06aaf08cd9",
+      "source": "lane/tool_deadline_turn.json",
+      "source_sha256": "7a9e264d68bbbf4aa07370934bbe01833965899808a1cd99fdee4667152b5d88",
+      "validated": true
+    },
+    "lane/tool_descendants_turn.json": {
+      "bytes": 2480,
+      "format": "json",
+      "repaired": [],
+      "sha256": "e6264b724cbdcc4d13ba5ce965b5489f2c078884c7a7de9d2b1793d754fe65a3",
+      "source": "lane/tool_descendants_turn.json",
+      "source_sha256": "3cac5831afa1059cb24da415ae696198216e0991451bf0345dc2ef1e143072da",
+      "validated": true
+    },
+    "lane/tool_executor_killed_turn.json": {
+      "bytes": 1497,
+      "format": "json",
+      "repaired": [],
+      "sha256": "223275d29cafaebca27bb5ce624270aa2cb0db41248a2a74166e21ce5832ce59",
+      "source": "lane/tool_executor_killed_turn.json",
+      "source_sha256": "0703c3d2c3335c819c44685c792dd714568cb3980c662d2e52d624b42195afe2",
+      "validated": true
+    },
+    "lane/tool_stop_turn.json": {
+      "bytes": 1898,
+      "format": "json",
+      "repaired": [],
+      "sha256": "5245fc892dfacc8662b3649b4941726deb7b53d8099a229d1715c13a3357e4b5",
+      "source": "lane/tool_stop_turn.json",
+      "source_sha256": "258bd7a829e8a21cc22c4962d18bb1c1badd0203f70bfd9774c029e4806be472",
+      "validated": true
+    },
+    "lane/tool_turn.json": {
+      "bytes": 2312,
+      "format": "json",
+      "repaired": [],
+      "sha256": "8e698001d01d61ec15a593a07b1bbb06775dc8b507c83ce815221d2d83b5547c",
+      "source": "lane/tool_turn.json",
+      "source_sha256": "dbeb0053cb89d4ca5a6aaf26b28d28668ac0b26d52f83427f268036a9cc553dd",
+      "validated": true
+    },
+    "lane/truncated_turn.json": {
+      "bytes": 1643,
+      "format": "json",
+      "repaired": [],
+      "sha256": "cc6c753c46fe029c358dcde303a0bd2ed4bf96e1aa8476d4792e2c4bd48a9a17",
+      "source": "lane/truncated_turn.json",
+      "source_sha256": "051d9d8d397cfc190e5631f87655d7eaa5bf1a4070936bf31dc745dcd8f99f36",
+      "validated": true
+    },
+    "runs/c2_only_xdev.txt": {
+      "bytes": 165,
+      "format": "text",
+      "repaired": [],
+      "sha256": "9b31a0851e1cb7762093a2224e8209bdf4b37373e12b85c896625a6bd68119d7",
+      "source": "runs/c2_only_xdev.txt",
+      "source_sha256": "9b31a0851e1cb7762093a2224e8209bdf4b37373e12b85c896625a6bd68119d7",
+      "validated": true
+    },
+    "runs/c2_stress.txt": {
+      "bytes": 122232,
+      "format": "text",
+      "repaired": [],
+      "sha256": "153076b44147f3b159eef36865abc55a5e5fcddff73c68ed8012686b06da8fbc",
+      "source": "runs/c2_stress.txt",
+      "source_sha256": "153076b44147f3b159eef36865abc55a5e5fcddff73c68ed8012686b06da8fbc",
+      "validated": true
+    },
+    "runs/c2_xdev.txt": {
+      "bytes": 1253,
+      "format": "text",
+      "repaired": [],
+      "sha256": "d45d70effc38edcfaa2844e1ddb06df3d2eaf6be2d7f59494d7aeab50f5b49d7",
+      "source": "runs/c2_xdev.txt",
+      "source_sha256": "782cad8feca9cbedd42d7ffde295796f3d68a484df7bbaa3441c5ffedb942d6b",
+      "validated": true
+    },
+    "runs/c2_xdev.xml": {
+      "bytes": 22745,
+      "format": "xml",
+      "junit_cases": 172,
+      "junit_status_counts": {
+        "passed": 172
+      },
+      "repaired": [],
+      "sha256": "52e535d17a10ec121e59ad1acd1a1659c4733f6c410143f749f8f5b6543153e2",
+      "source": "runs/c2_xdev.xml",
+      "source_sha256": "9934f3fe3feea8786a2bc39e60843ca7faac76faf3156e29196c1a632a32812d",
+      "validated": true
+    },
+    "runs/full_configured.txt": {
+      "bytes": 2476,
+      "format": "text",
+      "repaired": [],
+      "sha256": "3e970f538b3b7f0dcd8814ba58d44e324f4ad8a3ba2170a4ea1ca473ef9e9757",
+      "source": "runs/full_configured.txt",
+      "source_sha256": "b71fa81409e44fa8b583a8eace72d5d81de83e6a350b3b1b1cdfb20a47b779a2",
+      "validated": true
+    },
+    "runs/full_configured.xml": {
+      "bytes": 230915,
+      "format": "xml",
+      "junit_cases": 1724,
+      "junit_status_counts": {
+        "passed": 1724
+      },
+      "repaired": [],
+      "sha256": "6b4d087c2f1617ce2503e06098bc3f7037ddd06b8ce9056908adf61189da7457",
+      "source": "runs/full_configured.xml",
+      "source_sha256": "73f16399fd550378d37e7bcde2a7165f84b5896ec701011c22a63bbb710770ce",
+      "validated": true
+    },
+    "runs/full_unconfigured.txt": {
+      "bytes": 9500,
+      "format": "text",
+      "repaired": [],
+      "sha256": "a0b1465d6015637821caaacd049ae50021de79b257f30287931087fdd94e59fd",
+      "source": "runs/full_unconfigured.txt",
+      "source_sha256": "117f386a6459108dc8ebb142bbe0d0a5f8d4366dd159ffd3cdd990f8f55001a1",
+      "validated": true
+    },
+    "runs/full_unconfigured.xml": {
+      "bytes": 245132,
+      "format": "xml",
+      "junit_cases": 1724,
+      "junit_status_counts": {
+        "passed": 1673,
+        "skipped": 51
+      },
+      "repaired": [],
+      "sha256": "78e7a2221dbcb5993a65dd42bb66ae933beda4a8f329ccc8a4244d78dbacadfa",
+      "source": "runs/full_unconfigured.xml",
+      "source_sha256": "627847b17270131c26bad946833260840468f4e92b5e7de036f09c4ecd8b71cc",
+      "validated": true
+    },
+    "runs/lane_console.txt": {
+      "bytes": 1056,
+      "format": "text",
+      "repaired": [],
+      "sha256": "3eba008389d81edd32376975fde3e52dd93b57368e8bdedd36b58d3a20fd5cff",
+      "source": "runs/lane_console.txt",
+      "source_sha256": "6c3ee786f70d8a23696137317217bb4fb8de016d737c81794aad86db9a31c287",
+      "validated": true
+    },
+    "runs/run_context.txt": {
+      "bytes": 160,
+      "format": "text",
+      "repaired": [],
+      "sha256": "fcda6cdb53af5c762817ae187b020039979b4253f178aa53ed6d7e5e16e31e24",
+      "source": "runs/run_context.txt",
+      "source_sha256": "fcda6cdb53af5c762817ae187b020039979b4253f178aa53ed6d7e5e16e31e24",
+      "validated": true
+    }
+  },
+  "kind": "executed",
+  "note": "newly executed evidence, sanitised by a format-aware export",
+  "source_note": "Executions for Phase 1B C2 dispatcher safety at 46060d4 (see Phase1B_C2_Results.md section 3)."
+}

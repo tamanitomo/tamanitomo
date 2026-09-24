@@ -1,0 +1,55 @@
+{
+  "derived": {
+    "coverage": "incomplete",
+    "outcome": null,
+    "owner_turn": "unknown",
+    "reply": "unknown",
+    "sessions": [
+      {
+        "created_here": true,
+        "session_id": "c1-session"
+      },
+      {
+        "created_here": true,
+        "session_id": "c1-child"
+      }
+    ]
+  },
+  "driver": {
+    "error": null,
+    "scenario": "clone_then_death",
+    "state_rows": [
+      [
+        1,
+        "c1-session",
+        "user"
+      ],
+      [
+        2,
+        "c1-session",
+        "assistant"
+      ],
+      [
+        3,
+        "c1-child",
+        "user"
+      ],
+      [
+        4,
+        "c1-child",
+        "assistant"
+      ]
+    ]
+  },
+  "fact_kinds": [
+    "executor_started",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed"
+  ]
+}

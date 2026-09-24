@@ -1,0 +1,78 @@
+{
+  "fact_kinds": [
+    "executor_started",
+    "recovery",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "executor_finished"
+  ],
+  "provider_requests": [
+    [
+      "delayed_first_delta",
+      false,
+      1
+    ],
+    [
+      "delayed_first_delta",
+      true,
+      2
+    ]
+  ],
+  "row": {
+    "capability": "full",
+    "correlation": "linked",
+    "coverage": "complete",
+    "error_code": null,
+    "liveness": "quiescent",
+    "owner_turn": "recorded",
+    "reply": "final",
+    "state": "complete"
+  },
+  "settled": true,
+  "state_rows": [
+    {
+      "finish_reason": null,
+      "role": "user",
+      "row_id": 1,
+      "session_id": "20260924_183852_87ffcc"
+    },
+    {
+      "finish_reason": "stop",
+      "role": "assistant",
+      "row_id": 2,
+      "session_id": "20260924_183852_87ffcc"
+    }
+  ]
+}

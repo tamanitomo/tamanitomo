@@ -1,0 +1,130 @@
+{
+  "child": {
+    "alive": true,
+    "pgid": 116404,
+    "sid": 116404
+  },
+  "escaped": {
+    "alive": true,
+    "pgid": 116428,
+    "sid": 116428
+  },
+  "executor_pgid": 116333,
+  "fact_kinds": [
+    "executor_started",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_intent",
+    "write_committed",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "executor_finished"
+  ],
+  "provider_requests": [
+    [
+      "tool_children",
+      true,
+      1
+    ],
+    [
+      "tool_children",
+      false,
+      2
+    ],
+    [
+      "tool_children",
+      true,
+      3
+    ],
+    [
+      "tool_children",
+      true,
+      4
+    ]
+  ],
+  "row": {
+    "capability": "full",
+    "correlation": "linked",
+    "coverage": "complete",
+    "error_code": null,
+    "liveness": "quiescent",
+    "owner_turn": "recorded",
+    "reply": "final",
+    "state": "complete"
+  },
+  "settled": true,
+  "state_rows": [
+    {
+      "finish_reason": null,
+      "role": "user",
+      "row_id": 1,
+      "session_id": "20260924_184141_fa0413"
+    },
+    {
+      "finish_reason": "tool_calls",
+      "role": "assistant",
+      "row_id": 2,
+      "session_id": "20260924_184141_fa0413"
+    },
+    {
+      "finish_reason": null,
+      "role": "tool",
+      "row_id": 3,
+      "session_id": "20260924_184141_fa0413"
+    },
+    {
+      "finish_reason": "tool_calls",
+      "role": "assistant",
+      "row_id": 4,
+      "session_id": "20260924_184141_fa0413"
+    },
+    {
+      "finish_reason": null,
+      "role": "tool",
+      "row_id": 5,
+      "session_id": "20260924_184141_fa0413"
+    },
+    {
+      "finish_reason": "stop",
+      "role": "assistant",
+      "row_id": 6,
+      "session_id": "20260924_184141_fa0413"
+    }
+  ]
+}

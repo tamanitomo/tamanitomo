@@ -1,0 +1,79 @@
+{
+  "executor_pgid": 115587,
+  "fact_kinds": [
+    "executor_started",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_intent",
+    "write_committed",
+    "write_committed"
+  ],
+  "lease": 0,
+  "provider_requests": [
+    [
+      "tool_sleep",
+      false,
+      1
+    ],
+    [
+      "tool_sleep",
+      true,
+      2
+    ]
+  ],
+  "row": {
+    "capability": "full",
+    "correlation": "linked",
+    "coverage": "bounded",
+    "error_code": "executor_lost",
+    "liveness": "quiescent",
+    "owner_turn": "recorded",
+    "reply": "none",
+    "state": "unknown"
+  },
+  "settled": true,
+  "state_rows": [
+    {
+      "finish_reason": null,
+      "role": "user",
+      "row_id": 1,
+      "session_id": "20260924_184050_611b36"
+    },
+    {
+      "finish_reason": "tool_calls",
+      "role": "assistant",
+      "row_id": 2,
+      "session_id": "20260924_184050_611b36"
+    }
+  ],
+  "tool_after": {
+    "alive": true,
+    "pgid": 115658,
+    "sid": 115658
+  }
+}
