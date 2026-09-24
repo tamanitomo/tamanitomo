@@ -1,0 +1,34 @@
+{
+  "derived": {
+    "coverage": "incomplete",
+    "outcome": null,
+    "owner_turn": "unknown",
+    "reply": "unknown",
+    "sessions": [
+      {
+        "created_here": true,
+        "session_id": "c1-session"
+      }
+    ]
+  },
+  "driver": {
+    "error": null,
+    "later_write": "refused",
+    "owner_row": 1,
+    "scenario": "gap_after_owner_commit",
+    "state_rows": [
+      [
+        1,
+        "c1-session",
+        "user"
+      ]
+    ]
+  },
+  "fact_kinds": [
+    "executor_started",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "receipt_gap"
+  ]
+}

@@ -212,7 +212,7 @@ The source-side fixtures are `tests/chat_fixtures.py` and the push records in `t
 
 This section describes code that exists on the test branch and is **off** in every shipped build. `kit/app/chat_send_routes.py` registers its routes only when the app is built with an explicit `chat_sends=Options(...)` (`kit/app/server.py`). No entry point passes it; no UI calls it; the new modules are not in `release-files.json`. The workspace still sends through `POST /api/chat`, which is unchanged. There is no fallback between the two paths: a send accepted on the keyed path is never retried as an unkeyed `POST /api/chat`.
 
-Design: `PHASE1B_DESIGN.md` §4–§5. Results and the exact tests: `Phase1B_C1_Results.md`.
+Design: `PHASE1B_DESIGN.md` §4–§5. Results and the exact tests: `Phase1B_C1_Results.md`; the integration closure (F1–F3) and the Linux activation evidence: `Phase1B_C1_ActivationReadiness.md`, which is the current status.
 
 ### 8.1 Routes
 
@@ -221,11 +221,11 @@ Design: `PHASE1B_DESIGN.md` §4–§5. Results and the exact tests: `Phase1B_C1_
 | `GET /api/chat/sends/bootstrap` | `{conversation_id, generation}`; creates the ledger on first use. `503 send_ledger_lost / send_storage_unsupported / send_supervision_unavailable`, `409 ledger_busy` |
 | `POST /api/chat/sends` `{client_key, generation, conversation_id, message, session}` | `202` accepted (or a `not_started` send re-armed), `200` replay of the receipt for this key (`replay: true`). `409 key_conflict / generation_changed / not_bootstrapped / ledger_busy / turn_in_progress / installation_busy`, `422 key_expired`, `400` invalid input, wrong conversation, unauthorised session, `503` as above |
 | `GET /api/chat/sends/{send_id}` | receipt (recovery first) |
-| `GET /api/chat/sends?key=K` | receipt, or `404` (a `404` while a POST is in flight means retry the same key, never a new one) |
-| `GET /api/chat/sends?open=1` | unsettled receipts, newest 20 |
+| `GET /api/chat/sends?key=K` | receipt, or `404` (a `404` while a POST is in flight means retry the same key, never a new one). Same links as the direct receipt under the same binding |
+| `GET /api/chat/sends?open=1` | unsettled receipts, newest 20. Same links as the direct receipt under the same binding |
 | `POST /api/chat/sends/{send_id}/stop` | receipt. A stop never makes a send `interrupted` by itself; the outcome comes from the executor's facts |
 | `POST /api/chat/sends/ledger/reset` `{"confirm": "reset send ledger"}` | new `generation`. Without the exact confirmation: `400 confirmation_required`, nothing changes. `409 executor_live` while any managed execution is not proven quiescent |
-| `GET /api/operations/{id}` for a send's reserved id | a view built from the ledger (below) |
+| `GET /api/operations/{id}` for a send's reserved id | a view built from the ledger; while running, an authorised public `stream` snapshot; a keyed send the ledger cannot resolve: `status: unknown` (below) |
 
 Every route captures its scope once, before any read or side effect: installation, profile, resolved home and owner binding. A `send_id`, key or operation id from another scope is `404`. Two profile homes are two ledgers: the same key sent to both is two sends.
 
@@ -243,6 +243,8 @@ A receipt carries `state`, `owner_turn`, `reply`, `correlation`, `capability`, `
 - A chat operation's id is reserved in the acceptance transaction. `GET /api/operations/{id}` for it is built from the ledger. A missing or stale operation file never implies a new send, and nothing on this route launches one.
 - Status mapping: `accepted / launching / generating / stopping` → `running`; `complete`, `failed` and `interrupted` as themselves; `not_started` → `failed` ("The reply process was not started."); `unknown` → `interrupted` with its fixed sentence.
 - The file holds only `id, scope, profile, kind, label, status, progress, percent, started_at, finished_at, send_id, error_code, error, format` and `result {session, send_id, note}`. `progress` comes from a fixed set, and `error` is the fixed sentence for `error_code`, never exception text, stderr or output. Streamed text and the reply stay in memory only.
+- **A keyed operation never falls back to the legacy row.** The app marks a keyed send's operation (in memory, and by `format: 2` + `send_id` in its file). When the ledger cannot resolve it — unreadable (`error_code: send_ledger_unavailable`) or no longer holding the send after a reset or retention (`send_record_unavailable`) — the answer is `status: unknown` with the fixed sentence, `send: {state: unknown, ledger}`, `result: null`, and no prompt, reply, stream or session. This never claims the send ran, failed or never existed, and the read never resets, recreates or launches anything. The same id seen from another profile or installation is `404`. An id the app knows no keyed send for is answered by the legacy operation route as before (an unknown id is still `400 Unknown operation`).
+- **Stream snapshot (polling).** While the send runs, the view carries `stream: {available: true, text, truncated}` — the public text streamed so far in this process, as a snapshot (never an append log), at most the last 100 000 characters, with `<think>`/`<thinking>`/`<reasoning>` blocks (including one still open, and a tag fragment at the end) removed on the server. `stream_text` repeats `stream.text` for the current poller. It is rechecked on every read: the send's kind must be authorised by the current binding (`reason: not_authorised`) and its sources verified (`sources_unverified`). After a restart, or from another app process, the buffer does not exist: `reason: not_retained`, never regenerated. Terminal views carry `result`, not `stream`. Nothing streamed is written to the operation file. This is HTTP polling only; no browser rendering of it is certified.
 - Legacy clients get `result.response` and `result.messages` under the current authorisation, on both branches. In the live process, the in-memory reply is returned only while the send's kind is authorised and its links still resolve. Otherwise the result is reconstructed from the linked rows through the Phase 1A projection. Failing both, `response: null, messages: [], content_retained: false`. A reply is never regenerated.
 - Retention applies to terminal `format: 2` files only: removed when finished more than 7 days ago or not among the newest 500, at most 500 per pass, after each chat operation. Records without `format: 2` (pre-1B chat records containing text, and every other operation) are not touched and not described as removed.
 
@@ -258,6 +260,7 @@ A receipt carries `state`, `owner_turn`, `reply`, `correlation`, `capability`, `
   - `incomplete`: a reset could not read the old ledger, so earlier proofs were lost. Such notes then read as the session recorded them, and every read says so.
   - `unavailable`: the ledger cannot be read now.
   - `not_applied`: an app built **without** keyed sends found a ledger in the profile.
+- **Limitation, measured (open gate):** the pinned Hermes compresses a long session **in place**: it deactivates the original rows and appends active copies (history, a summary row and a copy of the owner message). The executor classifies the copies `rewrite_copy`, so the receipt's owner and reply are right. The reads follow Hermes's `active` flag, so the original owner row reads as deleted (the send's `links` become `lost`) and the copies read as new messages, the owner-text copy as uncorrelated owner speech. This is how the reads behave for any compressed session, keyed or not. See `Phase1B_C1_ActivationReadiness.md` §4.
 - **Limitation, stated:** rows written outside a keyed send (terminal, Telegram, earlier app versions, history) carry no provenance. A continuation note there shows as its session recorded it. Nothing is inferred for them.
 
 ### 8.5 Restore limitation
@@ -266,11 +269,6 @@ After any known restore or rollback of the profile home or of the ledger, an exp
 
 ### 8.6 Not activated, and why
 
-Keyed sends stay off until the activation gates in `Phase1B_C1_Results.md` are met:
-- tool-capable turns;
-- interruption during a tool;
-- real CLI compression;
-- containment of managed descendants;
-- real-platform supervisor observations on Windows, macOS and Termux.
+Keyed sends stay off. The gate table is `Phase1B_C1_ActivationReadiness.md` §4 (it supersedes the list that used to be here). Open on Linux: processes the pinned tool starts (every command runs in a new session, outside the managed group), the read side of real CLI compression, and escaped descendants. Not yet observed at all: supervisors on Windows, macOS and Termux.
 
 Until then, unsupported platforms, storage or interpreters are refused before anything is created (`503`). Existing users keep `POST /api/chat`.

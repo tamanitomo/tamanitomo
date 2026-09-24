@@ -1,6 +1,8 @@
 # Phase 1B design: send receipts, idempotency and interruption
 
-Status: **design, revision 3 with the focused corrections requested by PHASE1B_REVIEW_R3, marked (R4).** C0 was accepted as verification work. The **C1 core** now exists as isolated, callable components (`kit/app/chat_sends.py`, `send_executor.py`, `send_protocol.py`, `send_quiescence.py`) exercised by synthetic tests only; **no route, UI, release file or real profile uses it**, and the current workspace send path is unchanged. Evidence: [`Phase1B_C0_Results.md`](Phase1B_C0_Results.md), [`Phase1B_C1_Results.md`](Phase1B_C1_Results.md).
+**Current status (2026-09-24, supersedes the status line below):** C1 core, C1 integration (Appendix E) and the integration closure with Linux activation evidence (Appendix F) exist on test branches and are **not activated**: only an explicit `build(chat_sends=Options(...))` registers the routes, no UI or release file uses them, and `POST /api/chat` is unchanged. Gate table: [`Phase1B_C1_ActivationReadiness.md`](Phase1B_C1_ActivationReadiness.md) §4.
+
+*Superseded status (kept as history):* **design, revision 3 with the focused corrections requested by PHASE1B_REVIEW_R3, marked (R4).** C0 was accepted as verification work. The **C1 core** now exists as isolated, callable components (`kit/app/chat_sends.py`, `send_executor.py`, `send_protocol.py`, `send_quiescence.py`) exercised by synthetic tests only; **no route, UI, release file or real profile uses it**, and the current workspace send path is unchanged. Evidence: [`Phase1B_C0_Results.md`](Phase1B_C0_Results.md), [`Phase1B_C1_Results.md`](Phase1B_C1_Results.md).
 
 - Branch: `test/phase1-conversation-contract`
 - Revision 1: `b074ae9`. Revision 2: `7907066` (answered PHASE1B_REVIEW_R1). Revision 3 (this document) answers PHASE1B_REVIEW_R2 with focused corrections; the structure and numbering of revision 2 are kept. Every passage changed by revision 3 is marked **(R3)**; Appendix B lists them.
@@ -1066,4 +1068,15 @@ The reviewer's U1–U9 and O-A–O-D are decided (§0). **(R3)** These remain fo
 | §5.4 installation guard | `hold_installation(root)`: exclusive OS lock + the one quiescence contract; held by every non-chat `Operations.submit` and by the native console; acceptance takes the lock briefly | All non-chat installation actions count as mutations (conservative: mirrors the in-process rule). The application's own update is not an installation action. |
 | §5.5 contract/results | `docs/CHAT_CONTRACT.md` §8; `Phase1B_C1_Results.md` §0 | — |
 | Not built | the legacy `POST /api/chat` adapter through the ledger (§5.8), which the brief made optional; C2; C3 | `/api/chat` is unchanged and never a fallback. |
+
+## Appendix F. The C1 integration closure and Linux activation evidence (continuation handoff 2026-09-24)
+
+Branch `test/phase1b-c1-integration-closure`, from `dd7d614`. Results: [`Phase1B_C1_ActivationReadiness.md`](Phase1B_C1_ActivationReadiness.md).
+
+| Handoff item | What was built | Difference from the proposal |
+|---|---|---|
+| F1 keyed-to-legacy fallback | `Operations.submit(send_id=)` + `Operations.keyed(ident)` (memory, or `format: 2` file); an unresolvable keyed operation gets a metadata-only `status: unknown` view (`send_ledger_unavailable` / `send_record_unavailable`); another scope is 404 | The restricted view is `200` with a terminal status so today's poller stops; no ledger work on read |
+| F2 stream in the polling contract | `stream {available, text, truncated}` + `stream_text` on the running keyed view; reasoning markup removed server side; authorised per read; `not_retained` after restart | Tail-bounded at 100 000 characters; `sources_unverified` also withholds |
+| F3 receipt links | `lookup()`/`open_receipts()` take `authorized_kinds`; the routes pass the captured binding's kinds | Deny-by-default kept (omitted = no links) |
+| §5 evidence | eight new required pinned cases (`PinnedActivation`), manifest 19 → 27 | No production change: the failures measured (tool processes outside the group; compression reads) need their own design |
 

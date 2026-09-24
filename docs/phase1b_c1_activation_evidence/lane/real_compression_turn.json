@@ -1,0 +1,153 @@
+{
+  "excluded": {},
+  "new_rows": [
+    [
+      81,
+      "user",
+      "user_turn"
+    ],
+    [
+      82,
+      "user",
+      "rewrite_copy"
+    ],
+    [
+      83,
+      "assistant",
+      "rewrite_copy"
+    ],
+    [
+      84,
+      "user",
+      "rewrite_copy"
+    ],
+    [
+      85,
+      "assistant",
+      "rewrite_copy"
+    ],
+    [
+      86,
+      "user",
+      "rewrite_copy"
+    ],
+    [
+      87,
+      "assistant",
+      "rewrite_copy"
+    ],
+    [
+      88,
+      "user",
+      "rewrite_copy"
+    ],
+    [
+      89,
+      "assistant",
+      "rewrite_copy"
+    ],
+    [
+      90,
+      "user",
+      "rewrite_copy"
+    ],
+    [
+      91,
+      "assistant",
+      "rewrite_copy"
+    ],
+    [
+      92,
+      "user",
+      "rewrite_copy"
+    ],
+    [
+      93,
+      "assistant",
+      "public_output"
+    ]
+  ],
+  "owner_text_rows": [
+    81,
+    92
+  ],
+  "provider_requests": [
+    [
+      "overflow_once",
+      false
+    ],
+    [
+      "overflow_once",
+      true
+    ],
+    [
+      "overflow_once",
+      true
+    ],
+    [
+      "overflow_once",
+      true
+    ]
+  ],
+  "read_rows": {
+    "changes": [
+      82,
+      83,
+      84,
+      86,
+      87,
+      88,
+      89,
+      90,
+      91,
+      92,
+      93
+    ],
+    "history": [
+      82,
+      83,
+      84,
+      86,
+      87,
+      88,
+      89,
+      90,
+      91,
+      92
+    ],
+    "snapshot": [
+      86,
+      87,
+      88,
+      89,
+      90,
+      91,
+      92,
+      93
+    ]
+  },
+  "rebuilt_rows": [
+    86,
+    87,
+    88,
+    89,
+    90,
+    91,
+    92,
+    93
+  ],
+  "receipt": {
+    "links": "lost",
+    "owner_turn": "recorded",
+    "reply": "final",
+    "session": "c1-history",
+    "state": "complete"
+  },
+  "sessions": [
+    [
+      "c1-history",
+      "cli",
+      null
+    ]
+  ]
+}

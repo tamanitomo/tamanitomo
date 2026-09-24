@@ -1,0 +1,76 @@
+{
+  "fact_kinds": [
+    "executor_started",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "executor_finished"
+  ],
+  "provider_requests": [
+    [
+      "deltas",
+      true,
+      1
+    ],
+    [
+      "deltas",
+      false,
+      2
+    ],
+    [
+      "deltas",
+      true,
+      3
+    ]
+  ],
+  "row": {
+    "capability": "full",
+    "correlation": "linked",
+    "coverage": "complete",
+    "error_code": null,
+    "liveness": "quiescent",
+    "owner_turn": "recorded",
+    "reply": "final",
+    "state": "complete"
+  },
+  "settled": true,
+  "state_rows": [
+    {
+      "finish_reason": null,
+      "role": "user",
+      "row_id": 1,
+      "session_id": "20260924_162520_21bbc4"
+    },
+    {
+      "finish_reason": "stop",
+      "role": "assistant",
+      "row_id": 2,
+      "session_id": "20260924_162520_21bbc4"
+    },
+    {
+      "finish_reason": null,
+      "role": "user",
+      "row_id": 3,
+      "session_id": "20260924_162520_21bbc4"
+    },
+    {
+      "finish_reason": "stop",
+      "role": "assistant",
+      "row_id": 4,
+      "session_id": "20260924_162520_21bbc4"
+    }
+  ]
+}

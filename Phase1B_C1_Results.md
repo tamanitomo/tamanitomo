@@ -1,5 +1,7 @@
 # Phase 1B C1 results: core, closure and integration
 
+> **Current status lives in [`Phase1B_C1_ActivationReadiness.md`](Phase1B_C1_ActivationReadiness.md)** (integration closure F1–F3 and Linux activation evidence, 2026-09-24). The sections below are kept as the record of earlier rounds; their status summaries and gate lists are superseded by that report.
+
 ## I. C1 integration for PHASE1B_REVIEW_R5 (read this first)
 
 | | |

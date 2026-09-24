@@ -1,0 +1,131 @@
+{
+  "committed_classes": [
+    [
+      "user",
+      "user_turn"
+    ],
+    [
+      "assistant",
+      "assistant_internal"
+    ],
+    [
+      "tool",
+      "internal"
+    ],
+    [
+      "assistant",
+      "public_output"
+    ]
+  ],
+  "deltas": 6,
+  "fact_kinds": [
+    "executor_started",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_intent",
+    "write_committed",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "executor_finished"
+  ],
+  "provider_requests": [
+    [
+      "tool_echo",
+      false,
+      1
+    ],
+    [
+      "tool_echo",
+      true,
+      2
+    ],
+    [
+      "tool_echo",
+      true,
+      3
+    ]
+  ],
+  "row": {
+    "capability": "full",
+    "correlation": "linked",
+    "coverage": "complete",
+    "error_code": null,
+    "liveness": "quiescent",
+    "owner_turn": "recorded",
+    "reply": "final",
+    "state": "complete"
+  },
+  "settled": true,
+  "source_links": {
+    "owner": [
+      [
+        "20260924_162744_24780d",
+        1
+      ]
+    ],
+    "reply": [
+      [
+        "20260924_162744_24780d",
+        4
+      ]
+    ]
+  },
+  "state_rows": [
+    {
+      "finish_reason": null,
+      "role": "user",
+      "row_id": 1,
+      "session_id": "20260924_162744_24780d"
+    },
+    {
+      "finish_reason": "tool_calls",
+      "role": "assistant",
+      "row_id": 2,
+      "session_id": "20260924_162744_24780d"
+    },
+    {
+      "finish_reason": null,
+      "role": "tool",
+      "row_id": 3,
+      "session_id": "20260924_162744_24780d"
+    },
+    {
+      "finish_reason": "stop",
+      "role": "assistant",
+      "row_id": 4,
+      "session_id": "20260924_162744_24780d"
+    }
+  ]
+}
