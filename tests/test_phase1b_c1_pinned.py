@@ -34,6 +34,17 @@ INJECT = HERE / 'phase1b_c1' / 'inject'
 INJECT_PROVENANCE = HERE / 'phase1b_c1' / 'inject_provenance'
 
 
+def sp_live_members(pgid):
+    """Live processes in a process group, from /proc (the same question quiescence asks)."""
+    out = []
+    for entry in pathlib.Path('/proc').iterdir():
+        if entry.name.isdigit():
+            facts = proc_facts(entry.name)
+            if facts['alive'] and facts['pgid'] == pgid:
+                out.append(int(entry.name))
+    return out
+
+
 def state_rows(home):
     path = pathlib.Path(home) / 'state.db'
     if not path.exists():
@@ -477,6 +488,371 @@ class PinnedSeams(unittest.TestCase):
         classes = [r['class'] for f in facts if f['kind'] == 'write_committed' for r in f['data']['rows']]
         self.assertEqual(classes, ['user_internal', 'user_internal', 'public_output'])
         self.assertEqual(derived.owner_turn, 'absent')
+
+
+def proc_facts(pid):
+    """{'alive', 'pgid', 'sid'} for a pid from /proc (zombies are not alive)."""
+    try:
+        stat = pathlib.Path(f'/proc/{int(pid)}/stat').read_text()
+    except (OSError, ValueError):
+        return {'alive': False, 'pgid': None, 'sid': None}
+    fields = stat.rsplit(')', 1)[1].split()
+    return {'alive': fields[0] != 'Z', 'pgid': int(fields[2]), 'sid': int(fields[3])}
+
+
+def reap(*pids):
+    for pid in pids:
+        try:
+            os.kill(int(pid), signal.SIGKILL)
+        except (OSError, ValueError, TypeError):
+            pass
+
+
+def wait_until(pred, timeout=60.0, interval=0.05):
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        value = pred()
+        if value:
+            return value
+        time.sleep(interval)
+    return None
+
+
+@unittest.skipUnless(h.LINUX, 'the C1 supervision is established on Linux only (O-8, O-9, O-11)')
+class PinnedActivation(unittest.TestCase):
+    """Linux activation evidence (continuation handoff 2026-09-24 section 5), pinned Hermes +
+    mock provider, synthetic homes. The pinned `terminal` tool runs harmless commands in the
+    synthetic home. These tests ASSERT WHAT WAS OBSERVED, including limitations: a passing test
+    here that documents an escape is evidence of an OPEN gate, not a closed one."""
+
+    setUp = PinnedTurns.setUp
+    service = PinnedTurns.service
+    run_send = PinnedTurns.run_send
+    facts = PinnedTurns.facts
+    record = PinnedTurns.record
+
+    def started(self, svc, send_id):
+        return [d for k, d in self.facts(svc, send_id) if k == 'executor_started']
+
+    def lease(self, svc, send_id):
+        return h.ledger_rows(svc, 'SELECT count(*) FROM lease WHERE send_id=?', send_id)[0][0]
+
+    def pid_file(self, name, timeout=60):
+        path = self.env.home / name
+        found = wait_until(lambda: path.exists() and path.read_text().strip(), timeout)
+        self.assertTrue(found, f'{name} never appeared')
+        pid = int(path.read_text().strip())
+        self.addCleanup(reap, pid)
+        return pid
+
+    def launch_async(self, svc, scenario, message='A synthetic owner message'):
+        body, (status, payload) = h.send(svc, self.scope, message=message)
+        self.assertEqual(status, 202)
+        send_id, result = payload['send']['send_id'], {}
+        t = threading.Thread(target=lambda: result.update(row=svc.launch(send_id, message, lambda d: None)))
+        t.start()
+        self.addCleanup(t.join, 120)
+        return body, send_id, t, result
+
+    # --- a tool-using turn ------------------------------------------------------------------------
+
+    def test_tool_turn_completes_with_tool_rows_excluded(self):
+        """The real quiet CLI: tool call -> the pinned terminal tool -> tool result -> final reply.
+        Owner/reply correlation, tool rows not owner or reply evidence, completion facts."""
+        svc = self.service('tool_echo')
+        body, row, deltas = self.run_send(svc)
+        rows = state_rows(self.env.home)
+        receipt = svc.receipt(self.scope, row['send_id'], authorized_kinds={'workspace'})
+        committed = [r for k, d in self.facts(svc, row['send_id']) if k == 'write_committed' for r in d['rows']]
+        self.record('tool_turn', svc, row, deltas=len(deltas), committed_classes=[
+            (r['role'], r['class']) for r in committed], source_links=receipt['source_links'])
+        self.assertEqual([(r['role'], r['finish_reason']) for r in rows],
+                         [('user', None), ('assistant', 'tool_calls'), ('tool', None), ('assistant', 'stop')])
+        self.assertEqual((self.env.home / 'c1_tool_output.txt').read_text().strip(), 'c1-tool-ok')
+        self.assertEqual((row['state'], row['owner_turn'], row['reply'], row['coverage'], row['liveness']),
+                         ('complete', 'recorded', 'final', 'complete', 'quiescent'))
+        self.assertEqual(receipt['source_links']['owner'], [[rows[0]['session_id'], rows[0]['row_id']]])
+        replies = {tuple(r) for r in receipt['source_links']['reply']}
+        self.assertIn((rows[3]['session_id'], rows[3]['row_id']), replies)
+        self.assertNotIn((rows[2]['session_id'], rows[2]['row_id']), replies)       # the tool row
+        self.assertEqual(len(self.started(svc, row['send_id'])), 1)
+        self.assertEqual([r[1] for r in self.provider.requests if r[0] == 'tool_echo'].count(True), 2)
+        self.assertEqual(svc.accept(self.scope, body, h.workspace_only)[0], 200)
+        self.assertEqual(len(self.started(svc, row['send_id'])), 1)
+
+    # --- interruption while the tool process is active --------------------------------------------
+
+    def interrupted_during_tool(self, how):
+        kw = {'turn_timeout': 6.0, 'stop_grace': 10.0} if how == 'deadline' else {}
+        svc = self.service('tool_sleep', **kw)
+        body, send_id, t, result = self.launch_async(svc, 'tool_sleep')
+        tool = self.pid_file('c1_tool.pid')
+        executor = wait_until(lambda: self.started(svc, send_id), 30)[0]
+        during = {'tool': proc_facts(tool), 'executor_pgid': executor['pgid']}
+        requests_before = len(self.provider.requests)
+        if how == 'stop':
+            svc.stop(self.scope, send_id)
+            after_request = {'lease': self.lease(svc, send_id),
+                             'settled': h.ledger_rows(svc, 'SELECT settled_at FROM sends WHERE send_id=?',
+                                                      send_id)[0][0] is not None}
+        else:
+            after_request = None
+        t.join(120)
+        row = result['row']
+        after = {'tool': proc_facts(tool), 'lease': self.lease(svc, send_id)}
+        status, again = svc.accept(self.scope, body, h.workspace_only)
+        self.record(f'tool_{how}_turn', svc, row, during=during, after_stop_request=after_request, after=after,
+                    launches=len(self.started(svc, send_id)),
+                    provider_requests_after_interrupt=len(self.provider.requests) - requests_before,
+                    retry_status=status)
+        return svc, send_id, row, tool, during, after_request, after, status
+
+    def test_stop_during_a_tool(self):
+        svc, send_id, row, tool, during, after_request, after, retry = self.interrupted_during_tool('stop')
+        # The tool runs in its own session (pinned local backend: start_new_session=True):
+        # outside the executor's managed process group.
+        self.assertTrue(during['tool']['alive'])
+        self.assertNotEqual(during['tool']['pgid'], during['executor_pgid'])
+        # A stop request alone releases nothing.
+        self.assertEqual(after_request, {'lease': 1, 'settled': False})
+        self.assertEqual((row['state'], row['error_code'], row['liveness']), ('interrupted', 'stopped', 'quiescent'))
+        self.assertEqual(after['lease'], 0)
+        # Observed: Hermes's own interrupt handling kills the tool's group before the executor
+        # exits, so the tool is gone by settlement. (Hermes cleanup, not Tamanitomo containment.)
+        self.assertFalse(after['tool']['alive'])
+        self.assertEqual((retry, len(self.started(svc, send_id))), (200, 1))
+
+    def test_deadline_during_a_tool(self):
+        svc, send_id, row, tool, during, _, after, retry = self.interrupted_during_tool('deadline')
+        self.assertNotEqual(during['tool']['pgid'], during['executor_pgid'])
+        self.assertEqual((row['state'], row['error_code'], row['liveness']), ('interrupted', 'timeout', 'quiescent'))
+        self.assertFalse(after['tool']['alive'])
+        self.assertEqual((retry, len(self.started(svc, send_id))), (200, 1))
+
+    def test_executor_killed_during_a_tool_leaves_the_tool_running(self):
+        """The case Hermes cannot clean up: the executor process group is SIGKILLed (what the
+        supervisor does after the stop grace). The tool, in its own session, survives; the
+        managed group is empty, so the send settles while the tool still runs. OPEN GATE."""
+        svc = self.service('tool_sleep', stop_grace=0.5)
+        body, send_id, t, result = self.launch_async(svc, 'tool_sleep')
+        tool = self.pid_file('c1_tool.pid')
+        executor = wait_until(lambda: self.started(svc, send_id), 30)[0]
+        os.killpg(executor['pgid'], signal.SIGKILL)
+        t.join(120)
+        row = result['row']
+        after = proc_facts(tool)
+        self.record('tool_executor_killed_turn', svc, row, tool_after=after, executor_pgid=executor['pgid'],
+                    lease=self.lease(svc, send_id))
+        self.assertIsNotNone(row['settled_at'])
+        self.assertEqual(row['liveness'], 'quiescent')
+        self.assertEqual(self.lease(svc, send_id), 0)
+        self.assertTrue(after['alive'], 'the tool died with the executor group; update the gate table')
+        self.assertEqual(len(self.started(svc, send_id)), 1)
+
+    def test_controller_death_during_a_tool(self):
+        """M-8 with a tool active: the controller is SIGKILLed while the tool runs; the executor
+        continues; a new controller supervises it to completion; one launch."""
+        pl.synthetic_home(self.env.home, self.provider, 'tool_sleep')
+        ex = cs.ExecutorSpec(python=self.python, env=pl.executor_env(self.src, self.env.home), cwd=str(self.env.home))
+        out, cfg = self.env.root / 'ctl.json', self.env.root / 'cfg.json'
+        cfg.write_text(json.dumps({'home': str(self.env.home), 'state': str(self.env.state), 'kill_at': None,
+                                   'key': cs.new_ulid(), 'message': 'A synthetic owner message', 'out': str(out),
+                                   'turn_timeout': 120, 'poll': 0.2,
+                                   'executor': {'python': ex.python, 'env': ex.env, 'cwd': ex.cwd}}))
+        ctl = subprocess.Popen([sys.executable, str(HERE / 'phase1b_c1' / 'controller_proc.py'), str(cfg)],
+                               cwd=str(HERE.parent), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.addCleanup(lambda: (ctl.poll() is None and ctl.kill(), ctl.wait()))
+        tool = self.pid_file('c1_tool.pid')
+        ctl.kill()
+        ctl.wait(30)
+        send_id = json.loads(out.read_text())['send_id']
+        svc = self.env.service(ex)
+        mid = {'tool': proc_facts(tool), 'state': h.ledger_rows(svc, 'SELECT state FROM sends WHERE send_id=?',
+                                                                  send_id)[0][0],
+               'lease': self.lease(svc, send_id)}
+        row = svc.watch(send_id, timeout=110)
+        self.record('tool_controller_death_turn', svc, row, mid=mid, tool_after=proc_facts(tool))
+        self.assertTrue(mid['tool']['alive'])
+        self.assertEqual((mid['state'], mid['lease']), ('generating', 1))
+        self.assertEqual((row['state'], row['owner_turn'], row['reply'], row['liveness']),
+                         ('complete', 'recorded', 'final', 'quiescent'))
+        self.assertEqual(len(self.started(svc, send_id)), 1)
+
+    # --- real CLI compression -------------------------------------------------------------------
+
+    def test_real_cli_compression_continuation(self):
+        """The actual CLI compression path, not a SessionDB seam: a resumed session with a long
+        synthetic history (seeded through the pinned SessionDB), the provider refusing the first
+        main request as a context overflow (structured code), Hermes compressing and retrying,
+        then replying. Observed on the pinned code: compression rewrites IN PLACE (same session,
+        no child), appending copies of history, a summary row and a copy of the owner message.
+        Checked: which path ran, receipted rows and classes, owner/reply correlation, and what
+        snapshot/history/changes and a projection rebuild show. The receipt side holds; the
+        READ side fails (see the assertions): an OPEN GATE, pinned as observed."""
+        from tests.test_phase1b_c1_integration import App
+
+        def executor(rt, home):
+            return cs.ExecutorSpec(python=self.python, env=pl.executor_env(self.src, home), cwd=str(home))
+        a = App(self, executor=executor)
+        home = a.home()
+        pl.synthetic_home(home, self.provider, 'overflow_once')
+        cfg = home / 'config.yaml'
+        cfg.write_text(cfg.read_text().replace('model:\n', 'model:\n  context_length: 64000\n'))
+        seeded = subprocess.run([self.python, str(HERE / 'phase1b_c1' / 'seed_history.py'), str(home / 'state.db'),
+                                 'c1-history', '40', '8000'], env=pl.executor_env(self.src, home), cwd=str(home),
+                                capture_output=True, text=True, timeout=120)
+        self.assertEqual(seeded.returncode, 0, seeded.stderr[-2000:])
+        history = json.loads(seeded.stdout.strip().splitlines()[-1])['rows']
+        before = a.snapshot()
+        body, accepted, receipt = a.send('A synthetic owner message 6061', session='c1-history')
+        send_id = accepted['send']['send_id']
+        rows = [r for r in state_rows(home) if r['row_id'] > max(history)]
+        con = sqlite3.connect(str(home / 'state.db'))
+        try:
+            sessions = [list(r) for r in con.execute('SELECT id, source, parent_session_id FROM sessions')]
+            texts = {r[0]: r[1] for r in con.execute('SELECT id, content FROM messages WHERE id > ?', (max(history),))}
+        finally:
+            con.close()
+        svc = a.app.state.chat_sends._services[os.path.realpath(home)]
+        committed = [r for k, d in h.facts(svc, send_id) if k == 'write_committed' for r in d['rows']]
+        classes = {r['row_id']: r['class'] for r in committed}
+        requests = [(n, st) for n, st, _ in self.provider.requests]
+        snap, older = PinnedHttp.reads(self, a)
+        changes = a.get('/chat/changes', after=before['changes']['after']).json()
+        new_public = [m for m in snap['messages'] + older['messages'] if int(m['source']['message']) > max(history)]
+        pages = {'snapshot': snap['messages'], 'history': older['messages'],
+                 'changes': [c['message'] for c in changes['changes']]}
+        seen_rows = {name: sorted({int(m['source']['message']) for m in page if int(m['source']['message']) > max(history)})
+                     for name, page in pages.items()}
+        for path in (a.state / 'chat').rglob('*.sqlite3'):
+            path.unlink()
+        rebuilt = a.snapshot()
+        rebuilt_rows = sorted({int(m['source']['message']) for m in rebuilt['messages']
+                               if int(m['source']['message']) > max(history)})
+        owner_copies = [r['row_id'] for r in rows if r['role'] == 'user' and texts[r['row_id']] == body['message']]
+        pl.evidence('real_compression_turn', {
+            'receipt': {k: receipt.get(k) for k in ('state', 'owner_turn', 'reply', 'links', 'session')},
+            'sessions': sessions, 'provider_requests': requests,
+            'new_rows': [(r['row_id'], r['role'], classes.get(r['row_id'])) for r in rows],
+            'owner_text_rows': owner_copies, 'read_rows': seen_rows, 'rebuilt_rows': rebuilt_rows,
+            'excluded': snap.get('excluded')})
+        # Which path ran: the reactive compression in the real CLI (overflow, then a compressed retry).
+        self.assertEqual([st for n, st in requests if n == 'overflow_once'].count(True), 3)
+        self.assertEqual(len(sessions), 1)                          # in place: no child session
+        owner_row, reply_row = rows[0], rows[-1]
+        # Receipt side (holds): one launch; the owner turn is the real owner row; the copies,
+        # including a verbatim copy of the owner text, are classified rewrite_copy, never owner
+        # or reply evidence; the reply is the final public output.
+        self.assertEqual((receipt['state'], receipt['owner_turn'], receipt['reply']), ('complete', 'recorded', 'final'))
+        self.assertEqual(owner_copies[0], owner_row['row_id'])
+        self.assertGreaterEqual(len(owner_copies), 2)               # the rewrite copied the owner text
+        self.assertEqual(classes[owner_row['row_id']], 'user_turn')
+        self.assertEqual(classes[reply_row['row_id']], 'public_output')
+        for r in rows[1:-1]:
+            self.assertEqual(classes.get(r['row_id']), 'rewrite_copy', r)
+        self.assertEqual(a.launches(send_id), 1)
+        # Read side (OPEN GATE, observed): Hermes deactivates the original rows and appends active
+        # copies; the Phase 1A reads follow `active`, so the real owner row reads as deleted (the
+        # send's links are `lost`) and the copies read as NEW public messages -- including the
+        # copy of the owner text as uncorrelated owner speech. The summary row stays excluded.
+        # These assertions pin the observed failure so a fix flips them; they are not a pass.
+        copies = [r['row_id'] for r in rows[1:-1] if r['row_id'] not in seen_rows['snapshot'] + seen_rows['history']]
+        self.assertEqual(receipt['links'], 'lost')
+        self.assertNotIn(owner_row['row_id'], seen_rows['snapshot'] + seen_rows['history'] + seen_rows['changes'])
+        self.assertIn(owner_copies[-1], seen_rows['snapshot'])
+        self.assertEqual(len(copies), 1)                            # only the summary row is hidden
+        self.assertEqual(rebuilt_rows, seen_rows['snapshot'])
+        owners = [m for m in new_public if m['speaker'] == 'owner']
+        self.assertIn(str(owner_copies[-1]), {m['source']['message'] for m in owners})
+        self.assertTrue(all(m['correlation'] is None for m in owners))
+
+    # --- foreign writers -------------------------------------------------------------------------
+
+    def foreign_turn(self, message, session=None, scenario='deltas'):
+        """The pinned CLI run directly (NOT through Tamanitomo): an upstream writer that knows
+        nothing about the send ledger, its lease or the installation guard."""
+        code = 'import sys\nfrom hermes_cli.main import main\nsys.argv = ["hermes", *sys.argv[1:]]\nmain()'
+        argv = [self.python, '-c', code, 'chat', '--quiet', '--oneshot', '-q', message, '-m', scenario]
+        if session:
+            argv += ['--resume', session]
+        started = time.monotonic()
+        proc = subprocess.run(argv, env=pl.executor_env(self.src, self.env.home), cwd=str(self.env.home),
+                              capture_output=True, text=True, timeout=120)
+        return {'exit': proc.returncode, 'seconds': round(time.monotonic() - started, 2),
+                'stderr_tail': proc.stderr.strip().splitlines()[-3:]}
+
+    def test_foreign_writers_are_never_attributed(self):
+        """While a keyed send runs (its provider stream stalled): a second pinned CLI process
+        resuming THE SAME session is refused by Hermes's OWN session-owner lease
+        (SESSION_NOT_OWNED) -- upstream coordination, not Tamanitomo's lease; an unrelated
+        fresh-session turn in the same profile runs freely (control). After settlement, a
+        foreign turn in the same session with the SAME owner text is accepted by Hermes. No
+        foreign row is ever receipted, linked or counted for the send."""
+        svc = self.service('hang')
+        message = 'A synthetic owner message 7373'
+        body, send_id, t, result = self.launch_async(svc, 'hang', message)
+        owner = wait_until(lambda: [r for r in state_rows(self.env.home) if r['role'] == 'user'], 60)
+        self.assertTrue(owner, 'the keyed owner row never appeared')
+        session = owner[0]['session_id']
+        lease_during = self.lease(svc, send_id)
+        same_during = self.foreign_turn(message, session=session)
+        unrelated = self.foreign_turn('An unrelated synthetic message')
+        still_running = t.is_alive()
+        t.join(120)
+        row = result['row']
+        before = svc.receipt(self.scope, send_id, authorized_kinds={'workspace'})
+        same_after = self.foreign_turn(message, session=session)
+        rows = state_rows(self.env.home)
+        receipt = svc.receipt(self.scope, send_id, authorized_kinds={'workspace'})
+        receipted = {(r['session_id'], r['row_id']) for k, d in self.facts(svc, send_id) if k == 'write_committed'
+                     for r in d['rows']}
+        linked = {tuple(x) for part in receipt['source_links'].values() for x in part}
+        foreign = [r for r in rows if (r['session_id'], r['row_id']) not in receipted]
+        self.record('foreign_writers_turn', svc, row, lease_during=lease_during, same_session_during=same_during,
+                    unrelated=unrelated, same_session_after=same_after, keyed_still_running_after_foreign=still_running,
+                    foreign_rows=[(r['session_id'] == session, r['row_id'], r['role']) for r in foreign],
+                    linked=sorted(linked))
+        self.assertEqual(lease_during, 1)
+        self.assertEqual(same_during['exit'], 1)
+        self.assertIn('hermes-refusal-reason: SESSION_NOT_OWNED', same_during['stderr_tail'])
+        self.assertEqual((unrelated['exit'], same_after['exit']), (0, 0))
+        self.assertTrue(still_running)          # neither foreign turn waited for the send's lease
+        same_session_foreign = [r for r in foreign if r['session_id'] == session]
+        self.assertEqual([r['role'] for r in same_session_foreign], ['user', 'assistant'])
+        self.assertTrue([r for r in foreign if r['session_id'] != session])         # the unrelated control
+        self.assertFalse({(r['session_id'], r['row_id']) for r in foreign} & linked)
+        self.assertEqual(receipt['source_links'], before['source_links'])
+        self.assertEqual(receipt['source_links']['owner'], [[session, owner[0]['row_id']]])
+        self.assertTrue(linked <= receipted)
+        self.assertEqual((row['state'], row['owner_turn']), ('complete', 'recorded'))
+        self.assertEqual(len(self.started(svc, send_id)), 1)
+
+    # --- descendants of a real tool ---------------------------------------------------------------
+
+    def test_tool_descendants_escape_the_managed_group(self):
+        """Two descendants started through the real terminal tool: a Hermes-managed background
+        process (`background: true`) and a child a fixture script detaches with os.setsid().
+        Both are outside the executor's group (the pinned local backend starts every command
+        in a new session), neither is detected, and the send settles while they run. The
+        executor's own group is empty: quiescence holds for what it can see. OPEN GATE (O-10).
+        (Ordinary in-group children are covered at fixture level: test_phase1b_c1_core M-7e.)"""
+        from mock_provider import DETACH_SCRIPT
+        svc = self.service('tool_children')
+        (self.env.home / 'c1_detach.py').write_text(DETACH_SCRIPT)
+        _, row, _ = self.run_send(svc)
+        tool_rows = [r for r in state_rows(self.env.home) if r['role'] == 'tool']
+        self.assertEqual(len(tool_rows), 2)
+        child, escaped = self.pid_file('c1_child.pid'), self.pid_file('c1_escaped.pid')
+        executor = self.started(svc, row['send_id'])[0]
+        facts_ = {'child': proc_facts(child), 'escaped': proc_facts(escaped), 'executor_pgid': executor['pgid']}
+        self.record('tool_descendants_turn', svc, row, **facts_)
+        self.assertEqual((row['state'], row['liveness']), ('complete', 'quiescent'))
+        self.assertIsNotNone(row['settled_at'])
+        for name in ('child', 'escaped'):
+            self.assertTrue(facts_[name]['alive'], name)
+            self.assertNotEqual(facts_[name]['pgid'], executor['pgid'], name)
+        self.assertEqual(sp_live_members(executor['pgid']), [])
+
 
 
 if __name__ == '__main__':

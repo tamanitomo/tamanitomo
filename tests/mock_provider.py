@@ -47,6 +47,38 @@ def _deltas(text, size):
     return [_sse(_chunk({'content': text[i:i + size]})) for i in range(0, len(text), size)]
 
 
+def _tool_call(name, arguments, ident='call_c1'):
+    return _sse(_chunk({'tool_calls': [{'index': 0, 'id': ident, 'type': 'function',
+                                        'function': {'name': name, 'arguments': json.dumps(arguments)}}]}))
+
+
+# Phase 1B activation evidence: commands the pinned `terminal` tool runs in the synthetic
+# home (its cwd). Harmless, deterministic, local only; pids are written for the test to observe.
+TOOL_COMMANDS = {
+    'tool_echo': 'echo c1-tool-ok > c1_tool_output.txt && cat c1_tool_output.txt',
+    'tool_sleep': 'echo $$ > c1_tool.pid; exec sleep 45',
+}
+# Two tool calls in one turn: a Hermes-managed background process (`background: true`, the
+# route the pinned tool offers: it refuses a foreground `&` and nohup/disown/setsid wrappers,
+# and blocks `sh -c` in single-query mode), then a foreground run of a fixture script that
+# detaches its own child with os.setsid() (the test writes c1_detach.py into the home).
+TOOL_CHILDREN = [{'command': 'echo $$ > c1_child.pid; exec sleep 45', 'background': True},
+                 {'command': 'python3 c1_detach.py'}]
+DETACH_SCRIPT = """import os, sys, time
+if os.fork() == 0:
+    os.setsid()
+    if os.fork() == 0:
+        fd = os.open(os.devnull, os.O_RDWR)
+        for n in (0, 1, 2):
+            os.dup2(fd, n)
+        open('c1_escaped.pid', 'w').write(str(os.getpid()))
+        time.sleep(45)
+    os._exit(0)
+os.wait()
+print('c1-escaped-started')
+"""
+
+
 def scenarios():
     """name -> list of steps. A step is bytes to write, ('sleep', s), or
     ('close',) to drop the connection without finishing."""
@@ -55,7 +87,15 @@ def scenarios():
     moon = 'Café at night \U0001F319 — done.'
     moon_bytes = b''.join([role, _sse(_chunk({'content': moon})), stop, DONE])
     cut = moon_bytes.index('\U0001F319'.encode()) + 2          # inside the 4-byte moon
+    tools_done = _sse(_chunk(finish='tool_calls'))
+    final = [role, *_deltas(PUBLIC_TEXT, 7), stop, DONE]
+    tool_turns = {name: {'by': 'stream', 1: [role, _tool_call('terminal', {'command': command}), tools_done, DONE],
+                         'default': final} for name, command in TOOL_COMMANDS.items()}
+    tool_turns['tool_children'] = {'by': 'stream', 'default': final, **{
+        i + 1: [role, _tool_call('terminal', args, ident=f'call_c1_{i}'), tools_done, DONE]
+        for i, args in enumerate(TOOL_CHILDREN)}}
     return {
+        **tool_turns,
         'deltas': [role, *_deltas(PUBLIC_TEXT, 7), stop, DONE],
         'delayed_first_delta': [role, ('sleep', 0.3), *_deltas(PUBLIC_TEXT, 12), stop, DONE],
         'single': [role, _sse(_chunk({'content': PUBLIC_TEXT})), stop, DONE],
@@ -79,6 +119,12 @@ def scenarios():
         'recover': {1: [role, *_deltas(PUBLIC_TEXT, 7)[:2], ('close',)], 'default': [role, *_deltas(PUBLIC_TEXT, 7), stop, DONE]},
         # Phase 1B C1: like `recover`, but the drop is counted over STREAMING requests only, so
         # it always hits the main reply stream (an auxiliary non-stream request cannot absorb it).
+        # Phase 1B activation evidence: the first main stream is refused as a context overflow
+        # (structured code), so the real CLI runs its reactive compression, then the retry replies.
+        'overflow_once': {'by': 'stream', 1: [('status', 400, {
+            'code': 'context_length_exceeded', 'type': 'invalid_request_error',
+            'message': "This model's maximum context length is 64000 tokens. Please reduce the length of the messages."})],
+            'default': [role, *_deltas(PUBLIC_TEXT, 7), stop, DONE]},
         'recover_stream': {'by': 'stream', 1: [role, *_deltas(PUBLIC_TEXT, 7)[:2], ('close',)],
                            'default': [role, *_deltas(PUBLIC_TEXT, 7), stop, DONE]},
     }
@@ -88,6 +134,7 @@ class MockProvider:
     def __init__(self):
         self.token = secrets.token_urlsafe(24)
         self.requests = []           # (scenario, stream, attempt) per request, in order
+        self.bodies = []             # request bodies, in order (in memory only; synthetic content)
         self.request_times = []      # time.time() at each request's arrival, same order
         self._counts = {}
         self._lock = threading.Lock()
@@ -113,6 +160,7 @@ class MockProvider:
                 with provider._lock:
                     attempt = provider._counts[name] = provider._counts.get(name, 0) + 1
                     provider.requests.append((name, bool(body.get('stream')), attempt))
+                    provider.bodies.append(body)
                     provider.request_times.append(time.time())
                     if body.get('stream'):
                         streamed = provider._counts[(name, 'stream')] = provider._counts.get((name, 'stream'), 0) + 1
@@ -121,7 +169,8 @@ class MockProvider:
                     key = streamed if steps.get('by') == 'stream' and body.get('stream') else attempt
                     steps = steps.get(key, steps['default'])
                 if steps and isinstance(steps[0], tuple) and steps[0][0] == 'status':
-                    return self._json(steps[0][1], {'error': {'message': 'mock provider error', 'type': 'server_error'}})
+                    error = steps[0][2] if len(steps[0]) > 2 else {'message': 'mock provider error', 'type': 'server_error'}
+                    return self._json(steps[0][1], {'error': error})
                 if not body.get('stream'):
                     return self._json(200, provider.completion(name))
                 self.send_response(200)

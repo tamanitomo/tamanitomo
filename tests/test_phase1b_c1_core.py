@@ -1329,6 +1329,15 @@ class LaneVerdict(unittest.TestCase):
         """The reviewer's probe: the old prefix rule passed this."""
         self.assertEqual(self.lane.verdict(self.full[:1], 0)[0], 'fail')
 
+    def test_the_previous_manifest_alone_no_longer_passes(self):
+        """The 19 cases required before the activation-evidence cases were added: a run of only
+        those (a selected subset of today's lane) cannot report the full-lane verdict."""
+        earlier = [c for c in self.full if '::test_' in c['id'] and 'PinnedActivation' not in c['id']]
+        self.assertEqual(len(earlier), 19)
+        verdict, problems = self.lane.verdict(earlier, 0)
+        self.assertEqual(verdict, 'fail')
+        self.assertEqual(len(problems), len(self.lane.REQUIRED_CASES) - 19)
+
     def test_missing_skipped_duplicated_failed_or_errored_cases_fail(self):
         for mutate in (lambda c: c[1:],
                        lambda c: [{**c[0], 'status': 'skipped'}] + c[1:],

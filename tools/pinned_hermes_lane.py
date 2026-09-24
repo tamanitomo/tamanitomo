@@ -65,6 +65,17 @@ REQUIRED_CASES = tuple(f'tests.test_phase1b_c1_pinned.{name}' for name in (
     'PinnedSeams::test_compression_clone_then_death_is_unknown_not_absent',
     'PinnedSeams::test_receipt_gap_after_a_real_commit',
     'PinnedSeams::test_hidden_and_summary_owner_rows_are_not_owner_evidence',
+    # Activation evidence (continuation handoff 2026-09-24 section 5). Several of these PIN AN
+    # OBSERVED LIMITATION (an open gate); passing them is evidence, not a closed gate. See
+    # Phase1B_C1_ActivationReadiness.md.
+    'PinnedActivation::test_tool_turn_completes_with_tool_rows_excluded',
+    'PinnedActivation::test_stop_during_a_tool',
+    'PinnedActivation::test_deadline_during_a_tool',
+    'PinnedActivation::test_executor_killed_during_a_tool_leaves_the_tool_running',
+    'PinnedActivation::test_controller_death_during_a_tool',
+    'PinnedActivation::test_real_cli_compression_continuation',
+    'PinnedActivation::test_foreign_writers_are_never_attributed',
+    'PinnedActivation::test_tool_descendants_escape_the_managed_group',
 ))
 
 
