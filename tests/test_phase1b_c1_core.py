@@ -298,24 +298,37 @@ class Quiescence(unittest.TestCase):
 
     def test_observe_reports_unproven_for_an_acquired_lock_with_an_uninspectable_group(self):
         lock = self.dir / 'e.lock'
-        lock.touch()
+        lock.write_text(json.dumps({'lock_nonce': 'n1'}))
         st = lock.stat()
         self.patch_proc(_fake_proc(self.dir, {5: '5 (x) S 1 5 5'}))
         (pathlib.Path(sq.PROC) / '5' / 'stat').unlink()
         (pathlib.Path(sq.PROC) / '5' / 'stat').mkdir()
-        obs = sq.observe(lock, (st.st_dev, st.st_ino), 5)
+        obs = sq.observe(lock, (st.st_dev, st.st_ino), 5, 'n1')
         self.assertEqual((obs.state, obs.reason), ('unproven', 'process_uninspectable'))
 
     def test_missing_and_replaced_lock_paths_are_unproven(self):
         lock = self.dir / 'e.lock'
-        lock.touch()
+        lock.write_text(json.dumps({'lock_nonce': 'n1'}))
         st = lock.stat()
-        self.assertEqual(sq.observe(self.dir / 'missing.lock', (st.st_dev, st.st_ino), os.getpgid(0)).state,
+        self.assertEqual(sq.probe_lock(lock, (st.st_dev, st.st_ino), 'n1'), ('acquired', 'executor_lock_acquired'))
+        self.assertEqual(sq.observe(self.dir / 'missing.lock', (st.st_dev, st.st_ino), os.getpgid(0), 'n1').state,
                          'unproven')
         lock.unlink()
-        lock.touch()                                   # recreated: a different inode
-        self.assertEqual(sq.probe_lock(lock, (st.st_dev, st.st_ino)), ('unproven', 'lock_replaced'))
-        self.assertFalse(lock.is_symlink())
+        lock.touch()                                   # recreated: the file system may REUSE the inode
+        ident = (lock.stat().st_dev, lock.stat().st_ino)
+        self.assertEqual(sq.probe_lock(lock, (st.st_dev, st.st_ino), 'n1'), ('unproven', 'lock_replaced'))
+        if ident == (st.st_dev, st.st_ino):            # it did (seen on CI ext4): the nonce is what caught it
+            self.assertEqual(sq.probe_lock(lock, (st.st_dev, st.st_ino)), ('acquired', 'executor_lock_acquired'))
+        self.assertEqual(sq.probe_lock(lock, (st.st_dev, st.st_ino), ''), ('unproven', 'lock_replaced'))
+
+    def test_the_same_inode_with_another_nonce_is_not_the_executors_lock(self):
+        """Deterministic form of the CI finding: identical (st_dev, st_ino), different file."""
+        lock = self.dir / 'e.lock'
+        lock.write_text(json.dumps({'lock_nonce': 'first'}))
+        st = lock.stat()
+        lock.write_text(json.dumps({'lock_nonce': 'second'}))
+        self.assertEqual((lock.stat().st_dev, lock.stat().st_ino), (st.st_dev, st.st_ino))
+        self.assertEqual(sq.probe_lock(lock, (st.st_dev, st.st_ino), 'first'), ('unproven', 'lock_replaced'))
 
     def test_a_symlinked_lock_is_refused(self):
         target = self.dir / 'real.lock'
@@ -705,14 +718,26 @@ class Launch(unittest.TestCase):
         self.svc.stop(self.scope, send_id)
         t.join(30)
         row = result['row']
-        self.assertEqual((row['state'], row['error_code'], row['owner_turn']), ('interrupted', 'stopped', 'recorded'))
+        self.assertEqual((row['state'], row['error_code'], row['owner_turn']), ('interrupted', 'stopped', 'recorded'),
+                         h.facts(self.svc, send_id))
         self.assertIn('stop_seen', [k for k, _ in h.facts(self.svc, send_id)])
+
+    def test_stop_works_when_the_app_was_started_with_sigint_ignored(self):
+        """A process started with `&` from a non-interactive shell inherits SIGINT ignored; the
+        executor must still be interruptible (interrupt_main is a no-op under SIG_IGN)."""
+        import signal as _signal
+        previous = _signal.signal(_signal.SIGINT, _signal.SIG_IGN)     # inherited by the executor
+        self.addCleanup(_signal.signal, _signal.SIGINT, previous)
+        svc = self.env.service(turn_timeout=1.0, stop_grace=30.0, watchdog_interval=0.1)
+        _, row, _ = self.run_send(svc=svc, hang=20)
+        self.assertEqual((row['state'], row['error_code']), ('interrupted', 'timeout'), h.facts(svc, row['send_id']))
+        self.assertNotIn('kill_sent', [k for k, _ in h.facts(svc, row['send_id'])])
 
     def test_deadline_interrupts_the_turn(self):
         """M-13 (fake)."""
         svc = self.env.service(turn_timeout=1.0, stop_grace=5.0, watchdog_interval=0.1)
         _, row, _ = self.run_send(svc=svc, hang=20)
-        self.assertEqual((row['state'], row['error_code']), ('interrupted', 'timeout'))
+        self.assertEqual((row['state'], row['error_code']), ('interrupted', 'timeout'), h.facts(svc, row['send_id']))
 
     def test_a_missed_interrupt_reaches_the_kill_fallback(self):
         """M-13 kill leg: the turn swallows KeyboardInterrupt; the owner kills the group."""
@@ -989,7 +1014,7 @@ class ResetAndQuiescence(unittest.TestCase):
         self.assertTrue(_wait(lambda: sq.probe_lock(lock, started['lock_identity'])[0] == 'acquired'))
         lock.unlink()
         self.assert_blocked(send_id, 'unproven')
-        lock.touch()                                   # recreated: a different identity
+        lock.touch()                                   # recreated (possibly with the same inode number)
         self.assert_blocked(send_id, 'unproven')
 
     def test_unreadable_process_data_is_unproven(self):
@@ -1038,7 +1063,8 @@ class ResetAndQuiescence(unittest.TestCase):
         exc = self.refused(self.svc.reset)
         self.assertEqual((exc.code, exc.extra['executors'][0]['liveness']), ('executor_live', 'live'))
         _kill(started['pid'])
-        self.assertTrue(_wait(lambda: not _alive(started['pid'])))
+        lock = self.svc.dir / 'executors' / f'{send_id}.lock'
+        self.assertTrue(_wait(lambda: sq.probe_lock(lock, started['lock_identity'])[0] == 'acquired'))
         self.assertIn('generation', self.svc.reset())
         self.assertTrue(list(self.svc.dir.glob('ledger.lost-*.sqlite3')))
 

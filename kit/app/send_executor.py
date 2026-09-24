@@ -45,6 +45,8 @@ import itertools
 import json
 import os
 import re
+import secrets
+import signal
 import sqlite3
 import sys
 import threading
@@ -425,12 +427,17 @@ def main(argv=None, stdin=None, wire=None):
     fd, lock_identity = held
     pid = os.getpid()
     identity = {'pid': pid, 'pgid': os.getpgid(0), 'start': sp.start_time(pid), 'boot': sp.boot_id(),
-                'lock_identity': list(lock_identity)}
+                'lock_identity': list(lock_identity), 'lock_nonce': secrets.token_hex(16)}
     try:                                # the identity is also left in the lock file itself, for a
         os.ftruncate(fd, 0)             # reset that cannot read the ledger (4.1 step 3)
         os.pwrite(fd, json.dumps(identity).encode(), 0)
     except OSError:
         pass
+    # The watchdog's interrupt is _thread.interrupt_main(), which does NOTHING when SIGINT is
+    # ignored -- and a process started from a non-interactive shell with `&` (or nohup) inherits
+    # SIGINT ignored, which Python keeps. Stop and deadline would then silently reach only the
+    # kill fallback. Install Python's own handler before Hermes runs.
+    signal.signal(signal.SIGINT, signal.default_int_handler)
     registered = register(directory, send_id, token, identity)
     if registered is None:
         return EXIT_REGISTRATION

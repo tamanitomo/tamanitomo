@@ -6,8 +6,10 @@ retention and the installation-mutation check -- the same function everywhere
 
 A managed execution is QUIESCENT only when BOTH hold (PHASE1B_DESIGN.md 4.5):
   (a) the executor's lock is acquired through the identity probe: opened without
-      creating it, locked non-blocking, and fstat(fd) == the recorded identity
-      == stat(path);
+      creating it, locked non-blocking, fstat(fd) == the recorded identity ==
+      stat(path), AND the file still holds the random nonce the executor wrote into
+      it at S1. (st_dev, st_ino) alone is not an identity over time: ext4 reused
+      the inode number of an unlinked lock file for its recreation on CI;
   (b) the executor's process group is demonstrably empty.
 
 Anything short of that is `live` (the lock is busy, or a process is still in the
@@ -26,6 +28,7 @@ from __future__ import annotations
 
 import dataclasses
 import errno
+import json
 import os
 import signal
 import sys
@@ -79,8 +82,9 @@ def proc_hidepid():
     return False
 
 
-def probe_lock(path, recorded):
-    """(state, reason) for the executor lock alone: 'acquired' | 'live' | 'unproven'."""
+def probe_lock(path, recorded, nonce=None):
+    """(state, reason) for the executor lock alone: 'acquired' | 'live' | 'unproven'.
+    `nonce` is the executor's recorded lock nonce; None skips that check (tools only)."""
     if sp.fcntl is None:
         return 'unproven', 'lock_unsupported'
     try:
@@ -104,6 +108,13 @@ def probe_lock(path, recorded):
         ident = (held.st_dev, held.st_ino)
         if ident != tuple(recorded) or (now.st_dev, now.st_ino) != tuple(recorded):
             return 'unproven', 'lock_replaced'
+        if nonce is not None:
+            try:
+                content = json.loads(os.pread(fd, 65536, 0) or b'null')
+            except (OSError, ValueError):
+                content = None
+            if not isinstance(content, dict) or content.get('lock_nonce') != nonce or not nonce:
+                return 'unproven', 'lock_replaced'
         return 'acquired', 'executor_lock_acquired'
     finally:
         os.close(fd)
@@ -142,9 +153,9 @@ def group_members(pgid):
     return tuple(sorted(members)), complete, reason
 
 
-def observe(lock_path, recorded_ident, pgid):
+def observe(lock_path, recorded_ident, pgid, nonce):
     """The contract. Used for lease release, reset, retention and installation mutations."""
-    lock, why = probe_lock(lock_path, recorded_ident)
+    lock, why = probe_lock(lock_path, recorded_ident, nonce)
     if lock == 'live':
         return Observation('live', why)
     if lock != 'acquired':

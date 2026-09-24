@@ -870,8 +870,9 @@ class SendService:
             con.close()
 
     def _executor_observation(self, send_id, started):
+        # A record without a nonce can never match one (an executor always writes it).
         return sq.observe(self.dir / 'executors' / f'{send_id}.lock', started.get('lock_identity'),
-                          started.get('pgid'))
+                          started.get('pgid'), started.get('lock_nonce') or '')
 
     def _resolve(self, send_id, fence=False, error_code=None):
         """Ingest facts and transition, as the current claim owner. Returns the row."""
@@ -1192,11 +1193,12 @@ class SendService:
         except (OSError, ValueError):
             ident = None
         if not isinstance(ident, dict):
+            # No readable identity. An executor that died between creating its lock and writing
+            # it never ran Hermes, but a lock path REPLACED while its executor still holds the
+            # unlinked original looks the same. With no ledger to tell them apart: unproven.
             state, why = sq.probe_lock(path, None)
-            # Empty and acquirable: the executor died before writing its identity, which it
-            # does before S2, so it never ran Hermes. Busy: live.
-            return sq.Observation('live', why) if state == 'live' else None
-        return sq.observe(path, ident.get('lock_identity'), ident.get('pgid'))
+            return sq.Observation('live', why) if state == 'live' else sq.Observation('unproven', 'lock_identity_unreadable')
+        return sq.observe(path, ident.get('lock_identity'), ident.get('pgid'), ident.get('lock_nonce') or '')
 
 
 # --- Installation mutations (4.7): the same quiescence contract -----------------------------
@@ -1233,7 +1235,7 @@ def installation_quiescence(root):
                 blocked.append((str(home), send_id, 'unproven', 'send_open_without_executor_record'))
                 continue
             obs = sq.observe(directory / 'executors' / f'{send_id}.lock', started.get('lock_identity'),
-                             started.get('pgid'))
+                             started.get('pgid'), started.get('lock_nonce') or '')
             if not obs.quiescent:
                 blocked.append((str(home), send_id, obs.state, obs.reason))
     return blocked
