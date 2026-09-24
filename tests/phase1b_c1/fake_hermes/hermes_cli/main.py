@@ -22,7 +22,8 @@ The scenario comes from $HERMES_HOME/fake_scenario.json (a synthetic test home):
   stream_steps      list of delta strings streamed in order; before step i (i >= 1) the double
                     waits for the file <stream_pause_dir>/go<i> (a deterministic mid-turn pause);
                     the stored reply is their concatenation unless `reply` is also given
-  stream_pause_dir  directory holding the go<i> files (required with stream_steps)
+  stream_pause_dir  directory holding the go<i> files (required with stream_steps); before
+                    waiting for go<i> the double writes at<i> there (steps 0..i-1 were emitted)
 """
 import json
 import os
@@ -118,6 +119,7 @@ def main():
             for i, piece in enumerate(steps):
                 if i:
                     gate = Path(scenario['stream_pause_dir']) / f'go{i}'
+                    (gate.parent / f'at{i}').write_text('')
                     while not gate.exists():
                         time.sleep(0.02)
                 if agent.stream_delta_callback:

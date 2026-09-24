@@ -80,6 +80,11 @@ class Base(unittest.TestCase):
         for text in texts:
             self.assertNotIn(text.strip(), blob)
 
+    def launch_counters(self, profile='nova'):
+        """Deterministic evidence that a read launched nothing: operation rows in this app,
+        executor lock files, and Hermes rows in the profile's state.db."""
+        return (len(self.a.app.state.operations.rows), self.executors(profile), len(self.a.rows(profile)))
+
     def assert_restricted(self, r, code):
         """F1: an explicit unknown outcome for a known keyed send, never a legacy row."""
         self.assertEqual(r.status_code, 200, r.text)
@@ -129,7 +134,9 @@ class F1LegacyFallback(Base):
         for extra in ('-wal', '-shm'):
             pathlib.Path(str(db) + extra).unlink(missing_ok=True)
         db.write_bytes(b'not a database' * 100)
+        before = self.launch_counters()
         r = self.op(ident)
+        self.assertEqual(self.launch_counters(), before)
         self.assert_no_text(r.text, OWNER, REPLY_A)
         self.assert_restricted(r, 'send_ledger_unavailable')
         self.assertEqual(db.read_bytes(), b'not a database' * 100)            # never reset by a read
@@ -141,7 +148,9 @@ class F1LegacyFallback(Base):
         self.revoke()
         self.a.restart()
         self.id_file().rename(self.id_file().with_suffix('.away'))
+        before = self.launch_counters()
         r = self.op(ident)
+        self.assertEqual(self.launch_counters(), before)
         self.assert_no_text(r.text, OWNER, REPLY_A, session)       # not even the session id
         view = self.assert_restricted(r, 'send_ledger_unavailable')
         self.assertEqual(view['send_id'], send_id)
@@ -152,7 +161,9 @@ class F1LegacyFallback(Base):
         reset = self.a.post('/chat/sends/ledger/reset', {'confirm': csr.RESET_CONFIRMATION})
         self.assertEqual(reset.status_code, 200, reset.text)
         generation = self.a.bootstrap()['generation']
+        before = self.launch_counters()
         r = self.op(ident)
+        self.assertEqual(self.launch_counters(), before)
         self.assert_no_text(r.text, OWNER, REPLY_A)
         self.assert_restricted(r, 'send_record_unavailable')
         self.assertEqual(self.a.bootstrap()['generation'], generation)       # the read reset nothing
@@ -162,7 +173,9 @@ class F1LegacyFallback(Base):
         re-authorised: its links are gone, so content is not shown from memory."""
         _, ident, _ = self.completed()
         self.a.post('/chat/sends/ledger/reset', {'confirm': csr.RESET_CONFIRMATION})
+        before = self.launch_counters()
         r = self.op(ident)
+        self.assertEqual(self.launch_counters(), before)
         self.assert_no_text(r.text, OWNER, REPLY_A)
         self.assert_restricted(r, 'send_record_unavailable')
 
@@ -172,7 +185,9 @@ class F1LegacyFallback(Base):
         svc = next(iter(self.a.app.state.chat_sends._services.values()))
         pruned, _ = svc.prune(now=time.time() + cs.RETENTION + 60)
         self.assertEqual(pruned, 1)
+        before = self.launch_counters()
         r = self.op(ident)
+        self.assertEqual(self.launch_counters(), before)
         self.assert_no_text(r.text, OWNER, REPLY_A)
         self.assert_restricted(r, 'send_record_unavailable')
 

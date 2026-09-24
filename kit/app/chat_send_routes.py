@@ -60,6 +60,8 @@ UNRESOLVED = {
 STREAM_LIMIT = 100_000
 _REASONING = re.compile(r'<(think|thinking|reasoning)>[\s\S]*?(</\1>|$)', re.I)
 _TAGS = ('<think>', '<thinking>', '<reasoning>')
+_CLOSE = {t: '</' + t[1:] for t in _TAGS}
+_LONGEST = max(map(len, _TAGS))
 REFUSALS = {
     'installation_busy': 'Another action is running for this Hermes installation; try again when it finishes.',
     'chat_reply_running': 'A chat reply is still running; wait for it to finish first.',
@@ -110,6 +112,64 @@ def public_stream(text):
     if len(text) > STREAM_LIMIT:
         return text[-STREAM_LIMIT:], True
     return text, False
+
+
+class PublicFilter:
+    """The public-output boundary for one attempt's delta stream (R1/R2), applied BEFORE any
+    buffering or truncation. Incremental and bounded: across fragments it keeps only whether
+    the stream is inside a withheld block and a partial tag of at most a few characters. A
+    withheld body is never stored, so dropping old text can never forget that a block is open.
+    Tags as `public_stream`: <think>, <thinking>, <reasoning>, case-insensitive. One instance
+    per attempt, fed from one thread; a provider retry inside the attempt is the same stream."""
+
+    def __init__(self):
+        self.close = None           # the closing tag while inside a withheld block
+        self.pending = ''           # a possible partial tag (bounded by _LONGEST)
+        self.withheld = False       # a block was withheld at some point
+
+    def feed(self, text):
+        s = self.pending + str(text or '')
+        low, n, i, out = s.lower(), len(s), 0, []
+        self.pending = ''
+        while i < n:
+            if self.close:
+                j = low.find(self.close, i)
+                if j < 0:
+                    start = max(i, n - len(self.close) + 1)
+                    k = next((k for k in range(start, n) if self.close.startswith(low[k:])), n)
+                    self.pending = s[k:]
+                    break
+                i, self.close = j + len(self.close), None
+                continue
+            j = low.find('<', i)
+            if j < 0:
+                out.append(s[i:])
+                break
+            out.append(s[i:j])
+            head = low[j:j + _LONGEST]
+            tag = next((t for t in _TAGS if head.startswith(t)), None)
+            if tag:
+                self.close, self.withheld, i = _CLOSE[tag], True, j + len(tag)
+            elif n - j < _LONGEST and any(t.startswith(low[j:]) for t in _TAGS):
+                self.pending = s[j:]            # maybe an opening tag split across fragments
+                break
+            else:
+                out.append('<')
+                i = j + 1
+        return ''.join(out)
+
+    def finish(self):
+        """End of the attempt's stream: a partial that never became a tag was ordinary text;
+        an unclosed block stays withheld."""
+        tail = '' if self.close else self.pending
+        self.pending = ''
+        return tail
+
+
+def public_text(text):
+    """A whole string through the same boundary (terminal responses)."""
+    f = PublicFilter()
+    return f.feed(text) + f.finish()
 
 
 class Integration:
@@ -360,9 +420,13 @@ class Integration:
             return result
         _, owner, replies = self.resolve(ctx, row, ctx.svc.links(row['send_id']))
         messages = [m for m in [owner, *replies] if m]
+        # R2: the authorised linked final row first; the in-memory transcript (already filtered
+        # when it was streamed) only when no reply row is linked. Either way through the same
+        # public-output boundary, so a terminal state never reintroduces withheld text.
         remembered = (memory.get('result') or {}).get('response') if memory.get('status') != 'running' else None
-        response = remembered if remembered else (replies[-1]['content'] if replies else None)
-        result.update(messages=messages, response=response, content_retained=response is not None)
+        response = replies[-1]['content'] if replies else remembered
+        response = public_text(response) if response else None
+        result.update(messages=messages, response=response or None, content_retained=bool(response))
         return result
 
     def launch_action(self, ctx, send_id, message):
@@ -370,13 +434,17 @@ class Integration:
 
         def action(report):
             report('Waiting for Hermes')
-            deltas = []
+            public, started = [], []
+            gate = PublicFilter()           # this attempt's public-output boundary (R1)
 
             def on_delta(text):
-                if not deltas:
+                if not started:
+                    started.append(1)
                     report('Replying')
-                deltas.append(text)
-                report.stream(text)
+                visible = gate.feed(text)
+                if visible:
+                    public.append(visible)
+                    report.stream(visible)  # only public text is ever buffered
             try:
                 row = svc.launch(send_id, message, on_delta)
             except Exception:
@@ -385,6 +453,10 @@ class Integration:
                 row = svc._resolve(send_id, fence=True, error_code='launch_failed')
                 if row is None:
                     raise
+            tail = gate.finish()
+            if tail:
+                public.append(tail)
+                report.stream(tail)
             receipt = svc.receipt(ctx.scope, send_id, recover=False)
             created = [s['session_id'] for s in receipt['hermes_sessions'] if s['created_here']]
             if row['capability'] == 'full' and row['source_kind'] == 'workspace':
@@ -393,7 +465,7 @@ class Integration:
             sessions = receipt['hermes_sessions']
             return {'state': row['state'], 'error_code': row['error_code'], 'send_id': send_id, 'note': NOTE,
                     'session': sessions[-1]['session_id'] if sessions else None,
-                    'response': ''.join(deltas) or None}
+                    'response': ''.join(public) or None}
         return action
 
 
