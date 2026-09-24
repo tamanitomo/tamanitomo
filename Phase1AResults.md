@@ -103,7 +103,7 @@ python -X dev -W always::ResourceWarning -m pytest tests/test_chat_projection.py
 
 The identity sample raised a sync with nothing new from 0.6 ms to 7.9 ms at 50,000 messages. The other numbers are in the contract. These remain desktop, projection-only measurements.
 
-CI for the closure commit: see the commit that records it.
+**CI for the closure commit** `5fbc33c` (run 35982558665): all 5 jobs passed. `linux (3.11)`, `linux (3.13)` and `linux (3.14)` ran the full suite with Node required. `smoke (windows-latest)` and `smoke (macos-latest)` passed too, and these include the chat projection and mock-provider tests.
 
 Unchanged by this closure: the UI, the legacy `/api/feed` (still over-inclusive), and the send path. There was no browser, phone or live testing. The Phase 0 review document `ASTRA_PHASE0_REVIEW_R2.md` is still not available here; no compliance with its unseen contents is claimed.
 
