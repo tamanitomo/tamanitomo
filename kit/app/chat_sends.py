@@ -1185,14 +1185,15 @@ class SendService:
         finally:
             con.close()
 
-    def lookup(self, scope, client_key):
+    def lookup(self, scope, client_key, authorized_kinds=None):
+        """The receipt for a client key; source links under the same rule as receipt()."""
         self._open_or_refuse()
         row = self._lookup(scope.conversation_id, client_key)
         if row is None:
             raise NotFound(client_key)
-        return self.receipt(scope, row['send_id'])
+        return self.receipt(scope, row['send_id'], authorized_kinds=authorized_kinds)
 
-    def open_receipts(self, scope):
+    def open_receipts(self, scope, authorized_kinds=None):
         self._open_or_refuse()
         self.recover_open()
         self.prune()
@@ -1203,7 +1204,7 @@ class SendService:
                 'ORDER BY created_at DESC LIMIT 20', (scope.conversation_id,))]
         finally:
             con.close()
-        return [self.receipt(scope, i, recover=False) for i in ids]
+        return [self.receipt(scope, i, authorized_kinds=authorized_kinds, recover=False) for i in ids]
 
     # ----- retention (5.5) -----
 

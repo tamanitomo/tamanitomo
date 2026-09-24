@@ -280,7 +280,10 @@ class Operations:
       * `submit(..., persist=)` writes only what persist(row) returns (the chat allowlist);
         everything else, e.g. streamed text and the in-memory result, stays in memory.
       * `guard(scope)`, when set, is the cross-process installation guard: every non-chat
-        action takes it before it starts and keeps it until it finishes, or is refused."""
+        action takes it before it starts and keeps it until it finishes, or is refused.
+      * `submit(..., send_id=)` marks the operation as a keyed send's; `keyed(ident)` reads
+        that mark back from memory or from the metadata-only file, so a keyed operation is
+        recognised even when its ledger cannot resolve it (never served as a legacy row)."""
     def __init__(self, directory):
         self.directory=Path(directory)
         self.pool=ThreadPoolExecutor(max_workers=4,thread_name_prefix='companion')
@@ -298,7 +301,7 @@ class Operations:
     def release(self, scope):
         with self.lock:self.busy.discard(scope)
 
-    def submit(self, scope, label, action, *, profile="default", kind="runtime", ident=None, claimed=False, persist=None):
+    def submit(self, scope, label, action, *, profile="default", kind="runtime", ident=None, claimed=False, persist=None, send_id=None):
         with self.lock:
             if not claimed:
                 if scope in self.busy: raise ValueError('Another action is still running for this installation.')
@@ -313,6 +316,7 @@ class Operations:
             row={'id':ident,'scope':scope,'profile':profile or 'default','kind':kind,
                  'label':label,'status':'running','progress':'Starting',
                  'started_at':dt.datetime.now(dt.timezone.utc).isoformat()}
+            if send_id is not None:row['send_id']=send_id
             if persist is not None:self.persist[ident]=persist
             self.rows[ident]=row
             self._save(row)
@@ -384,6 +388,18 @@ class Operations:
             try:path.unlink();removed+=1
             except OSError:pass
         return removed
+
+    def keyed(self, ident):
+        """{send_id, scope, profile, label, started_at} for a keyed send's operation, from
+        memory or its `format: 2` file (metadata only), else None. Never returns content."""
+        if not re.fullmatch('[a-f0-9]{32}',ident or ''):return None
+        with self.lock:
+            row=dict(self.rows.get(ident) or {})
+        if not row.get('send_id'):
+            try:row=read_json(self.directory/(ident+'.json'),None)
+            except (OSError,ValueError):return None
+            if not isinstance(row,dict) or row.get('format')!=2 or not row.get('send_id'):return None
+        return {k:row.get(k) for k in ('send_id','scope','profile','label','started_at')}
 
     def get(self, ident):
         if not re.fullmatch('[a-f0-9]{32}',ident): raise ValueError('Unknown operation')

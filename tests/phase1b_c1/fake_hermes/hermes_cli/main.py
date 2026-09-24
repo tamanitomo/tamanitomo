@@ -19,6 +19,10 @@ The scenario comes from $HERMES_HOME/fake_scenario.json (a synthetic test home):
                agent.session_persistence._db_flush_write (the O-12 shape), then the final reply
   note_text    the note's words (default: the pinned note sentence)
   note_pause_file   wait for this file after the note commits, before its provenance is written
+  stream_steps      list of delta strings streamed in order; before step i (i >= 1) the double
+                    waits for the file <stream_pause_dir>/go<i> (a deterministic mid-turn pause);
+                    the stored reply is their concatenation unless `reply` is also given
+  stream_pause_dir  directory holding the go<i> files (required with stream_steps)
 """
 import json
 import os
@@ -109,6 +113,18 @@ def main():
                 except KeyboardInterrupt:
                     if not scenario.get('ignore_interrupt'):
                         raise
+        if scenario.get('stream_steps'):
+            steps = [str(x) for x in scenario['stream_steps']]
+            for i, piece in enumerate(steps):
+                if i:
+                    gate = Path(scenario['stream_pause_dir']) / f'go{i}'
+                    while not gate.exists():
+                        time.sleep(0.02)
+                if agent.stream_delta_callback:
+                    agent.stream_delta_callback(piece)
+            reply = scenario.get('reply', ''.join(steps))
+            db.append_message(session, 'assistant', reply, finish_reason=scenario.get('finish', 'stop'))
+            sys.exit(int(scenario.get('exit', 0)))
         reply = scenario.get('reply', 'A synthetic reply.')
         for i in range(0, len(reply), 5):
             if agent.stream_delta_callback:

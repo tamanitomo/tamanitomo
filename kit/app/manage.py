@@ -304,7 +304,9 @@ def register(app, select, load, operations):
         sends=getattr(app.state,'chat_sends',None)
         if sends is not None:
             # A keyed send's reserved operation id: the ledger is authoritative (Phase 1B 5.6).
-            view=sends.operation_view(ident,select,load,app.state.chat_selection)
+            # A keyed operation is never served by the legacy branch below: a view, or 404.
+            try:view=sends.operation_view(ident,select,load,app.state.chat_selection)
+            except LookupError:raise HTTPException(404,'Unknown operation') from None
             if view is not None:return view
         row=operations.get(ident)
         rt,profile=select()

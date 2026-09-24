@@ -12,7 +12,9 @@ fallback between the two: an accepted keyed send is never retried on the unkeyed
   GET  /api/chat/sends?key=K | ?open=1    receipt by client key | open receipts
   POST /api/chat/sends/{send_id}/stop     receipt; never `interrupted` because a stop was asked
   POST /api/chat/sends/ledger/reset       explicit, confirmed ledger reset (4.1)
-  GET  /api/operations/{id}               for a send's reserved id: a view built from the ledger
+  GET  /api/operations/{id}               for a send's reserved id: a view built from the ledger;
+                                          while running, an authorised public stream snapshot;
+                                          a keyed send the ledger cannot resolve: status unknown
 
 Every route captures its scope (installation, profile, resolved home, owner binding) ONCE,
 before any read or side effect, and never looks at the selected profile again. A send_id,
@@ -47,6 +49,17 @@ PROGRESS = {'accepted': 'Starting', 'launching': 'Starting', 'generating': 'Repl
 PERSISTED = ('id', 'scope', 'profile', 'kind', 'label', 'status', 'progress', 'percent', 'started_at',
              'finished_at', 'send_id', 'error_code', 'error', 'format')
 FIXED_PROGRESS = ('Starting', 'Waiting for Hermes', 'Replying', 'Complete', 'Needs attention')
+# A keyed operation whose ledger cannot resolve it (F1): never a legacy row, never content.
+UNRESOLVED = {
+    'send_ledger_unavailable': 'The send ledger for this conversation cannot be read, so how this reply '
+                               'went is unknown here.',
+    'send_record_unavailable': 'The send ledger no longer holds this send (reset or retention), so how '
+                               'this reply went is not shown.',
+}
+# The public stream snapshot (F2): bounded, reasoning markup removed server side.
+STREAM_LIMIT = 100_000
+_REASONING = re.compile(r'<(think|thinking|reasoning)>[\s\S]*?(</\1>|$)', re.I)
+_TAGS = ('<think>', '<thinking>', '<reasoning>')
 REFUSALS = {
     'installation_busy': 'Another action is running for this Hermes installation; try again when it finishes.',
     'chat_reply_running': 'A chat reply is still running; wait for it to finish first.',
@@ -81,6 +94,22 @@ class Context:
     @property
     def kinds(self):
         return {k for k, on in (('workspace', self.binding.workspace), ('terminal', self.binding.terminal)) if on}
+
+
+class Hidden(LookupError):
+    """A keyed operation outside the captured scope: 404, never the legacy branch."""
+
+
+def public_stream(text):
+    """The reply text streamed so far with reasoning blocks removed, including one still
+    open and a trailing fragment that may be the start of an opening tag. (text, truncated)."""
+    text = _REASONING.sub('', text or '')
+    cut = text.rfind('<')
+    if cut >= 0 and '>' not in text[cut:] and any(t.startswith(text[cut:].lower()) for t in _TAGS):
+        text = text[:cut]
+    if len(text) > STREAM_LIMIT:
+        return text[-STREAM_LIMIT:], True
+    return text, False
 
 
 class Integration:
@@ -253,18 +282,25 @@ class Integration:
         return allowlisted
 
     def operation_view(self, ident, select, load, current_selection):
-        """The operation for a send's reserved id, built from the ledger (authoritative), or
-        None when this id is not a send of the captured scope. A missing or stale operation
-        file never implies that a new send is needed, and nothing here ever launches one."""
+        """The operation for a send's reserved id, built from the ledger (authoritative).
+        None ONLY when this app knows no keyed send by this id (the legacy branch may answer).
+        A keyed send whose ledger is unreadable, reset or pruned gets an explicit `unknown`
+        view with no content; one outside the captured scope raises Hidden (404). A missing
+        or stale operation file never implies that a new send is needed, and nothing here
+        ever launches, resets or recreates anything."""
         if not re.fullmatch('[a-f0-9]{32}', ident or ''):
             return None
+        origin = self.operations.keyed(ident)
         ctx = self.capture(select, load, current_selection)
         try:
-            send_id = ctx.svc.by_operation(ctx.scope, ident)
-        except cs.Refused:
-            return None
+            ledger = ctx.svc.status()
+            send_id = ctx.svc.by_operation(ctx.scope, ident) if ledger == 'ok' else None
+        except (cs.Refused, OSError, cs.sqlite3.Error):
+            ledger, send_id = 'lost', None
         if send_id is None:
-            return None
+            if origin is None:
+                return None
+            return self.unresolved_view(ctx, ident, origin, ledger)
         receipt = ctx.svc.receipt(ctx.scope, send_id, authorized_kinds=ctx.kinds)
         row = ctx.svc.row(ctx.scope, send_id)
         http = self.http_receipt(ctx, receipt, row)
@@ -280,7 +316,38 @@ class Integration:
                 'format': 2, 'send': http}
         if status != 'running':
             view['result'] = self.legacy_result(ctx, row, http, memory)
+        else:
+            view['stream'] = self.stream(ctx, row, memory)
+            if view['stream'].get('available'):
+                view['stream_text'] = view['stream']['text']     # what the current poller renders
         return view
+
+    def unresolved_view(self, ctx, ident, origin, ledger):
+        """F1: a keyed send this app recorded, which the ledger cannot resolve now. Metadata
+        only; `unknown`, never a claim that it ran, failed, or never existed."""
+        if origin.get('scope') != str(ctx.rt.root) or (origin.get('profile') or 'default') != ctx.scope.profile:
+            raise Hidden(ident)
+        code = 'send_ledger_unavailable' if ledger != 'ok' else 'send_record_unavailable'
+        return {'id': ident, 'scope': str(ctx.rt.root), 'profile': ctx.scope.profile, 'kind': 'chat',
+                'label': origin.get('label') or 'Chat', 'status': 'unknown', 'progress': 'Needs attention',
+                'started_at': origin.get('started_at'), 'finished_at': None, 'send_id': origin['send_id'],
+                'error_code': code, 'error': UNRESOLVED[code], 'format': 2, 'result': None,
+                'send': {'send_id': origin['send_id'], 'state': 'unknown', 'settled': None,
+                         'ledger': 'unavailable' if ledger != 'ok' else 'no_record'}}
+
+    def stream(self, ctx, row, memory):
+        """F2: the public stream so far, as a snapshot (never an append log), rechecked on
+        every read against the CURRENT binding. Only this process's in-memory buffer is a
+        source: after a restart it is honestly unavailable, never regenerated."""
+        if row['source_kind'] not in ctx.kinds:
+            return {'available': False, 'reason': 'not_authorised'}
+        if row['capability'] != 'full':
+            return {'available': False, 'reason': 'sources_unverified'}
+        if memory.get('send_id') != row['send_id'] or 'stream_text' not in memory:
+            return {'available': False, 'reason': 'not_retained' if memory.get('send_id') != row['send_id']
+                    else 'not_started'}
+        text, truncated = public_stream(memory['stream_text'])
+        return {'available': True, 'text': text, 'truncated': truncated}
 
     def legacy_result(self, ctx, row, http, memory):
         """The legacy `result` for old clients (5.7), under the CURRENT authorisation on both
@@ -382,7 +449,7 @@ def register(app, state_dir, select, load, current_selection, operations, option
                     operations.submit(root, 'Chat with ' + str(getattr(ctx.c, 'agent', 'companion')),
                                       sends.launch_action(ctx, send_id, payload['message']),
                                       profile=ctx.scope.profile, kind='chat', ident=row['operation_id'],
-                                      claimed=True, persist=sends.persist(send_id))
+                                      claimed=True, persist=sends.persist(send_id), send_id=send_id)
                 except BaseException:
                     operations.release(root)
                     ctx.svc._resolve(send_id, fence=True, error_code='launch_failed')
@@ -402,11 +469,11 @@ def register(app, state_dir, select, load, current_selection, operations, option
         def run():
             ctx = capture()
             if key is not None:
-                receipt = ctx.svc.lookup(ctx.scope, key)
+                receipt = ctx.svc.lookup(ctx.scope, key, authorized_kinds=ctx.kinds)
                 return sends.http_receipt(ctx, receipt, ctx.svc.row(ctx.scope, receipt['send_id']))
             if open:
                 return {'sends': [sends.http_receipt(ctx, r, ctx.svc.row(ctx.scope, r['send_id']))
-                                  for r in ctx.svc.open_receipts(ctx.scope)]}
+                                  for r in ctx.svc.open_receipts(ctx.scope, authorized_kinds=ctx.kinds)]}
             return JSONResponse({'error': 'invalid_request'}, status_code=400)
         return guarded(run)
 
