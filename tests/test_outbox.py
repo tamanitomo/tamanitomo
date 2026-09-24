@@ -143,7 +143,9 @@ class DispatcherTests(Base):
         self.q(body='hello')
         with patch.object(dispatch,'deliver',return_value=(False,'unconfirmed')):
             dispatch.run(self.c,self.day)
-        self.assertEqual([e['status'] for e in outbox.fold(self.c)],['failed'])
+        # Phase 1B C2 (PHASE1B_DESIGN 7.5): an UNCONFIRMED send is `unknown`, not `failed` --
+        # Hermes may have delivered it. Either way the slot is kept and it is never retried.
+        self.assertEqual([e['status'] for e in outbox.fold(self.c)],['unknown'])
         # the slot was spent, so a second message this hour is capped after one more
         self.q(body='again')
         result,_=self.dispatch(self.day)

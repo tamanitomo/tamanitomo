@@ -314,9 +314,20 @@ one message off the queue and decides whether it leaves, from the clock and a co
 | Inside quiet hours | Held — unless you wrote in the last 45 minutes, in which case you are visibly awake and the window steps aside. That does not raise the daily cap |
 | Content permission | `yes` sends, `ask` withholds with a reason she can act on ("offer it in words, do not attach it unasked"), `no` never sends |
 | Daily cap | Held. The counter is on disk, checked and reserved atomically under a sidecar lock, including on Windows |
-| Delivery failed or unconfirmed | The slot is kept and it is **never retried**. A double message is worse than a missing one |
+| Delivery failed or unconfirmed | The slot is kept and it is **never retried**. A double message is worse than a missing one. Only a confirmed success is `sent`; anything Hermes did not confirm (an error it reports, a timeout, unreadable output) is `unknown`, because it may have arrived |
 
-One message per run, deliberately. `--dry-run --json` reports exactly what it would do and why,
+One message per run, deliberately.
+
+**One dispatcher at a time, and crashes (Phase 1B C2).** A run holds `<life>/.dispatch.run.lock`; a
+second run that finds it busy does nothing. Each send is an attempt that writes its progress to the
+outbox before each step (`dispatching`, `reserving_slot`, `slot_reserved`, `sending`), and the daily
+charge row carries the attempt id. The next run resolves an attempt a crashed run left behind:
+before any charge it is queued again; after a charge but before the send it is `failed` and not
+sent (the slot stays used); once `sending` was written it is `unknown` and **never sent again**. If
+the daily ledger cannot be read, the entry is `reservation_unresolved`: definitely not sent, slot
+use unknown, left for you rather than retried. A `sent` entry keeps the message id Hermes returned
+(for a split or media send, the last chunk's only). Running an older dispatcher at the same time as
+this one on the same companion is unsupported: stop the old one first. `--dry-run --json` reports exactly what it would do and why,
 which is the fastest way to answer "why has nothing been sent".
 
 The gate fails closed on a corrupt or unreadable ledger. Quiet hours wrap midnight correctly.

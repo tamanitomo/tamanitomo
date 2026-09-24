@@ -85,10 +85,13 @@ def decide(c,now=None,urgent=False):
     return {**out,'allowed':True,
             'reason':'Outside quiet hours and within the daily limit.' if limit else 'No daily limit set.'}
 
-def _append(c,reason,now):
+def _append(c,reason,now,attempt=None):
     p=path(c);p.parent.mkdir(parents=True,exist_ok=True)
     row={'kind':'outreach','day':now.date().isoformat(),'at':now.isoformat(timespec='seconds'),
          'reason':str(reason)[:200]}
+    # The dispatcher's attempt identity (PHASE1B_DESIGN 7.2 step 3b): a crashed run's
+    # charge is then found by lookup, never inferred from the outbox marker alone.
+    if attempt:row['attempt']=str(attempt)[:80]
     with p.open('a',encoding='utf-8') as f:
         f.write(json.dumps(row,ensure_ascii=False)+'\n');f.flush();os.fsync(f.fileno())
 
@@ -100,16 +103,41 @@ def record(c,reason='',now=None):
         _append(c,reason,now)
         return sent_today(c,now)
 
-def claim(c,reason='',now=None,urgent=False):
-    """Atomically reserve one send before delivery; failed sends still consume the slot."""
+def claim(c,reason='',now=None,urgent=False,attempt=None):
+    """Atomically reserve one send before delivery; failed sends still consume the slot.
+    `attempt` (the dispatcher's attempt id) is stored on the charge row for charges_for().
+    A refusal appends nothing."""
     now=(now or dt.datetime.now(_tz(c))).astimezone(_tz(c))
     with file_lock(path(c).with_suffix('.jsonl.lock')):
         result=decide(c,now,urgent)
         if result['allowed']:
-            _append(c,reason,now)
+            _append(c,reason,now,attempt)
             result['sent_today']+=1
             result['reserved']=True
         return result
+
+def charges_for(c,attempt):
+    """How many charge rows carry this attempt id, read under the outreach lock.
+
+    Raises ValueError when the ledger cannot be read in full (a torn or invalid line):
+    an unreadable ledger is never evidence that no charge happened (PHASE1B_DESIGN 7.3).
+    A missing ledger is a readable empty one."""
+    if not attempt:raise ValueError('an attempt id is required')
+    found=0
+    with file_lock(path(c).with_suffix('.jsonl.lock')):
+        try:
+            with path(c).open(encoding='utf-8') as f:
+                for line in f:
+                    line=line.strip()
+                    if not line:continue
+                    try:row=json.loads(line)
+                    except ValueError as exc:raise ValueError('Corrupt outreach ledger; the charge cannot be established') from exc
+                    if not isinstance(row,dict) or row.get('kind')!='outreach':
+                        raise ValueError('Invalid outreach ledger entry; the charge cannot be established')
+                    if row.get('attempt')==attempt:found+=1
+        except FileNotFoundError:return 0
+        except UnicodeError as exc:raise ValueError('Unreadable outreach ledger') from exc
+    return found
 
 def send(c,message,reason='',target='telegram',now=None):
     """Reserve and deliver through the profile's native Hermes CLI; never auto-retry."""

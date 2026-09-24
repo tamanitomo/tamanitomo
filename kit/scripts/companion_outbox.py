@@ -26,7 +26,14 @@ import companion_self as slf
 
 KINDS=('text','image','voice')
 PRIORITIES=('normal','high')
-STATUSES=('queued','sent','expired','failed','withheld')
+STATUSES=('queued','sent','expired','failed','withheld')     # what mark() may write
+# Phase 1B C2 (PHASE1B_DESIGN.md 7): an attempt in progress, and what can end one.
+# An entry in a PHASE is owned by exactly one attempt; only that attempt's guarded
+# transition() moves it on, and a dispatcher that died mid-attempt is resolved by the
+# next run under the run lock (companion_dispatch.recover).
+PHASES=('dispatching','reserving_slot','slot_reserved','sending')
+OUTCOMES=('sent','failed','unknown','withheld','expired','reservation_unresolved')
+ALL_STATUSES=('queued',)+PHASES+OUTCOMES
 DEFAULT_TTL_HOURS=8
 # Hermes delivery platforms. A target is where a message goes, never who it is for:
 # a model that wrote "target": "<the human's name>" queued messages Hermes could only
@@ -95,10 +102,49 @@ def queue(c,entry,now=None):
         return slf._append(path_for(c),row)
 
 def mark(c,ident,status,detail='',now=None):
+    """Decide a QUEUED entry by hand (or from older code). Guarded like every write here:
+    an entry an attempt currently owns, or one already decided, is refused and unchanged."""
     now=now or dt.datetime.now(_tz(c))
     if status not in STATUSES:raise ValueError(f'status must be one of {STATUSES}')
+    def guard():
+        entry=current(c,ident)
+        if entry is not None and entry['status']!='queued':
+            return {'written':False,'refused':f"the message is {entry['status']}; only a queued message can be marked"}
+        return None
     return slf._append(path_for(c),{'id':ident,'kind':'outbox_update','status':status,
-                                    'detail':str(detail)[:300],'at':now.isoformat()},dedupe_id=False)
+                                    'detail':str(detail)[:300],'at':now.isoformat()},dedupe_id=False,guard=guard)
+
+def current(c,ident):
+    """The folded entry, or None."""
+    return next((e for e in fold(c) if e.get('id')==ident),None)
+
+def transition(c,ident,status,attempt,run_id,expect,now=None,detail='',**extra):
+    """The guarded append of PHASE1B_DESIGN 7.2. Under the outbox lock, re-read the fold and
+    write only if the entry's status is exactly `expect` and, from any phase, its current
+    attempt is `attempt`. Otherwise nothing is written: {'written': False, 'refused': why}.
+    A stale snapshot, a second dispatcher, or a late update for another attempt changes nothing."""
+    if status not in ALL_STATUSES:raise ValueError(f'status must be one of {ALL_STATUSES}')
+    if not attempt:raise ValueError('an attempt id is required')
+    now=now or dt.datetime.now(_tz(c))
+    def guard():
+        entry=current(c,ident)
+        if entry is None:return {'written':False,'refused':'no such message'}
+        if entry['status']!=expect:return {'written':False,'refused':f"status is {entry['status']}, not {expect}"}
+        if expect!='queued' and entry.get('attempt')!=attempt:
+            return {'written':False,'refused':'the message belongs to a different attempt'}
+        return None
+    row={'id':ident,'kind':'outbox_update','status':status,'attempt':attempt,'run_id':run_id,
+         'detail':str(detail)[:300],'at':now.isoformat(),**extra}
+    return slf._append(path_for(c),row,dedupe_id=False,guard=guard)
+
+def resolve_unknown(c,ident,attempt,outcome,delivery,run_id='reconciler',now=None,detail=''):
+    """PHASE1B_DESIGN 7.4: an `unknown` outcome may be replaced only by the SAME attempt with
+    positive evidence (a message_id or an explicit platform result). Nothing is ever resent."""
+    if outcome not in ('sent','failed'):raise ValueError('a late outcome is sent or failed')
+    delivery=dict(delivery or {})
+    if not (delivery.get('message_id') or delivery.get('platform_result')):
+        return {'written':False,'refused':'a late outcome needs evidence: a message_id or a platform result'}
+    return transition(c,ident,outcome,attempt,run_id,'unknown',now,detail,delivery=delivery,late=True)
 
 def fold(c):
     """Current state of every message ever queued, oldest first."""
@@ -111,6 +157,11 @@ def fold(c):
             item['status']=row.get('status',item['status'])
             item['decided_at']=row.get('at','')
             if row.get('detail'):item['detail']=row['detail']
+            # Attempt ownership follows the latest row (absent on pre-1B rows).
+            item['attempt']=row.get('attempt');item['run_id']=row.get('run_id')
+            for key in ('delivery','not_dispatched','release_reason','error_code'):
+                item.pop(key,None)                       # never carried over from an earlier attempt
+                if key in row:item[key]=row[key]
     return sorted(latest.values(),key=lambda e:e['queued_at'])
 
 def waiting(c,now=None):
@@ -156,7 +207,7 @@ def main():
     s=p.add_subparsers(dest='cmd',required=True)
     q=s.add_parser('queue',help='queue one or more messages from a JSON file')
     q.add_argument('--file',type=pathlib.Path,required=True)
-    l=s.add_parser('list');l.add_argument('--status',choices=list(STATUSES)+['all'],default='queued')
+    l=s.add_parser('list');l.add_argument('--status',choices=list(ALL_STATUSES)+['all'],default='queued')
     d=s.add_parser('drop',help='withdraw a queued message');d.add_argument('--id',required=True)
     a=p.parse_args();c=cc.load(a.home)
     if a.cmd=='queue':out=batch(c,a.file)

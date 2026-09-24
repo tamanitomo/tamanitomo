@@ -52,7 +52,7 @@ The adapter filters rows by Hermes's own structural markers, never by stripping 
 Tool rows, tool-call-only assistant rows and every reasoning column are never read into the projection. A row that stops qualifying after it was shown (deleted, archived or hidden) becomes a **deletion**.
 
 **Proactive delivery is unsupported in 1A** (review R1 F4). The requirement is that a delivered proactive message appears only through verified delivery linkage. No source this phase can read provides that linkage:
-- `companion_outbox` marks an entry `sent` without the platform message id that `hermes send --json` returns.
+- `companion_outbox` marks an entry `sent` without the platform message id that `hermes send --json` returns. *(Phase 1B C2, not yet reviewed: the dispatcher now records that id, scoped to the last chunk of a split or media send. That alone links nothing, because the mirror row below still carries no id.)*
 - Hermes's delivery mirror row (`gateway/mirror.py` → `append_message(session_id, role, content)`) has no outbox id and no platform id. It carries no marker that tells it apart from a model reply; the mirror metadata is dropped at the SQLite boundary.
 - `finish_reason`/`token_count` are not a proof either. Nothing establishes that they are set on every model reply.
 
@@ -62,7 +62,7 @@ So the boundary is:
 - A **companion** row in a trusted session is shown as that session's transcript recorded it, with `correlation: null`. No row is labelled or counted as a verified delivered outreach, whether it came from a model reply or a delivery mirror, and the gate stays **not passed**.
 - An **owner** row in a Telegram session must carry the `platform_message_id` that Hermes records for every inbound gateway turn (`gateway/run_turn.py`). Without one, the sender of a user row is not established under this adapter's rule. That covers the cron-brief delivery mirror, which Hermes writes as `role="user"`, and genuine owner messages written before the column existed: a missing id does **not** prove the owner never sent the message. Such a row is excluded from the trusted conversation as `unverified_sender`; the source row is kept and the exclusion counted. A future opt-in archive view could show such rows labelled unverified, but that is a separately reviewed visibility feature: showing a row would not make it trusted owner evidence, reflection input or model context. This is structural, not a text-prefix match, and the source row is untouched.
 
-Recording the delivery id at dispatch would make proactive delivery verifiable. That is a send-path change and belongs to Phase 1B.
+Recording the delivery id at dispatch would make proactive delivery verifiable. That is a send-path change and belongs to Phase 1B. **(C2)** The id is now recorded; proactive delivery stays **unsupported** in the reads, because Hermes's mirror row still has no id to join on and joining by text or time is forbidden (`PHASE1B_DESIGN.md` §7.7). The capability text served by `kit/app/chat_sources.py` still describes the pre-C2 outbox and is a separate follow-up (`Phase1B_C2_Results.md` §6).
 
 **Attachments** are resolved at read time through the existing media catalog (`_attach_media`), so review status and authorisation are unchanged. Nothing is fetched remotely.
 
