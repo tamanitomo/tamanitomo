@@ -200,9 +200,15 @@ function usMemoryPreview(facts,limit=US_LIMITS.memories){
   for(const f of ranked){
     const key=f.category||'other';if(!byCat.has(key))byCat.set(key,[]);byCat.get(key).push(f);
   }
-  const lanes=[...byCat.values()],out=[];
+  // The same fact is sometimes filed twice in different words or categories;
+  // one of each is enough for a preview.
+  const gist=f=>String(f.statement||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().split(' ').slice(0,7).join(' ');
+  const lanes=[...byCat.values()],out=[],seen=new Set();
   for(let round=0;out.length<limit&&lanes.some(l=>l.length>round);round++)
-    for(const lane of lanes)if(lane[round]&&out.length<limit)out.push(lane[round]);
+    for(const lane of lanes){
+      const f=lane[round];if(!f||out.length>=limit||seen.has(gist(f)))continue;
+      seen.add(gist(f));out.push(f);
+    }
   return out;
 }
 function memoryDetailHTML(f){
@@ -278,9 +284,14 @@ function usDiscoveriesHTML(prefs,limit=US_LIMITS.discoveries,companionName='They
 }
 
 /* ------------------------------------------------------ still between you */
+/* Alternated, so a long list of questions never hides every carried thread
+   from the first few rows. */
 function usOpenThreads(questions,loops){
-  return [...(questions||[]).map(q=>({kind:'question',text:q.text,detail:''})),
-          ...(loops||[]).map(l=>({kind:'thread',text:l.title,detail:l.detail||l.gentle_use||''}))].filter(x=>x.text);
+  const asks=(questions||[]).map(q=>({kind:'question',text:q.text,detail:''})).filter(x=>x.text);
+  const carried=(loops||[]).map(l=>({kind:'thread',text:l.title,detail:l.detail||l.gentle_use||''})).filter(x=>x.text);
+  const out=[];
+  for(let i=0;i<Math.max(asks.length,carried.length);i++){if(asks[i])out.push(asks[i]);if(carried[i])out.push(carried[i]);}
+  return out;
 }
 function threadDraft(x){
   return x.kind==='question'?`You’ve been wanting to ask me something: “${x.text}”`:`Can we come back to “${x.text}”?`;

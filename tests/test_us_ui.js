@@ -173,6 +173,12 @@ const picked=sandbox.usMemoryPreview([
   {id:'g2',category:'people',statement:'Robin has a sister',recorded_at:day(9)}],2).map(f=>f.id);
 same(picked,['g1','g2'],'readable facts first');
 assert.equal(sandbox.usMemoryPreview([{id:'q',category:'other',statement:'Robin said: "hi"'}],5).length,1,'quotes still fill an otherwise empty preview');
+same(sandbox.usMemoryPreview([
+  {id:'a',category:'logistics',statement:'Robin has an older 4 GB GTX 1050 Ti available to install in a spare PC.'},
+  {id:'b',category:'other',statement:'Robin has an older 4 GB GTX 1050 Ti available for the spare PC.'},
+  {id:'c',category:'likes',statement:'Robin likes tea'}],5).map(f=>f.id),['c','a'],'a fact filed twice shows once');
+// A long list of questions does not hide every carried thread.
+same(sandbox.usOpenThreads([{text:'q1'},{text:'q2'},{text:'q3'}],[{title:'t1'}]).map(x=>x.text),['q1','t1','q2','q3']);
 
 // Standing instructions are not memories.
 assert.doesNotMatch(page.slice(page.indexOf('id="us-memories"'),page.indexOf('id="us-discoveries"')),/before 8am/);

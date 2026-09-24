@@ -1,3 +1,8 @@
+## 3.0.23 — Us: threads and repeats (2026-09-23)
+
+- Alternate open questions with carried threads in "Still between you". Questions were listed first, and a profile with 35 open questions showed no carried thread in the first five rows.
+- Collapse near-duplicate facts in the memory preview (same first seven words, case and punctuation ignored); the library still lists every record.
+
 ## 3.0.22 — Us, tuned on real data (2026-09-23)
 
 - Draw Us without waiting for `/overview` (about 2.7s on a lived-in profile, against 0.1–1.7s for the others) and fill in carried threads when it arrives; a later page render discards a stale fill.

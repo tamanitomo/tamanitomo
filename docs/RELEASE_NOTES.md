@@ -1,8 +1,7 @@
-Tamanitomo 3.0.22: the Us page, tuned on a real relationship.
+Tamanitomo 3.0.23: small fixes to the Us page.
 
-- **Faster to open.** Us no longer waits for the slowest part of the workspace; loose threads fill in a moment after the rest of the page.
-- **A story, not a list of labels.** Everyday moments lead with their own words instead of repeating "A moment worth keeping" down the page.
-- **Better memories up front.** The preview favours things that describe you over word-for-word quotes and one-off dated events. Every memory is still in "View all memories".
+- **Loose threads show up.** "Still between you" alternates your companion's questions with the threads they are carrying, so a long list of questions no longer hides the rest.
+- **No repeats up front.** A memory written down twice in slightly different words appears once in the preview.
 
 ### Install
 
