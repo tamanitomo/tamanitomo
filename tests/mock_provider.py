@@ -192,7 +192,10 @@ def consume(url, token, scenario, timeout=5):
                 event, buffer = buffer.split('\n\n', 1)
                 data = '\n'.join(line[5:].lstrip() for line in event.split('\n') if line.startswith('data:'))
                 if data == '[DONE]':
-                    out['done'] = True;continue
+                    # The stream is over; what the server does to the socket next
+                    # (a reset on Windows, a FIN elsewhere) is not part of it.
+                    out['done'] = True
+                    return out
                 try:
                     chunk = json.loads(data)
                 except ValueError:

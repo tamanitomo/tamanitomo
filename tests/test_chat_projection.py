@@ -5,6 +5,7 @@ snapshot / history / changes contracts.
 BOUNDARY: source store (a Hermes-schema state.db built by tests/chat_fixtures)
 -> adapter -> projection. No provider, transport or UI is exercised here.
 """
+import contextlib
 import datetime as dt
 import hashlib
 import json
@@ -266,7 +267,7 @@ class OrderingTests(ProjectionCase):
         for gone in ('to delete', 'to hide'):
             self.assertEqual((by_id[ids[gone]]['kind'], by_id[ids[gone]]['message']['content']), ('delete', None))
         self.assertEqual(self.contents(projection.snapshot()), ['corrected'])
-        with sqlite3.connect(projection.path) as con:
+        with contextlib.closing(sqlite3.connect(projection.path)) as con, con:
             self.assertNotIn('to delete', json.dumps(con.execute('SELECT content FROM messages').fetchall()),
                              'the projection keeps no copy of deleted content')
 
@@ -341,7 +342,7 @@ class ResyncTests(ProjectionCase):
         after.sync(self.projection(binding=revoked)[1])
         with self.assertRaises(cp.ResyncRequired):after.changes(snap['changes']['after'])
         self.assertEqual(self.contents(after.snapshot()), ['workspace'])
-        with sqlite3.connect(after.path) as con:
+        with contextlib.closing(sqlite3.connect(after.path)) as con, con:
             self.assertNotIn('telegram secret', json.dumps(con.execute('SELECT content FROM messages').fetchall()))
 
 
@@ -377,7 +378,7 @@ class SourceSafetyTests(ProjectionCase):
 
     def test_a_messages_table_without_stable_ids_is_unsupported(self):
         self.store.path.unlink()
-        with sqlite3.connect(self.store.path) as db:
+        with contextlib.closing(sqlite3.connect(self.store.path)) as db, db:
             db.executescript('CREATE TABLE sessions(id TEXT, source TEXT, started_at REAL, profile_name TEXT);'
                              'CREATE TABLE messages(session_id TEXT, role TEXT, content TEXT, timestamp REAL);')
         with self.assertRaises(cs.SourceUnavailable):self.sync()
@@ -418,7 +419,7 @@ class ScaleTests(ProjectionCase):
         page_s = (time.perf_counter() - started) / 50
         started = time.perf_counter();idle = projection.sync(self.projection()[1]);idle_s = time.perf_counter() - started
         started = time.perf_counter();projection.sync(self.projection()[1], force_reconcile=True);full_s = time.perf_counter() - started
-        with sqlite3.connect(projection.path) as con:
+        with contextlib.closing(sqlite3.connect(projection.path)) as con, con:
             plan = ' '.join(r[3] for r in con.execute(
                 "EXPLAIN QUERY PLAN SELECT * FROM messages WHERE status<>'deleted' AND (sort_at<? OR (sort_at=? AND message_id<?)) "
                 "ORDER BY sort_at DESC, message_id DESC LIMIT 61", (1e12, 1e12, 'z')))
