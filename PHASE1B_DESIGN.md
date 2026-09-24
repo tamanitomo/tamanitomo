@@ -146,7 +146,8 @@ Non-goals for 1B: exactly-once execution; a new transport; the UI switch to the 
 | `operation_id` | the server, **reserved in the acceptance transaction** | 32 hex | Status-polling compatibility. The ledger is authoritative; the operation file is a recoverable view (§5.6). |
 | `controller` | each app process at start | `ctl_` + random, plus a held OS lock `<ledger dir>/controllers/<controller>.lock` | The process that accepted a send and reads the executor's pipes. Liveness = that lock is held. |
 | `claim` | the ledger | integer generation per send, plus `claim_owner` (a controller id) | The right to transition a send. Every transition is a compare-and-set on `(state, claim)`. Recovery takes ownership by incrementing it (fencing). |
-| `launch_token` | the claim owner, when committing `launching` | 128-bit random | The executor's authorisation. The executor can start the turn only if its token is still the send's current token (§4.4). |
+| `launch_token` | the claim owner, when committing `launching` | 128-bit random | The executor's **revocable** authorisation. The executor can start the turn only if its token is still the send's current token (§4.4). Fencing (recovery, reset) clears it; clearing it says nothing about the past. |
+| `attempt_id` **(R5)** | the claim owner, in the same T1 transaction | 128-bit random, not secret | The **immutable** identity of one launch attempt. S2 requires it; `executor_started` records it; start evidence is looked up by it, never by the token; the executor lock is per attempt (`executors/<send_id>.<attempt_id>.lock`). A re-arm (same `send_id`) starts a new attempt. |
 | `executor` | the executor process itself, before it enters Hermes | `{launch_token, pid, start_identity, pgid, lock_identity}` in `send_facts`, plus a held OS lock `<ledger dir>/executors/<send_id>.lock` | The process that runs the Hermes turn. **(R3)** Liveness of the executor = that lock, checked against the recorded `lock_identity` (§4.5). Quiescence of the managed execution also needs its process group or job to be empty (§4.5). |
 | `hermes_sessions` | the executor, from its committed write receipts | ordered list with `created_here` flags | Sessions this executor used or created. **(R3)** `created_here=true` only from a committed session insert that C0's recorder saw as **fresh** (absent before, present after, in the same transaction). An upsert, an ensure or a failed create never sets it (§4.10.2). |
 | source receipts **(R3)** | the executor, at Hermes's commit boundary | one `write_committed` fact per committed `_execute_write`: `{wid, method, attempts, rows:[(session_id, row_id, role, class)], sessions:[(session_id, fresh)], unidentified}` | Causal links: rows **this executor committed** (§4.10.1). Candidates seen inside a callback that rolled back, was retried or never finished are never published. |
@@ -339,7 +340,7 @@ P  Popen(bridge, stdin=PIPE, stdout=PIPE,  E starts, imports nothing from Hermes
 J  (Windows) assign E to a job object
 G  write {"go": K, "send_id", "ledger"}\n  E reads it.  EOF instead → exit 0 without
    to E's stdin                               running (C died before G)
-                                           S1 open/create executors/<send_id>.lock, lock it
+                                           S1 open/create executors/<send_id>.<attempt_id>.lock (R5), lock it
                                               (non-blocking; failure → exit, nothing run);
                                               record its (st_dev, st_ino)
                                            S2 guard.lock shared; BEGIN IMMEDIATE: require
@@ -370,7 +371,9 @@ The gap in revision 1 was "`launching` committed, `Popen` returned, controller d
 
 #### 4.4.3 Fencing
 
-Recovery (or a stop of a `launching` send) begins with one transaction: `UPDATE sends SET claim=claim+1, claim_owner=:me, launch_token=NULL WHERE send_id=? AND claim=:seen`. After it commits, S2 of any executor holding the old token fails. Then, in a later transaction, if no `executor_started` fact with the old token exists, the send is definitely not started (`not_started`), and no executor can later start it. If one exists, it is `generating` and its liveness is checked through its lock (§4.5).
+Recovery (or a stop of a `launching` send) begins with one transaction: `UPDATE sends SET claim=claim+1, claim_owner=:me, launch_token=NULL WHERE send_id=? AND claim=:seen`. After it commits, S2 of any executor holding the old token fails. Then, if no `executor_started` fact **for the send's current `attempt_id`** exists, the send is definitely not started (`not_started`), and no executor can later start it. If one exists, it is `generating` and its liveness is checked through its lock (§4.5).
+
+**(R5) Revocation is not history.** PHASE1B_REVIEW_R4 (C1-R4-1) showed the R4 core deciding "not started" from the token: a refused reset nulled the token of a send whose executor had already committed S2 (the controller had not yet promoted it to `generating`), and a later recovery settled it `not_started`, released the lease and allowed a same-key re-arm while the executor ran. The token now only authorises future starts. Start evidence is read by `attempt_id`, which fencing, a refused reset, a change of claim owner and settlement never alter. Every launcher and finaliser callback is bound to its own attempt (or, before T1, its own claim) and leaves any other attempt untouched.
 
 Because S2 and the fencing update both run under `BEGIN IMMEDIATE`, SQLite serialises them (one writer at a time; `BEGIN IMMEDIATE` takes the write lock at `BEGIN` [E1]). Whichever commits first wins, and the other sees its result.
 
@@ -529,6 +532,8 @@ At S3, inside E only, the bridge wraps **`SessionDB._execute_write`**, the one p
 3. **Publish only after commit.** Only when the outermost `_execute_write` **returns** (Hermes has committed) does E commit `write_committed {wid, method, attempts, rows, sessions, unidentified}`. Nested `_execute_write` calls publish nothing of their own; their observations belong to the enclosing scope.
 4. **Failure outcomes.** If `_execute_write` raises and the callback never returned: `write_rolled_back {wid, attempts, candidates}`, and no rows are published. If the callback returned but the commit step raised: `write_unsettled {wid}`, meaning settlement is unknown.
 5. **Cross-store gap.** Hermes committed but the `write_committed` fact could not be written: E records `receipt_gap {wid}` if it still can, and **never raises into Hermes for that write**, because it succeeded. From then on every `write_intent` fails closed, so no later row, and in particular no owner row in a session the ledger never attributed, can land. `executor_finished` carries `receipts_complete=false`. The gap is never filled later by matching text or by taking whatever row now holds a candidate id.
+
+**(R5) Continuation-note provenance (O-12).** Hermes creates its mid-stream continuation note as a `role=user` dict tagged `_length_continuation_nudge` (`agent/turn_truncation.py`); the SessionDB projection drops the tag and Hermes pops it from the live dict when the continued reply finishes, so the stored row has no marker. Inside E only, the executor keeps a reference to each dict Hermes created **with** that tag (wrapping the module-level `append_message` of `agent.turn_truncation`) and, at `agent.session_persistence._db_flush_write(agent, batch_rows, batch_msgs)` after the commit, matches them **by object identity** to the rows whose committed ids Hermes copies back. It writes `row_provenance {rows: [{session_id, row_id, kind: length_continuation_nudge}]}`. Receipt derivation treats a row as internal only when that provenance names a row committed in this attempt's own receipts; any other entry changes nothing. Text is never read, and an owner message with the identical words stays owner speech. A missing seam, a copied dict or a failed provenance write leaves the conservative result (`ambiguous`, never complete). Seen on the pinned code only; no Hermes change.
 
 Row classes, computed at publish time:
 
@@ -982,7 +987,7 @@ The reviewer's U1–U9 and O-A–O-D are decided (§0). **(R3)** These remain fo
 | O-F | **Decided (R4):** gap latching without re-failing a committed source write. | Shown in C1 with the real CLI exception path, the real SessionDB, an in-process multi-thread case and interrupt-safe fact writes (C1 results §3). |
 | O-G | **Decided (R4):** explicit coverage and containment activation gates. | Still open before activation for tool-capable chat: a real tool-using turn, interruption during a tool, full CLI compression continuation, descendant containment for tool processes (O-10), foreign writers (O-5). |
 | O-H | **Decided (R4):** structured `attempt` identity on charge records in C2. | C2, later. |
-| O-I **(R4, new)** | O-12: an unmarked `role=user` continuation note after a dropped stream. | C1 reports `ambiguous`/`unknown`. Whether Phase 1A should exclude it needs a structural marker that the pinned Hermes does not write; the reviewer's call. |
+| O-I | **Decided (R5, PHASE1B_REVIEW_R4 §6):** the continuation note is internal machinery, not owner speech. The source row is preserved; nothing is excluded by text or prefix; no historical row is reclassified. | For C1-controlled turns the executor records causal provenance (§4.10.1 R5), receipts list the row as internal, and the owner turn is the real owner row. **Still an activation gate:** the Phase 1A read adapter must exclude that exact row by this provenance (bound to the committed source identity) while keeping an equal-text owner control; rows written outside a C1 executor (terminal, legacy, history) have no such provenance, so that trusted-read path stays marked incomplete and its activation blocked. |
 
 ---
 
@@ -1039,3 +1044,13 @@ The reviewer's U1–U9 and O-A–O-D are decided (§0). **(R3)** These remain fo
 | §5.2 owner eligibility | §4.10.1: `user_turn` requires Phase 1A's public/trusted structural eligibility; new class `user_internal`. |
 | C1 findings | §4.10.2 freshness by rowid; O-12 continuation note (§8, §12 O-I); §9 C1 split into core (done) and activation (later). |
 | Implementation details found in C1 | The executor moves the controller's pipes off fds 0/1 before Hermes runs, so a Hermes descendant cannot hold the stream open after the executor exits (the controller also never blocks closing a pipe a descendant holds). `tmpfs` is added to the supported local file systems (flock and rollback-journal locking work there). A ledger on tmpfs disappears at reboot: if the app-state marker survives on persistent storage this is `ledger_lost`; if the whole profile home and app state are on tmpfs it is indistinguishable from a new profile, which is stated, not detected.. |
+
+## Appendix D. (R5) Corrections answering PHASE1B_REVIEW_R4
+
+| Review item | What changed |
+|---|---|
+| C1-R4-1 refused reset erased start identity | `attempt_id` (immutable) separated from `launch_token` (revocable); start evidence read by attempt in fencing, recovery, promotion and derivation; cleanup callbacks bound to their attempt/claim (§3, §4.4.3). |
+| C1-R4-2 stale executor rewrote a newer attempt's lock | one lock file per attempt; S2 also requires the attempt; the nonce check is unchanged (§3, §4.4.1). |
+| §5 lane completeness | explicit required-case manifest; any missing, skipped, duplicated, failed or errored case fails the verdict. |
+| §6 O-12 | decision recorded (§12 O-I); causal provenance for C1 turns (§4.10.1 R5); read-boundary change remains an activation gate. |
+| §8 CI annotations | only test id, file and exception class are published; details stay in the job log. |

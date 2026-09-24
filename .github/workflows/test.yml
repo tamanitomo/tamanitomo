@@ -31,18 +31,29 @@ jobs:
       - name: Run tests (no hermes on PATH)
         run: python -m pytest -q -rs --junitxml=junit.xml
       - name: Report failed tests as annotations
-        # Job logs need a signed-in viewer; check-run annotations are public.
+        # Job logs need a signed-in viewer; check-run annotations are public. So an annotation
+        # carries only the test id, its file and the exception class as a category -- never the
+        # assertion text or traceback, which can contain arbitrary strings. Details: the job log.
         if: failure()
         run: |
           python - <<'PY'
+          import os, re
           import xml.etree.ElementTree as ET
+          if not os.path.exists('junit.xml'):
+              print('::notice title=No test report::junit.xml was not written; see the job log.')
+              raise SystemExit(0)
+          safe = lambda text, n: re.sub(r'[^A-Za-z0-9_.:/ -]', '', str(text or ''))[:n]
           for case in ET.parse('junit.xml').getroot().iter('testcase'):
               for tag in ('failure', 'error'):
                   node = case.find(tag)
-                  if node is not None:
-                      text = (node.get('message') or '') + ' | ' + (node.text or '')[-1500:]
-                      text = text.replace('%', '%25').replace('\r', '').replace('\n', '%0A')
-                      print(f"::error title={case.get('classname')}::{case.get('name')}: {text}")
+                  if node is None:
+                      continue
+                  kind = re.match(r'\s*([A-Za-z_][\w.]*)', node.get('message') or '')
+                  category = safe(kind.group(1).rsplit('.', 1)[-1] if kind else tag, 60)
+                  cls = safe(case.get('classname'), 120)
+                  path = cls.rsplit('.', 1)[0].replace('.', '/') + '.py' if '.' in cls else ''
+                  print(f"::error file={path},title=Test {tag}::{cls}::{safe(case.get('name'), 120)} "
+                        f"({category}); details in the job log")
           PY
       - name: Validate installer syntax
         run: bash -n setup-linux.sh setup-termux.sh update.sh uninstall-termux.sh

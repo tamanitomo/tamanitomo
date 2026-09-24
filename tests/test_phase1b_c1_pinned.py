@@ -31,6 +31,7 @@ from kit.app import send_protocol as sp                         # noqa: E402
 from mock_provider import MockProvider                          # noqa: E402
 
 INJECT = HERE / 'phase1b_c1' / 'inject'
+INJECT_PROVENANCE = HERE / 'phase1b_c1' / 'inject_provenance'
 
 
 def state_rows(home):
@@ -59,7 +60,8 @@ class PinnedTurns(unittest.TestCase):
         pl.synthetic_home(self.env.home, self.provider, scenario)
         env = pl.executor_env(self.src, self.env.home)
         if inject:
-            env['PYTHONPATH'] = os.pathsep.join([str(INJECT), env['PYTHONPATH']])
+            path = INJECT_PROVENANCE if inject == 'provenance' else INJECT
+            env['PYTHONPATH'] = os.pathsep.join([str(path), env['PYTHONPATH']])
         ex = cs.ExecutorSpec(python=self.python, env=env, cwd=str(self.env.home))
         kw.setdefault('turn_timeout', 120)
         kw.setdefault('watchdog_interval', 0.2)
@@ -148,8 +150,8 @@ class PinnedTurns(unittest.TestCase):
         hits. (a) An auxiliary non-stream request is dropped: one owner row, one final reply,
         `complete`. (b) The main stream is dropped mid-reply: Hermes stores the partial reply
         (`length`), then a role=user continuation note with NO structural marker, then the final
-        reply. Structure cannot tell that note from an owner message, so the receipt must say
-        `owner_turn=ambiguous` and never `complete` (no candidate is chosen, no text is read)."""
+        reply. The executor's provenance (O-12) names that exact committed row as internal, so the
+        owner turn is the one real owner row and the turn completes."""
         svc = self.service('recover')
         _, row, _ = self.run_send(svc)
         users = [r for r in state_rows(self.env.home) if r['role'] == 'user']
@@ -161,25 +163,57 @@ class PinnedTurns(unittest.TestCase):
             self.assertEqual((row['state'], row['owner_turn'], row['reply']), ('complete', 'recorded', 'final'))
         else:
             self.assertEqual(len(users), 2)
-            self.assertEqual((row['state'], row['owner_turn'], row['error_code']),
-                             ('unknown', 'ambiguous', 'owner_turn_not_established'))
+            self.assertEqual((row['state'], row['owner_turn'], row['reply']), ('complete', 'recorded', 'final'))
+            receipt = svc.receipt(self.scope, row['send_id'])
+            self.assertEqual(receipt['internal_rows'], [[users[1]['session_id'], users[1]['row_id']]])
         self.assertIsNotNone(row['settled_at'])
 
     def test_a_dropped_main_stream_adds_an_unmarked_user_row(self):
-        """New observation (O-12): the main reply stream dropped mid-reply. The pinned Hermes stores
-        the partial reply, then a role=user continuation note with no display_kind, observed or
-        summary marker, then the retried reply. The receipt refuses to choose an owner row."""
+        """O-12: the main reply stream dropped mid-reply. The pinned Hermes stores the partial reply,
+        then a role=user continuation note with no display_kind, observed or summary marker, then
+        the retried reply. The executor records provenance for exactly that committed row (the
+        dict Hermes created with `_length_continuation_nudge`, matched by identity, not text), so
+        it is internal, the owner turn is the real owner row, and a same-key retry replays."""
         svc = self.service('recover_stream')
-        _, row, _ = self.run_send(svc)
+        body, row, _ = self.run_send(svc)
         rows = state_rows(self.env.home)
         self.record('dropped_main_stream_turn', svc, row)
         self.assertEqual([(r['role'], r['finish_reason']) for r in rows],
                          [('user', None), ('assistant', 'length'), ('user', None), ('assistant', 'stop')])
         committed = [r for k, d in self.facts(svc, row['send_id']) if k == 'write_committed' for r in d['rows']]
         self.assertEqual([r['class'] for r in committed if r['role'] == 'user'], ['user_turn', 'user_turn'])
-        self.assertEqual((row['state'], row['owner_turn'], row['reply'], row['correlation'], row['error_code']),
-                         ('unknown', 'ambiguous', 'partial', 'ambiguous', 'owner_turn_not_established'))
+        provenance = [d for k, d in self.facts(svc, row['send_id']) if k == 'row_provenance']
+        self.assertEqual([n['row_id'] for d in provenance for n in d['rows']], [rows[2]['row_id']])
+        self.assertEqual((row['state'], row['owner_turn'], row['reply'], row['correlation']),
+                         ('complete', 'recorded', 'final', 'linked'))
+        receipt = svc.receipt(self.scope, row['send_id'], authorized_kinds={'workspace'})
+        self.assertEqual(receipt['internal_rows'], [[rows[2]['session_id'], rows[2]['row_id']]])
+        self.assertEqual(receipt['source_links']['owner'], [[rows[0]['session_id'], rows[0]['row_id']]])
         self.assertEqual([k for k, _ in self.facts(svc, row['send_id'])].count('executor_started'), 1)
+        status, again = svc.accept(self.scope, body, h.workspace_only)
+        self.assertEqual((status, again['send']['state'], again['send']['internal_rows']),
+                         (200, 'complete', receipt['internal_rows']))
+
+    def test_an_owner_message_equal_to_the_note_text_is_still_owner_speech(self):
+        """O-12 control: the owner may type the note's exact words. With no provenance for that
+        row it stays owner evidence; nothing is excluded by text."""
+        stub = ('[System: The previous response was cut off by a network error mid-stream. Continue exactly '
+                'where you left off. Do not restart or repeat prior text. Finish the answer directly.]')
+        svc = self.service('deltas')
+        _, row, _ = self.run_send(svc, message=stub)
+        self.record('equal_text_owner_turn', svc, row)
+        self.assertEqual((row['state'], row['owner_turn'], row['reply']), ('complete', 'recorded', 'final'))
+        self.assertEqual(svc.receipt(self.scope, row['send_id'])['internal_rows'], [])
+
+    def test_a_note_without_its_provenance_stays_conservative(self):
+        """O-12 interrupted delivery: the provenance fact cannot be written. The note is then a
+        possible owner row: owner_turn=ambiguous, never complete."""
+        svc = self.service('recover_stream', inject='provenance')
+        _, row, _ = self.run_send(svc)
+        self.record('note_without_provenance_turn', svc, row)
+        self.assertNotIn('row_provenance', [k for k, _ in self.facts(svc, row['send_id'])])
+        self.assertEqual((row['state'], row['owner_turn'], row['reply'], row['error_code']),
+                         ('unknown', 'ambiguous', 'partial', 'owner_turn_not_established'))
 
     def test_truncated_and_disconnected_replies_fail_as_incomplete(self):
         """M-9: the pinned CLI exits 0 with a finish_reason='length' row."""
@@ -292,8 +326,10 @@ class PinnedSeams(unittest.TestCase):
         send_id = payload['send']['send_id']
         con = sp.connect(self.svc.db)
         with sp.immediate(con):
-            self.svc._cas(con, send_id, 'accepted', 1, 'test', state='launching', launch_token='T')
-            sp.insert_fact(con, send_id, 'T', 'executor_started', {'pid': 1, 'pgid': 1, 'lock_identity': [0, 0]})
+            self.svc._cas(con, send_id, 'accepted', 1, 'test', state='launching', launch_token='T',
+                          attempt_id='a' * 32)
+            sp.insert_fact(con, send_id, 'T', 'executor_started',
+                           {'pid': 1, 'pgid': 1, 'lock_identity': [0, 0], 'attempt_id': 'a' * 32})
             self.svc._cas(con, send_id, 'launching', 1, 'test', state='generating')
         con.close()
         work = self.env.root / 'seam'

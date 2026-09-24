@@ -79,7 +79,7 @@ def _row(role, cls, sid='S1', row_id=1, finish=None):
 
 
 def _turn(*writes, finished=None, session='S1', started=True):
-    facts = [_f('executor_started', pid=1, pgid=1, lock_identity=[1, 1])] if started else []
+    facts = [_f('executor_started', pid=1, pgid=1, lock_identity=[1, 1], attempt_id='A1')] if started else []
     facts.append(_f('write_intent', wid=0, method='_insert_session_row'))
     facts.append(_f('write_committed', wid=0, method='_insert_session_row', rows=[], unidentified=0,
                     sessions=[{'session_id': session, 'fresh': True}]))
@@ -111,7 +111,7 @@ def gap():
 
 
 OK = {'exit': 0, 'interrupted': False, 'timed_out': False, 'receipts_complete': True}
-SEND = {'capability': 'full', 'requested_session': None}
+SEND = {'capability': 'full', 'requested_session': None, 'attempt_id': 'A1'}
 USER = _row('user', 'user_turn', row_id=1)
 REPLY = _row('assistant', 'public_output', row_id=2, finish='stop')
 
@@ -147,7 +147,7 @@ class Derivation(unittest.TestCase):
 
     def test_an_upsert_of_an_existing_session_is_not_created_here(self):
         facts = _turn(committed(USER, sessions=[{'session_id': None, 'fresh': False}]), finished=OK)
-        d = cs.derive({'capability': 'full', 'requested_session': 'S1'}, facts[:1] + facts[3:])
+        d = cs.derive({'capability': 'full', 'requested_session': 'S1', 'attempt_id': 'A1'}, facts[:1] + facts[3:])
         self.assertEqual(d.sessions, [{'session_id': 'S1', 'created_here': False}])
         self.assertEqual(d.owner_turn, 'recorded')
 
@@ -206,6 +206,32 @@ class Derivation(unittest.TestCase):
         d = cs.derive(SEND, facts)
         self.assertEqual((d.coverage, d.owner_turn, d.outcome, d.error_code),
                          ('unavailable', 'unknown', 'unknown', 'sources_unverified'))
+
+    def test_continuation_note_provenance_binds_to_a_receipted_row(self):
+        """O-12: provenance reclassifies exactly the named committed row of this attempt."""
+        note = _row('user', 'user_turn', row_id=3)
+        base = [committed(USER), committed(_row('assistant', 'public_output', row_id=2, finish='length')),
+                committed(note), committed(_row('assistant', 'public_output', row_id=4, finish='stop'))]
+        prov = lambda wid: [_f('row_provenance', rows=[{'session_id': 'S1', 'row_id': 3,
+                                                        'kind': 'length_continuation_nudge'}])]
+        d = cs.derive(SEND, _turn(*base, prov, finished=OK))
+        self.assertEqual((d.owner_turn, d.reply, d.outcome, d.internal_rows),
+                         ('recorded', 'final', 'complete', [['S1', 3]]))
+        self.assertEqual(d.owner_rows, [['S1', 1]])
+        # Without provenance, or with provenance under another token, or naming a row this
+        # attempt did not commit (a reused id), nothing is reclassified.
+        self.assertEqual(cs.derive(SEND, _turn(*base, finished=OK)).owner_turn, 'ambiguous')
+        other = lambda wid: [_f('row_provenance', token='OTHER', rows=[{'session_id': 'S1', 'row_id': 3,
+                                                                        'kind': 'length_continuation_nudge'}])]
+        self.assertEqual(cs.derive(SEND, _turn(*base, other, finished=OK)).owner_turn, 'ambiguous')
+        stray = lambda wid: [_f('row_provenance', rows=[{'session_id': 'S1', 'row_id': 99,
+                                                         'kind': 'length_continuation_nudge'}])]
+        d = cs.derive(SEND, _turn(*base, stray, finished=OK))
+        self.assertEqual((d.owner_turn, d.internal_rows), ('ambiguous', []))
+
+    def test_start_evidence_of_another_attempt_is_ignored(self):
+        """C1-R4-1/2: start evidence belongs to one immutable attempt."""
+        self.assertIsNone(cs.derive({**SEND, 'attempt_id': 'A2'}, _turn(committed(USER), finished=OK)).started)
 
     def test_facts_under_another_token_are_ignored(self):
         facts = _turn(committed(USER))
@@ -998,7 +1024,7 @@ class ResetAndQuiescence(unittest.TestCase):
         self.assertTrue(_wait(lambda: pid_file.exists() and not _alive(started['pid'])))
         child = int(pid_file.read_text())
         self.addCleanup(_kill, child)
-        self.assertEqual(sq.probe_lock(self.svc.dir / 'executors' / f'{send_id}.lock',
+        self.assertEqual(sq.probe_lock(self.svc.dir / 'executors' / sp.lock_name(send_id, started['attempt_id']),
                                        started['lock_identity'])[0], 'acquired')
         self.assert_blocked(send_id, 'live')
         self.assertEqual(self.svc.recover(send_id)['state'], 'complete')     # outcome final, lease held
@@ -1010,7 +1036,7 @@ class ResetAndQuiescence(unittest.TestCase):
     def test_missing_or_replaced_lock_is_unproven(self):
         send_id, started = self.orphaned(hang=30)
         _kill(started['pid'])
-        lock = self.svc.dir / 'executors' / f'{send_id}.lock'
+        lock = self.svc.dir / 'executors' / sp.lock_name(send_id, started['attempt_id'])
         self.assertTrue(_wait(lambda: sq.probe_lock(lock, started['lock_identity'])[0] == 'acquired'))
         lock.unlink()
         self.assert_blocked(send_id, 'unproven')
@@ -1020,7 +1046,7 @@ class ResetAndQuiescence(unittest.TestCase):
     def test_unreadable_process_data_is_unproven(self):
         send_id, started = self.orphaned(hang=30)
         _kill(started['pid'])
-        lock = self.svc.dir / 'executors' / f'{send_id}.lock'
+        lock = self.svc.dir / 'executors' / sp.lock_name(send_id, started['attempt_id'])
         self.assertTrue(_wait(lambda: sq.probe_lock(lock, started['lock_identity'])[0] == 'acquired'))
         proc = _fake_proc(self.env.root, {started['pgid']: None, 99: '99 (x) S 1 99 99'})
         (proc / str(started['pgid']) / 'stat').mkdir()          # cannot be read: EISDIR
@@ -1063,10 +1089,256 @@ class ResetAndQuiescence(unittest.TestCase):
         exc = self.refused(self.svc.reset)
         self.assertEqual((exc.code, exc.extra['executors'][0]['liveness']), ('executor_live', 'live'))
         _kill(started['pid'])
-        lock = self.svc.dir / 'executors' / f'{send_id}.lock'
+        lock = self.svc.dir / 'executors' / sp.lock_name(send_id, started['attempt_id'])
         self.assertTrue(_wait(lambda: sq.probe_lock(lock, started['lock_identity'])[0] == 'acquired'))
         self.assertIn('generation', self.svc.reset())
         self.assertTrue(list(self.svc.dir.glob('ledger.lost-*.sqlite3')))
+
+
+# ---------------------------------------------------------------------------------------------
+# Attempt lifecycle (PHASE1B_REVIEW_R4 C1-R4-1, C1-R4-2)
+# ---------------------------------------------------------------------------------------------
+
+class _Paused(cs.SendService):
+    """Test-only subclass: blocks at named hooks until released (U6: no shipped switch)."""
+
+    def __init__(self, *a, pause_at=(), **kw):
+        super().__init__(*a, **kw)
+        self.pause_at = set(pause_at)
+        self.reached = {name: threading.Event() for name in self.pause_at}
+        self.release = {name: threading.Event() for name in self.pause_at}
+
+    def _hook(self, name):
+        if name in self.pause_at:
+            self.reached[name].set()
+            self.release[name].wait(60)
+
+
+@unittest.skipUnless(LINUX, POSIX_ONLY)
+class AttemptLifecycle(unittest.TestCase):
+
+    def setUp(self):
+        self.env = h.Env(self)
+        self.scope = h.scope_for(self.env.home)
+
+    def paused(self, *names, **kw):
+        kw.setdefault('turn_timeout', 60)
+        kw.setdefault('stop_grace', 60)
+        kw.setdefault('watchdog_interval', 0.1)
+        svc = _Paused(self.env.home, self.env.state, h.fake_executor(self.env.home), pause_at=names, **kw)
+        self.addCleanup(svc.close)
+        for name in names:
+            self.addCleanup(svc.release[name].set)
+        return svc
+
+    def refused(self, fn, *a):
+        with self.assertRaises(cs.Refused) as caught:
+            fn(*a)
+        return caught.exception
+
+    def leases(self, svc):
+        return h.ledger_rows(svc, 'SELECT count(*) FROM lease')[0][0]
+
+    def test_refused_reset_then_controller_death_keeps_a_registered_attempt_started(self):
+        """C1-R4-1: S2 committed, controller not yet promoted to generating; a refused reset
+        fences the token; the controller dies; another controller recovers. The attempt must
+        stay started: lease held, new key refused, the old key never re-armed."""
+        h.scenario(self.env.home, hang=30)
+        key = cs.new_ulid()
+        out, cfg = self.env.root / 'ctl.json', self.env.root / 'cfg.json'
+        ex = h.fake_executor(self.env.home)
+        cfg.write_text(json.dumps({'home': str(self.env.home), 'state': str(self.env.state),
+                                   'kill_at': 'started_event', 'key': key, 'message': 'hi', 'out': str(out),
+                                   'turn_timeout': 60, 'poll': 0.1,
+                                   'executor': {'python': ex.python, 'env': ex.env, 'cwd': ex.cwd}}))
+        proc = subprocess.run([sys.executable, str(HERE / 'phase1b_c1' / 'controller_proc.py'), str(cfg)],
+                              cwd=str(HERE.parent), capture_output=True, timeout=60)
+        self.assertEqual(proc.returncode, -signal.SIGKILL, proc.stderr.decode()[-2000:])
+        info = json.loads(out.read_text())
+        svc = self.env.service(stop_grace=60)
+        started = [d for k, d in h.facts(svc, info['send_id']) if k == 'executor_started']
+        self.assertEqual(len(started), 1)
+        self.addCleanup(lambda: os.killpg(started[0]['pgid'], signal.SIGKILL) if _alive(started[0]['pid']) else None)
+        self.assertEqual(h.ledger_rows(svc, 'SELECT state FROM sends')[0][0], 'launching')
+        self.assertEqual(self.refused(svc.reset).code, 'executor_live')
+        row = svc.recover(info['send_id'])
+        self.assertNotEqual(row['state'], 'not_started')
+        self.assertEqual((row['state'], row['liveness'], row['settled_at']), ('generating', 'live', None))
+        self.assertEqual(self.leases(svc), 1)
+        self.assertEqual(self.refused(h.send, svc, self.scope, 'new text').code, 'turn_in_progress')
+        body = {'client_key': key, 'generation': info['generation'], 'conversation_id': self.scope.conversation_id,
+                'message': 'hi', 'session': None}
+        status, payload = svc.accept(self.scope, body, h.workspace_only)
+        self.assertEqual((status, payload.get('rearmed')), (200, None))
+        os.killpg(started[0]['pgid'], signal.SIGKILL)
+        lock_ok = lambda: svc.recover(info['send_id'])['settled_at'] is not None
+        self.assertTrue(_wait(lock_ok))
+        self.assertEqual(svc._read(info['send_id'])['state'], 'unknown')
+
+    def test_refused_reset_without_controller_death_settles_from_the_facts(self):
+        """C1-R4-1, same gap, the controller survives: the receipt reflects the executor's
+        facts (complete), never not_started. The refused reset is repeated."""
+        h.scenario(self.env.home, hang=1.0)
+        svc = self.paused('started_event')
+        other = self.env.service()
+        body, (_, p) = h.send(svc, self.scope)
+        result = {}
+        t = threading.Thread(target=lambda: result.update(row=svc.launch(p['send']['send_id'], body['message'])))
+        t.start()
+        self.assertTrue(svc.reached['started_event'].wait(30))
+        for _ in range(2):
+            self.assertEqual(self.refused(other.reset).code, 'executor_live')
+        svc.release['started_event'].set()
+        t.join(60)
+        row = result['row']
+        self.assertEqual((row['state'], row['owner_turn'], row['reply'], row['liveness']),
+                         ('complete', 'recorded', 'final', 'quiescent'))
+        self.assertIsNotNone(row['settled_at'])
+
+    def test_a_reset_that_wins_before_registration_means_never_started(self):
+        """The fence-wins side of the race: reset before the executor's S2 (here before `go`).
+        The executor is refused and never runs Hermes."""
+        h.scenario(self.env.home)
+        svc = self.paused('after_popen')
+        body, (_, p) = h.send(svc, self.scope)
+        result = {}
+        t = threading.Thread(target=lambda: result.update(row=svc.launch(p['send']['send_id'], body['message'])))
+        t.start()
+        self.assertTrue(svc.reached['after_popen'].wait(30))
+        self.env.service().reset()
+        svc.release['after_popen'].set()
+        t.join(60)
+        self.assertFalse((self.env.home / 'state.db').exists())
+        self.assertEqual(h.ledger_rows(svc, 'SELECT count(*) FROM sends')[0][0], 0)
+
+    def rearm_after_stale(self, pause_a, hang=None, release_a_when='before_finalize'):
+        """A launches and is paused at `pause_a`; A's controller dies; B recovers and re-arms the
+        same send_id and runs attempt 2 (paused before finalize); then A resumes."""
+        h.scenario(self.env.home, **({'hang': hang} if hang else {}))
+        a = self.paused(pause_a)
+        body, (_, p) = h.send(a, self.scope)
+        send_id = p['send']['send_id']
+        ta = threading.Thread(target=lambda: a.launch(send_id, body['message']))
+        ta.start()
+        self.assertTrue(a.reached[pause_a].wait(30))
+        a.close()                                     # A's controller lock is released: A is "dead"
+        b = self.paused('before_finalize', 'generating')
+        b.release['generating'].set()
+        self.assertEqual(b.recover(send_id)['state'], 'not_started')
+        status, again = b.accept(self.scope, body, h.workspace_only)
+        self.assertEqual((status, again.get('rearmed')), (202, True))
+        result = {}
+        tb = threading.Thread(target=lambda: result.update(row=b.launch(send_id, body['message'])))
+        tb.start()
+        self.assertTrue(b.reached[release_a_when].wait(30))
+        a.release[pause_a].set()                      # the stale attempt resumes now
+        ta.join(60)
+        b.release['before_finalize'].set()
+        tb.join(60)
+        return b, result['row']
+
+    def test_a_stale_executor_cannot_touch_the_newer_attempts_lock(self):
+        """C1-R4-2: E1 delayed after `go`... here before `go` (same effect: it reaches S1 only
+        after the newer attempt E2 has finished, before E2's settlement)."""
+        b, row = self.rearm_after_stale('after_popen')
+        self.assertEqual((row['state'], row['liveness']), ('complete', 'quiescent'))
+        self.assertIsNotNone(row['settled_at'])
+        self.assertEqual([k for k, _ in h.facts(b, row['send_id'])].count('executor_started'), 1)
+
+    def test_a_stale_executor_resuming_while_the_newer_attempt_holds_its_lock(self):
+        b, row = self.rearm_after_stale('after_popen', hang=1.0, release_a_when='generating')
+        self.assertEqual((row['state'], row['liveness']), ('complete', 'quiescent'))
+
+    def gated_stale(self, release_when, hang=None):
+        """The review's exact interleaving: E1 has received `go` and is held just before S1."""
+        h.scenario(self.env.home, **({'hang': hang} if hang else {}))
+        gate = self.env.root / 'gate'
+        gate.mkdir()
+        self.addCleanup(lambda: (gate / 'release').touch())
+        ex = h.fake_executor(self.env.home, extra_path=[HERE / 'phase1b_c1' / 'inject_delay'])
+        ex.env['C1_TEST_S1_GATE'] = str(gate)
+        a = _Paused(self.env.home, self.env.state, ex, turn_timeout=60, stop_grace=60, watchdog_interval=0.1)
+        body, (_, p) = h.send(a, self.scope)
+        send_id = p['send']['send_id']
+        ta = threading.Thread(target=lambda: a.launch(send_id, body['message']))
+        ta.start()
+        self.assertTrue(_wait(lambda: (gate / 'reached').exists(), 30))   # E1: after go, before S1
+        a.close()
+        b = self.paused('before_finalize', 'generating')
+        b.release['generating'].set()
+        self.assertEqual(b.recover(send_id)['state'], 'not_started')
+        self.assertEqual(b.accept(self.scope, body, h.workspace_only)[0], 202)
+        result = {}
+        tb = threading.Thread(target=lambda: result.update(row=b.launch(send_id, body['message'])))
+        tb.start()
+        self.assertTrue(b.reached[release_when].wait(30))
+        (gate / 'release').touch()                    # E1 resumes: S1 on ITS attempt's lock, S2 refused
+        ta.join(60)
+        time.sleep(0.5)                               # give E1 time to reach S1/S2 and exit
+        b.release['before_finalize'].set()
+        tb.join(60)
+        return b, result['row'], send_id
+
+    def test_stale_executor_released_after_the_newer_attempt_finished(self):
+        b, row, send_id = self.gated_stale('before_finalize')
+        self.assertEqual((row['state'], row['liveness']), ('complete', 'quiescent'))
+        self.assertIsNotNone(row['settled_at'])
+        locks = sorted(p.name for p in (b.dir / 'executors').glob(f'{send_id}.*.lock'))
+        self.assertEqual(len(locks), 2)               # one per attempt, resolvable independently
+
+    def test_stale_executor_released_while_the_newer_attempt_holds_its_lock(self):
+        b, row, _ = self.gated_stale('generating', hang=1.0)
+        self.assertEqual((row['state'], row['liveness']), ('complete', 'quiescent'))
+
+    def test_a_stale_launcher_losing_T1_does_not_fence_the_newer_attempt(self):
+        """The launch() compare-and-set-loss cleanup must stay bound to its own attempt."""
+        b, row = self.rearm_after_stale('before_T1')
+        self.assertEqual((row['state'], row['liveness']), ('complete', 'quiescent'))
+
+
+# ---------------------------------------------------------------------------------------------
+# The pinned lane's acceptance verdict (review R4 section 5)
+# ---------------------------------------------------------------------------------------------
+
+def _lane():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('c1_lane_tool', HERE.parent / 'tools' / 'pinned_hermes_lane.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class LaneVerdict(unittest.TestCase):
+
+    def setUp(self):
+        self.lane = _lane()
+        self.full = [{'id': i, 'status': 'passed'} for i in self.lane.REQUIRED_CASES]
+
+    def test_the_manifest_is_exactly_the_pinned_test_module(self):
+        import ast
+        tree = ast.parse((HERE / 'test_phase1b_c1_pinned.py').read_text())
+        found = {f'tests.test_phase1b_c1_pinned.{c.name}::{f.name}' for c in tree.body if isinstance(c, ast.ClassDef)
+                 for f in c.body if isinstance(f, ast.FunctionDef) and f.name.startswith('test_')}
+        self.assertEqual(set(self.lane.REQUIRED_CASES), found)
+        self.assertEqual(len(self.lane.REQUIRED_CASES), len(set(self.lane.REQUIRED_CASES)))
+
+    def test_only_the_complete_manifest_passes(self):
+        self.assertEqual(self.lane.verdict(self.full, 0), ('pass', []))
+
+    def test_a_subset_with_one_passing_case_fails(self):
+        """The reviewer's probe: the old prefix rule passed this."""
+        self.assertEqual(self.lane.verdict(self.full[:1], 0)[0], 'fail')
+
+    def test_missing_skipped_duplicated_failed_or_errored_cases_fail(self):
+        for mutate in (lambda c: c[1:],
+                       lambda c: [{**c[0], 'status': 'skipped'}] + c[1:],
+                       lambda c: c + [c[0]],
+                       lambda c: [{**c[0], 'status': 'failure'}] + c[1:],
+                       lambda c: [{**c[0], 'status': 'error'}] + c[1:],
+                       lambda c: c + [{'id': 'tests.other::x', 'status': 'failure'}]):
+            with self.subTest(mutate=mutate):
+                self.assertEqual(self.lane.verdict(mutate(list(self.full)), 0)[0], 'fail')
+        self.assertEqual(self.lane.verdict(self.full, 1)[0], 'fail')
 
 
 # ---------------------------------------------------------------------------------------------

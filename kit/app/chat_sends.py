@@ -158,6 +158,7 @@ class Derived:
     owner_rows: list = dataclasses.field(default_factory=list)
     reply_rows: list = dataclasses.field(default_factory=list)
     stop_seen: str | None = None
+    internal_rows: list = dataclasses.field(default_factory=list)
 
 
 def derive(send, facts):
@@ -169,7 +170,7 @@ def derive(send, facts):
     fact that does not claim complete receipts make coverage INCOMPLETE, and
     incomplete coverage never establishes an absence (review R3 5.2)."""
     out = Derived()
-    started = [f for f in facts if f['kind'] == 'executor_started']
+    started = sp.started_for(facts, send.get('attempt_id'))
     if not started:
         return out
     token = started[-1]['launch_token']
@@ -202,7 +203,14 @@ def derive(send, facts):
                 sessions.append({'session_id': s['session_id'], 'created_here': True})
                 session_set.add(s['session_id'])
     rows = [r for c in committed for r in c.get('rows') or []]
-    user_rows = [r for r in rows if r.get('class') == 'user_turn']
+    # O-12: a committed row this executor's own provenance names as Hermes's continuation note
+    # is internal machinery, not owner speech. Bound to a receipted row of THIS attempt; a
+    # provenance entry naming any other row changes nothing.
+    notes = {(n.get('session_id'), n.get('row_id')) for f in own if f['kind'] == 'row_provenance'
+             for n in f['data'].get('rows') or [] if n.get('kind') == 'length_continuation_nudge'}
+    internal = [r for r in rows if r.get('role') == 'user' and (r.get('session_id'), r.get('row_id')) in notes]
+    out.internal_rows = [[r['session_id'], r['row_id']] for r in internal]
+    user_rows = [r for r in rows if r.get('class') == 'user_turn' and r not in internal]
     public_rows = [r for r in rows if r.get('class') == 'public_output']
     outside = [r for r in user_rows + public_rows if r.get('session_id') not in session_set]
     finish_incomplete = out.finished is not None and not out.finished.get('receipts_complete')
@@ -637,6 +645,7 @@ class SendService:
                         now = self.clock()
                         con.execute(
                             "UPDATE sends SET state='accepted', claim=claim+1, claim_owner=?, launch_token=NULL, "
+                            "attempt_id=NULL, "
                             "owner_turn='absent', reply='none', correlation='pending', coverage='none', "
                             "liveness='none', error_code=NULL, settled_at=NULL, stop_requested_at=NULL, "
                             'deadline_at=NULL, updated_at=? WHERE send_id=? AND claim=?',
@@ -705,7 +714,7 @@ class SendService:
             raise Refused('not_launchable', 409)
         if request_digest(row['conversation_id'], row['requested_session'], message) != row['request_digest']:
             raise Refused('digest_mismatch', 409)
-        claim, token = row['claim'], secrets.token_hex(16)
+        claim, token, attempt = row['claim'], secrets.token_hex(16), secrets.token_hex(16)
         with self._lock:
             self._active.add(send_id)
         try:
@@ -714,13 +723,17 @@ class SendService:
             try:
                 with sp.immediate(con):
                     ok = self._cas(con, send_id, 'accepted', claim, 'launch', state='launching',
-                                   launch_token=token, deadline_at=time.time() + self.turn_timeout)
+                                   launch_token=token, attempt_id=attempt,
+                                   deadline_at=time.time() + self.turn_timeout)
             except sqlite3.Error:
-                ok = False
+                ok = None
             finally:
                 con.close()
-            if not ok:
-                return self._settle_without_executor(send_id, 'launch_failed')
+            if ok is False:
+                return self._read(send_id)     # lost the claim: this launch authorised nothing
+            if ok is None:
+                # Not committed (rolled back). Settle only if the row is still exactly as we left it.
+                return self._settle_without_executor(send_id, 'launch_failed', claim=claim)
             self._hook('after_T1')
             try:
                 proc = subprocess.Popen(
@@ -735,28 +748,30 @@ class SendService:
                         sp.insert_fact(con, send_id, None, 'spawn_failed', {'code': 'spawn_failed'})
                 finally:
                     con.close()
-                return self._settle_without_executor(send_id, 'spawn_failed')
+                return self._settle_without_executor(send_id, 'spawn_failed', attempt=attempt)
             self._hook('after_popen')
             try:
-                proc.stdin.write(json.dumps({'go': token, 'send_id': send_id, 'ledger': str(self.dir),
-                                             'poll': self.watchdog_interval}) + '\n')
+                proc.stdin.write(json.dumps({'go': token, 'send_id': send_id, 'attempt': attempt,
+                                             'ledger': str(self.dir), 'poll': self.watchdog_interval}) + '\n')
                 proc.stdin.flush()
                 proc.stdin.close()
             except OSError:
                 pass
             self._hook('after_go')
-            self._supervise(send_id, proc, on_delta)
-            return self._finalize(send_id)
+            self._supervise(send_id, proc, on_delta, attempt)
+            self._hook('before_finalize')
+            return self._finalize(send_id, attempt)
         finally:
             with self._lock:
                 self._active.discard(send_id)
 
-    def _settle_without_executor(self, send_id, code):
-        """Fence, then not_started if no executor registered with the old token (4.4.3)."""
-        self._resolve(send_id, fence=True, error_code=code)
+    def _settle_without_executor(self, send_id, code, attempt=None, claim=None):
+        """Fence, then not_started if no executor of THIS attempt registered (4.4.3). Bound to
+        its own attempt (or, before T1, its own claim): stale cleanup never touches a newer one."""
+        self._resolve(send_id, fence=True, error_code=code, attempt=attempt, claim=claim)
         return self._read(send_id)
 
-    def _supervise(self, send_id, proc, on_delta):
+    def _supervise(self, send_id, proc, on_delta, attempt):
         """Read the executor's stream; enforce the kill fallback after stop/deadline grace."""
         events = []
         def read():
@@ -768,7 +783,8 @@ class SendService:
                         continue
                     if event.get('event') == 'started':
                         events.append('started')
-                        self._mark_generating(send_id)
+                        self._hook('started_event')
+                        self._mark_generating(send_id, attempt)
                     elif event.get('event') == 'delta' and on_delta:
                         try:
                             on_delta(event.get('text', ''))
@@ -782,8 +798,8 @@ class SendService:
         while proc.poll() is None:
             time.sleep(0.05)
             row = self._read(send_id)
-            if row is None or row['claim_owner'] != self.controller:
-                break              # lost the claim: stop reading, never kill (4.6)
+            if row is None or row['claim_owner'] != self.controller or row['attempt_id'] != attempt:
+                break              # lost the claim or the attempt: stop reading, never kill (4.6)
             if row['stop_requested_at'] and row['state'] == 'generating':
                 con = self._connect()
                 try:
@@ -816,7 +832,7 @@ class SendService:
     def _kill(self, send_id, row):
         con = self._connect()
         try:
-            started = [f for f in self._facts(con, send_id) if f['kind'] == 'executor_started']
+            started = sp.started_for(self._facts(con, send_id), row['attempt_id'])
         finally:
             con.close()
         if not started:
@@ -831,27 +847,29 @@ class SendService:
             con.close()
         return result
 
-    def _mark_generating(self, send_id):
+    def _mark_generating(self, send_id, attempt):
         con = self._connect()
         try:
             with sp.immediate(con):
                 row = self._row(con, send_id=send_id)
-                if row and row['state'] == 'launching' and row['launch_token'] and any(
-                        f['kind'] == 'executor_started' and f['launch_token'] == row['launch_token']
-                        for f in self._facts(con, send_id)):
+                # Start evidence by the immutable attempt, not the token: a refused reset may have
+                # revoked the token after S2 committed (C1-R4-1).
+                if row and row['state'] == 'launching' and row['attempt_id'] == attempt \
+                        and sp.started_for(self._facts(con, send_id), attempt):
                     self._cas(con, send_id, 'launching', row['claim'], 'executor_started', state='generating')
         finally:
             con.close()
         self._hook('generating')
 
-    def _finalize(self, send_id, attempts=20):
+    def _finalize(self, send_id, attempt, tries=20):
         """After the executor process ended: ingest, prove quiescence (killing managed
-        descendants still in the group), release. Unproven stays held."""
-        for _ in range(attempts):
+        descendants still in the group), release. Unproven stays held. Bound to `attempt`."""
+        for _ in range(tries):
             # The executor process has ended, so a send still `launching` is fenced now:
-            # without an executor_started fact for its token it is definitely not started.
-            row = self._resolve(send_id, fence=True)
-            if row is None or row['settled_at'] is not None or row['claim_owner'] != self.controller:
+            # without start evidence for THIS attempt it is definitely not started.
+            row = self._resolve(send_id, fence=True, attempt=attempt)
+            if row is None or row['settled_at'] is not None or row['claim_owner'] != self.controller \
+                    or row['attempt_id'] != attempt:
                 return row
             if row['liveness'] == 'live':
                 self._kill(send_id, row)
@@ -869,31 +887,41 @@ class SendService:
         finally:
             con.close()
 
+    def _lock_path(self, send_id, started):
+        return self.dir / 'executors' / sp.lock_name(send_id, started.get('attempt_id') or 'missing')
+
     def _executor_observation(self, send_id, started):
         # A record without a nonce can never match one (an executor always writes it).
-        return sq.observe(self.dir / 'executors' / f'{send_id}.lock', started.get('lock_identity'),
+        return sq.observe(self._lock_path(send_id, started), started.get('lock_identity'),
                           started.get('pgid'), started.get('lock_nonce') or '')
 
-    def _resolve(self, send_id, fence=False, error_code=None):
-        """Ingest facts and transition, as the current claim owner. Returns the row."""
+    def _resolve(self, send_id, fence=False, error_code=None, attempt=None, claim=None):
+        """Ingest facts and transition, as the current claim owner. Returns the row.
+        `attempt`/`claim` bind a caller to its own launch: a row now belonging to another
+        attempt (or, before T1, another claim) is returned untouched."""
         con = self._connect()
         try:
             row = self._row(con, send_id=send_id)
             if row is None or row['claim_owner'] != self.controller:
                 return row
+            if (attempt is not None and row['attempt_id'] != attempt) or (claim is not None and row['claim'] != claim):
+                return row
             if row['state'] in ('accepted', 'launching') and fence:
                 with sp.immediate(con):
                     row = self._row(con, send_id=send_id)
-                    claim, old = row['claim'], row['launch_token']
+                    if (attempt is not None and row['attempt_id'] != attempt) or \
+                            (claim is not None and row['claim'] != claim):
+                        return row
+                    current = row['claim']
                     cur = con.execute('UPDATE sends SET claim=claim+1, launch_token=NULL, updated_at=? '
                                       'WHERE send_id=? AND claim=? AND claim_owner=?',
-                                      (self.clock(), send_id, claim, self.controller))
+                                      (self.clock(), send_id, current, self.controller))
                     if cur.rowcount != 1:
                         return self._row(con, send_id=send_id)
-                    claim += 1
-                    started = old is not None and any(
-                        f['kind'] == 'executor_started' and f['launch_token'] == old
-                        for f in self._facts(con, send_id))
+                    claim = current + 1
+                    # Revoking the token stops FUTURE starts; whether this attempt already started
+                    # is read from its immutable start evidence (C1-R4-1).
+                    started = bool(sp.started_for(self._facts(con, send_id), row['attempt_id']))
                     if started:
                         self._cas(con, send_id, row['state'], claim, 'executor_started', state='generating')
                     else:
@@ -976,10 +1004,9 @@ class SendService:
                                   settled_at=self.clock())
                         con.execute('DELETE FROM lease WHERE send_id=?', (send_id,))
                     if row['state'] == 'launching':
-                        # The fence above nulled the token; resolve with the token we fenced.
-                        started = row['launch_token'] is not None and any(
-                            f['kind'] == 'executor_started' and f['launch_token'] == row['launch_token']
-                            for f in self._facts(con, send_id))
+                        # The fence above revoked the token (a refused reset may already have). Start
+                        # evidence is the attempt's, independent of the token (C1-R4-1).
+                        started = bool(sp.started_for(self._facts(con, send_id), row['attempt_id']))
                         claim = row['claim'] + 1
                         if started:
                             self._cas(con, send_id, 'launching', claim, 'executor_started', state='generating')
@@ -1060,6 +1087,7 @@ class SendService:
         out['error'] = {'code': row['error_code'], 'message': ERRORS.get(row['error_code'], '')} \
             if row['error_code'] else None
         out['hermes_sessions'] = derived.sessions
+        out['internal_rows'] = derived.internal_rows      # source ids only, e.g. continuation notes
         if authorized_kinds is not None and row['source_kind'] in authorized_kinds \
                 and row['capability'] == 'full':
             out['source_links'] = {'owner': derived.owner_rows, 'reply': derived.reply_rows}
@@ -1095,8 +1123,8 @@ class SendService:
                                  'ORDER BY settled_at LIMIT ?', (now - RETENTION, PRUNE_BATCH)).fetchall()
             locks = {}
             for (send_id,) in doomed:
-                started = [f for f in self._facts(con, send_id) if f['kind'] == 'executor_started']
-                locks[send_id] = started[-1]['data'] if started else None
+                locks[send_id] = {sp.lock_name(send_id, f['data'].get('attempt_id')): f['data']
+                                  for f in self._facts(con, send_id) if f['kind'] == 'executor_started'}
             with sp.immediate(con):
                 for (send_id,) in doomed:
                     con.execute('DELETE FROM sends WHERE send_id=? AND settled_at IS NOT NULL AND settled_at < ?',
@@ -1104,11 +1132,16 @@ class SendService:
         finally:
             con.close()
         removed = 0
-        for send_id, started in locks.items():
-            path = self.dir / 'executors' / f'{send_id}.lock'
-            if started and path.exists() and self._executor_observation(send_id, started).quiescent:
-                path.unlink()
-                removed += 1
+        for send_id, recorded in locks.items():
+            for path in (self.dir / 'executors').glob(f'{send_id}.*.lock'):
+                started = recorded.get(path.name)
+                if started is not None:
+                    safe = self._executor_observation(send_id, started).quiescent
+                else:                   # an attempt that never registered: only "not busy" matters
+                    safe = sq.probe_lock(path, None)[0] != 'live'
+                if safe:
+                    path.unlink()
+                    removed += 1
         return len(doomed), removed
 
     # ----- explicit reset (4.1) -----
@@ -1131,24 +1164,25 @@ class SendService:
                                         'WHERE launch_token IS NOT NULL')
                         unsettled = [r[0] for r in con.execute(
                             'SELECT send_id FROM sends WHERE settled_at IS NULL')]
-                        recorded = {}
+                        recorded = {}           # lock file name -> (send_id, start record), per attempt
                         for send_id in unsettled:
-                            started = [f for f in self._facts(con, send_id) if f['kind'] == 'executor_started']
-                            if started:
-                                recorded[send_id] = started[-1]['data']
+                            for f in self._facts(con, send_id):
+                                if f['kind'] == 'executor_started':
+                                    name = sp.lock_name(send_id, f['data'].get('attempt_id'))
+                                    recorded[name] = (send_id, f['data'])
                     finally:
                         con.close()
                 except sqlite3.Error:
                     readable = False
                     recorded = {}
                 blocked = []
-                for send_id, started in recorded.items():
+                for send_id, started in recorded.values():
                     obs = self._executor_observation(send_id, started)
                     if not obs.quiescent:
                         blocked.append((send_id, obs.state, obs.reason))
                 for path in sorted((self.dir / 'executors').glob('*.lock')):
-                    send_id = path.stem
-                    if send_id in recorded:
+                    send_id = path.name.split('.')[0]
+                    if path.name in recorded:
                         continue
                     obs = self._orphan_lock_observation(path, use_content=not readable)
                     if obs is not None and not obs.quiescent:
@@ -1234,8 +1268,8 @@ def installation_quiescence(root):
             if started is None:
                 blocked.append((str(home), send_id, 'unproven', 'send_open_without_executor_record'))
                 continue
-            obs = sq.observe(directory / 'executors' / f'{send_id}.lock', started.get('lock_identity'),
-                             started.get('pgid'), started.get('lock_nonce') or '')
+            obs = sq.observe(directory / 'executors' / sp.lock_name(send_id, started.get('attempt_id') or 'missing'),
+                             started.get('lock_identity'), started.get('pgid'), started.get('lock_nonce') or '')
             if not obs.quiescent:
                 blocked.append((str(home), send_id, obs.state, obs.reason))
     return blocked

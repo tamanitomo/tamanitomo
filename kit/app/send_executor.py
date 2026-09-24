@@ -293,6 +293,64 @@ def install_recorder(session_db_class, facts):
     return _execute_write
 
 
+def install_provenance(truncation_module, persistence_module, facts):
+    """O-12 (review R4 section 6): record which COMMITTED rows are Hermes's own continuation notes.
+
+    Hermes creates the note as a role=user message dict tagged `_length_continuation_nudge`
+    (agent/turn_truncation.py, through its module-level `append_message`). The tag does not
+    survive: the SessionDB projection drops it, and when the continued reply finishes Hermes
+    pops it from the live dict in place (agent/turn_final_response.py). So the executor keeps a
+    reference to each dict object Hermes created WITH the tag, and at `_db_flush_write(agent,
+    batch_rows, batch_msgs)` -- which pairs the live dicts 1:1 with the rows it persists and
+    receives each committed row id after the commit -- matches them by object identity. Text is
+    never read. A missing seam, a copied dict, a missing row id or a failed fact write leaves
+    the conservative result (the note stays a possible owner row)."""
+    append = getattr(truncation_module, 'append_message', None)
+    flush = getattr(persistence_module, '_db_flush_write', None)
+    if append is None or flush is None:
+        return False
+    try:
+        if list(inspect.signature(flush).parameters)[:3] != ['agent', 'batch_rows', 'batch_msgs'] or \
+                list(inspect.signature(append).parameters)[:2] != ['messages', 'message']:
+            return False
+    except (TypeError, ValueError):
+        return False
+    created = []                        # strong references: identities stay unique for the turn
+    lock = threading.Lock()
+
+    @functools.wraps(append)
+    def append_message(messages, message, *args, **kwargs):
+        if isinstance(message, dict) and message.get('_length_continuation_nudge') is True:
+            with lock:
+                created.append(message)
+        return append(messages, message, *args, **kwargs)
+
+    @functools.wraps(flush)
+    def _db_flush_write(agent, batch_rows, batch_msgs, *args, **kwargs):
+        session_id = getattr(agent, 'session_id', None)
+        result = flush(agent, batch_rows, batch_msgs, *args, **kwargs)
+        with lock:
+            mine = list(created)
+        notes = []
+        for msg, row in zip(batch_msgs or (), batch_rows or ()):
+            if any(msg is note for note in mine) and isinstance(row, dict) \
+                    and isinstance(row.get('_row_id'), int) and session_id:
+                notes.append({'session_id': session_id, 'row_id': row['_row_id'],
+                              'kind': 'length_continuation_nudge'})
+        if notes:
+            try:
+                facts.write('row_provenance', rows=notes)
+            except KeyboardInterrupt:
+                raise
+            except Exception:
+                pass                    # conservative: without the fact the note stays owner-possible
+        return result
+
+    truncation_module.append_message = append_message
+    persistence_module._db_flush_write = _db_flush_write
+    return True
+
+
 class Watchdog(threading.Thread):
     """Reads the ledger's stop flag and deadline; delivers ONE interrupt to Hermes's
     main thread (the Ctrl-C path). Works without the controller."""
@@ -350,14 +408,16 @@ def read_go(stream):
     except ValueError:
         return None
     if not (isinstance(go, dict) and isinstance(go.get('go'), str) and isinstance(go.get('send_id'), str)
-            and isinstance(go.get('ledger'), str) and re.fullmatch(r'snd_[a-z2-7]{26}', go['send_id'])):
+            and isinstance(go.get('ledger'), str) and re.fullmatch(r'snd_[a-z2-7]{26}', go['send_id'])
+            and isinstance(go.get('attempt'), str) and re.fullmatch(r'[0-9a-f]{32}', go['attempt'])):
         return None
     return go
 
 
-def take_lock(directory, send_id):
-    """S1. Returns (fd, (dev, ino)) or None. The fd is never inherited by children."""
-    path = Path(directory) / 'executors' / f'{send_id}.lock'
+def take_lock(directory, send_id, attempt_id):
+    """S1. Returns (fd, (dev, ino)) or None. The fd is never inherited by children. The path
+    belongs to this attempt only, so nothing here can touch another attempt's evidence."""
+    path = Path(directory) / 'executors' / sp.lock_name(send_id, attempt_id)
     try:
         fd = sp.open_lock_file(path, create=True)
     except OSError:
@@ -371,17 +431,18 @@ def take_lock(directory, send_id):
     return fd, (st.st_dev, st.st_ino)
 
 
-def register(directory, send_id, token, identity):
-    """S2. True when this executor is now the send's tracked executor."""
+def register(directory, send_id, token, identity, attempt_id=None):
+    """S2. True when this executor is now the send's tracked executor: the send is still
+    `launching`, its revocable token is still ours and its current attempt is ours."""
     ledger = Path(directory) / sp.LEDGER_FILE
     try:
         with sp.guard(directory, exclusive=False, timeout=10):
             con = sp.connect(ledger)
             try:
                 with sp.immediate(con):
-                    row = con.execute('SELECT launch_token, state FROM sends WHERE send_id=?',
+                    row = con.execute('SELECT launch_token, state, attempt_id FROM sends WHERE send_id=?',
                                       (send_id,)).fetchone()
-                    if not row or row[0] != token or row[1] != 'launching':
+                    if not row or row[0] != token or row[1] != 'launching' or row[2] != attempt_id:
                         return False
                     sp.insert_fact(con, send_id, token, 'executor_started', identity)
                 return True
@@ -420,14 +481,15 @@ def main(argv=None, stdin=None, wire=None):
         return EXIT_NO_GO
     if wire is None:
         wire = private_wire()
-    directory, send_id, token = go['ledger'], go['send_id'], go['go']
-    held = take_lock(directory, send_id)
+    directory, send_id, token, attempt = go['ledger'], go['send_id'], go['go'], go['attempt']
+    held = take_lock(directory, send_id, attempt)
     if held is None:
         return EXIT_LOCK_BUSY
     fd, lock_identity = held
     pid = os.getpid()
     identity = {'pid': pid, 'pgid': os.getpgid(0), 'start': sp.start_time(pid), 'boot': sp.boot_id(),
-                'lock_identity': list(lock_identity), 'lock_nonce': secrets.token_hex(16)}
+                'lock_identity': list(lock_identity), 'lock_nonce': secrets.token_hex(16),
+                'attempt_id': attempt}
     try:                                # the identity is also left in the lock file itself, for a
         os.ftruncate(fd, 0)             # reset that cannot read the ledger (4.1 step 3)
         os.pwrite(fd, json.dumps(identity).encode(), 0)
@@ -438,7 +500,7 @@ def main(argv=None, stdin=None, wire=None):
     # SIGINT ignored, which Python keeps. Stop and deadline would then silently reach only the
     # kill fallback. Install Python's own handler before Hermes runs.
     signal.signal(signal.SIGINT, signal.default_int_handler)
-    registered = register(directory, send_id, token, identity)
+    registered = register(directory, send_id, token, identity, attempt)
     if registered is None:
         return EXIT_REGISTRATION
     if not registered:
@@ -464,6 +526,15 @@ def main(argv=None, stdin=None, wire=None):
                 capability = 'unverified_sources'
                 facts.safe('capability_downgrade', missing=[why])
             import cli
+            if capability == 'full':
+                try:
+                    import agent.session_persistence as persistence
+                    import agent.turn_truncation as truncation
+                    seam = install_provenance(truncation, persistence, facts)
+                except Exception:
+                    seam = False
+                if not seam:
+                    facts.safe('provenance_unavailable', seam='turn_truncation.append_message/session_persistence._db_flush_write')
             configure = getattr(cli, '_configure_quiet_agent', None)
             if configure:
                 def configured(agent, *args, **kwargs):

@@ -15,8 +15,9 @@ What it does, and why each step exists:
      versions, and the import origin of every Hermes module the executor uses. An import
      that resolves outside the verified tree fails the lane.
   4. Runs the C1 pinned tests with TAMANITOMO_C1_REQUIRE_PINNED=1: a missing or
-     mismatched prerequisite FAILS instead of skipping, and the lane then fails if any
-     test was skipped, failed or errored, or if a required test id did not run.
+     mismatched prerequisite FAILS instead of skipping. The verdict is `pass` only when every
+     id in REQUIRED_CASES ran exactly once and passed and nothing else failed; extra pytest
+     arguments that deselect a required case make the verdict `fail`.
   5. Leaves inspectable synthetic evidence in <work>/evidence/ (lane.json, environment.json,
      junit.xml, per-test JSON). Homes are synthetic; the provider is tests/mock_provider.py.
 
@@ -40,7 +41,49 @@ import xml.etree.ElementTree as ET
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PINNED = '0e9fc2cc152b4a4d9fd736f107412ace2a0c2555'
 TESTS = ['tests/test_phase1b_c1_pinned.py']
-REQUIRED_PREFIX = 'tests.test_phase1b_c1_pinned'
+# The acceptance manifest (review R4 section 5). The lane passes only when EVERY one of these
+# ran exactly once and passed. A deselected, missing, skipped, duplicated, failed or errored case
+# fails the verdict; a diagnostic subset run therefore never reports the acceptance verdict.
+# tests/test_phase1b_c1_core.py checks this list against the test module, so it cannot drift.
+REQUIRED_CASES = tuple(f'tests.test_phase1b_c1_pinned.{name}' for name in (
+    'PinnedTurns::test_fresh_turn_completes_and_the_same_key_replays',
+    'PinnedTurns::test_resumed_session_is_not_created_here',
+    'PinnedTurns::test_a_provider_retry_inside_one_turn_is_one_launch',
+    'PinnedTurns::test_a_dropped_main_stream_adds_an_unmarked_user_row',
+    'PinnedTurns::test_an_owner_message_equal_to_the_note_text_is_still_owner_speech',
+    'PinnedTurns::test_a_note_without_its_provenance_stays_conservative',
+    'PinnedTurns::test_truncated_and_disconnected_replies_fail_as_incomplete',
+    'PinnedTurns::test_provider_error_before_the_first_byte',
+    'PinnedTurns::test_stop_during_a_stream_is_interrupted',
+    'PinnedTurns::test_deadline_interrupts_a_hung_turn',
+    'PinnedTurns::test_controller_death_mid_turn_then_recovery',
+    'PinnedTurns::test_receipt_gap_in_a_real_turn',
+    'PinnedSeams::test_compression_clone_then_death_is_unknown_not_absent',
+    'PinnedSeams::test_receipt_gap_after_a_real_commit',
+    'PinnedSeams::test_hidden_and_summary_owner_rows_are_not_owner_evidence',
+))
+
+
+def verdict(cases, pytest_exit):
+    """('pass' | 'fail', problems). `cases` = [{'id', 'status'}] from the JUnit report."""
+    problems = []
+    if pytest_exit != 0:
+        problems.append(f'pytest exited {pytest_exit}')
+    seen = {}
+    for case in cases:
+        seen.setdefault(case['id'], []).append(case['status'])
+    for ident in REQUIRED_CASES:
+        statuses = seen.get(ident, [])
+        if not statuses:
+            problems.append(f'required case did not run: {ident}')
+        elif len(statuses) > 1:
+            problems.append(f'required case ran {len(statuses)} times: {ident}')
+        elif statuses[0] != 'passed':
+            problems.append(f'required case {statuses[0]}: {ident}')
+    for ident, statuses in seen.items():
+        if ident not in REQUIRED_CASES and any(st != 'passed' for st in statuses):
+            problems.append(f'case not passed: {ident}')
+    return ('fail' if problems else 'pass'), problems
 
 
 def blob_sha(data):
@@ -183,9 +226,9 @@ def main(argv=None):
             cases.append({'id': f"{case.get('classname')}::{case.get('name')}", 'status': status,
                           'seconds': float(case.get('time') or 0)})
     lane.update(pytest_exit=proc.returncode, cases=cases, finished=time.time())
-    bad = [c for c in cases if c['status'] != 'passed']
-    required = [c for c in cases if c['id'].startswith(REQUIRED_PREFIX)]
-    lane['verdict'] = 'pass' if proc.returncode == 0 and cases and not bad and required else 'fail'
+    lane['verdict'], lane['problems'] = verdict(cases, proc.returncode)
+    lane['required_cases'] = len(REQUIRED_CASES)
+    bad = lane['problems']
     (evidence / 'lane.json').write_text(json.dumps(lane, indent=2))
     print(json.dumps({'verdict': lane['verdict'], 'cases': len(cases), 'not_passed': bad,
                       'evidence': str(evidence)}, indent=2))

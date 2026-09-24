@@ -34,7 +34,7 @@ LEDGER_DIRNAME = '.tamanitomo-sends'
 LEDGER_FILE = 'ledger.sqlite3'
 LEDGER_ID_FILE = 'ledger.id'
 GUARD_FILE = 'guard.lock'
-SCHEMA_VERSION = '1'
+SCHEMA_VERSION = '2'
 
 SCHEMA = """
 CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -54,7 +54,8 @@ CREATE TABLE sends(
   state TEXT NOT NULL,
   claim INTEGER NOT NULL DEFAULT 1,
   claim_owner TEXT NOT NULL,
-  launch_token TEXT,
+  launch_token TEXT,                    -- REVOCABLE authorisation to start (fencing nulls it)
+  attempt_id TEXT,                      -- IMMUTABLE identity of the current launch attempt (R4)
   capability TEXT NOT NULL,
   owner_turn TEXT NOT NULL DEFAULT 'absent',
   reply TEXT NOT NULL DEFAULT 'none',
@@ -100,6 +101,20 @@ class Busy(Exception):
 
 def ledger_dir(home):
     return Path(home) / LEDGER_DIRNAME
+
+
+def lock_name(send_id, attempt_id):
+    """One lock file per launch ATTEMPT, never per send: a re-armed send reuses its send_id,
+    and a stale executor of an earlier attempt must not be able to open (and rewrite) the
+    lock of a newer one (review R4, C1-R4-2)."""
+    return f'{send_id}.{attempt_id}.lock'
+
+
+def started_for(facts, attempt_id):
+    """The executor_started facts of one attempt. Start evidence is looked up by the immutable
+    attempt id, never by the revocable launch token (review R4, C1-R4-1)."""
+    return [f for f in facts if f['kind'] == 'executor_started' and attempt_id
+            and (f.get('data') or {}).get('attempt_id') == attempt_id]
 
 
 def connect(path, readonly=False, create=False):
