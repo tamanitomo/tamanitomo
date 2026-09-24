@@ -1,6 +1,63 @@
-# Phase 1B C1 core results: isolated send service, supervised executor, receipts
+# Phase 1B C1 results: core, closure and integration
 
-## 0. Closure for PHASE1B_REVIEW_R4 (read this first)
+## I. C1 integration for PHASE1B_REVIEW_R5 (read this first)
+
+| | |
+|---|---|
+| Answers | `PHASE1B_REVIEW_R5.md`: R4 closed and the C1 core accepted; the remaining C1 integration was requested |
+| Branch | `test/phase1b-c1-core`, unmerged. Earlier reviewed commits are preserved and not rewritten |
+| Commits | `d7885b1` integration code and tests; `f76c14f` docs (`docs/CHAT_CONTRACT.md` §8, `PHASE1B_DESIGN.md` Appendix E); `38d6b79` a **test-only** fix: the cross-process tests' `spawn()` helper now closes subprocess pipes and reaps its helper processes (it had raised `ResourceWarning`). No production module changed in `38d6b79`. |
+| **Tested code head** | **`38d6b79e0b6cef0b5c1ed3b2e0fb27b1044a478d`**. Every local result below ran there on a clean tree. This report and the evidence are committed after it. |
+| Activated | **No.** The keyed routes exist only in an app built with `build(chat_sends=Options(...))`, and no entry point passes that option. No UI uses them. Nothing was added to `release-files.json`. `POST /api/chat`, `Runtime.chat()` and `hermes_stream.py` are unchanged, and there is no fallback between the two paths. The executor and quiescence modules are byte-identical to `1e161c3`. |
+| Not done | C2 and C3; the optional adapter that would route the legacy `POST /api/chat` through the ledger. Nothing was merged, tagged, released or deployed, and no live profile, credential, model or platform message was touched. |
+
+### I.1 Implemented and tested (synthetic, Linux, this host)
+
+The brief's items, each with where it is tested. `tests/test_phase1b_c1_integration.py` drives the app over HTTP (TestClient) with the fake Hermes double. That double is **protocol evidence only**. `PinnedHttp` in `tests/test_phase1b_c1_pinned.py` runs the same app path against the pinned Hermes `0e9fc2cc15` and `tests/mock_provider.py`.
+
+| Item | Implementation | Tests |
+|---|---|---|
+| 1. Routes | `kit/app/chat_send_routes.py`: bootstrap, keyed POST, receipt, `?key=`, `?open=1`, stop, reset (needs `{"confirm": "reset send ledger"}`). Scope is captured once, first. When this process's installation slot is taken, `accept(admit=False)` still replays and refuses new keys. The keyed routes are exempt from the middleware's busy refusal, so a retry can replay and a stop can reach a running turn. | `HttpLifecycle` (connected path and replay; POST before bootstrap; lost-response recovery by key; `key_conflict`, `generation_changed`, `key_expired`, wrong conversation, unauthorised session; resume authorised by the current binding; one active attempt with same-key replay while running; stop; open receipts; confirmed reset and the generation fence; reset refused while a turn runs). `PinnedHttp.test_http_fresh_turn_links_reads_and_replays` |
+| 2. Operation ids and views | The operation id is reserved at acceptance and used through `Operations.submit(ident=, claimed=, persist=)`. `GET /api/operations/{id}` for a send is built from the ledger. Files are allowlisted, `format: 2`, and never hold prompt, reply, stream or exception text. The legacy `result` is in memory or reconstructed, in both cases only under the **current** authorisation. Retention removes terminal `format: 2` files only. | `OperationViews` (file at completion, failure and mid-turn has no text; after a restart with the file deleted, the view comes from the ledger and nothing relaunches; revocation withholds links and content on the in-memory and reconstructed branches; a replaced source row is `lost`; the join survives a projection rebuild; retention leaves a pre-1B record untouched) |
+| 3. Read boundary | Workspace sessions come from fresh-session receipts. O-12 notes are excluded by the receipted identity fingerprint, not by text. A note projected before its proof arrived is withdrawn on the next read as a `delete` with `note: internal_turn_machinery`. `correlation.send_id` is added at read time. Provenance is kept in the ledger's `provenance` table: not pruned with sends, and carried across a reset whose old ledger is readable. | `ReadBoundary` (receipt-derived workspace session; no ledger gives an unchanged read; note excluded from snapshot, history and changes; equal-text owner control; late proof withdraws the projected row; rebuild, pruning and readable reset keep the exclusion; unreadable-ledger reset **discloses** the loss; unreadable ledger disclosed). `PinnedHttp`: the real dropped-stream note is excluded from all three reads; owner text equal to the note stays owner speech; a failed provenance write hides nothing and the receipt is `unknown`/`ambiguous` |
+| 4. Installation guard | `chat_sends.hold_installation(root)` takes an exclusive OS lock and applies the one quiescence contract. It is held by every non-chat `Operations.submit` for its whole run and by the native console for its lifetime; acceptance takes it briefly. The application's own update is not an installation action. | `InstallationGuard`, each case with a **second OS process** (`tests/phase1b_c1/mutation_proc.py`): a mutation in the other process refuses acceptance, then admits it; an open send refuses the other process's mutation; an app mutation is refused while the other process runs a send; an app mutation refuses the other process's send for its whole duration; the console holds the guard until it ends |
+| 5. Contract | `docs/CHAT_CONTRACT.md` §8; `PHASE1B_DESIGN.md` Appendix E | `Scopes` (M-17 over HTTP: two profiles, same key); `Disabled` (routes absent without the option; Phase 1A output unchanged; a leftover ledger is disclosed `not_applied`; the shipped files import stand-alone; the two fingerprint functions agree) |
+
+**A loss of provenance is disclosed, not preserved.** The read model reports `incomplete` in two cases: a reset could not read the old ledger, or an app built without keyed sends found a ledger (`not_applied`). In both, earlier notes read as their session recorded them and each read says the guarantee is gone. That is a disclosure; the exclusion is not maintained. It is maintained only across a projection rebuild, receipt pruning, and a reset of a **readable** ledger.
+
+### I.2 Commands and results at `38d6b79` (environment-specific)
+
+Temporary files went to a dedicated directory on `/home`. This host's `/tmp` tmpfs had about 216 MB free, and an unrelated space check fails there. No check was blocked by space.
+
+| Command | Result |
+|---|---|
+| `TMPDIR=<task dir> python -X dev -W always::ResourceWarning -m pytest -q tests/test_phase1b_c1_integration.py` | **35 passed**, 2 subtests, 0 skipped, exit 0; **0 ResourceWarnings** (the only warning is the existing Starlette/httpx deprecation) |
+| `python tools/pinned_hermes_lane.py --checkout <hermes-agent> --python <hermes venv python> --work <task dir>/lane` | verdict **pass**: **19/19 required cases**, 0 skipped, 0 failed, 71.9 s; `lane.json`: `app_commit` `38d6b79`, `app_dirty: false`. Evidence: [`docs/phase1b_c1_integration_evidence/`](docs/phase1b_c1_integration_evidence/) (paths sanitised to `~`, `<work>`, `<tmp>`; host name to `<host>`) |
+| full suite, C0 and C1 pinned configured (`PATH=/usr/local/bin:/usr/bin:/bin TAMANITOMO_REQUIRE_NODE=1 TAMANITOMO_C0_HERMES_*` on a separate copy of the verified export with `.c0-revision`, `TAMANITOMO_C1_HERMES_*`, `TAMANITOMO_C1_REQUIRE_PINNED=1`, `pytest -q -rs`) | **1653 passed, 0 skipped, 0 failed**, 502 subtests, 1 warning (the same deprecation), exit 0 |
+| unconfigured full suite | not rerun locally at this head; ordinary CI provides it (§I.4) |
+
+The lane manifest is now 19 cases: the 15 from R4 plus `PinnedHttp` ×4. `LaneVerdict` still checks it against the test module. The R4 evidence in `docs/phase1b_c1_evidence/` is unchanged.
+
+Earlier runs on intermediate code during development are not the results of record. For reference only, a diagnostic lane subset (`-- -k http`) at `f76c14f` returned verdict fail, exit 1, as intended.
+
+### I.3 Remaining activation gates (unchanged in kind; nothing here closes them)
+
+- **Tool-capable turns and interruption during a tool:** not run (O-G).
+- **Real CLI compression continuation:** only SessionDB-level seam evidence exists (O-G).
+- **Managed-descendant containment** for tool processes (O-10); **foreign writers** (O-5).
+- **Real-platform supervisor observations** on Windows, macOS and Termux (O-8, O-11, O-9). Those platforms are refused, and CI smoke refusals are not those observations. Rollout is held (O-E); existing users keep `POST /api/chat`.
+- **Non-C1 provenance:** rows written outside a keyed send (terminal, Telegram, earlier app versions, history) carry no provenance, and a continuation note there still reads as owner speech. This is documented, not resolved.
+- **Provenance is applied only in apps built with keyed sends.** Activation must keep it on wherever a ledger exists; a build without it only discloses `not_applied`.
+- **Not built:** the legacy `/api/chat` adapter (optional in the brief), C2 dispatcher safety, C3 client migration.
+- **Other properties:** the send route's executor environment is refreshed per request. Eager recovery runs when the app is built. Every non-chat installation action is treated as a mutation (conservative; mirrors the in-process rule).
+
+### I.4 CI
+
+Recorded after the push below.
+
+The sections that follow are the R4-round report, kept as written.
+
+## 0. Closure for PHASE1B_REVIEW_R4
 
 | | |
 |---|---|
