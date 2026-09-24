@@ -1,0 +1,58 @@
+name: Tests
+# Integration check for pushes and pull requests. It does not gate a release:
+# release.yml runs its own Linux gate, so a runner-only failure here cannot stop
+# a version being published. A red run still means something to look at.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  linux:
+    # The whole suite, with Node required: a missing Node fails the JS regressions
+    # instead of skipping them.
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.13', '3.14']
+    runs-on: ubuntu-latest
+    env:
+      TAMANITOMO_REQUIRE_NODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install -r requirements.txt
+      - name: Run tests (no hermes on PATH)
+        run: python -m pytest -q -rs
+      - name: Validate installer syntax
+        run: bash -n setup-linux.sh setup-termux.sh update.sh uninstall-termux.sh
+
+  smoke:
+    # Windows and macOS: the memory ledgers, locking and file handling, which is
+    # where the platforms differ. The rest of the matrix is not claimed here.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      TAMANITOMO_REQUIRE_NODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install -r requirements.txt
+      - name: Ledgers, locks and files
+        run: python -m pytest -q -rs tests/test_local_reflection.py tests/test_hardening.py tests/test_config.py tests/test_missions.py
+      - name: Browser-script regressions
+        run: python -m pytest -q -rs "tests/test_reliability.py::BrowserScriptRegressionTests"

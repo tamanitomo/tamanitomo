@@ -173,11 +173,37 @@ const picked=sandbox.usMemoryPreview([
   {id:'g2',category:'people',statement:'Robin has a sister',recorded_at:day(9)}],2).map(f=>f.id);
 same(picked,['g1','g2'],'readable facts first');
 assert.equal(sandbox.usMemoryPreview([{id:'q',category:'other',statement:'Robin said: "hi"'}],5).length,1,'quotes still fill an otherwise empty preview');
-same(sandbox.usMemoryPreview([
-  {id:'a',category:'logistics',statement:'Robin has an older 4 GB GTX 1050 Ti available to install in a spare PC.'},
-  {id:'b',category:'other',statement:'Robin has an older 4 GB GTX 1050 Ti available for the spare PC.'},
-  {id:'c',category:'likes',statement:'Robin likes tea'}],5).map(f=>f.id),['c','a'],'a fact filed twice shows once');
-// ...but the preview never collapses facts that only open alike.
+// A fact filed twice in different words takes one preview slot, and the other
+// stays readable under it as a Similar memory -- neither is hidden.
+{
+  const rows=sandbox.usMemoryPreview([
+    {id:'a',category:'logistics',statement:'Robin has an older 4 GB GTX 1050 Ti available to install in a spare PC.'},
+    {id:'b',category:'other',statement:'Robin has an older 4 GB GTX 1050 Ti available for the spare PC.'},
+    {id:'c',category:'likes',statement:'Robin likes tea'}],5);
+  same(rows.map(f=>f.id),['c','a'],'one slot for the pair');
+  same(rows[1].similar.map(f=>f.id),['b'],'the other is grouped, not dropped');
+  const html=sandbox.memoryRowHTML(rows[1]);
+  assert.match(html,/Similar memory \(1\)/);assert.match(html,/available for the spare PC/);
+  assert.match(html,/data-fact="b"/,'a grouped memory can still be marked incorrect');
+}
+// Word order is meaning: both are shown.
+{
+  const rows=sandbox.usMemoryPreview([{id:'a',category:'people',statement:'Robin introduced Alice to Kit.'},
+    {id:'b',category:'people',statement:'Robin introduced Kit to Alice.'}],5);
+  const shown=rows.flatMap(f=>[f.id,...f.similar.map(g=>g.id)]);
+  same(shown.sort(),['a','b'],'neither introduction is discarded');
+  assert.ok(rows.flatMap(f=>[f,...f.similar]).every(f=>f.statement.includes('introduced')));
+}
+// Only the same text collapses, by the same rule the ledger uses to refuse a duplicate.
+{
+  const cases=JSON.parse(fs.readFileSync(path.join(__dirname,'canonical_statement_cases.json'),'utf8'));
+  for(const [a,b] of cases.same)
+    assert.equal(sandbox.usFactKey({statement:a}),sandbox.usFactKey({statement:b}),`same: ${a} / ${b}`);
+  for(const [a,b] of cases.different)
+    assert.notEqual(sandbox.usFactKey({statement:a}),sandbox.usFactKey({statement:b}),`different: ${a} / ${b}`);
+  same(sandbox.usMemoryPreview([{id:'a',category:'likes',statement:'Robin likes tea.'},{id:'b',category:'other',statement:'robin likes tea'}],5).map(f=>f.id).length,1);
+}
+// Pairs that only open alike are separate memories, each in its own slot.
 for(const [a,b] of [['Robin likes Fire Emblem.','Robin dislikes Fire Emblem.'],
   ["Robin's sister Alice lives in Raleigh.","Robin's sister Beth lives in Raleigh."],
   ['Robin has a GTX 1050 Ti in the first spare PC.','Robin has a GTX 1050 Ti in the second spare PC.'],
@@ -186,14 +212,19 @@ for(const [a,b] of [['Robin likes Fire Emblem.','Robin dislikes Fire Emblem.'],
   ['Robin keeps a GTX 1050 Ti in the spare PC at home.','Robin keeps a GTX 1050 Ti in the spare PC at the office.'],
   ['Robin likes tea.','Robin does not like tea.'],['Robin likes tea.','Robin never likes tea.']])
   assert.equal(sandbox.usMemoryPreview([{id:'a',category:'likes',statement:a},{id:'b',category:'likes',statement:b}],5).length,2,`distinct: ${a} / ${b}`);
-// The preview may hide a likely duplicate; the library never does.
+// The library lists every active record.
 {
   const pair=[{id:'a',category:'logistics',statement:'Robin has an older 4 GB GTX 1050 Ti available to install in a spare PC.'},
     {id:'b',category:'other',statement:'Robin has an older 4 GB GTX 1050 Ti available for the spare PC.'}];
-  assert.equal(sandbox.usMemoryPreview(pair,5).length,1);
   assert.equal(sandbox.renderMemoryLibrary(pair).matches,2,'the library lists every active record');
+  assert.equal(pair[0].similar,undefined,'the preview does not mutate the records it was given');
 }
-assert.match(us,/legacy display protection, not\s+the authoritative duplicate definition/);
+assert.match(us,/never hides a memory because it looks like another one/);
+// A written statement says it is a summary; a recorded one says nothing extra.
+assert.match(sandbox.memoryRowHTML({id:'p',category:'likes',statement:'Robin likes tea.',evidence:'I love tea',statement_origin:'model_paraphrase'}),
+  /Summed up from what you said; the quote below is exact/);
+assert.doesNotMatch(sandbox.memoryRowHTML({id:'p',category:'likes',statement:'Robin likes tea.',evidence:'I love tea'}),/Summed up/);
+assert.doesNotMatch(us,/Worded by (?:her|him)\b/,'no fixed pronoun for the companion');
 // A long list of questions does not hide every carried thread.
 same(sandbox.usOpenThreads([{text:'q1'},{text:'q2'},{text:'q3'}],[{title:'t1'}]).map(x=>x.text),['q1','t1','q2','q3']);
 

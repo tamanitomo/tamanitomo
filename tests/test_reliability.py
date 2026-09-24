@@ -1,6 +1,7 @@
 """Regressions for the fresh-eyes audit, using disposable profiles only."""
 import dataclasses
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -192,53 +193,62 @@ class ReliabilityTests(unittest.TestCase):
                 self.assertIn('Preferences were saved', row['error'])
                 self.assertEqual(cc.load(f.c.home).quiet_start, hour)
 
+
+def node_or_skip(test, why):
+    """Node, or a visible skip. With TAMANITOMO_REQUIRE_NODE=1 (as in CI) a
+    missing Node is a failure: required regressions may not silently skip."""
+    import os
+    import shutil
+    node = shutil.which('node')
+    if not node:
+        if os.environ.get('TAMANITOMO_REQUIRE_NODE') == '1':
+            test.fail('Node is required here (TAMANITOMO_REQUIRE_NODE=1): ' + why)
+        test.skipTest(why)
+    return node
+
+
+class BrowserScriptRegressionTests(unittest.TestCase):
+    """The authoritative runner for the shipped browser-script regressions in
+    tests/*.js: `python -m pytest tests/test_reliability.py::BrowserScriptRegressionTests`.
+    Each drives the real static files in a Node VM; none of them is a browser."""
+
+    def test_every_script_regression_is_run_here(self):
+        wired = set(re.findall(r"with_name\('(test_[a-z_]+\.js)'\)", Path(__file__).read_text()))
+        shipped = {p.name for p in Path(__file__).parent.glob('test_*.js')}
+        self.assertEqual(shipped - wired, set(), 'a JS regression that nothing runs')
+
     def test_browser_regressions(self):
-        import shutil
         import subprocess
-        node = shutil.which('node')
-        if not node:
-            self.skipTest('Node is needed for browser state regression tests')
+        node = node_or_skip(self, 'Node is needed for browser state regression tests')
         subprocess.run([node, str(Path(__file__).with_name('test_reliability_ui.js'))], check=True)
 
     def test_content_and_feed_regressions(self):
         """Photo filters, message formatting, and the guard that keeps a slow
         reply to an abandoned page from repainting the feed."""
-        import shutil
         import subprocess
-        node = shutil.which('node')
-        if not node:
-            self.skipTest('Node is needed for the content and feed regressions')
+        node = node_or_skip(self, 'Node is needed for the content and feed regressions')
         subprocess.run([node, str(Path(__file__).with_name('test_content_ui.js'))], check=True)
 
     def test_import_offers_all_three_outcomes(self):
         """An imported picture yields their graph rebuilt into a kit lane, their
         graph as detected, and their original file. Each button must save its
         own thing, and a refusal to rebuild has to say why."""
-        import shutil
         import subprocess
-        node = shutil.which('node')
-        if not node:
-            self.skipTest('Node is needed for the workflow import regression')
+        node = node_or_skip(self, 'Node is needed for the workflow import regression')
         subprocess.run([node, str(Path(__file__).with_name('test_import_ui.js'))], check=True)
 
     def test_us_page(self):
         """Together and Memories became one page, Us. Scores and ledgers stay
         reachable but secondary; boundary states stay in the open; friendship
         never shows romantic stages; Talk about this drafts and never sends."""
-        import shutil
         import subprocess
-        node = shutil.which('node')
-        if not node:
-            self.skipTest('Node is needed for the Us page regressions')
+        node = node_or_skip(self, 'Node is needed for the Us page regressions')
         subprocess.run([node, str(Path(__file__).with_name('test_us_ui.js'))], check=True)
 
     def test_update_notice_ui(self):
         """Shipped with the release but was only ever run by hand."""
-        import shutil
         import subprocess
-        node = shutil.which('node')
-        if not node:
-            self.skipTest('Node is needed for the update notice regressions')
+        node = node_or_skip(self, 'Node is needed for the update notice regressions')
         subprocess.run([node, str(Path(__file__).with_name('test_updates_ui.js'))], check=True)
 
     def test_media_urls_keep_their_profile(self):
@@ -246,32 +256,23 @@ class ReliabilityTests(unittest.TestCase):
         property: the entities stay literal, `profile` arrives as `amp;profile`,
         and every companion but the first is served the default one's pictures
         -- or nothing at all."""
-        import shutil
         import subprocess
-        node = shutil.which('node')
-        if not node:
-            self.skipTest('Node is needed for the media URL regression')
+        node = node_or_skip(self, 'Node is needed for the media URL regression')
         subprocess.run([node, str(Path(__file__).with_name('test_media_url_ui.js'))], check=True)
 
     def test_model_licence_notice(self):
         """Weights carry their publisher's terms, which are independent of this
         project's licence. The downloader has to show them before fetching."""
-        import shutil
         import subprocess
-        node = shutil.which('node')
-        if not node:
-            self.skipTest('Node is needed for the model licence regression')
+        node = node_or_skip(self, 'Node is needed for the model licence regression')
         subprocess.run([node, str(Path(__file__).with_name('test_licence_ui.js'))], check=True)
 
     def test_creation_interview_stays_inside_the_catalogs(self):
         """The browser interview proposes a persona, a relationship frame and a
         set of answers on its own. Every one of them has to be something the
         backend will actually accept."""
-        import shutil
         import subprocess
-        node = shutil.which('node')
-        if not node:
-            self.skipTest('Node is needed for the creation interview regression')
+        node = node_or_skip(self, 'Node is needed for the creation interview regression')
         import companion_catalog as catalog
         from kit.cli.questions import known_answer_keys
         subprocess.run([node, str(Path(__file__).with_name('test_onboarding_ui.js')),

@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Local structured reflections with deterministic periods and evidence-backed writes.
+"""Local structured reflections with deterministic periods and quote-backed writes.
+
+Evidence stored in human ledgers is always an exact human quote the code selected
+by ID. A fact's statement is the model's wording of that quote: it is screened for
+obvious mismatches (companion_self.paraphrase_concerns) and held for review when
+one is found, but it is not verified, and it is marked as a paraphrase.
 
 The model selects and authors content; it cannot choose shell commands, file paths,
 journal dates, human attribution, or fabricate the evidence stored in human ledgers.
@@ -18,6 +23,8 @@ import companion_loops as loops
 from companion_platform import file_lock,atomic_write
 
 KINDS=('daily','weekly','monthly','checkin')
+# Plans refused as malformed for one period before the model is no longer asked.
+MAX_ATTEMPTS=3
 # Plans saved before facts carried their own statement lack one; a resumed plan
 # from then is applied the way it was authored.
 PLAN_CONTRACT=2
@@ -181,18 +188,38 @@ def _transcript_wrapper(statement,human):
     who=r'the (?:human|user)'+('|'+re.escape(human.strip()) if (human or '').strip() else '')
     return bool(re.match(r'^\W*(?:'+who+r')\s+(?:said|mentioned|told (?:me|you|us))\b',statement.strip(),re.I))
 
-def _about_the_human(question,human):
-    """A new question that names the human, or calls them the human/user, is
-    written about them rather than to them. He/she/they are allowed: a
-    question can be about someone else."""
-    if re.search(r'\bthe (?:human|user)\b',question,re.I):return True
+def question_concern(question,human):
+    """How a new question falls short of being asked to the human, if it does.
+
+    ('omit', why) is for wording no person would be asked: "the human", "the
+    user", or a bare question ID. ('warn', why) is for a question that uses
+    the human's name as a third person and never says "you"; it may still be a
+    fine question ("What will you do tomorrow?" to someone named Will, or
+    "Robin, how was the trip?"), so it is kept and reported. A name is matched
+    with its case, as a name is written. Neither is a reason to lose the rest
+    of a reflection."""
+    q=question.strip()
+    if re.fullmatch(r'q-[a-f0-9]+',q):return ('omit','an existing question ID, not a new question')
+    if human is None:return None
+    if re.search(r'\bthe (?:human|user)\b',q,re.I):return ('omit','calls the person "the human" or "the user"')
     name=(human or '').strip()
-    return bool(name and name.lower() not in ('the user','the human')
-                and re.search(r'(?<!\w)'+re.escape(name)+r'(?!\w)',question,re.I))
+    if not name or name.lower() in ('the user','the human'):return None
+    named=re.compile(r'(?<!\w)'+re.escape(name)+r'(?!\w)')
+    unaddressed=re.sub(r'^\W*'+re.escape(name)+r'\s*,|,\s*'+re.escape(name)+r'\W*$','',q)
+    if named.search(unaddressed) and not re.search(r"\b(?:you|your|yours|yourself)\b",q,re.I):
+        return ('warn',f'names {name} in the third person and never says "you"')
+    return None
 
 def validate(plan,kind,sources,question_ids,human='',legacy=False):
-    """`legacy` is only for resuming a plan saved under the previous contract,
-    whose facts carried no statement and whose questions were never checked."""
+    """Refuse a plan whose structure or evidence is wrong; that is fatal.
+
+    Returns the optional parts that are merely below standard, as
+    {'omitted': [...], 'warnings': [...]}: a question in `omitted` is left
+    out when the plan is applied, and the run reports it rather than calling
+    itself clean. `legacy` is only for resuming a plan saved under the
+    previous contract, whose facts carried no statement and whose questions
+    were never checked."""
+    diagnostics={'omitted':[],'warnings':[]}
     expected={'reflection','preferences','questions','facts','standing','moments','answers','open_loops','soul_append'}
     if not isinstance(plan,dict) or set(plan)!=expected:raise ValueError('unexpected reflection fields')
     def text(value,limit,empty=False):
@@ -208,9 +235,10 @@ def validate(plan,kind,sources,question_ids,human='',legacy=False):
         text(p['subject'],120);text(p['text'],600)
     for q in plan['questions']:
         text(q,400)
-        if re.fullmatch(r'q-[a-f0-9]+',q.strip()):raise ValueError('new questions must be prose, not existing IDs')
-        if not legacy and _about_the_human(q,human):
-            raise ValueError('new questions are asked to the human directly: use "you", not their name or "the human"')
+        # A legacy plan's questions were never checked for wording; only an ID is left out.
+        if concern:=question_concern(q,None if legacy else human):
+            level,why=concern
+            diagnostics['omitted' if level=='omit' else 'warnings'].append({'kind':'question','text':q,'reason':why})
     for key in ('facts','standing','moments','answers','open_loops'):
         for p in plan[key]:
             allowed={'quote_id'}|({'category'}|(set() if legacy else {'statement'}) if key=='facts' else {'question_id'} if key=='answers' else {'title'} if key=='open_loops' else set())
@@ -224,6 +252,12 @@ def validate(plan,kind,sources,question_ids,human='',legacy=False):
                     raise ValueError('a fact statement is a proposition about the human, not a transcript ("X said: ...")')
             if key=='answers' and p['question_id'] not in question_ids:raise ValueError('unknown question')
             if key=='open_loops':text(p['title'],120)
+    return diagnostics
+
+def usable(plan,diagnostics):
+    """The plan as applied: omitted questions taken out, nothing else changed."""
+    dropped={d['text'] for d in diagnostics['omitted'] if d['kind']=='question'}
+    return {**plan,'questions':[q for q in plan['questions'] if q not in dropped]}
 
 def apply_plan(c,kind,day,plan,sources,now):
     results=[]
@@ -241,8 +275,16 @@ def apply_plan(c,kind,day,plan,sources,now):
             quote=s['content'];evidence=f'{when}: {quote}'
             if key=='facts':
                 # The statement is the readable memory; the quote is why it may be remembered.
-                statement=p['statement'].strip() if 'statement' in p else f'{c.human} said: "{quote}"'
-                out=slf.record_fact(c.human_dir,statement,evidence,now,p['category'],'stated',source,human=c.human)
+                # A written statement is the model's words, so it is screened against the
+                # quote and held for a person when it obviously says something else.
+                if 'statement' in p:
+                    statement=p['statement'].strip()
+                    concerns=slf.paraphrase_concerns(statement,quote,(c.human,c.agent))
+                    out=(slf.hold_fact(c.human_dir,statement,evidence,now,p['category'],source,concerns,c.human) if concerns else
+                         slf.record_fact(c.human_dir,statement,evidence,now,p['category'],'stated',source,human=c.human,
+                                         statement_origin='model_paraphrase'))
+                else:
+                    out=slf.record_fact(c.human_dir,f'{c.human} said: "{quote}"',evidence,now,p['category'],'stated',source,human=c.human)
             elif key=='standing':out=notes.add_standing(c,{'instruction':quote,'evidence':evidence,'scope':''},now)
             elif key=='moments':out=notes.add_moment(c,{'moment':'note','text':f'{c.human} said: "{quote}"','happened_on':when[:10]},now)
             elif key=='answers':
@@ -275,17 +317,30 @@ def reflect(c,kind,base_url,model,human_id='',slot=1,now=None,planner=None,
         if saved and saved.get('complete'):return {'status':'skipped','reason':'this reflection was already committed','id':key}
         data=context(c,kind,start,end,day,rows);data['more_conversation_messages']=more
         data['evidence_quotes']=[{'quote_id':key,'quote':value['content']} for key,value in sources.items()]
-        if saved:plan=saved['plan'];sources=saved['sources'];usage=saved.get('usage')
+        attempts_path=folder/(key+'.attempts.json')
+        attempts=json.loads(attempts_path.read_text()) if attempts_path.exists() else {'count':0,'errors':[]}
+        question_ids=[q['id'] for q in data['existing_questions']]
+        if saved:
+            plan=saved['plan'];sources=saved['sources'];usage=saved.get('usage')
+            legacy=saved.get('contract',1)<PLAN_CONTRACT
+            diagnostics=validate(plan,kind,sources,question_ids,c.human,legacy)
         else:
+            if attempts['count']>=MAX_ATTEMPTS:
+                return {'status':'held','id':key,'attempts':attempts['count'],'errors':attempts['errors'],
+                        'reason':f'{attempts["count"]} plans for this period were refused; the model is not asked again. '
+                                 f'Rejected plans are kept beside {attempts_path.name} for review.'}
             plan,usage=(planner or request_plan)(c,kind,data,sources,base_url,model,slot,
                                                  allow_remote,api_key_env)
-        legacy=bool(saved) and saved.get('contract',1)<PLAN_CONTRACT
-        validate(plan,kind,sources,[q['id'] for q in data['existing_questions']],c.human,legacy)
-        if not saved:
+            try:diagnostics=validate(plan,kind,sources,question_ids,c.human)
+            except ValueError as exc:
+                attempts['count']+=1;attempts['errors'].append({'at':now.isoformat(),'error':str(exc)})
+                atomic_write(folder/f'{key}.rejected-{attempts["count"]}.json',json.dumps({'error':str(exc),'plan':plan},ensure_ascii=False,indent=2))
+                atomic_write(attempts_path,json.dumps(attempts,ensure_ascii=False,indent=2))
+                raise
             saved={'id':key,'kind':kind,'day':day,'plan':plan,'sources':sources,'usage':usage,'authored_at':now.isoformat(),
-                   'contract':PLAN_CONTRACT,'complete':False}
+                   'contract':PLAN_CONTRACT,'diagnostics':diagnostics,'complete':False}
             atomic_write(path,json.dumps(saved,ensure_ascii=False,indent=2))
-        results=apply_plan(c,kind,day,plan,sources,dt.datetime.fromisoformat(saved['authored_at']))
+        results=apply_plan(c,kind,day,usable(plan,diagnostics),sources,dt.datetime.fromisoformat(saved['authored_at']))
         if kind=='checkin':
             # A new conversation can finish during inference. Advance only the
             # evidence watermark we processed; never clear a newer pending flag.
@@ -295,7 +350,10 @@ def reflect(c,kind,base_url,model,human_id='',slot=1,now=None,planner=None,
                 if state.get('last_end')==flag.get('last_end') and not more:state['pending']=0
                 atomic_write(checkin.path_for(c),json.dumps(state,ensure_ascii=False,indent=2))
         saved.update(complete=True,results=results);atomic_write(path,json.dumps(saved,ensure_ascii=False,indent=2))
-        return {'status':'recorded','id':key,'results':results,'usage':usage,'more_conversation_messages':more}
+        held=[r for r in results if r.get('held')]
+        return {'status':'recorded','id':key,'results':results,'usage':usage,'more_conversation_messages':more,
+                'clean':not (diagnostics['omitted'] or diagnostics['warnings'] or held),
+                'omitted':diagnostics['omitted'],'warnings':diagnostics['warnings'],'held_facts':len(held)}
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--home',type=pathlib.Path)

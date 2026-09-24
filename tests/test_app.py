@@ -87,10 +87,26 @@ class AppTests(unittest.TestCase):
                              dt.datetime.now(dt.timezone.utc))['entry']
         r=self.client.post(f"/api/facts/{made['id']}/forget")
         self.assertEqual(r.status_code,200)
-        self.assertEqual(slf.facts(self.c.human_dir),[]
-                         if not slf.facts(self.c.human_dir) else slf.facts(self.c.human_dir))
-        self.assertNotIn(made['id'],[f['id'] for f in slf.facts(self.c.human_dir)])
+        # Nothing takes its place: no "(retired by ...)" row reads as a memory.
+        self.assertEqual(slf.facts(self.c.human_dir),[])
         self.assertIn('anchovies',(self.c.human_dir/'facts.jsonl').read_text())
+        self.assertEqual(self.client.post(f"/api/facts/{made['id']}/forget").status_code,404)
+
+    def test_a_placeholder_left_by_an_earlier_forget_is_not_a_memory(self):
+        import companion_self as slf
+        import datetime as dt
+        import json
+        made=slf.record_fact(self.c.human_dir,'Robin likes olives.','said so once',dt.datetime.now(dt.timezone.utc))['entry']
+        path=self.c.human_dir/'facts.jsonl'
+        with path.open('a') as f:
+            f.write(json.dumps({'id':made['id']+'-retired','kind':'human_fact','category':'other',
+                                'statement':'(retired by Robin)','evidence':'retired in the app','source':'app',
+                                'confidence':'stated','status':'active','supersedes':made['id'],
+                                'recorded_at':'2026-09-20T00:00:00+00:00'})+'\n')
+        before=path.read_bytes()
+        self.assertEqual(slf.facts(self.c.human_dir),[])
+        self.assertEqual(self.client.get('/api/ledgers').json()['facts'],[])
+        self.assertEqual(path.read_bytes(),before,'the old row is read around, never rewritten')
 
     def test_a_mission_can_be_added_and_dropped(self):
         r=self.client.post('/api/missions',json={'title':'price a new kettle'})

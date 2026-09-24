@@ -65,7 +65,7 @@ class ReflectionTests(unittest.TestCase):
         self.assertEqual(''.join(s['content'] for s in result.values()),content)
         self.assertTrue(all(len(s['content'])<=300 for s in result.values()))
         plan=empty();plan['questions']=['q-deadbeef']
-        with self.assertRaises(ValueError):reflection.validate(plan,'daily',{},[])
+        self.assertEqual([d['text'] for d in reflection.validate(plan,'daily',{},[])['omitted']],['q-deadbeef'])
 
     def test_periodic_midnight_boundary_does_not_include_the_next_day(self):
         db=self.db();start=self.now.replace(hour=0)-dt.timedelta(days=1);end=start+dt.timedelta(days=1)
@@ -89,6 +89,19 @@ class FactQualityTests(unittest.TestCase):
                      '8':{'id':'8','role':'assistant','content':'You love Fire Emblem.','timestamp':self.now.timestamp(),'session_id':'chat'}}
     def plan(self,**facts):
         plan=empty();plan['facts']=[{'quote_id':'7','category':'likes',**facts}];return plan
+    def converse(self,*quotes):
+        """Yesterday's conversation in state.db, for tests that run reflect().
+        Returns the quote IDs, in order."""
+        db=sqlite3.connect(self.c.home/'state.db')
+        db.executescript('CREATE TABLE IF NOT EXISTS sessions(id TEXT, source TEXT,user_id TEXT); CREATE TABLE IF NOT EXISTS messages(id INTEGER,session_id TEXT,role TEXT,content TEXT,timestamp REAL,active INTEGER,compacted INTEGER,_compressed_summary INTEGER);')
+        db.execute('INSERT INTO sessions VALUES (?,?,?)',('chat','telegram','robin'))
+        at=(self.now-dt.timedelta(days=1)).timestamp()
+        for i,q in enumerate(quotes,1):db.execute('INSERT INTO messages VALUES (?,?,?,?,?,1,0,0)',(i,'chat','user',q,at+i))
+        db.commit();db.close()
+        return [f'{i}:0' for i in range(1,len(quotes)+1)]
+    def run_daily(self,plan,**kw):
+        return reflection.reflect(self.c,'daily','http://127.0.0.1:1','m',human_id='robin',now=self.now,
+                                  planner=kw.pop('planner',lambda *a:(plan,None)),**kw)
 
     def test_schema_requires_a_statement_on_every_fact(self):
         fact=reflection.schema('daily',self.source,[])['properties']['facts']['items']
@@ -152,13 +165,56 @@ class FactQualityTests(unittest.TestCase):
         self.assertIn('number 39',known['facts'][0]['statement'],'newest first')
 
     def test_questions_are_addressed_to_the_human(self):
+        def check(q,name='Robin'):
+            plan=empty();plan['questions']=[q];return reflection.validate(plan,'daily',{},[],name)
         for good in ('Why did you stop playing guitar?','What happened next?','Did your sister like the gift she got?',
-                     'What was he like, your old roommate?'):
-            plan=empty();plan['questions']=[good];reflection.validate(plan,'daily',{},[],'Robin')
-        for bad in ('What was Robin like in high school?','How does the human feel about moving again?',
-                    'Why did the user stop playing guitar?',"Is robin's sister older?"):
-            plan=empty();plan['questions']=[bad]
-            with self.assertRaises(ValueError,msg=bad):reflection.validate(plan,'daily',{},[],'Robin')
+                     'What was he like, your old roommate?','Robin, how was the trip?','How was the trip, Robin?',
+                     'Did Robin the cat ever come home to you?',"Is robin's sister older?"):
+            self.assertEqual(check(good),{'omitted':[],'warnings':[]},good)
+        # A name that is also a word is not the person.
+        self.assertEqual(check('What will you do tomorrow?','Will'),{'omitted':[],'warnings':[]})
+        self.assertEqual(check('May I ask about your trip?','May'),{'omitted':[],'warnings':[]})
+        # Machine wording is left out; a question about the human in the third person is kept and reported.
+        for bad in ('How does the human feel about moving again?','Why did the user stop playing guitar?','q-0123abcd'):
+            found=check(bad);self.assertEqual([d['text'] for d in found['omitted']],[bad]);self.assertEqual(found['warnings'],[])
+        found=check('What was Robin like in high school?')
+        self.assertEqual(found['omitted'],[]);self.assertIn('third person',found['warnings'][0]['reason'])
+
+    def test_a_poorly_worded_question_does_not_cost_the_reflection(self):
+        [quote]=self.converse('I play Fire Emblem all the time.')
+        plan=self.plan(statement='Robin plays Fire Emblem.');plan['facts'][0]['quote_id']=quote
+        plan['questions']=['How does the human feel about Fire Emblem?','Which Fire Emblem did you play first?']
+        result=self.run_daily(plan)
+        self.assertEqual(result['status'],'recorded');self.assertFalse(result['clean'])
+        self.assertEqual([d['text'] for d in result['omitted']],['How does the human feel about Fire Emblem?'])
+        self.assertEqual([q['text'] for q in slf.questions(self.c.life)],['Which Fire Emblem did you play first?'])
+        self.assertEqual([f['statement'] for f in slf.facts(self.c.human_dir)],['Robin plays Fire Emblem.'])
+        saved=json.loads((self.c.life/'local-reflections'/(result['id']+'.json')).read_text())
+        self.assertEqual(saved['diagnostics']['omitted'][0]['kind'],'question')
+        self.assertEqual(saved['plan']['questions'],plan['questions'],'the plan is saved as authored')
+        again=self.run_daily(None,planner=lambda *a:self.fail('committed'))
+        self.assertEqual(again['status'],'skipped')
+
+    def test_a_clean_run_says_so(self):
+        [quote]=self.converse('I play Fire Emblem all the time.')
+        plan=self.plan(statement='Robin plays Fire Emblem.');plan['facts'][0]['quote_id']=quote
+        result=self.run_daily(plan)
+        self.assertTrue(result['clean']);self.assertEqual(result['held_facts'],0)
+
+    def test_refused_plans_are_retried_a_bounded_number_of_times(self):
+        [quote]=self.converse('I play Fire Emblem all the time.')
+        bad=self.plan(statement='Robin said: "I play Fire Emblem all the time."');bad['facts'][0]['quote_id']=quote
+        calls=[]
+        def planner(*a):calls.append(1);return bad,None
+        for _ in range(reflection.MAX_ATTEMPTS):
+            with self.assertRaises(ValueError):
+                self.run_daily(None,planner=planner)
+        held=self.run_daily(None,planner=planner)
+        self.assertEqual(held['status'],'held');self.assertEqual(len(calls),reflection.MAX_ATTEMPTS,'the model is not asked again')
+        self.assertEqual(len(held['errors']),reflection.MAX_ATTEMPTS)
+        folder=self.c.life/'local-reflections'
+        self.assertEqual(len(list(folder.glob(held['id']+'.rejected-*.json'))),reflection.MAX_ATTEMPTS,'each refused plan is kept for review')
+        self.assertEqual(slf.facts(self.c.human_dir),[])
 
     def test_a_plan_saved_under_the_old_contract_still_applies(self):
         (self.c.life/'local-reflections').mkdir(parents=True)
@@ -170,6 +226,8 @@ class FactQualityTests(unittest.TestCase):
                                   planner=lambda *a:self.fail('a saved plan is not re-requested'))
         self.assertEqual(result['status'],'recorded')
         self.assertEqual(slf.facts(self.c.human_dir)[0]['statement'],'Robin said: "I play Fire Emblem all the time."')
+        self.assertNotIn('statement_origin',slf.facts(self.c.human_dir)[0],'a quoted statement is not a paraphrase')
+        self.assertEqual([q['text'] for q in slf.questions(self.c.life)],['What was Robin like in school?'])
         with self.assertRaises(ValueError):reflection.validate(old,'daily',self.source,[],'Robin')
 
 class FactLedgerTests(unittest.TestCase):
@@ -183,7 +241,7 @@ class FactLedgerTests(unittest.TestCase):
 
     def test_the_same_proposition_is_one_fact_whatever_its_category_source_or_evidence(self):
         first=self.fact('Robin enjoys playing Fire Emblem.')
-        again=self.fact('  robin ENJOYS playing “Fire   Emblem”!  ',evidence='2026-09-24T09:00:00+00:00: Fire Emblem again',
+        again=self.fact('  robin enjoys   playing Fire Emblem!  ',evidence='2026-09-24T09:00:00+00:00: Fire Emblem again',
                         category='other',source='session:b message:9')
         self.assertTrue(first['written'])
         self.assertEqual(again,{'written':False,'reason':'fact already recorded','duplicate_of':first['entry']['id']})
@@ -198,6 +256,18 @@ class FactLedgerTests(unittest.TestCase):
             self.assertTrue(self.fact(s)['written'],s)
         self.assertEqual(len(slf.facts(self.root)),9)
 
+    def test_only_formatting_is_folded(self):
+        cases=json.loads((ROOT/'tests/canonical_statement_cases.json').read_text(encoding='utf-8'))
+        for a,b in cases['same']:
+            self.assertEqual(slf.canonical_statement(a),slf.canonical_statement(b),(a,b))
+        for a,b in cases['different']:
+            self.assertNotEqual(slf.canonical_statement(a),slf.canonical_statement(b),(a,b))
+        # ...and at write time: the second of each different pair is a new memory, not a duplicate.
+        for i,(a,b) in enumerate(cases['different']):
+            root=self.root.parent/f'pair-{i}'
+            slf.record_fact(root,a,'2026-09-23: said so',self.now,human='Robin')
+            self.assertTrue(slf.record_fact(root,b,'2026-09-23: said so',self.now,human='Robin')['written'],(a,b))
+
     def test_corrections_and_retractions_still_work(self):
         original=self.fact('Robin likes tea.')['entry']
         # A correction may restate the fact it replaces, e.g. to fix its category.
@@ -209,6 +279,59 @@ class FactLedgerTests(unittest.TestCase):
         self.assertEqual(len(slf._read(self.root/'facts.jsonl',kind='human_fact')),2,'history retained')
         # Once withdrawn, the same proposition can be recorded again.
         self.assertTrue(self.fact('Robin likes tea.',evidence='2026-09-25T09:00:00+00:00: I do like tea')['written'])
+
+    def test_a_correction_is_not_cancelled_by_an_equal_fact(self):
+        coffee=self.fact('Robin likes coffee.')['entry'];tea=self.fact('Robin likes tea.',source='session:b message:2')['entry']
+        fixed=self.fact('Robin likes tea.',evidence='2026-09-24T09:00:00+00:00: tea, not coffee',supersedes=coffee['id'])
+        self.assertTrue(fixed['written']);self.assertEqual(fixed['entry']['supersedes'],coffee['id'])
+        self.assertEqual(fixed['equal_to'],[tea['id']],'the overlap is reported, not merged')
+        active={f['id'] for f in slf.facts(self.root)}
+        self.assertNotIn(coffee['id'],active,'the corrected fact is no longer active')
+        self.assertEqual(active,{tea['id'],fixed['entry']['id']})
+
+    def test_retrying_a_correction_is_idempotent(self):
+        original=self.fact('Robin likes tea.')['entry']
+        first=self.fact('Robin likes green tea.',supersedes=original['id'])
+        again=self.fact('Robin likes green tea.',supersedes=original['id'])
+        self.assertTrue(first['written']);self.assertFalse(again['written'])
+        self.assertEqual(again['entry']['id'],first['entry']['id'])
+
+    def test_a_correction_target_is_checked_inside_the_lock(self):
+        """The target has to still be active when the row is appended, not just
+        when record_fact began: a rival correction may land in between."""
+        original=self.fact('Robin likes tea.')['entry']
+        real=slf._append
+        def rival_first(path,row,**kw):
+            if row.get('statement')=='Robin likes coffee.':
+                real(path,{**row,'id':'fact-rival','statement':'Robin likes cocoa.'})
+            return real(path,row,**kw)
+        slf._append=rival_first
+        try:
+            with self.assertRaisesRegex(ValueError,'active fact'):self.fact('Robin likes coffee.',supersedes=original['id'])
+        finally:slf._append=real
+        self.assertEqual([f['statement'] for f in slf.facts(self.root)],['Robin likes cocoa.'])
+
+    def test_concurrent_corrections_of_one_fact_leave_one_winner(self):
+        import threading
+        original=self.fact('Robin likes tea.')['entry'];gate=threading.Barrier(8);results=[]
+        def correct(i):
+            gate.wait()
+            try:results.append(self.fact(f'Robin likes tea number {i}.',supersedes=original['id']))
+            except ValueError as exc:results.append(exc)
+        threads=[threading.Thread(target=correct,args=(i,)) for i in range(8)]
+        for t in threads:t.start()
+        for t in threads:t.join()
+        written=[r for r in results if isinstance(r,dict) and r['written']]
+        self.assertEqual(len(written),1);self.assertEqual(sum(isinstance(r,ValueError) for r in results),7)
+        self.assertEqual([f['id'] for f in slf.facts(self.root)],[written[0]['entry']['id']])
+
+    def test_a_retry_written_by_a_newer_release_is_the_same_row(self):
+        old=self.fact('Robin plays Fire Emblem.')['entry']
+        path=self.root/'facts.jsonl';before=path.read_bytes()
+        again=slf.record_fact(self.root,'Robin plays Fire Emblem.','2026-09-23T10:00:00+00:00: I said so',self.now,'likes','stated',
+                              'session:a message:1',human='Robin',statement_origin='model_paraphrase')
+        self.assertFalse(again['written']);self.assertEqual(again['entry']['id'],old['id'])
+        self.assertEqual(path.read_bytes(),before)
 
     def test_rerunning_the_same_write_is_still_idempotent(self):
         first=self.fact('Robin enjoys tea.');again=self.fact('Robin enjoys tea.')
@@ -231,3 +354,138 @@ class FactLedgerTests(unittest.TestCase):
         spare=pairs[tuple(sorted(['Robin has a GTX 1050 Ti in the first spare PC.','Robin has a GTX 1050 Ti in the second spare PC.']))]
         self.assertIn('probably distinct',spare['reason'])
         self.assertEqual(len(slf.facts(self.root)),6)
+
+class ParaphraseScreenTests(unittest.TestCase):
+    """The statement of a reflected fact is the model's wording of an exact
+    quote. paraphrase_concerns() screens for obvious changes; it does not verify
+    meaning. Each case is (quote, statement, what the screen should find)."""
+    NAMES=('Robin','Nova')
+    FAITHFUL=[
+        ('I play Fire Emblem all the time.','Robin enjoys playing Fire Emblem.'),
+        ('My sister is Bee.',"Robin's sister is Bee."),
+        ("I don't like olives.",'Robin dislikes olives.'),
+        ("I can't stand mornings.",'Robin is not a morning person.'),
+        ("I'm 34.",'Robin is 34.'),
+        ('I have three cats.','Robin has 3 cats.'),
+        ('I came second in the race.','Robin placed 2nd in the race.'),
+        ('No, I work as a nurse.','Robin works as a nurse.'),
+        ('I might move to Denver next year.','Robin might move to Denver next year.'),
+        ('I want you to remind me about it.','Robin wants Nova to remind him about it.'),
+        ('I have a 4 GB GTX 1050 Ti.','Robin has a 4 GB GTX 1050 Ti.'),
+        ('I turned 34.','Robin is 34.'),
+        ('It cost $1,200.','Robin paid $1200 for it.'),
+    ]
+    CAUGHT=[
+        # changed quantities
+        ('I have three cats.','Robin has 4 cats.','number'),
+        ('My card has 4.5 GB.','Robin has a 45 GB card.','number'),
+        ('It was -5 out.','Robin measured +5 degrees.','number'),
+        ('I got a raise.','Robin got a 5% raise.','number'),
+        # negation
+        ('I like olives.','Robin does not like olives.','negation'),
+        ("I don't drink coffee.",'Robin drinks coffee.','negation'),
+        ('I quit smoking.','Robin smokes.','negation'),
+        # names
+        ('My sister lives in Raleigh.','Robin\'s sister Alice lives in Raleigh.','name'),
+        ('I work at a bank.','Robin works at Larkspur Savings.','name'),
+        # dates and times
+        ('I have a dentist appointment.','Robin has a dentist appointment tomorrow.','time'),
+        ('I went hiking.','Robin goes hiking every weekend.','time'),
+        ('I started a new job.','Robin started a new job in March.','name'),
+        ('I started a new job.','Robin started a new job on 2026-09-01.','number'),
+        # uncertainty
+        ('I might move to Denver.','Robin is moving to Denver.','certain'),
+        ("I'm thinking about getting a dog.",'Robin is getting a dog.','certain'),
+        ('Maybe I will learn piano.','Robin is learning piano.','certain'),
+        # misattribution
+        ('My sister loves hiking.','Robin loves hiking.','someone else'),
+        ('She plays the cello.','Robin plays the cello.','someone else'),
+        ('My friend thinks I should quit.','Robin wants to quit.','someone else'),
+    ]
+    # Known misses. They document what a lexical screen cannot see; a case that
+    # starts being caught should move to CAUGHT on purpose, not silently.
+    MISSED=[
+        ('I love tea.','Robin loves coffee.'),                      # substituted object, no new name
+        ('My sister and I went to Paris.','Robin went to Paris alone.'),  # a detail contradicted in prose
+        ('I used to live in Ohio.','Robin lives in Ohio.'),        # tense and habit changed
+        ('I play Fire Emblem all the time.','Robin is a professional Fire Emblem player.'),  # exaggeration
+    ]
+
+    def test_faithful_paraphrases_pass(self):
+        for quote,statement in self.FAITHFUL:
+            self.assertEqual(slf.paraphrase_concerns(statement,quote,self.NAMES),[],(quote,statement))
+
+    def test_obvious_changes_are_found(self):
+        for quote,statement,expected in self.CAUGHT:
+            found=slf.paraphrase_concerns(statement,quote,self.NAMES)
+            self.assertTrue(any(expected in f for f in found),(quote,statement,found))
+
+    def test_known_limitations_are_stated_not_hidden(self):
+        for quote,statement in self.MISSED:
+            self.assertEqual(slf.paraphrase_concerns(statement,quote,self.NAMES),[],
+                             f'now caught -- move to CAUGHT: {quote!r} / {statement!r}')
+        self.assertIn('not otherwise verified',slf.PARAPHRASE_CHECK)
+
+class HeldFactTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
+        root=pathlib.Path(self.tmp.name);self.c=cc.Companion(agent='Nova',human='Robin',hermes_root=root/'home',vault=root/'vault',timezone='UTC')
+        self.c.home.mkdir(parents=True);self.c.soul_dir.mkdir(parents=True)
+        self.c.soul.write_text('A companion.\n'+slf.BEGIN+'\n'+slf.END+'\n')
+        self.now=dt.datetime(2026,9,23,11,tzinfo=dt.timezone.utc)
+        self.source={'1':{'id':'1','role':'user','content':'I have three cats.','timestamp':self.now.timestamp(),'session_id':'chat'},
+                     '2':{'id':'2','role':'user','content':'My sister loves hiking.','timestamp':self.now.timestamp(),'session_id':'chat'}}
+    def plan(self):
+        plan=empty();plan['facts']=[{'quote_id':'1','category':'other','statement':'Robin has 3 cats.'},
+                                    {'quote_id':'2','category':'likes','statement':'Robin loves hiking.'}]
+        return plan
+
+    def test_a_mismatched_statement_is_held_not_remembered(self):
+        results=reflection.apply_plan(self.c,'daily','2026-09-22',self.plan(),self.source,self.now)
+        [fact]=slf.facts(self.c.human_dir)
+        self.assertEqual(fact['statement'],'Robin has 3 cats.')
+        self.assertEqual(fact['statement_origin'],'model_paraphrase');self.assertIn('not otherwise verified',fact['statement_check'])
+        self.assertTrue(fact['evidence'].endswith('I have three cats.'),'the quote stays exact')
+        [held]=slf.held_facts(self.c.human_dir)
+        self.assertEqual(held['statement'],'Robin loves hiking.');self.assertIn('someone else',held['reasons'][0])
+        self.assertTrue(any(r.get('held') for r in results))
+        known=slf.fact_statements(self.c.human_dir)['facts']
+        self.assertEqual([(f['statement'],f.get('origin')) for f in known],[('Robin has 3 cats.','model_paraphrase')],
+                         'a held statement is not offered back as known; a paraphrase says so')
+
+    def test_reapplying_a_plan_does_not_duplicate_held_or_active_rows(self):
+        for _ in range(2):reflection.apply_plan(self.c,'daily','2026-09-22',self.plan(),self.source,self.now)
+        self.assertEqual(len(slf._read(self.c.human_dir/'facts-held.jsonl')),1)
+        self.assertEqual(len(slf._read(self.c.human_dir/'facts.jsonl')),1)
+
+    def test_a_person_accepts_or_dismisses_a_held_statement(self):
+        reflection.apply_plan(self.c,'daily','2026-09-22',self.plan(),self.source,self.now)
+        [held]=slf.held_facts(self.c.human_dir)
+        out=slf.decide_held(self.c.human_dir,held['id'],'accept',self.now,'Robin')
+        self.assertTrue(out['written']);self.assertEqual(slf.held_facts(self.c.human_dir),[])
+        self.assertIn('Robin loves hiking.',[f['statement'] for f in slf.facts(self.c.human_dir)])
+        with self.assertRaises(ValueError):slf.decide_held(self.c.human_dir,held['id'],'dismiss',self.now)
+
+class ReadOnlyTests(unittest.TestCase):
+    """Reading and reporting never change a byte of the history they read."""
+    def test_reads_and_reports_leave_history_untouched(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp);c=cc.Companion(agent='Nova',human='Robin',hermes_root=root/'home',vault=root/'vault',timezone='UTC')
+            c.home.mkdir(parents=True);c.soul_dir.mkdir(parents=True);c.soul.write_text('A companion.\n'+slf.BEGIN+'\n'+slf.END+'\n')
+            now=dt.datetime(2026,9,23,11,tzinfo=dt.timezone.utc)
+            a=slf.record_fact(c.human_dir,'Robin likes tea.','2026-09-20: I like tea',now,'likes',human='Robin')['entry']
+            slf.record_fact(c.human_dir,'Robin likes green tea.','2026-09-20: green tea',now,'likes',supersedes=a['id'],human='Robin')
+            slf.record_fact(c.human_dir,'Robin has an older 4 GB card for the spare PC.','2026-09-20: card',now,'other',human='Robin')
+            slf.record_fact(c.human_dir,'Robin has an older 4 GB card to install in a spare PC.','2026-09-21: card',now,'logistics',human='Robin')
+            slf.hold_fact(c.human_dir,'Robin loves hiking.','2026-09-20: My sister loves hiking.',now,'likes','s',['someone else'])
+            db=sqlite3.connect(c.home/'state.db')
+            db.executescript('CREATE TABLE sessions(id TEXT, source TEXT,user_id TEXT); CREATE TABLE messages(id INTEGER,session_id TEXT,role TEXT,content TEXT,timestamp REAL,active INTEGER,compacted INTEGER,_compressed_summary INTEGER);')
+            db.execute("INSERT INTO sessions VALUES ('chat','telegram','robin')")
+            db.execute("INSERT INTO messages VALUES (1,'chat','user','hello',?,1,0,0)",(now.timestamp()-3600,));db.commit();db.close()
+            snapshot=lambda:{p:p.read_bytes() for p in sorted(root.rglob('*')) if p.is_file() and not p.name.endswith('.lock')}
+            before=snapshot()
+            slf.facts(c.human_dir);slf.fact_statements(c.human_dir);slf.duplicate_facts(c.human_dir);slf.held_facts(c.human_dir)
+            rows,*_=reflection.messages(c,now-dt.timedelta(days=1),now,'robin')
+            reflection.context(c,'checkin',now-dt.timedelta(days=1),now,'2026-09-23',rows)
+            self.assertEqual(len(rows),1)
+            self.assertEqual(snapshot(),before)

@@ -80,6 +80,21 @@ skipped. Its daily/weekly/monthly modes use bounded period excerpts and dated jo
 appends; validate their semantic choices on copies before replacing journal jobs. Typed output prevents arbitrary
 commands and invented quotations, but does not prove a memory is worth retaining.
 
+What is and is not checked about a fact: its evidence is always the exact human
+quote the model selected by ID, so the *origin* of the quote is established. Its
+statement is the model's own wording and is not verified against that quote. It
+is stored with `statement_origin: model_paraphrase`, and it is screened for
+obvious mismatches (a number, negation, certainty, name or time the quote lacks,
+or a quote about someone else). A statement that fails the screen is held in
+`facts-held.jsonl` rather than remembered: `companion_self.py held-facts` lists
+them and `decide-held --id ID --decision accept|dismiss` settles one. The screen
+has known misses, listed in `tests/test_local_reflection.py`.
+
+A badly worded new question (one calling the person "the human") is left out
+and reported; it no longer costs the rest of the reflection. A plan refused as
+malformed is kept as `<id>.rejected-N.json`, and after three refusals for one
+period the model is not asked again (`status: held`).
+
 Use `--phase morning` or `--phase winddown` on the pulse worker for a daily
 checkpoint with a code-owned unique ID. It can run as a pre-read script before
 optional agent outreach, so state is saved independently of tool-call decisions.

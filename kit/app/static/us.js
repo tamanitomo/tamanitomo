@@ -201,19 +201,24 @@ function memoryPreviewScore(f){
   if(text.length>140)score-=1;
   return score;
 }
-/* The same fact is sometimes filed twice in different words or categories;
-   one of each is enough for a preview. This is legacy display protection, not
-   the authoritative duplicate definition: it only hides a preview row, the
-   library still lists every active record, and the ledger is never touched.
-   Conservative on purpose -- two statements count as one only when every
-   content word of one appears in the other and they differ by no number,
-   ordinal or negation, so "likes"/"dislikes", Alice/Beth, or the first and
-   second spare PC stay two memories. A statement that only adds detail to
-   another (the same card, "to install in" it) may be hidden behind it here. */
+/* The preview never hides a memory because it looks like another one. Two
+   statements that are the same text (usFactKey, the same formatting-only rule
+   the ledger uses to refuse a duplicate) show once -- the library keeps both
+   records. Statements that only share their words ("introduced Alice to Kit"
+   and "introduced Kit to Alice") both stay: the later one is listed under the
+   first as a Similar memory, open to read, and does not take a preview slot.
+   Display only; the ledger is never touched. */
+const US_QUOTES={'‘':"'",'’':"'",'‚':"'",'‛':"'",'′':"'",'“':'"','”':'"','„':'"','‟':'"','″':'"'};
+function usFactKey(f){
+  const t=String(f.statement||'').normalize('NFC').replace(/[‘’‚‛′“”„‟″]/g,c=>US_QUOTES[c])
+    .split(/\s+/).filter(Boolean).join(' ').replace(/\s+(?=[,;:.!?](?:\s|$))/g,'').replace(/(?<=\S)[.!]+$/,'');
+  return t.slice(0,1).toLowerCase()+t.slice(1);
+}
 const US_FILLER=new Set(['a','an','the','to','in','into','for','of','on','at','by','from','with','and','his','her','their','its','my','your']);
 const US_DISTINCT=/^(\d.*|no|not|never|none|nor|doesn|don|didn|isn|wasn|won|can|cannot|t|first|second|third|fourth|fifth|last|next|previous|other|another|former|latter|one|two|three|four|five|six|seven|eight|nine|ten)$/;
 const usFactWords=f=>new Set(String(f.statement||'').toLowerCase().normalize('NFKC').replace(/[’']s\b/g,'').split(/[^\p{L}\p{N}.]+/u)
   .map(w=>w.replace(/^\.+|\.+$/g,'')).filter(w=>w&&!US_FILLER.has(w)));
+/* Word-bag likeness: only ever a reason to group, never to hide. */
 function usLikelySameFact(a,b){
   const x=usFactWords(a),y=usFactWords(b);
   const [small,big]=x.size<=y.size?[x,y]:[y,x];
@@ -230,17 +235,31 @@ function usMemoryPreview(facts,limit=US_LIMITS.memories){
   const lanes=[...byCat.values()],out=[];
   for(let round=0;out.length<limit&&lanes.some(l=>l.length>round);round++)
     for(const lane of lanes){
-      const f=lane[round];if(!f||out.length>=limit||out.some(g=>usLikelySameFact(f,g)))continue;
-      out.push(f);
+      const f=lane[round];if(!f||out.length>=limit)continue;
+      if(out.some(g=>usFactKey(g)===usFactKey(f)))continue;
+      const like=out.find(g=>usLikelySameFact(f,g));
+      if(like){like.similar.push(f);continue;}
+      out.push({...f,similar:[]});
     }
   return out;
 }
 function memoryDetailHTML(f){
   return `<div class="us-memory-detail">
     <p class="us-memory-meta"><span class="dim small">Category</span> ${esc(usCap(f.category||'other'))}</p>
-    ${f.evidence?`<details class="us-evidence"><summary>Why this is remembered</summary><p>“${esc(f.evidence)}”</p></details>`:''}
+    ${f.evidence?`<details class="us-evidence"><summary>Why this is remembered</summary>${usOriginNote(f)}<p>“${esc(f.evidence)}”</p></details>`:''}
     <button type="button" class="quiet small-btn" data-us-action="forget" data-fact="${esc(f.id)}">Mark incorrect</button>
+    ${(f.similar||[]).length?`<details class="us-similar"><summary>Similar ${f.similar.length===1?'memory':'memories'} (${f.similar.length})</summary>
+      ${f.similar.map(g=>`<div class="us-similar-row"><p class="us-memory-text">${esc(g.statement)}</p>
+        <p class="us-memory-meta"><span class="dim small">Category</span> ${esc(usCap(g.category||'other'))}</p>
+        ${g.evidence?`<details class="us-evidence"><summary>Why this is remembered</summary>${usOriginNote(g)}<p>“${esc(g.evidence)}”</p></details>`:''}
+        <button type="button" class="quiet small-btn" data-us-action="forget" data-fact="${esc(g.id)}">Mark incorrect</button></div>`).join('')}
+    </details>`:''}
   </div>`;
+}
+/* A statement written from a quote is the companion's wording; the quote is
+   the record. Said plainly, without claiming the wording was checked. */
+function usOriginNote(f){
+  return f.statement_origin==='model_paraphrase'?'<p class="us-origin">Summed up from what you said; the quote below is exact.</p>':'';
 }
 function memoryRowHTML(f){
   return `<details class="us-memory-row">
@@ -268,7 +287,7 @@ function renderMemoryLibrary(facts,{query='',category='all',shown=US_LIMITS.libr
           <button type="button" class="quiet small-btn" data-us-action="forget" data-fact="${esc(f.id)}">Mark incorrect</button>
         </div>
         <div class="memory-statement">${esc(f.statement)}</div>
-        ${f.evidence?`<details class="us-evidence"><summary>Why this is remembered</summary><p>“${esc(f.evidence)}”</p></details>`:''}
+        ${f.evidence?`<details class="us-evidence"><summary>Why this is remembered</summary>${usOriginNote(f)}<p>“${esc(f.evidence)}”</p></details>`:''}
       </div>`).join('')||'<p class="dim small" style="grid-column:1/-1;padding:24px;text-align:center">Nothing matches this filter.</p>'}</div>
     ${matches.length>page.length?'<div class="vault-recent-more"><button type="button" class="quiet" data-us-action="library-more">Show more</button></div>':''}`};
 }

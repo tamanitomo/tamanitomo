@@ -48,6 +48,10 @@ def _read(path,kind=None):
     except FileNotFoundError:pass
     return rows
 
+# Describe how a row was written, not what it claims; a retry written by a
+# newer release may describe the same row differently.
+_ROW_METADATA=frozenset({'recorded_at','provenance','statement_origin','statement_check'})
+
 def _append(path,row,dedupe_id=True,guard=None):
     """Append one row. `guard` runs under the same lock after the ID check; a
     dict it returns is the answer instead of a write."""
@@ -56,7 +60,7 @@ def _append(path,row,dedupe_id=True,guard=None):
         if dedupe_id:
             for e in _read(path):
                 if e.get('id')==row['id']:
-                    ignored={'recorded_at','provenance'}
+                    ignored=_ROW_METADATA
                     if {k:v for k,v in e.items() if k not in ignored}!={k:v for k,v in row.items() if k not in ignored}:
                         raise ValueError('Entry ID already exists with different content; original retained')
                     return {'written':False,'entry':e}
@@ -77,42 +81,164 @@ def _text(value,limit,label):
 _QUOTES=str.maketrans({'\u2018':"'",'\u2019':"'",'\u201a':"'",'\u201b':"'",'\u2032':"'",
                        '\u201c':'"','\u201d':'"','\u201e':'"','\u201f':'"','\u2033':'"'})
 
-def canonical_statement(text):
-    """The form two fact statements must share to be the same proposition.
+_SPACE_BEFORE_MARK=re.compile(r'\s+(?=[,;:.!?](?:\s|$))')
+_FINAL_STOP=re.compile(r'(?<=\S)[.!]+$')
 
-    Only differences that cannot change meaning are erased: Unicode form, case,
-    whitespace, quote style, and punctuation that is not inside a word or
-    number ("tea." == "tea", but "4.5" != "45" and "Robin's" keeps its
-    apostrophe). Anything more generous would merge different memories.
+def canonical_statement(text):
+    """The form two fact statements must share to be refused as the same one.
+
+    A refused write is a lost memory while a duplicate is only clutter, so this
+    erases formatting alone -- the policy, in full:
+
+      * Unicode composition (NFC): a composed and a decomposed "é" are one
+        letter. Compatibility forms are NOT folded: NFKC turns "x²" into "x2"
+        and "５" into "5", which are different text.
+      * Curly and straight quote marks. The marks themselves stay: "friend"
+        in quotation marks can mean something plain friend does not.
+      * Runs of whitespace, and whitespace before , ; : . ! ?
+      * One run of "." or "!" ending the statement.
+      * The case of the first letter only; sentence case is formatting. Case
+        elsewhere is kept ("US"/"us", "Polish"/"polish", "May"/"may").
+
+    Everything else is kept, including signs (-5/+5/5), % and currency and
+    unit symbols, "C++"/"C#"/"C", operators, apostrophes, word order and
+    negation. duplicate_facts() is the looser, report-only comparison.
     """
-    text=unicodedata.normalize('NFKC',str(text or '')).translate(_QUOTES).casefold()
-    text=re.sub(r"(?<!\w)[^\w\s]+|[^\w\s]+(?!\w)",' ',text)
-    return ' '.join(text.split())
+    text=unicodedata.normalize('NFC',str(text or '')).translate(_QUOTES)
+    text=' '.join(text.split())
+    text=_FINAL_STOP.sub('',_SPACE_BEFORE_MARK.sub('',text))
+    return text[:1].lower()+text[1:]
+
+# The statement of a fact written from a reflection is the model's wording; only
+# its evidence is the human's. A screen for obvious mismatches is not a proof.
+STATEMENT_ORIGINS=('recorded','model_paraphrase')
+PARAPHRASE_CHECK=('screened for changed numbers, negation, certainty, names and times; '
+                  'the statement is not otherwise verified against its quote')
+
 def record_fact(root,statement,evidence,now,category='other',confidence='stated',
-                source='',supersedes='',human='the human'):
+                source='',supersedes='',human='the human',statement_origin='recorded'):
+    """Append one fact.
+
+    A statement equal (by canonical_statement) to an active fact is refused
+    with `duplicate_of`, unless it is an explicit correction: a valid
+    `supersedes` always goes through, even when that leaves two equal
+    statements, because refusing it would leave the fact it corrects active.
+    The target is checked under the ledger lock, so two corrections of one
+    fact cannot both land."""
     if category not in CATEGORIES:raise ValueError(f'category must be one of {CATEGORIES}')
     if confidence not in CONFIDENCE:raise ValueError(f'confidence must be one of {CONFIDENCE}')
+    if statement_origin not in STATEMENT_ORIGINS:raise ValueError(f'statement_origin must be one of {STATEMENT_ORIGINS}')
     statement=_text(statement,400,'statement');evidence=_text(evidence,600,'evidence')
     urls_only = re.sub(r'https?://\S+', '', evidence).strip()
     if not urls_only or urls_only in (';', ',', '-', '.', '|'):
         raise ValueError(f'evidence cannot be only web URLs; facts about {human} require actual interaction or observation')
-    row={'id':_mkid('fact',category,statement.lower(),evidence,confidence,source,supersedes),'kind':'human_fact','category':category,
+    supersedes=(supersedes or '').strip()[:80]
+    # The exact statement, not its lower case: "from the US" and "from the us"
+    # are two statements, and a lower-cased ID made the second one an error.
+    row={'id':_mkid('fact',category,statement,evidence,confidence,source,supersedes),'kind':'human_fact','category':category,
          'statement':statement,'evidence':evidence,'source':(source or '').strip()[:200],
-         'confidence':confidence,'status':'active','supersedes':(supersedes or '').strip()[:80],
+         'confidence':confidence,'status':'active','supersedes':supersedes,
          'recorded_at':now.isoformat(),
-         'provenance':f'Recorded from stated or observed evidence about {human}; not imagined'}
-    if supersedes and not any(f['id']==supersedes for f in facts(root)):
-        raise ValueError('supersedes must refer to an active fact')
-    key=canonical_statement(statement)
-    def already_known():
-        # The same proposition is one memory whatever its category, source or
-        # evidence. A correction may restate the fact it replaces. Only an exact
-        # canonical match is refused; near-matches are for duplicate_facts().
-        for f in facts(root):
-            if f['id']!=row['supersedes'] and canonical_statement(f.get('statement'))==key:
+         'provenance':(f'Statement written by the companion from quoted evidence about {human}; the evidence is exact'
+                       if statement_origin=='model_paraphrase' else
+                       f'Recorded from stated or observed evidence about {human}; not imagined')}
+    if statement_origin=='model_paraphrase':
+        row['statement_origin']=statement_origin;row['statement_check']=PARAPHRASE_CHECK
+    key=canonical_statement(statement);equal=[]
+    def guard():
+        active=facts(root)
+        if supersedes:
+            if not any(f['id']==supersedes for f in active):
+                raise ValueError('supersedes must refer to an active fact')
+            # An explicit correction is never cancelled by a duplicate match.
+            equal.extend(f['id'] for f in active if f['id']!=supersedes and canonical_statement(f.get('statement'))==key)
+            return None
+        for f in active:
+            if canonical_statement(f.get('statement'))==key:
                 return {'written':False,'reason':'fact already recorded','duplicate_of':f['id']}
         return None
-    return _append(pathlib.Path(root)/'facts.jsonl',row,guard=already_known)
+    out=_append(pathlib.Path(root)/'facts.jsonl',row,guard=guard)
+    if out['written'] and equal:
+        out['equal_to']=equal
+        out['note']='Correction recorded; another active fact already says the same thing. Nothing was merged.'
+    return out
+
+_NUMBER_WORDS={w:str(i) for i,w in enumerate('zero one two three four five six seven eight nine ten eleven twelve'.split())}
+_ORDINAL_WORDS={w:str(i) for i,w in enumerate('first second third fourth fifth sixth seventh eighth ninth tenth'.split(),1)}
+_NEGATION=re.compile(r"\b(?:not|never|no|none|nobody|nothing|neither|nor|without|cannot|no longer|"
+                     r"\w+n't|dislike[sd]?|hate[sd]?|quit|quits|stopped)\b")
+_LEADING_ANSWER=re.compile(r"^\W*(?:no|nope|nah|yes|yeah|yep)\b\W+")
+_HEDGE=re.compile(r"\b(?:maybe|might|probably|perhaps|possibly|may|considering|thinking (?:about|of)|"
+                  r"not sure|unsure|hope|hopes|hoping|plan|plans|planning|want|wants|wanting|would like|if)\b")
+_TIME=re.compile(r"\b(?:today|tonight|tomorrow|yesterday|weekend|weekends|week|weekly|month|monthly|year|yearly|"
+                 r"daily|morning|mornings|evening|evenings|night|nights|ago|last|next|recently|soon|always|"
+                 r"usually|every|currently|now|still|anymore)\b")
+_THIRD_PARTY=re.compile(r"^\W*(?:(?:my|our) (sister|brother|mom|mum|mother|dad|father|wife|husband|partner|friend|"
+                        r"son|daughter|boss|roommate|girlfriend|boyfriend|kid|kids|cousin|aunt|uncle|grandma|grandpa|"
+                        r"coworker|neighbor|neighbour|teacher|doctor)|(he|she|they))\b(?! and (?:i|me)\b)",re.I)
+
+def _numbers(text):
+    text=text.casefold()
+    found={re.sub(r'(?<=\d),(?=\d{3}\b)','',n) for n in re.findall(r'[-+]?\d[\d,]*(?:\.\d+)?%?(?!\d|[.,]\d)(?!(?:st|nd|rd|th)\b)',text)}
+    found|={'#'+n for n in re.findall(r'\b(\d+)(?:st|nd|rd|th)\b',text)}
+    for word in re.findall(r'[a-z]+',text):
+        if word in _NUMBER_WORDS:found.add(_NUMBER_WORDS[word])
+        if word in _ORDINAL_WORDS:found.add('#'+_ORDINAL_WORDS[word])
+    return found
+
+def paraphrase_concerns(statement,quote,names=()):
+    """Obvious ways a written statement can say more than, or other than, its
+    quote: a number, polarity, certainty, name or time the quote lacks, or a
+    quote about somebody else stated as the human's own. An empty answer means
+    none of these were seen -- not that the statement is supported. See
+    tests/test_local_reflection.py ParaphraseScreenTests for what it misses."""
+    s=unicodedata.normalize('NFC',str(statement or '')).translate(_QUOTES)
+    q=unicodedata.normalize('NFC',str(quote or '')).translate(_QUOTES)
+    sl,ql=s.casefold(),q.casefold();out=[]
+    if extra:=sorted(_numbers(s)-_numbers(q)):out.append('a number or position not in the quote: '+', '.join(extra))
+    if bool(_NEGATION.search(sl))!=bool(_NEGATION.search(_LEADING_ANSWER.sub('',ql))):
+        out.append('negation differs from the quote')
+    if _HEDGE.search(ql) and not _HEDGE.search(sl):out.append('states as certain what the quote hedges')
+    known={n.casefold() for n in names if n}
+    quote_words=set(re.findall(r"[\w-]+",ql))
+    proper={w for w in re.findall(r"(?<=\s)[A-Z][\w-]*",s) if w!='I'}
+    new=sorted(w for w in proper if re.sub(r"'s$",'',w.casefold()) not in quote_words|known)
+    if new:out.append('a name not in the quote: '+', '.join(new))
+    moments=lambda t:{w.removesuffix('s') for w in _TIME.findall(t)}
+    if times:=sorted(moments(sl)-moments(ql)):out.append('a time not in the quote: '+', '.join(times))
+    if (m:=_THIRD_PARTY.match(q)) and not re.search(r'\b(?:'+re.escape((m.group(1) or m.group(2)).casefold())+r'|he|she|they|his|her|their)\b',sl):
+        out.append('the quote is about someone else')
+    return out
+
+def hold_fact(root,statement,evidence,now,category,source,reasons,human='the human'):
+    """Keep a statement that failed the paraphrase screen for a person to look
+    at, outside the active ledger. Nothing reads it as a memory."""
+    statement=_text(statement,400,'statement');evidence=_text(evidence,600,'evidence')
+    row={'id':_mkid('held',category,statement,evidence,source),'kind':'held_fact','category':category,
+         'statement':statement,'evidence':evidence,'source':(source or '').strip()[:200],
+         'reasons':list(reasons),'status':'held','recorded_at':now.isoformat(),
+         'provenance':f'Written by the companion about {human}; held because it may not match its quote'}
+    return {**_append(pathlib.Path(root)/'facts-held.jsonl',row),'held':True,'reasons':list(reasons)}
+
+def held_facts(root):
+    """Held statements that have not been accepted or dismissed."""
+    rows=_read(pathlib.Path(root)/'facts-held.jsonl')
+    done={r['held_id'] for r in rows if r.get('kind')=='held_fact_decision'}
+    return [r for r in rows if r.get('kind')=='held_fact' and r['id'] not in done]
+
+def decide_held(root,held_id,decision,now,human='the human'):
+    """`accept` records the statement as an ordinary fact; `dismiss` drops it.
+    Either way the held row stays in its file."""
+    if decision not in ('accept','dismiss'):raise ValueError('decision must be accept or dismiss')
+    row=next((r for r in held_facts(root) if r['id']==held_id),None)
+    if not row:raise ValueError('unknown or already decided held fact')
+    out={}
+    if decision=='accept':
+        out=record_fact(root,row['statement'],row['evidence'],now,row['category'],'stated',row['source'],
+                        human=human,statement_origin='model_paraphrase')
+    _append(pathlib.Path(root)/'facts-held.jsonl',{'id':_mkid('decide',held_id),'kind':'held_fact_decision',
+            'held_id':held_id,'decision':decision,'recorded_at':now.isoformat()})
+    return {'decision':decision,**out}
 
 def record_pref(root,text,now,valence='like',subject='',agent='the companion'):
     if valence not in VALENCE:raise ValueError(f'valence must be one of {VALENCE}')
@@ -166,10 +292,17 @@ def facts(root,category=None):
     dead.update(r['fact_id'] for r in history if r.get('kind')=='human_fact_retraction')
     seen={}
     for r in rows:
-        if r['id'] in dead or r.get('status','active')!='active':continue
+        if r['id'] in dead or r.get('status','active')!='active' or _app_tombstone(r):continue
         seen[r['id']]=r
     rows=list(seen.values())
     return [r for r in rows if r['category']==category] if category else rows
+
+def _app_tombstone(r):
+    """Earlier releases' "Mark incorrect" superseded a fact with an active
+    placeholder, "(retired by <name>)", which then read as a memory. Those rows
+    stay in the ledger; they are recognised by the fields the app wrote."""
+    return (r.get('source')=='app' and r.get('evidence')=='retired in the app'
+            and bool(r.get('supersedes')) and r.get('id')==r['supersedes']+'-retired')
 
 def fact_statements(root,limit_chars=6000):
     """Active fact statements, newest first, within a character budget, so a
@@ -179,6 +312,7 @@ def fact_statements(root,limit_chars=6000):
     kept,used=[],0
     for f in rows:
         item={'id':f['id'],'category':f.get('category','other'),'statement':f.get('statement','')}
+        if f.get('statement_origin'):item['origin']=f['statement_origin']
         size=len(item['statement'])+len(item['category'])+40
         if used+size>limit_chars:break
         kept.append(item);used+=size
@@ -192,8 +326,13 @@ _DISTINCT=re.compile(r"^(\d.*|no|not|never|none|nor|doesn't|don't|didn't|isn't|w
                      r"first|second|third|fourth|fifth|last|next|previous|other|another|former|latter|"
                      r"one|two|three|four|five|six|seven|eight|nine|ten)$")
 
+def _loose(statement):
+    """Generous on purpose, and only ever used to suggest a pair for review."""
+    text=unicodedata.normalize('NFKC',str(statement or '')).translate(_QUOTES).casefold()
+    return ' '.join(re.sub(r"(?<!\w)[^\w\s]+|[^\w\s]+(?!\w)",' ',text).split())
+
 def _words(statement):
-    return {w for w in re.sub(r"'s\b",'',canonical_statement(statement)).split() if w not in _FILLER}
+    return {w for w in re.sub(r"'s\b",'',_loose(statement)).split() if w not in _FILLER}
 
 def duplicate_facts(root,threshold=.6):
     """Pairs of active facts that may say the same thing, for a person to review.
@@ -407,6 +546,8 @@ def main():
     r=s.add_parser('resolve');r.add_argument('--id',required=True)
     r.add_argument('--status',required=True,choices=['asked','answered','dropped']);r.add_argument('--answer',default='')
     s.add_parser('profile');s.add_parser('summary')
+    s.add_parser('held-facts',help='List fact statements held because they may not match their quote')
+    dh=s.add_parser('decide-held');dh.add_argument('--id',required=True);dh.add_argument('--decision',choices=['accept','dismiss'],required=True)
     df=s.add_parser('duplicate-facts',help='List likely duplicate facts for review; changes nothing')
     df.add_argument('--threshold',type=float,default=.6)
     w=s.add_parser('wonder');w.add_argument('--status',choices=['open','asked','answered','dropped'])
@@ -423,6 +564,8 @@ def main():
     elif x.cmd=='ask':out=ask(c.life,x.text,now)
     elif x.cmd=='resolve':out=resolve(c.life,x.id,x.status,now,x.answer)
     elif x.cmd=='profile':out={'facts':facts(c.human_dir)}
+    elif x.cmd=='held-facts':out={'held':held_facts(c.human_dir)}
+    elif x.cmd=='decide-held':out=decide_held(c.human_dir,x.id,x.decision,now,c.human)
     elif x.cmd=='duplicate-facts':out=duplicate_facts(c.human_dir,x.threshold)
     elif x.cmd=='wonder':out={'questions':questions(c.life,x.status)}
     elif x.cmd=='pref-history':

@@ -465,18 +465,14 @@ def build(home=None,token='',state_dir=None):
 
     @app.post('/api/facts/{fact_id}/forget')
     def forget(fact_id:str):
-        """Retire a fact the human says is wrong. It is superseded, not deleted."""
+        """Retire a fact the human says is wrong. It is retracted, not deleted,
+        and nothing takes its place: earlier releases wrote an active
+        "(retired by …)" fact here, which then read as a memory."""
         c=load()
         import companion_self as slf
-        rows=[f for f in slf.facts(c.human_dir) if f['id']==fact_id]
-        if not rows:raise HTTPException(404,'no such active fact')
-        slf._append(c.human_dir/'facts.jsonl',
-                    {'id':fact_id+'-retired','kind':'human_fact','category':rows[0]['category'],
-                     'statement':'(retired by '+c.human+')','evidence':'retired in the app',
-                     'source':'app','confidence':'stated','status':'active',
-                     'supersedes':fact_id,'recorded_at':dt.datetime.now(dt.timezone.utc).isoformat(),
-                     'provenance':'Retired by the human through the app; the original is retained.'})
-        return {'retired':fact_id,'note':'Superseded, not deleted. The original stays in the ledger.'}
+        if not any(f['id']==fact_id for f in slf.facts(c.human_dir)):raise HTTPException(404,'no such active fact')
+        slf.retract_fact(c.human_dir,fact_id,'Marked incorrect by '+c.human+' in the app',dt.datetime.now(dt.timezone.utc))
+        return {'retired':fact_id,'note':'Retracted, not deleted. The original stays in the ledger.'}
 
     @app.get('/api/settings')
     def get_settings():
