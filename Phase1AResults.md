@@ -11,6 +11,104 @@
 
 The contract, the API and the capability table are in [`docs/CHAT_CONTRACT.md`](docs/CHAT_CONTRACT.md).
 
+---
+
+## Review R1 closure
+
+Separate commit on top of the reviewed head `438312e`, answering `PHASE1A_REVIEW_R1.md`. Earlier commits are unchanged. Where this section and the original report below disagree, this section is current.
+
+**Reproductions first.** The new regression tests were run against the reviewed revision `438312e`, in a detached worktree with only the new test and fixture files copied in:
+- **8 of 9 failed**, each on the defect itself:
+  - F1: workspace rows still served after revocation
+  - F2: `SourceUnavailable not raised` for a renamed store; a never-created store not reported
+  - F3: `rebuilt` was `None` for both anchor-preserving replacements
+  - F4: the cron-mirror row admitted
+  - the binding purge was not applied while the source was down
+- **The reassigned-id case**, once a constant that did not exist yet was replaced, failed with `None != 'source_identity_changed'`: the reassigned id was folded in as an edit under the old message id.
+- **The ordinary-edit control passed.**
+
+The same tests pass at the closure commit.
+
+### F1: workspace revocation is enforced
+
+`session_kind()` admits a registered workspace session only when `binding.workspace` is true. Otherwise it excludes it as `workspace_not_trusted`, and never relabels it as terminal. Terminal trust is independent, and the existing test that withdrawing terminal trust keeps the workspace still passes.
+
+`test_revoking_workspace_trust_removes_workspace_content`:
+- workspace owner and companion rows are indexed
+- trust is revoked
+- snapshot, history and changes cursors all answer `resync_required`
+- after the sync only the terminal row is served
+- the projection file holds no workspace text
+- with both kinds of trust off, nothing is served
+
+### F2: a missing store is an outage, not empty history
+
+- **Indexed before, missing now:** `SourceUnavailable`, which the routes return as 503 `retryable`. The transaction rolls back, so the projection, its id and `as_of` are unchanged. When the same store is renamed back, old cursors continue with no rebuild (`test_a_missing_store_after_indexing_is_unavailable_not_empty`, and a route-level twin).
+- **Never existed:** `source_state: "not_created"`, 200, empty. The first messages arrive as changes (`test_a_store_that_never_existed_is_an_empty_new_conversation`). Whether a store has ever been seen survives rebuilds, so a binding purge cannot turn an outage into "not created".
+- **Stale-data policy:** `snapshot` and `changes` require a successful sync. `history` is served from the projection with `as_of`, the time of the last successful sync.
+- **Binding changes don't wait for the source:** an owner-binding change is committed in its own transaction before the source is read, so revocation purges even during an outage (`test_a_revoked_binding_is_purged_even_while_the_source_is_down`).
+
+### F3: an id reused for another message never inherits an old id
+
+Each projected row now stores `source_fp` = hash(id, session_id, role, timestamp). The projection schema is v2, so older projections rebuild themselves.
+
+Two checks:
+- **Every apply:** in both the pull and reconciliation, a fingerprint mismatch raises `IdentityChanged`. It is never treated as an edit. The projection is rebuilt in the same transaction (`source_identity_changed`).
+- **Every sync:** a bounded, evenly spread sample of up to 64 indexed rows is re-checked alongside the sequence and anchor (`source_replaced`).
+
+Tests:
+- the reviewer's counterexample, with the same sequence and the anchor preserved
+- the missing-anchor variant
+- a reassigned id outside the sample, served stale (not aliased) until reconciliation reaches it, then rebuilt with a new id and the new provenance
+- the ordinary-edit control
+
+The limit is stated in the contract: a replacement that keeps a row's id, session, role and timestamp and changes only its content is indistinguishable from an edit. Hermes has no store-instance id.
+
+### F4: proactive delivery is reported unsupported; the owner boundary is structural
+
+The installed schema offers no independent evidence of delivery:
+- the outbox has no platform id
+- the delivery mirror row has no outbox id, no platform id and no marker; its metadata is dropped at SQLite, and `finish_reason`/`token_count` are not established as a reliable model-reply marker
+
+So:
+- The gate is reported **not passed / unsupported** (`capabilities()['proactive delivery provenance']`).
+- A companion row in a trusted session is shown as recorded, with `correlation: null`. No row is presented or counted as a verified delivered outreach.
+- **The text-prefix rule is removed.** A Telegram **user** row is the owner only with the `platform_message_id` that Hermes records for every inbound gateway turn. Rows without one are excluded as `unverified_sender`. That covers the cron-brief mirror whatever its text, and older rows that predate the column. Source rows are untouched.
+- The outreach test is rewritten to assert exactly this, and that `CRON_MIRROR_PREFIX` no longer exists.
+
+**Decision for the reviewer.** The `unverified_sender` rule also excludes genuine owner Telegram messages written before Hermes recorded platform ids. Their number in any real history is unknown: no live store was read. Options:
+- keep them out, the current default ("unknown identities stay out")
+- add an explicit owner opt-in that admits them labelled as unverified
+
+Nothing was added for this without a decision.
+
+### Windows diagnosis, corrected
+
+Job 107502858190 (run 35958848173, `a4ae50f`) ended 4 failed, 158 passed. All four failures were temporary-directory cleanup `PermissionError` / WinError 32 on SQLite files still open, in:
+- `test_edits_and_deletions_change_revision_not_identity`
+- `test_changing_the_owner_binding_stops_serving_what_it_authorised`
+- `test_a_messages_table_without_stable_ids_is_unsupported`
+- `test_fifty_thousand_messages`
+
+These were fixed by closing the test connections in `db950d9`. The same commit made the reference SSE reader stop at `[DONE]`. That change is **additional hardening**: the log shows no SSE failure. The earlier CI note below overstated it.
+
+### Closure commands and results
+
+```text
+env PATH=/usr/local/bin:/usr/bin:/bin TAMANITOMO_REQUIRE_NODE=1 .venv/bin/python -m pytest -q -rs
+-> 1445 passed, 464 subtests passed, 0 skipped, 1 warning (existing Starlette/httpx deprecation)
+python -X dev -W always::ResourceWarning -m pytest tests/test_chat_projection.py tests/test_chat_routes.py
+-> 0 unclosed-database warnings
+```
+
+The identity sample raised a sync with nothing new from 0.6 ms to 7.9 ms at 50,000 messages. The other numbers are in the contract. These remain desktop, projection-only measurements.
+
+CI for the closure commit: see the commit that records it.
+
+Unchanged by this closure: the UI, the legacy `/api/feed` (still over-inclusive), and the send path. There was no browser, phone or live testing. The Phase 0 review document `ASTRA_PHASE0_REVIEW_R2.md` is still not available here; no compliance with its unseen contents is claimed.
+
+---
+
 ## What was found (1A.1)
 
 These are read from the installed Hermes source (`~/.hermes/hermes-agent` at `0e9fc2cc15`, `SCHEMA_SQL` schema_version 30). The column set used in `tests/chat_fixtures.py` was compared programmatically against it and is identical for `sessions` and `messages`.

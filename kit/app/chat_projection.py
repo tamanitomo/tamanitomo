@@ -37,7 +37,7 @@ from pathlib import Path
 
 from .chat_sources import SourceUnavailable
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 PAGE_DEFAULT, PAGE_MAX = 60, 200
 CHANGES_DEFAULT, CHANGES_MAX = 200, 1000
 # Change rows kept for incremental readers; older cursors must resync.
@@ -48,6 +48,13 @@ SYNC_BATCH = 5000
 SYNC_MAX_ROWS = 20000
 RECONCILE_CHUNK = 10000
 RECONCILE_INTERVAL = 30.0
+# Indexed rows whose identity is re-checked against the source on every sync.
+IDENTITY_SAMPLE = 64
+
+
+class IdentityChanged(Exception):
+    """A source id now names a different message (another session, role or
+    authored time): the store was replaced. Never folded in as an edit."""
 
 
 class ResyncRequired(Exception):
@@ -99,7 +106,8 @@ CREATE TABLE messages(
   status TEXT NOT NULL,
   content TEXT NOT NULL, content_hash TEXT NOT NULL,
   note TEXT NOT NULL DEFAULT '',
-  source_id INTEGER NOT NULL);
+  source_id INTEGER NOT NULL,
+  source_fp TEXT);
 CREATE INDEX messages_history ON messages(sort_at DESC, message_id DESC) WHERE status<>'deleted';
 CREATE INDEX messages_source_id ON messages(source_id);
 CREATE TABLE changes(seq INTEGER PRIMARY KEY AUTOINCREMENT, message_id TEXT NOT NULL, revision INTEGER NOT NULL,
@@ -147,7 +155,9 @@ class Projection:
 
     def _create(self, con, reason):
         """A new, empty projection with a new identity. Old cursors cannot
-        continue into it."""
+        continue into it. Whether a source store has ever been seen survives,
+        so a rebuilt projection still tells an outage from a new companion."""
+        seen = bool(self._meta(con).get('source_seen'))
         for table in ('meta', 'messages', 'changes'):
             con.execute(f'DROP TABLE IF EXISTS {table}')
         con.execute("DELETE FROM sqlite_sequence WHERE name='changes'") if con.execute(
@@ -160,7 +170,7 @@ class Projection:
                   scope={'installation': self.scope.installation, 'home': self.scope.home},
                   binding=self.scope.binding_digest, created_at=self.clock(), created_reason=reason,
                   last_id=0, reconcile_pos=0, reconcile_at=0, retained_from=1, source=None,
-                  excluded={}, rows_seen=0)
+                  excluded={}, rows_seen=0, source_state='unknown', synced_at=None, source_seen=seen)
 
     def _ensure(self, con):
         """Open the projection for this scope, rebuilding it when it was made
@@ -185,27 +195,53 @@ class Projection:
         Returns stats. Raises SourceUnavailable without changing anything when
         the source cannot be read."""
         with self._db() as con:
+            # First, on its own: a changed or revoked owner binding purges what
+            # it authorised even when the source cannot be read right now.
+            con.execute('BEGIN IMMEDIATE')
+            try:
+                self._ensure(con)
+                con.execute('COMMIT')
+            except BaseException:
+                con.execute('ROLLBACK')
+                raise
             con.execute('BEGIN IMMEDIATE')
             try:
                 meta = self._ensure(con)
-                stats = source.read(lambda reader: self._sync(con, meta, reader, force_reconcile))
+                stats = source.read(lambda reader: self._sync_checked(con, meta, reader, force_reconcile))
                 con.execute('COMMIT')
                 return stats
             except BaseException:
                 con.execute('ROLLBACK')
                 raise
 
+    def _sync_checked(self, con, meta, reader, force_reconcile):
+        try:
+            return self._sync(con, meta, reader, force_reconcile)
+        except IdentityChanged:
+            # Found while applying: start over in a new generation, in this
+            # same transaction, so no old id is ever given to another message.
+            self._create(con, 'source_identity_changed')
+            stats = self._sync(con, self._meta(con), reader, force_reconcile)
+            stats['rebuilt'] = 'source_identity_changed'
+            return stats
+
     def _sync(self, con, meta, reader, force_reconcile):
         now = self.clock()
         stats = {'inserted': 0, 'edited': 0, 'deleted': 0, 'restored': 0, 'read': 0, 'rebuilt': None}
         if reader is None:
-            # No store yet. If one existed before, it has gone: a replacement.
-            if meta.get('source'):
-                self._create(con, 'source_removed');stats['rebuilt'] = 'source_removed'
+            if meta.get('source') or meta.get('source_seen'):
+                # Indexed before and missing now: an outage (a move, an unmounted
+                # disk, a restore in progress), not an authoritative empty history.
+                # Nothing is reset; the caller gets a retryable error.
+                raise SourceUnavailable('The Hermes session store that was indexed is missing; '
+                                        'the conversation is kept as last read. Try again when it is back.')
+            # Never created: this companion has not had a conversation yet.
+            self._set(con, source_state='not_created', synced_at=now)
+            stats['source_state'] = 'not_created'
             return stats
         gen = reader.generation()
         known = meta.get('source')
-        if known and self._replaced(known, gen, reader):
+        if known and (self._replaced(known, gen, reader) or self._identity_sample_changed(con, reader)):
             self._create(con, 'source_replaced');stats['rebuilt'] = 'source_replaced'
             meta = self._meta(con)
         last = meta['last_id'];excluded = dict(meta.get('excluded') or {})
@@ -229,7 +265,8 @@ class Projection:
             anchor_id = last or None
         source_state = {'sequence': gen['sequence'], 'max_id': gen['max_id'], 'anchor_id': anchor_id,
                         'anchor': reader.anchor(anchor_id) if anchor_id else None}
-        self._set(con, last_id=last, excluded=excluded, source=source_state)
+        self._set(con, last_id=last, excluded=excluded, source=source_state, source_state='ok', synced_at=now, source_seen=True)
+        stats['source_state'] = 'ok'
         if force_reconcile or now - meta.get('reconcile_at', 0) >= RECONCILE_INTERVAL:
             stats.update({k: stats.get(k, 0) + v for k, v in self._reconcile(con, reader, now, last, force_reconcile).items()})
         self._prune(con)
@@ -250,6 +287,22 @@ class Projection:
             if now is not None and now != known['anchor']:
                 return True
         return False
+
+    @staticmethod
+    def _identity_sample_changed(con, reader):
+        """Re-check a bounded, evenly spread sample of indexed rows: any whose
+        id now names a different message means the store was replaced, even
+        when its sequence and anchor look continuous. A missing row is a
+        deletion, not a replacement."""
+        total = con.execute("SELECT count(*) FROM messages WHERE source_fp IS NOT NULL").fetchone()[0]
+        if not total:
+            return False
+        step = max(1, total // IDENTITY_SAMPLE)
+        sample = {r[0]: r[1] for r in con.execute(
+            "SELECT source_id, source_fp FROM messages WHERE source_fp IS NOT NULL AND (pk % ?)=0 "
+            "ORDER BY pk LIMIT ?", (step, IDENTITY_SAMPLE + 1))}
+        current = reader.fingerprints(sample)
+        return any(current[i] != fp for i, fp in sample.items() if i in current)
 
     def _message_id(self, con, source_key):
         meta = self._meta(con)
@@ -272,6 +325,9 @@ class Projection:
         if row is not None and rev is not None and row['source_revision'] is not None and rev < row['source_revision']:
             return self._count('ignored_stale')
         source_id = int(record.source_message) if str(record.source_message).isdigit() else 0
+        fp = getattr(record, 'fingerprint', None)
+        if row is not None and fp and row['source_fp'] and fp != row['source_fp']:
+            raise IdentityChanged(record.source_key)
         if row is None:
             if not record.visible:
                 return self._count('ignored_never_public')
@@ -279,11 +335,11 @@ class Projection:
             seq = self._change(con, message_id, 1, 'insert', now)
             con.execute('INSERT INTO messages(message_id,source_key,source_kind,source_account,source_channel,source_session,'
                         'source_message,platform_message_id,speaker,occurred_at,first_observed_at,sort_at,observed_seq,revision,'
-                        'source_revision,status,content,content_hash,note,source_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                        'source_revision,status,content,content_hash,note,source_id,source_fp) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                         (message_id, record.source_key, record.source_kind, record.source_account, record.source_channel,
                          record.source_session, record.source_message, record.platform_message_id, record.speaker,
                          record.occurred_at, now, record.occurred_at if record.occurred_at is not None else now, seq, 1,
-                         rev, 'public', record.content, _hash(record.content), record.note, source_id))
+                         rev, 'public', record.content, _hash(record.content), record.note, source_id, fp))
             return self._count('inserted')
         if not record.visible:
             if row['status'] == 'deleted':
@@ -450,6 +506,7 @@ class Projection:
                 if not high:
                     high = meta.get('retained_from', 1) - 1
                 return {'conversation_id': self.scope.conversation_id, 'projection_id': meta['projection_id'],
+                        'as_of': meta.get('synced_at'), 'source_state': meta.get('source_state'),
                         'messages': messages,
                         'history': {'before': before, 'start_reached': before is None,
                                     'start_note': 'The earliest message the sources still hold. '
@@ -469,7 +526,10 @@ class Projection:
                 meta = self._read_meta(con)
                 payload = self._open_cursor(meta, before, 'h')
                 messages, cursor = self._page(con, meta, limit, (payload['t'], payload['i']))
+                # Served from the projection as of its last successful sync, which
+                # `as_of` states; history is never fetched from the source here.
                 return {'conversation_id': self.scope.conversation_id, 'projection_id': meta['projection_id'],
+                        'as_of': meta.get('synced_at'),
                         'messages': messages, 'history': {'before': cursor, 'start_reached': cursor is None}}
             finally:
                 con.execute('COMMIT')
@@ -496,6 +556,7 @@ class Projection:
                 rows = rows[:limit]
                 high = rows[-1]['seq'] if rows else mark
                 return {'conversation_id': self.scope.conversation_id, 'projection_id': meta['projection_id'],
+                        'as_of': meta.get('synced_at'),
                         'changes': [{'seq': r['seq'], 'kind': r['kind'], 'revision': r['change_revision'],
                                      'message': self._message(r)} for r in rows],
                         'after': self._sign(meta['secret'], {'k': 'c', 'c': self.scope.conversation_id,

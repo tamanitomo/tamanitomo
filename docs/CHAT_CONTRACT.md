@@ -13,9 +13,11 @@ A private conversation is **one owner and one companion (profile) on one Hermes 
 
 | Source | Included when | Identity comes from |
 |---|---|---|
-| workspace | a `cli`/`desktop`/`tui` session this app started | the app's session registry (`.tamanitomo-sessions.json`), written at send time |
-| terminal | a local `cli`/`desktop`/`tui` session with no gateway `chat_id`, and `terminal` trusted in the binding | host provenance: only local processes write these sessions |
-| telegram | `sessions.user_id` is a bound Telegram account **and** the session is a DM (`chat_type='dm'`, or `chat_type` empty with `chat_id == user_id`, which is Telegram's private-chat rule) | the owner binding |
+| workspace | a `cli`/`desktop`/`tui` session this app started, and `workspace` trusted in the binding | the app's session registry (`.tamanitomo-sessions.json`), written at send time |
+| terminal | a local `cli`/`desktop`/`tui` session with no gateway `chat_id`, not started by this app, and `terminal` trusted in the binding | host provenance: only local processes write these sessions |
+| telegram | `sessions.user_id` is a bound Telegram account **and** the session is a DM (`chat_type='dm'`, or `chat_type` empty with `chat_id == user_id`, which is Telegram's private-chat rule). An owner (user) row also needs the `platform_message_id` Hermes records when it receives a platform message | the owner binding, plus the platform receipt id for each owner row |
+
+Workspace and terminal trust are independent. With workspace trust withdrawn, a registered workspace session is excluded (`workspace_not_trusted`); it is never relabelled as a terminal session. With terminal trust withdrawn, the workspace is unaffected.
 
 Everything else is excluded and counted by reason (`/api/chat/sources`, and `excluded` in each snapshot):
 - `unknown_participant`
@@ -23,7 +25,9 @@ Everything else is excluded and counted by reason (`/api/chat/sources`, and `exc
 - `unverified_source:<name>`: Discord, Signal and every other gateway
 - `internal_session`: cron, subagent, tool, audits
 - `local_source_with_gateway_chat`
+- `workspace_not_trusted`
 - `terminal_not_trusted`
+- `unverified_sender`: a Telegram user row without a platform message id (see section 2)
 
 A group message is excluded even when the owner wrote it. A reply to a stranger or into a group is excluded with its session. Nothing is matched by display name or message text.
 
@@ -47,15 +51,18 @@ The adapter filters rows by Hermes's own structural markers, never by stripping 
 
 Tool rows, tool-call-only assistant rows and every reasoning column are never read into the projection. A row that stops qualifying after it was shown (deleted, archived or hidden) becomes a **deletion**.
 
-**Proactive messages.** Output of a cron session is never conversation. A proactive message that Hermes delivered **and mirrored into the owner's DM session** appears as the companion speaking on Telegram, because that row is in the owner's conversation.
+**Proactive delivery is unsupported in 1A** (review R1 F4). The requirement is that a delivered proactive message appears only through verified delivery linkage. No source this phase can read provides that linkage:
+- `companion_outbox` marks an entry `sent` without the platform message id that `hermes send --json` returns.
+- Hermes's delivery mirror row (`gateway/mirror.py` → `append_message(session_id, role, content)`) has no outbox id and no platform id. It carries no marker that tells it apart from a model reply; the mirror metadata is dropped at the SQLite boundary.
+- `finish_reason`/`token_count` are not a proof either. Nothing establishes that they are set on every model reply.
 
-The outbox cannot be joined to it:
-- `companion_outbox` marks an entry `sent` without the platform message id.
-- The Hermes mirror row (`gateway/mirror.py`) carries no outbox id.
+So the boundary is:
+- Output of a cron (or any internal) session is never conversation.
+- No outbox entry is projected, and none is joined to a transcript row, by text or otherwise. Queued, withheld, failed and expired entries never appear.
+- A **companion** row in a trusted session is shown as that session's transcript recorded it, with `correlation: null`. No row is labelled or counted as a verified delivered outreach, whether it came from a model reply or a delivery mirror, and the gate stays **not passed**.
+- An **owner** row in a Telegram session must carry the `platform_message_id` that Hermes records for every inbound gateway turn (`gateway/run_turn.py`). A user row without one was not received from the platform. That covers the cron-brief delivery mirror, which Hermes writes as `role="user"`, and rows written before the column existed. Such a row is excluded as `unverified_sender`. This is structural, not a text-prefix match, and the source row is untouched.
 
-So `correlation` is `null`, and no outbox entry is projected by itself. Queued, withheld, failed and expired entries never appear. Nothing is joined by text.
-
-Hermes also mirrors **cron briefs** into a chat as `role="user"` rows. They carry only a `[Cron delivery: <job>]` text prefix; the structured marker is dropped at the SQLite boundary. Such a row keeps its place, but its `speaker` is `unverified` with a note, never `owner`. This is a sender-attribution guard. It is not the public/private boundary.
+Recording the delivery id at dispatch would make proactive delivery verifiable. That is a send-path change and belongs to Phase 1B.
 
 **Attachments** are resolved at read time through the existing media catalog (`_attach_media`), so review status and authorisation are unchanged. Nothing is fetched remotely.
 
@@ -65,7 +72,7 @@ Hermes also mirrors **cron briefs** into a chat as `role="user"` rows. They carr
 |---|---|
 | `message_id` | Opaque: `msg_` + hash(conversation, projection generation, source key). Stable across syncs and restarts of one projection. |
 | `source` | `{kind, account, channel, session, message}`. `message` is Hermes `messages.id` (AUTOINCREMENT, never reused within one file). |
-| `speaker` | `owner` / `companion` / `unverified`. `role` is kept for compatibility (`unverified` maps to `user`). |
+| `speaker` | `owner` / `companion`. `role` is kept for compatibility. |
 | `occurred_at` | Hermes `timestamp`; `occurred_at_known` is false if absent (history then sorts by first observation). |
 | `observed_seq` | App-owned change sequence of the latest change to this message. |
 | `revision` | 1 on insert, +1 on every edit, delete or restore. Identity never changes. |
@@ -73,11 +80,15 @@ Hermes also mirrors **cron briefs** into a chat as `role="user"` rows. They carr
 | `reply_to` | Always `null`: Hermes stores no reply link. |
 | `correlation` | `{platform_message_id}` when Hermes stored one (Telegram user turns); otherwise `null`. Outgoing provisional/final correlation is reserved for 1B. |
 
-**Source generation.** The projection stores the source's AUTOINCREMENT sequence and a fingerprint of one anchor row. Either of these counts as a **replaced store**:
-- the sequence goes backwards (an older backup was restored)
-- the anchor id now holds a different row (a different file)
+**Source identity and generation** (review R1 F3). Every projected row stores a fingerprint of what must not change for a source row to still be the same message: `(id, session_id, role, timestamp)`. Content may change; that is an edit. Hermes has no store-instance id (checked in `state_meta`), so continuity rests on these checks:
+- **Every apply.** When a source id is read, in the incremental pull or in reconciliation, its fingerprint is compared with the stored one. A mismatch means the id now names a different message. It is never folded in as an edit (`source_identity_changed`).
+- **Every sync.** An evenly spread sample of up to 64 indexed rows is re-checked. So is the AUTOINCREMENT sequence (it must not go backwards) and the anchor row (it must not hold a different row). Any failure means `source_replaced`. A missing row is a deletion, not a replacement, and a missing anchor is replaced by a new one.
 
-A replaced store rebuilds the projection with a new `projection_id` and generation. Old cursors answer `resync_required`, and old ids are never aliased to new rows.
+Either result rebuilds the projection in the same transaction, with a new `projection_id` and generation. Old cursors answer `resync_required`, and no old opaque id is ever given to a different message.
+
+A replaced row outside the sample is found when reconciliation reaches it (at most 10,000 ids per call, every 30 s). Until then the old message is served as last read: stale, never aliased.
+
+Limit: a replacement that keeps a row's id, session, role and timestamp and changes only its content cannot be told apart from an edit.
 
 A Hermes `replace_messages()` (a transcript rewrite) gives surviving turns new ids. It is projected as deletions plus inserts, not as the same messages; this is a documented limit, and nothing is merged by text.
 
@@ -91,16 +102,16 @@ History order is `(occurred_at, message_id)`. Change order is `observed_seq`. Th
 
 ```
 GET /api/chat/snapshot?limit=60        (1-200)
--> {conversation_id, projection_id, scope:{profile, installation, owner_binding},
+-> {conversation_id, projection_id, as_of, source_state, scope:{profile, installation, owner_binding},
     messages:[...oldest→newest...],
     history:{before: cursor|null, start_reached, start_note},
     changes:{after: cursor, high_water}, excluded:{reason:count}, sync:{...}}
 
 GET /api/chat/history?before=<history cursor>&limit=60
--> {conversation_id, projection_id, messages, history:{before, start_reached}}
+-> {conversation_id, projection_id, as_of, messages, history:{before, start_reached}}
 
 GET /api/chat/changes?after=<changes cursor>&limit=200   (1-1000)
--> {conversation_id, projection_id, changes:[{seq, kind: insert|edit|delete|restore,
+-> {conversation_id, projection_id, as_of, changes:[{seq, kind: insert|edit|delete|restore,
     revision, message}], after: cursor, more}
 
 GET /api/chat/sources -> capability table, binding origin, conversation_id
@@ -117,7 +128,13 @@ Errors:
   - `changes_expired`: the cursor is older than the retained window of 10,000 changes
 
   Load a new snapshot. This is never "no new messages".
-- **503 `source_unavailable`** (`retryable: true`): the store is missing, locked, corrupt or of an unknown schema, including a messages table with no `id`. Nothing is changed.
+- **503 `source_unavailable`** (`retryable: true`) from `snapshot` and `changes`: the store is locked, corrupt, of an unknown schema (including a messages table with no `id`), or **missing after it was once indexed**. Nothing is changed, and the projection is not reset (review R1 F2). When the same store comes back, old cursors continue.
+
+**A store that never existed** is a new companion with no conversation yet. `snapshot` returns 200 with no messages and `source_state: "not_created"`, and the first messages arrive as changes. Whether a store has ever been seen survives rebuilds.
+
+**Stale data.** `snapshot` and `changes` succeed only after a successful sync. `history` pages are served from the projection without contacting the source, and every response carries `as_of`: the time of the last successful sync. During an outage, older pages remain readable and say how old they are.
+
+An owner-binding change is applied and committed before the source is read. A revoked binding therefore purges what it authorised even while the source is down.
 
 **Start of history.** `start_reached: true` means the earliest message the sources still hold. A message a source has deleted is not recoverable by scrolling.
 
@@ -129,7 +146,7 @@ The legacy `GET /api/feed` and `GET /api/sessions/{id}` are unchanged. They stil
 
 **Why it exists.** Stable ids, revisions and a change sequence need somewhere to live that is not Hermes's database. This file is not a second authority: it is rebuilt from the sources whenever its schema, scope, binding or source generation differs, and it can be deleted at any time.
 
-**Interrupted writes.** Every sync is one `BEGIN IMMEDIATE` transaction, so a crash rolls back to the last consistent state (tested).
+**Interrupted writes.** A sync is two `BEGIN IMMEDIATE` transactions: the binding/scope check, then the source read. A crash rolls back to the last consistent state (tested).
 
 **Indexing bounds** (for phone-class hosts):
 - **Pulling new rows:** at most 20,000 source rows per request, in batches of 5,000.
@@ -143,26 +160,28 @@ Measured on 50,000 synthetic messages (Linux, Python 3.14, SSD; `tests/test_chat
 
 | | |
 |---|---|
-| initial indexing | 1.44 s over 3 bounded calls |
+| initial indexing | 1.69 s over 3 bounded calls |
 | snapshot (60 messages) | 0.6 ms, 26 KB JSON |
 | history page (60) | 0.3 ms |
-| sync with nothing new | 0.6 ms |
-| full reconcile | 0.49 s |
-| projection file | 21 MB |
+| sync with nothing new | 7.9 ms (includes the 64-row identity sample) |
+| full reconcile | 0.65 s |
+| projection file | 22 MB |
+
+These are desktop measurements of the projection alone. They are not phone results, and not route/media-enrichment or rendered-UI measurements.
 
 ## 6. Capability table
 
 "Fixture" means tested against a Hermes-schema `state.db` built with the installed Hermes's exact sessions/messages columns (schema_version 30, hermes-agent `0e9fc2cc15`). Nothing here is live-tested.
 
-| | workspace | terminal | telegram | discord / signal / others | outbox delivery |
+| | workspace | terminal | telegram | discord / signal / others | proactive delivery |
 |---|---|---|---|---|---|
 | Schema inspected | yes | yes | yes | not in this phase | yes (`companion_outbox`, Hermes `send`/mirror) |
-| Owner / DM identity | app registry | local session, no gateway chat | bound `user_id` + DM rule | **unsupported** | n/a |
+| Owner / DM identity | app registry + binding | local session, no gateway chat + binding | bound `user_id` + DM rule; owner rows need `platform_message_id` | **unsupported** | n/a |
 | Durable ids / lifecycle | `messages.id` per store generation | same | same (+`platform_message_id` on user turns) | n/a | outbox id, no platform id |
 | Edits / deletions | content change / row gone or hidden | same | same; Telegram edits are not recorded by Hermes | n/a | n/a |
 | Attachments | `MEDIA:`/image refs via media catalog | same | same | n/a | n/a |
 | Deltas | completed messages only (Hermes persists no deltas) | same | same | n/a | n/a |
-| Delivered proactive provenance | n/a | n/a | mirror row appears, no linkage | n/a | **linkage unavailable** |
+| Delivered proactive provenance | n/a | n/a | not verifiable; companion rows shown with `correlation: null` | n/a | **unsupported** |
 | Tested | fixture | fixture | fixture | excluded (fixture) | fixture |
 
 ## 7. Synthetic provider

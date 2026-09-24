@@ -68,7 +68,20 @@ class HermesStore:
                        (ident, source, user_id, chat_id, chat_type, started, profile))
         return ident
 
+    def _platform_id(self, db, session, role):
+        """Hermes records the platform's message id on every gateway user turn
+        (gateway/run_turn.py); a Telegram user row gets one unless a test
+        passes platform_message_id=None to write a row that has none."""
+        source = db.execute('SELECT source FROM sessions WHERE id=?', (session,)).fetchone()
+        if role != 'user' or not source or source[0] != 'telegram':
+            return None
+        self._next_platform_id = getattr(self, '_next_platform_id', 1000) + 1
+        return str(self._next_platform_id)
+
     def say(self, session, role, content, ts, **cols):
+        with self.db() as db:
+            if 'platform_message_id' not in cols and (pid := self._platform_id(db, session, role)):
+                cols['platform_message_id'] = pid
         names = ['session_id', 'role', 'content', 'timestamp', *cols]
         with self.db() as db:
             cur = db.execute(f"INSERT INTO messages({','.join(names)}) VALUES ({','.join('?' * len(names))})",
@@ -85,8 +98,8 @@ class HermesStore:
 
     def many(self, session, rows):
         with self.db() as db:
-            db.executemany('INSERT INTO messages(session_id,role,content,timestamp) VALUES (?,?,?,?)',
-                           [(session, role, content, ts) for role, content, ts in rows])
+            db.executemany('INSERT INTO messages(session_id,role,content,timestamp,platform_message_id) VALUES (?,?,?,?,?)',
+                           [(session, role, content, ts, self._platform_id(db, session, role)) for role, content, ts in rows])
 
 
 def standard_sessions(store):

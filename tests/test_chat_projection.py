@@ -135,28 +135,69 @@ class BoundaryTests(ProjectionCase):
         self.assertEqual(self.contents(page), ['real question', 'compacted original', 'the answer'])
         self.assertNotIn('PRIVATE', json.dumps(page))
 
-    def test_delivered_outreach_is_distinguished_from_cron_output(self):
-        """The cron session's own output never appears. A proactive message
-        Hermes delivered and mirrored into the owner's DM appears as the
-        companion speaking on Telegram. Outbox entries are never joined by
-        text, and a queued/withheld one never appears at all."""
+    def test_proactive_delivery_is_not_claimed_and_unverified_senders_stay_out(self):
+        """Review R1 F4. No source record proves a proactive message was
+        delivered, so none is presented as one: the cron run's own output is
+        not conversation, an outbox entry is never projected or joined by text,
+        and a user-role row with no platform message id (the shape of Hermes's
+        cron-brief delivery mirror) is not the owner and stays out. A companion
+        row in the owner's DM is shown as that transcript recorded it, with no
+        delivery correlation."""
         self.c.life.mkdir(parents=True, exist_ok=True)
         now = dt.datetime(2026, 9, 24, 9, tzinfo=dt.timezone.utc)
         sent = outbox.queue(self.c, {'body': 'Good morning, did you sleep?'}, now)['entry']
         outbox.mark(self.c, sent['id'], 'sent', 'sent', now)
         outbox.queue(self.c, {'body': 'An idea I never sent'}, now)
         self.store.say('job', 'assistant', 'Good morning, did you sleep?', 30)       # the generating run
-        self.store.say('tg', 'assistant', 'Good morning, did you sleep?', 31)        # Hermes's delivery mirror
-        self.store.say('tg', 'user', '[Cron delivery: morning]\nWeather brief', 32)  # role=user cron mirror
-        projection, _ = self.sync()
+        self.store.say('tg', 'assistant', 'Good morning, did you sleep?', 31)        # a companion row in the DM
+        self.store.say('tg', 'user', '[Cron delivery: morning]\nWeather brief', 32, platform_message_id=None)
+        self.store.say('tg', 'user', 'no platform id, ordinary words', 33, platform_message_id=None)
+        self.store.say('tg', 'user', 'received from Telegram', 34, platform_message_id='555')
+        projection, stats = self.sync()
         page = projection.snapshot()
-        self.assertEqual(self.contents(page), ['Good morning, did you sleep?', '[Cron delivery: morning]\nWeather brief'])
-        delivered, brief = page['messages']
-        self.assertEqual((delivered['speaker'], delivered['source']['kind'], delivered['correlation']), ('companion', 'telegram', None))
-        self.assertEqual(brief['speaker'], 'unverified', 'a cron mirror is not presented as the owner')
-        self.assertIn('not verified', brief['note'])
+        self.assertEqual(self.contents(page), ['Good morning, did you sleep?', 'received from Telegram'])
+        companion, owner = page['messages']
+        self.assertEqual((companion['speaker'], companion['source']['kind'], companion['correlation']), ('companion', 'telegram', None))
+        self.assertEqual((owner['speaker'], owner['correlation']), ('owner', {'platform_message_id': '555'}))
+        self.assertEqual(stats['excluded']['unverified_sender'], 2, 'excluded structurally, whatever the text says')
+        self.assertEqual(stats['excluded']['internal_session'], 1)
         self.assertNotIn('An idea I never sent', json.dumps(page))
-        self.assertEqual(cs.capabilities()['outbox (proactive delivery)']['status'], 'linkage unavailable')
+        self.assertNotIn('delivered', json.dumps(page).lower())
+        self.assertEqual(cs.capabilities()['proactive delivery provenance']['status'], 'unsupported')
+        self.assertFalse(hasattr(cs, 'CRON_MIRROR_PREFIX'), 'no text-prefix rule')
+
+    def test_revoking_workspace_trust_removes_workspace_content(self):
+        """Review R1 F1."""
+        self.store.say('web', 'user', 'workspace owner', 10);self.store.say('web', 'assistant', 'workspace companion', 11)
+        self.store.say('term', 'user', 'terminal owner', 12)
+        projection, _ = self.sync()
+        snap = projection.snapshot(1)
+        self.assertEqual(self.contents(projection.snapshot()), ['workspace owner', 'workspace companion', 'terminal owner'])
+        revoked = cs.OwnerBinding(workspace=False, terminal=True, telegram=(OWNER_TELEGRAM,), origin='owner-file')
+        after, source = self.projection(binding=revoked)
+        for read in (after.snapshot, lambda: after.history(snap['history']['before']), lambda: after.changes(snap['changes']['after'])):
+            with self.assertRaises(cp.ResyncRequired):read()
+        stats = after.sync(source)
+        page = after.snapshot()
+        self.assertEqual(self.contents(page), ['terminal owner'], 'not relabelled as terminal either')
+        self.assertEqual(stats['excluded']['workspace_not_trusted'], 2)
+        self.assertEqual(after.changes(page['changes']['after'])['changes'], [])
+        with contextlib.closing(sqlite3.connect(after.path)) as con, con:
+            stored = json.dumps(con.execute('SELECT content FROM messages').fetchall())
+        self.assertNotIn('workspace', stored, 'the derived state keeps no revoked content')
+        both_off = cs.OwnerBinding(workspace=False, terminal=False, origin='owner-file')
+        off, source = self.projection(binding=both_off);off.sync(source)
+        self.assertEqual(off.snapshot()['messages'], [])
+
+    def test_a_revoked_binding_is_purged_even_while_the_source_is_down(self):
+        self.store.say('web', 'user', 'workspace secret', 10)
+        projection, _ = self.sync()
+        self.store.path.rename(self.store.path.with_name('state.db.away'))
+        revoked = cs.OwnerBinding(workspace=False, origin='owner-file')
+        after, source = self.projection(binding=revoked)
+        with self.assertRaises(cs.SourceUnavailable):after.sync(source)
+        with contextlib.closing(sqlite3.connect(after.path)) as con, con:
+            self.assertNotIn('workspace secret', json.dumps(con.execute('SELECT content FROM messages').fetchall()))
 
 
 class IdentityTests(ProjectionCase):
@@ -344,6 +385,101 @@ class ResyncTests(ProjectionCase):
         self.assertEqual(self.contents(after.snapshot()), ['workspace'])
         with contextlib.closing(sqlite3.connect(after.path)) as con, con:
             self.assertNotIn('telegram secret', json.dumps(con.execute('SELECT content FROM messages').fetchall()))
+
+
+class ReviewR1SourceTests(ProjectionCase):
+    """Review R1 F2 (a missing store) and F3 (a replacement that keeps the
+    sequence and the anchor)."""
+    def index(self, n=5):
+        for t in range(n):self.store.say('tg', 'user', f'm{t}', 100 + t)
+        projection, _ = self.sync()
+        return projection, projection.snapshot(2)
+
+    def test_a_missing_store_after_indexing_is_unavailable_not_empty(self):
+        projection, snap = self.index()
+        away = self.store.path.with_name('state.db.away');self.store.path.rename(away)
+        for attempt in range(2):
+            with self.assertRaises(cs.SourceUnavailable):projection.sync(self.projection()[1])
+        after = projection.snapshot(2)
+        self.assertEqual((after['projection_id'], after['messages']), (snap['projection_id'], snap['messages']), 'not reset')
+        self.assertEqual(after['as_of'], snap['as_of'], 'still says when it was last read')
+        away.rename(self.store.path)
+        stats = projection.sync(self.projection()[1])
+        self.assertIsNone(stats['rebuilt'], 'the same store coming back is not a replacement')
+        self.assertEqual(projection.changes(snap['changes']['after'])['changes'], [], 'old cursors continue')
+        self.assertEqual(self.contents(projection.history(snap['history']['before'])), ['m0', 'm1', 'm2'])
+
+    def test_a_store_that_never_existed_is_an_empty_new_conversation(self):
+        fresh = self.companion('fresh', 'Fresh')
+        projection, stats = self.sync(fresh)
+        self.assertEqual(stats['source_state'], 'not_created')
+        page = projection.snapshot()
+        self.assertEqual((page['messages'], page['source_state']), ([], 'not_created'))
+        store = HermesStore(fresh.home)
+        store.session('tg', 'telegram', profile='fresh', user_id=OWNER_TELEGRAM, chat_id=OWNER_TELEGRAM, chat_type='dm')
+        store.say('tg', 'user', 'first words', 1)
+        projection.sync(self.projection(fresh)[1])
+        self.assertEqual([c['message']['content'] for c in projection.changes(page['changes']['after'])['changes']], ['first words'])
+
+    def replace_keeping_anchor(self, change_anchor=False):
+        """Build the reviewer's counterexample in place: the same file, the
+        same AUTOINCREMENT sequence, the anchor row (the highest id) kept, and
+        another id reassigned to a different message in another session."""
+        if change_anchor:
+            self.store.delete(5)
+        self.store.update(3, session_id='web', role='assistant', content='a different message', timestamp=500)
+
+    def assert_rebuilt_without_aliasing(self, projection, snap, stats):
+        self.assertIn(stats['rebuilt'], ('source_replaced', 'source_identity_changed'))
+        for read in (lambda: projection.history(snap['history']['before']), lambda: projection.changes(snap['changes']['after'])):
+            with self.assertRaises(cp.ResyncRequired):read()
+        fresh = {m['source']['message']: m for m in projection.snapshot()['messages']}
+        old_ids = {m['message_id'] for m in snap['messages']}
+        self.assertEqual((fresh['3']['source']['session'], fresh['3']['speaker']), ('web', 'companion'))
+        self.assertFalse({m['message_id'] for m in fresh.values()} & old_ids, 'no old opaque id reused')
+
+    def test_a_replacement_that_keeps_sequence_and_anchor_is_detected(self):
+        projection, snap = self.index()
+        with self.store.db() as db:
+            seq = db.execute("SELECT seq FROM sqlite_sequence WHERE name='messages'").fetchone()[0]
+        self.replace_keeping_anchor()
+        with self.store.db() as db:
+            self.assertEqual(db.execute("SELECT seq FROM sqlite_sequence WHERE name='messages'").fetchone()[0], seq)
+        self.assert_rebuilt_without_aliasing(projection, snap, projection.sync(self.projection()[1]))
+
+    def test_a_replacement_with_the_anchor_missing_is_detected(self):
+        projection, snap = self.index()
+        self.replace_keeping_anchor(change_anchor=True)
+        self.assert_rebuilt_without_aliasing(projection, snap, projection.sync(self.projection()[1]))
+
+    def test_a_reassigned_id_outside_the_sample_is_caught_before_it_is_aliased(self):
+        self.store.many('tg', [('user', f'n{i}', float(i)) for i in range(400)])
+        projection, _ = self.sync()
+        snap = projection.snapshot(2)
+        target = 251
+        with contextlib.closing(sqlite3.connect(projection.path)) as con:
+            step = max(1, con.execute('SELECT count(*) FROM messages').fetchone()[0] // cp.IDENTITY_SAMPLE)
+            sampled = {r[0] for r in con.execute('SELECT source_id FROM messages WHERE (pk % ?)=0 LIMIT ?', (step, cp.IDENTITY_SAMPLE + 1))}
+        self.assertNotIn(target, sampled)
+        self.store.update(target, session_id='web', role='assistant', content='someone else entirely')
+        quiet = projection.sync(self.projection()[1])
+        self.assertIsNone(quiet['rebuilt'], 'not yet reconciled: the old row is stale, not aliased')
+        old = {m['source']['message']: m for m in self.all_history(projection, 200)}
+        self.assertEqual(old[str(target)]['content'], f'n{target - 1}')
+        stats = projection.sync(self.projection()[1], force_reconcile=True)
+        self.assertEqual(stats['rebuilt'], 'source_identity_changed')
+        with self.assertRaises(cp.ResyncRequired):projection.changes(snap['changes']['after'])
+        now = {m['source']['message']: m for m in self.all_history(projection, 200)}
+        self.assertEqual((now[str(target)]['source']['session'], now[str(target)]['content']), ('web', 'someone else entirely'))
+        self.assertNotEqual(now[str(target)]['message_id'], old[str(target)]['message_id'])
+
+    def test_an_ordinary_edit_is_still_an_edit(self):
+        projection, snap = self.index()
+        self.store.update(3, content='m2, corrected')
+        stats = projection.sync(self.projection()[1], force_reconcile=True)
+        self.assertIsNone(stats['rebuilt'])
+        [change] = projection.changes(snap['changes']['after'])['changes']
+        self.assertEqual((change['kind'], change['message']['content']), ('edit', 'm2, corrected'))
 
 
 class SourceSafetyTests(ProjectionCase):

@@ -64,6 +64,19 @@ class ChatRouteTests(unittest.TestCase):
         down = self.get('/chat/snapshot')
         self.assertEqual((down.status_code, down.json()['error'], down.json()['retryable']), (503, 'source_unavailable', True))
 
+    def test_a_missing_store_is_retryable_and_history_says_how_old_it_is(self):
+        for i in range(4):self.store.say('tg', 'user', f'm{i}', 10 + i)
+        snap = self.get('/chat/snapshot', limit=2).json()
+        away = self.store.path.with_name('state.db.away');self.store.path.rename(away)
+        for path, params in (('/chat/snapshot', {}), ('/chat/changes', {'after': snap['changes']['after']})):
+            r = self.get(path, **params)
+            self.assertEqual((r.status_code, r.json()['error'], r.json()['retryable']), (503, 'source_unavailable', True), path)
+        older = self.get('/chat/history', before=snap['history']['before'], limit=2)
+        self.assertEqual(older.status_code, 200)
+        self.assertEqual(older.json()['as_of'], snap['as_of'], 'served from the last successful read, and says so')
+        away.rename(self.store.path)
+        self.assertEqual(self.get('/chat/changes', after=snap['changes']['after']).json()['changes'], [])
+
     def test_sources_report_capabilities_and_binding(self):
         body = self.get('/chat/sources').json()
         self.assertEqual(body['owner_binding']['origin'], 'owner-file')

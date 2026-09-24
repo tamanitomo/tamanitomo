@@ -4,9 +4,13 @@ A source adapter turns rows some other program owns into SourceRecords. It
 never writes to that program's store. What belongs in the owner's private
 conversation is decided here, from structural provenance only:
 
-  workspace  a cli/desktop/tui session this app started (its session registry)
-  terminal   a local cli/desktop/tui session with no gateway chat attached
-  telegram   a direct-message session whose Telegram user ID is bound to the owner
+  workspace  a cli/desktop/tui session this app started (its session registry),
+             when the binding trusts the workspace
+  terminal   a local cli/desktop/tui session with no gateway chat attached and
+             not started by this app, when the binding trusts the terminal
+  telegram   a direct-message session whose Telegram user ID is bound to the
+             owner; a user turn counts as the owner only when Hermes recorded
+             the platform message id it was received as
 
 Everything else -- another participant, a group or channel, a platform this
 phase has not verified, a scheduled run, a sub-agent, an internal notification
@@ -28,12 +32,13 @@ LOCAL_SOURCES = ('cli', 'desktop', 'tui')
 # Adapters whose identity and DM semantics this phase has checked against the
 # installed Hermes schema. Anything else is excluded as unverified.
 VERIFIED_CHANNELS = ('telegram',)
-# Hermes writes a cron delivery mirrored into a chat as a role="user" row that
-# starts with this, and drops every structured marker on the way into SQLite
-# (gateway/mirror.py, cron/scheduler_delivery.py). It is not the owner speaking,
-# and nothing structural says so; such a row keeps its place in the transcript
-# but its sender is reported as unverified instead of as the owner.
-CRON_MIRROR_PREFIX = '[Cron delivery: '
+# Gateway sources whose inbound user turns Hermes records with the platform's
+# own message id (gateway/run_turn.py _hmwa_user_transcript_entry). A user row
+# in such a session WITHOUT one was not received from the platform: Hermes's
+# delivery mirror (gateway/mirror.py) writes cron briefs as role="user" rows with
+# no id, and rows from releases before the column existed have none either. The
+# sender of such a row is not established, so it stays out of the private feed.
+PLATFORM_ID_SOURCES = ('telegram',)
 
 
 class SourceUnavailable(Exception):
@@ -108,6 +113,8 @@ class SourceRecord:
     # A source's own ordering of versions of this message (e.g. an edit time),
     # when it has one. Hermes has none: its current row is authoritative.
     source_revision: float | None = None
+    # Identity of the source row (see fingerprint()); None for push records.
+    fingerprint: str | None = None
 
 
 # ---------------------------------------------------------------- Hermes store
@@ -177,8 +184,15 @@ class _HermesReader:
     def anchor(self, ident):
         """A fingerprint of one row, to tell "the same row" from "a row that
         happens to have the same id in a different file"."""
-        row = self.con.execute('SELECT id,session_id,role,timestamp FROM messages WHERE id=?', (ident,)).fetchone()
-        return None if row is None else hashlib.sha256(json.dumps(list(row)).encode()).hexdigest()[:24]
+        return self.fingerprints([ident]).get(ident)
+
+    def fingerprints(self, ids):
+        """{id: fingerprint} for those of `ids` that still exist (<= 500)."""
+        ids = [int(i) for i in ids][:500]
+        if not ids:
+            return {}
+        rows = self.con.execute(f"SELECT id,session_id,role,timestamp FROM messages WHERE id IN ({','.join('?' * len(ids))})", ids)
+        return {r[0]: fingerprint(*r) for r in rows}
 
     def _select(self):
         sc, mc = self.session_cols, self.message_cols
@@ -224,7 +238,10 @@ def session_kind(row, binding, workspace):
     chat_id = str(row.get('chat_id') or '')
     if source in LOCAL_SOURCES:
         if row.get('session_id') in workspace:
-            return 'workspace', None, None
+            # A session this app started is the workspace's, whatever else is
+            # trusted: with workspace trust withdrawn it is excluded, never
+            # relabelled as a terminal session.
+            return ('workspace', None, None) if binding.workspace else (None, 'workspace_not_trusted', None)
         if chat_id:
             return None, 'local_source_with_gateway_chat', None
         if binding.terminal:
@@ -262,16 +279,23 @@ def classify(row, binding, workspace):
     public = (not (row.get('display_kind') or '') and not row.get('compressed')
               and (row.get('active') in (None, 1) or row.get('compacted') == 1)
               and bool(content.strip()))
+    if role == 'user' and kind in PLATFORM_ID_SOURCES and not row.get('platform_message_id'):
+        return None, 'unverified_sender'
     speaker, note = ('owner' if role == 'user' else 'companion'), ''
-    if role == 'user' and content.startswith(CRON_MIRROR_PREFIX):
-        speaker, note = 'unverified', 'written in the Hermes cron-mirror format; the sender is not verified as the owner'
     stamp = row.get('timestamp')
     return SourceRecord(
         source_key=f"hermes:{row['id']}", source_kind=kind, source_account=account, source_channel=channel,
         source_session=str(row['session_id']), source_message=str(row['id']),
         platform_message_id=str(row['platform_message_id']) if row.get('platform_message_id') else None,
         speaker=speaker, occurred_at=float(stamp) if isinstance(stamp, (int, float)) else None,
-        content=content if public else '', visible=public, note=note), None
+        content=content if public else '', visible=public, note=note,
+        fingerprint=fingerprint(row['id'], row['session_id'], role, stamp)), None
+
+
+def fingerprint(ident, session, role, timestamp):
+    """What must not change for a source row to still be the same message:
+    its id, session, role and authored time. Content may change (an edit)."""
+    return hashlib.sha256(json.dumps([ident, session, role, timestamp]).encode()).hexdigest()[:24]
 
 
 def capabilities():
@@ -288,15 +312,18 @@ def capabilities():
         'terminal': {**common, 'status': 'supported', 'identity': 'local cli/desktop/tui session with no gateway chat',
                      'tested': 'fixture'},
         'telegram': {**common, 'status': 'supported', 'identity': 'sessions.user_id bound to the owner; DM by chat_type=dm or chat_id=user_id',
-                     'platform_message_id': 'user turns only; delivery mirrors carry none',
+                     'platform_message_id': 'required on user turns: a user row without one (a cron-brief delivery '
+                                            'mirror, or a row older than the column) is excluded as unverified_sender',
                      'edits': 'Hermes does not record Telegram edits of past messages', 'tested': 'fixture'},
         'discord': {'status': 'unsupported', 'reason': 'identity/DM semantics not verified in this phase'},
         'signal': {'status': 'unsupported', 'reason': 'identity/DM semantics not verified in this phase'},
         'other gateways': {'status': 'unsupported', 'reason': 'excluded as unverified_source:<name>'},
-        'outbox (proactive delivery)': {
-            'status': 'linkage unavailable',
-            'reason': ('outbox marks a message sent without the platform message id, and the Hermes delivery '
-                       'mirror row carries no outbox id. A delivered message appears only as the mirror row in '
-                       "the owner's DM session; it is never joined to the outbox by text."),
+        'proactive delivery provenance': {
+            'status': 'unsupported',
+            'reason': ('No source record proves that a proactive message was delivered: the outbox marks an entry '
+                       'sent without the platform message id, and the Hermes delivery mirror row carries no outbox '
+                       'id, no platform id and no marker distinguishing it from a model reply. Companion rows in a '
+                       'trusted session are shown as that session recorded them, with delivery unverified; no row is '
+                       'presented as a verified delivered outreach, and nothing is joined by text.'),
             'tested': 'fixture'},
     }
