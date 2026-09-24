@@ -53,7 +53,21 @@ Earlier runs on intermediate code during development are not the results of reco
 
 ### I.4 CI
 
-Recorded after the push below.
+Run [`36035658970`](https://github.com/tamanitomo/tamanitomo/actions/runs/36035658970) (`test.yml`, "Tests"). It ran on head **`2bd8d14`**: the report and evidence commit, whose code is identical to the tested `38d6b79`. Conclusion: **success**. All 5 jobs passed:
+
+| Job | Result |
+|---|---|
+| linux (3.11) | success |
+| linux (3.13) | success |
+| linux (3.14) | success |
+| smoke (windows-latest) | success |
+| smoke (macos-latest) | success |
+
+Pass and skip counts are **not available** from here. The job logs need authentication (the API returns 403), and the public check-run annotations hold only runner notices (the Node 20 deprecation and the ubuntu-latest migration). No test-failure annotation was emitted. The unconfigured Linux jobs skip the pinned cases by design; the pinned lane is the local run in §I.2.
+
+Windows and macOS smoke passing shows refusal and derivation behaviour on those runners. It is **not** supervisor evidence for O-8 or O-11.
+
+This paragraph is committed after `2bd8d14` in a report-only commit. Any CI run on that later commit is not the run recorded here.
 
 The sections that follow are the R4-round report, kept as written.
 
