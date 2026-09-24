@@ -41,12 +41,12 @@
   "provider_requests": [
     [
       "deltas",
-      false,
+      true,
       1
     ],
     [
       "deltas",
-      true,
+      false,
       2
     ]
   ],
@@ -66,13 +66,13 @@
       "finish_reason": null,
       "role": "user",
       "row_id": 1,
-      "session_id": "20260924_095800_459552"
+      "session_id": "20260924_104413_0986ef"
     },
     {
       "finish_reason": "stop",
       "role": "assistant",
       "row_id": 2,
-      "session_id": "20260924_095800_459552"
+      "session_id": "20260924_104413_0986ef"
     }
   ]
 }

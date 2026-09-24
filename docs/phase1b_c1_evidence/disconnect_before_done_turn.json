@@ -40,12 +40,12 @@
   "provider_requests": [
     [
       "truncated",
-      true,
+      false,
       1
     ],
     [
       "truncated",
-      false,
+      true,
       2
     ],
     [
@@ -105,13 +105,13 @@
       "finish_reason": null,
       "role": "user",
       "row_id": 1,
-      "session_id": "20260924_095829_071e98"
+      "session_id": "20260924_104441_6ae460"
     },
     {
       "finish_reason": "length",
       "role": "assistant",
       "row_id": 2,
-      "session_id": "20260924_095829_071e98"
+      "session_id": "20260924_104441_6ae460"
     }
   ]
 }

@@ -40,12 +40,12 @@
   "provider_requests": [
     [
       "recover_stream",
-      true,
+      false,
       1
     ],
     [
       "recover_stream",
-      false,
+      true,
       2
     ],
     [
@@ -70,25 +70,25 @@
       "finish_reason": null,
       "role": "user",
       "row_id": 1,
-      "session_id": "20260924_095743_b469e1"
+      "session_id": "20260924_104356_39f394"
     },
     {
       "finish_reason": "length",
       "role": "assistant",
       "row_id": 2,
-      "session_id": "20260924_095743_b469e1"
+      "session_id": "20260924_104356_39f394"
     },
     {
       "finish_reason": null,
       "role": "user",
       "row_id": 3,
-      "session_id": "20260924_095743_b469e1"
+      "session_id": "20260924_104356_39f394"
     },
     {
       "finish_reason": "stop",
       "role": "assistant",
       "row_id": 4,
-      "session_id": "20260924_095743_b469e1"
+      "session_id": "20260924_104356_39f394"
     }
   ]
 }

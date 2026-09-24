@@ -37,33 +37,28 @@
     "write_committed",
     "executor_finished"
   ],
-  "path": "continuation_note_row",
+  "path": "single_owner_row",
   "provider_requests": [
     [
       "recover",
-      true,
+      false,
       1
     ],
     [
       "recover",
-      false,
-      2
-    ],
-    [
-      "recover",
       true,
-      3
+      2
     ]
   ],
   "row": {
     "capability": "full",
-    "correlation": "ambiguous",
+    "correlation": "linked",
     "coverage": "complete",
-    "error_code": "owner_turn_not_established",
+    "error_code": null,
     "liveness": "quiescent",
-    "owner_turn": "ambiguous",
-    "reply": "partial",
-    "state": "unknown"
+    "owner_turn": "recorded",
+    "reply": "final",
+    "state": "complete"
   },
   "settled": true,
   "state_rows": [
@@ -71,25 +66,13 @@
       "finish_reason": null,
       "role": "user",
       "row_id": 1,
-      "session_id": "20260924_095745_77ed23"
-    },
-    {
-      "finish_reason": "length",
-      "role": "assistant",
-      "row_id": 2,
-      "session_id": "20260924_095745_77ed23"
-    },
-    {
-      "finish_reason": null,
-      "role": "user",
-      "row_id": 3,
-      "session_id": "20260924_095745_77ed23"
+      "session_id": "20260924_104359_dc562d"
     },
     {
       "finish_reason": "stop",
       "role": "assistant",
-      "row_id": 4,
-      "session_id": "20260924_095745_77ed23"
+      "row_id": 2,
+      "session_id": "20260924_104359_dc562d"
     }
   ]
 }

@@ -39,12 +39,12 @@
   "provider_requests": [
     [
       "hang",
-      true,
+      false,
       1
     ],
     [
       "hang",
-      false,
+      true,
       2
     ]
   ],
@@ -64,7 +64,7 @@
       "finish_reason": null,
       "role": "user",
       "row_id": 1,
-      "session_id": "20260924_095751_98c777"
+      "session_id": "20260924_104405_ce80af"
     }
   ]
 }

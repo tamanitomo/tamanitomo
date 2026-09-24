@@ -4,7 +4,7 @@
 |---|---|
 | Answers | `PHASE1B_REVIEW_R3.md` (acceptance of C0 at `8735557`; authorisation of the isolated C1 core) |
 | Branch | `test/phase1b-c1-core` (new, unmerged), on top of `8735557` |
-| Base / code head | base `87355573c75a2237d54002bed579fde73843c003`; code head `425babf` (the evidence below was produced there); this report is committed on top |
+| Base / code head | base `87355573c75a2237d54002bed579fde73843c003`; code head `97bb3a1` (the evidence below was produced there); this report is committed on top |
 | Scope | **C1 core only**: callable components and their synthetic integration tests. |
 | Activated | **No.** No route, UI, `release-files.json` entry or real profile uses these modules. `POST /api/chat`, `Runtime.chat()` and `kit/app/hermes_stream.py` are unchanged, so no platform's current chat changes. C2 and C3 were not started. |
 | Hermes | `hermes-agent` `0e9fc2cc152b4a4d9fd736f107412ace2a0c2555`, exported blob by blob and verified by `tools/pinned_hermes_lane.py` (12,298 files, tree `a6b86d2a`). |
@@ -44,10 +44,10 @@ Platform: Linux 7.2.0 (CachyOS), x86_64. App interpreter Python 3.14.7. Hermes i
 
 | Command | Result |
 |---|---|
-| `python tools/pinned_hermes_lane.py --checkout <hermes-agent> --python <hermes venv python> --work <empty dir>` at `425babf`, run twice | **pass** both times: 13/13 passed, 0 skipped, 0 failed (53 s, 52 s). Evidence: [`docs/phase1b_c1_evidence/`](docs/phase1b_c1_evidence/) (paths sanitised to `~`, `<work>`, `<tmp>`) |
-| `pytest -q tests/test_phase1b_c1_core.py` | **84 passed**, 14 subtests; repeated 3× without a failure; `-X dev -W always::ResourceWarning`: 0 unclosed resources |
-| full suite, pinned **not** configured, **on this host** (`PATH=/usr/local/bin:/usr/bin:/bin TAMANITOMO_REQUIRE_NODE=1 pytest -q -rs`) | **1559 passed, 37 skipped**, 490 subtests, 1 warning (the existing Starlette/httpx deprecation). The 37 skips are the 24 Hermes-backed C0 cases and the 13 C1 pinned cases, each with the reason printed. (CI will differ: it also lacks `uv`, which skips one installer test.) |
-| full suite with C0 **and** C1 pinned configured (`TAMANITOMO_C0_HERMES_*`, `TAMANITOMO_C1_HERMES_*`, `TAMANITOMO_C1_REQUIRE_PINNED=1`) | **1596 passed, 0 skipped**, 494 subtests, 1 warning |
+| `python tools/pinned_hermes_lane.py --checkout <hermes-agent> --python <hermes venv python> --work <empty dir>` at `97bb3a1`, run twice | **pass** both times: 13/13 passed, 0 skipped, 0 failed (52 s, 53 s). Evidence: [`docs/phase1b_c1_evidence/`](docs/phase1b_c1_evidence/) (paths sanitised to `~`, `<work>`, `<tmp>`) |
+| `pytest -q tests/test_phase1b_c1_core.py` | **86 passed**, 14 subtests; 11 clean repeats, 8 of them as four concurrent copies (load); `-X dev -W always::ResourceWarning`: 0 unclosed resources |
+| full suite, pinned **not** configured, **on this host** (`PATH=/usr/local/bin:/usr/bin:/bin TAMANITOMO_REQUIRE_NODE=1 pytest -q -rs`) | **1561 passed, 37 skipped**, 490 subtests, 1 warning (the existing Starlette/httpx deprecation). The 37 skips are the 24 Hermes-backed C0 cases and the 13 C1 pinned cases, each with the reason printed. (CI will differ: it also lacks `uv`, which skips one installer test.) |
+| full suite with C0 **and** C1 pinned configured (`TAMANITOMO_C0_HERMES_*`, `TAMANITOMO_C1_HERMES_*`, `TAMANITOMO_C1_REQUIRE_PINNED=1`) | **1598 passed, 0 skipped**, 494 subtests, 1 warning |
 | CI (`test.yml`) | recorded after the push in §9; the Windows/macOS smoke jobs now include `tests/test_phase1b_c1_core.py`, where the Linux-only cases skip and the refusal, derivation and recorder cases run. That is refusal evidence, **not** O-8/O-11 supervision evidence. |
 
 The lane exists because ordinary runs skip the 13 pinned cases. In the lane:
@@ -92,7 +92,7 @@ The lane exists because ordinary runs skip the 13 pinned cases. In the lane:
 | M-6, M-6e, M-6f, M-6a, M-6b, M-6c, M-6d | fake | generation, freshness, POST-never-creates, replay after expiry, expired re-arm, lost/corrupt ledger (`send_ledger_lost`, nothing recreated), bounded pruning with unsettled sends kept |
 | M-7 kill at each §4.8 row (controller) | fake, subprocess controller SIGKILLed by a test-only subclass hook | after acceptance → `not_started` then re-arm with the same `send_id`; after T1 → `not_started`; M-7a between spawn and `go` → executor exits on EOF, **Hermes never ran** (no `state.db`); M-7b after `go` → exactly one of `not_started`/started |
 | M-7 kill of the executor at turn boundaries | fake | before owner row: `unknown/absent/none/bounded`; inside the owner write: `unknown/possible`; after owner row: `unknown/recorded/none`; after reply: `unknown/recorded/partial`; all `executor_lost`, quiescent, settled |
-| M-7c/M-7d lock missing, replaced, symlinked | fake | `unproven`, lease held, reset refused, new send refused |
+| M-7c/M-7d lock missing, replaced (including inode reuse), symlinked | fake | `unproven`, lease held, reset refused, new send refused |
 | M-7e descendant in the group; `setsid` descendant | fake | lease held until the owner kills the group; the escaped child stays alive and is outside the boundary |
 | M-8 controller dies mid-turn | fake + pinned | executor continues; recovery supervises through lock and facts; `complete`; one launch |
 | M-8a stale owner | fake | its launch and compare-and-set are refused |
@@ -120,7 +120,9 @@ Not covered (activation work or C2/C3): M-10, M-14, M-15, M-16, M-16a, M-18 (kil
 2. **Exit 0 after a refused write.** In the real receipt-gap turn, Hermes caught the refused reply write and still exited 0. Exit 0 is again not evidence of a persisted reply; the receipt says `unknown`/`receipts_incomplete`.
 3. **Session freshness by rowid.** The pinned upsert's `VALUES` list contains a literal `NULL`, so mapping `id` to a positional parameter failed (the first real turn came out `receipts_incomplete`). The recorder now reads the ids whose rowid exceeds the pre-statement maximum; see design §4.10.2 (R4).
 4. **Descendants holding the controller's pipe.** A Hermes descendant inherited the executor's stdout, so the controller's reader, and a `close()` of the pipe, waited until the descendant exited (60 s in the test). The executor now keeps its wire on a private non-inheritable fd and gives Hermes `/dev/null` on fds 0 and 1; the controller never closes a pipe its reader is blocked on.
-5. **Implementation defects found by the tests and fixed:** a controller-lock race between threads (M-2); a plain `sqlite3.connect` would have created an empty file over a missing ledger (all opens are now `mode=rw`, only creation uses `rwc`); concurrent first bootstraps could both create (creation is now exclusive under `create.lock`); a reset through one app state made other app states see `ledger_lost` (the new ledger lists previous ledger ids); a connection leaked when a PRAGMA failed on a corrupt file; `reply=final` was reported for an ambiguous owner turn.
+5. **A lock's `(st_dev, st_ino)` is not an identity over time.** The first CI run failed `test_missing_and_replaced_lock_paths_are_unproven`: on the runner's ext4, a lock file unlinked and recreated got the **same inode number**, so the identity probe (the design's and C0's) accepted a replaced file. The executor now writes a random nonce into its lock at S1 and records it in `executor_started`; the probe requires device, inode **and** nonce. With an unreadable ledger, a lock file without a readable identity is `unproven` (a replaced path is indistinguishable from an executor that died before writing it). New deterministic test: same inode, different nonce → `lock_replaced`.
+6. **Stop and deadline silently degrade when SIGINT is ignored.** `_thread.interrupt_main()` does nothing when SIGINT is `SIG_IGN`, which a process started with `&` from a non-interactive shell (or under `nohup`) inherits and Python keeps. Under a loaded local run started that way, stop and deadline reached only the kill fallback (`unknown`/`executor_lost`). The executor now installs Python's default SIGINT handler before Hermes runs; `test_stop_works_when_the_app_was_started_with_sigint_ignored` fails without the fix (kill after the grace) and passes with it.
+7. **Implementation defects found by the tests and fixed:** a controller-lock race between threads (M-2); a plain `sqlite3.connect` would have created an empty file over a missing ledger (all opens are now `mode=rw`, only creation uses `rwc`); concurrent first bootstraps could both create (creation is now exclusive under `create.lock`); a reset through one app state made other app states see `ledger_lost` (the new ledger lists previous ledger ids); a connection leaked when a PRAGMA failed on a corrupt file; `reply=final` was reported for an ambiguous owner turn.
 
 ---
 
@@ -153,11 +155,11 @@ Then C2 (dispatcher, with the structured `attempt` field, O-H) and C3 (the minim
 |---|---|
 | `kit/app/chat_sends.py`, `send_executor.py`, `send_protocol.py`, `send_quiescence.py` | new production modules, not activated, not shipped |
 | `tools/pinned_hermes_lane.py` | the designated lane |
-| `tests/test_phase1b_c1_core.py` | 84 tests (derivation, eligibility, quiescence, refusal, admission, launch, crash recovery, reset/quiescence, retention, recorder) |
+| `tests/test_phase1b_c1_core.py` | 86 tests (derivation, eligibility, quiescence, refusal, admission, launch, crash recovery, reset/quiescence, retention, recorder) |
 | `tests/test_phase1b_c1_pinned.py` | 13 pinned cases (lane) |
 | `tests/phase1b_c1/` | harness, fake Hermes double, subprocess controller, pinned locator, pinned seam driver, test-only fault injector (`inject/sitecustomize.py`, placed on the executor's `PYTHONPATH` by one test) |
 | `tests/mock_provider.py` | additive `recover_stream` scenario |
-| `docs/phase1b_c1_evidence/` | sanitised lane evidence at `425babf` |
+| `docs/phase1b_c1_evidence/` | sanitised lane evidence at `97bb3a1` (paths → `~`/`<work>`/`<tmp>`, host name → `<host>`) |
 | `.github/workflows/test.yml` | the C1 core file added to the Windows/macOS smoke list |
 | `PHASE1B_DESIGN.md` | R4 corrections, Appendix C |
 | `Phase1B_C0_Results.md` | post-review note; environment-specific CI counts |
@@ -166,7 +168,11 @@ Then C2 (dispatcher, with the structured `attempt` field, O-H) and C3 (the minim
 
 ## 9. CI
 
-Recorded after the push.
+| Run | Head | Result |
+|---|---|---|
+| `36010308868` | `2f11faf` | Windows and macOS smoke **passed** (now including the C1 core file). Linux 3.11/3.13/3.14 **failed**: finding 5 (inode reuse) and a test that did not wait for a killed executor's lock release. Job logs need a signed-in viewer, so `6b4b2a4` added a failure-only step that publishes failed tests as check-run annotations. |
+| `36012008668` | `6b4b2a4` | same failures, now readable as annotations; fixed in `97bb3a1` |
+| CI_FINAL | | |
 
 ---
 
