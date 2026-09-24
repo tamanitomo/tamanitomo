@@ -1,0 +1,70 @@
+{
+  "fact_kinds": [
+    "executor_started",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "stop_seen",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "executor_finished"
+  ],
+  "provider_requests": [
+    [
+      "hang",
+      true,
+      1
+    ],
+    [
+      "hang",
+      false,
+      2
+    ]
+  ],
+  "row": {
+    "capability": "full",
+    "correlation": "linked",
+    "coverage": "complete",
+    "error_code": "timeout",
+    "liveness": "quiescent",
+    "owner_turn": "recorded",
+    "reply": "none",
+    "state": "interrupted"
+  },
+  "settled": true,
+  "state_rows": [
+    {
+      "finish_reason": null,
+      "role": "user",
+      "row_id": 1,
+      "session_id": "20260924_095751_98c777"
+    }
+  ]
+}

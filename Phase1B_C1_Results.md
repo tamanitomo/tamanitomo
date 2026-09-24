@@ -1,0 +1,179 @@
+# Phase 1B C1 core results: isolated send service, supervised executor, receipts
+
+| | |
+|---|---|
+| Answers | `PHASE1B_REVIEW_R3.md` (acceptance of C0 at `8735557`; authorisation of the isolated C1 core) |
+| Branch | `test/phase1b-c1-core` (new, unmerged), on top of `8735557` |
+| Base / code head | base `87355573c75a2237d54002bed579fde73843c003`; code head `425babf` (the evidence below was produced there); this report is committed on top |
+| Scope | **C1 core only**: callable components and their synthetic integration tests. |
+| Activated | **No.** No route, UI, `release-files.json` entry or real profile uses these modules. `POST /api/chat`, `Runtime.chat()` and `kit/app/hermes_stream.py` are unchanged, so no platform's current chat changes. C2 and C3 were not started. |
+| Hermes | `hermes-agent` `0e9fc2cc152b4a4d9fd736f107412ace2a0c2555`, exported blob by blob and verified by `tools/pinned_hermes_lane.py` (12,298 files, tree `a6b86d2a`). |
+| Provider / data | `tests/mock_provider.py` only (127.0.0.1, per-run token, fallbacks disabled). Synthetic `HOME`/`HERMES_HOME` per turn, `PATH=/usr/bin:/bin`. No live profile, credential, model or platform message. |
+| Merged / tagged / released / deployed / upstream | **No** |
+
+**What a pass means here.** The lane cases run the production C1 modules end to end against the real pinned Hermes CLI and SessionDB. They are integrated **synthetic** results on **one Linux host**. They are not a production-send certification, not evidence for Windows, macOS or Android, and not evidence for the paths listed in §7 as activation gates.
+
+---
+
+## 1. What was built
+
+| Component | File | Design |
+|---|---|---|
+| Ledger location, schema, connection rules, ownership guard, row classes | `kit/app/send_protocol.py` (standard library only; imported by the app **and** by the executor under Hermes's interpreter) | §3, §4.1, §4.2, §4.10.1 |
+| One quiescence contract | `kit/app/send_quiescence.py` | §4.5 (R4) |
+| Durable send service | `kit/app/chat_sends.py`: bootstrap, loss markers, admission and replay, generation fence, freshness, re-arm, launch ownership (T1, spawn in a new session, `go`), stop, settlement, recovery, reset, retention, receipt derivation, installation-mutation check | §4.1–§4.9, §5.1–§5.5 |
+| Supervised executor | `kit/app/send_executor.py`: go-gate, S1 lock with recorded identity, S2 under the shared guard, watchdog, commit-boundary recorder, `executor_finished` | §4.4, §4.9, §4.10.1 |
+| Designated pinned lane | `tools/pinned_hermes_lane.py` | review R3 5.3 |
+
+Not built (activation work, a later changeset): the `/api/chat/sends*` routes, the legacy `/api/chat` through the ledger, `Operations.submit(ident=)` and the operation-record allowlist/retention (§5.6–§5.8), the Phase 1A classifier reading fresh-session receipts, the `correlation.send_id` projection join, the installation lock around real mutations in `manage.py`, and `docs/CHAT_CONTRACT.md`. The core exposes what those need (`receipt()` with source links gated by the current binding's kinds, `installation_quiescence()`), but nothing calls it.
+
+The send path the review asked to prioritise runs end to end:
+
+```text
+bootstrap → immutable pending intent (client key + generation) → durable acceptance (lease)
+→ T1 token → spawn (own session/group) → go → S2 registration → pinned Hermes turn (mock provider)
+→ commit-boundary receipts → executor_finished → quiescence (lock + empty group) → settlement
+→ same-key replay (200, nothing launched, provider not called again)
+```
+
+---
+
+## 2. Commands, platform and counts (environment-specific)
+
+Platform: Linux 7.2.0 (CachyOS), x86_64. App interpreter Python 3.14.7. Hermes interpreter Python 3.11.15 with SQLite 3.53.1: the dependency environment of the locally installed hermes-agent venv (134 distributions, listed in `environment.json`). Only its interpreter and packages were used; every Hermes import resolved inside the verified exported tree, and its profile data was never read. Windows, macOS and Android hosts were **not available**.
+
+| Command | Result |
+|---|---|
+| `python tools/pinned_hermes_lane.py --checkout <hermes-agent> --python <hermes venv python> --work <empty dir>` at `425babf`, run twice | **pass** both times: 13/13 passed, 0 skipped, 0 failed (53 s, 52 s). Evidence: [`docs/phase1b_c1_evidence/`](docs/phase1b_c1_evidence/) (paths sanitised to `~`, `<work>`, `<tmp>`) |
+| `pytest -q tests/test_phase1b_c1_core.py` | **84 passed**, 14 subtests; repeated 3× without a failure; `-X dev -W always::ResourceWarning`: 0 unclosed resources |
+| full suite, pinned **not** configured, **on this host** (`PATH=/usr/local/bin:/usr/bin:/bin TAMANITOMO_REQUIRE_NODE=1 pytest -q -rs`) | **1559 passed, 37 skipped**, 490 subtests, 1 warning (the existing Starlette/httpx deprecation). The 37 skips are the 24 Hermes-backed C0 cases and the 13 C1 pinned cases, each with the reason printed. (CI will differ: it also lacks `uv`, which skips one installer test.) |
+| full suite with C0 **and** C1 pinned configured (`TAMANITOMO_C0_HERMES_*`, `TAMANITOMO_C1_HERMES_*`, `TAMANITOMO_C1_REQUIRE_PINNED=1`) | **1596 passed, 0 skipped**, 494 subtests, 1 warning |
+| CI (`test.yml`) | recorded after the push in §9; the Windows/macOS smoke jobs now include `tests/test_phase1b_c1_core.py`, where the Linux-only cases skip and the refusal, derivation and recorder cases run. That is refusal evidence, **not** O-8/O-11 supervision evidence. |
+
+The lane exists because ordinary runs skip the 13 pinned cases. In the lane:
+- the tree is exported from `git ls-tree`/`git cat-file` (raw blobs; `git archive` applies `.gitattributes` eol conversion, which made 5 `.ps1` files differ on the first attempt), and **every file's git blob hash is re-verified** against the commit's listing, with missing and extra files failing; the test-side locator re-verifies the same manifest before any case runs, so a handwritten marker is not provenance;
+- interpreter, SQLite version, installed distributions and the import origin of `hermes_state`, `cli`, `hermes_cli.main`, `hermes_state_messages` and `run_agent` are recorded; an import outside the verified tree fails the lane;
+- `TAMANITOMO_C1_REQUIRE_PINNED=1` turns a missing or mismatched prerequisite into a **failure**; the lane verdict is `fail` on any skip, failure or error, or if no required case ran. Checked: required-but-unconfigured → 13 failed; not required → 13 skipped with the reason; one byte appended to `hermes_state.py` → `PrerequisiteMissing: hermes_state.py differs from 0e9fc2cc15`.
+- It also caught a real harness regression during this work (the receipt-gap injector stopped firing after ledger opens moved to `file:` URIs), failing the case instead of passing it vacuously (`2e72c4d`).
+
+---
+
+## 3. Review R3 items and where they are answered
+
+| R3 item | Implementation | Evidence |
+|---|---|---|
+| **5.1** incomplete process observation is not an empty group | `send_quiescence.group_members` returns `complete=false` for permission, I/O (EISDIR), parse failure, an unreadable `/proc`, `hidepid`, or an unsupported platform; only ENOENT/ESRCH ("gone") is skipped. `observe()` → `unproven`. | `Quiescence.*` (real `PermissionError` via `chmod 000`, real EISDIR, a vanished entry, an unparseable entry, `hidepid=2`); `ResetAndQuiescence.test_unreadable_process_data_is_unproven` (lease held, reset refused, new send `turn_in_progress`) |
+| 5.1 one hardened contract for release, reset and installation mutations | `sq.observe` is the only liveness decision in lease release, `reset()`, `prune()` lock removal and `installation_quiescence()`. Reset probes without creating, checks identity and group; with an unreadable ledger it uses the identity the executor wrote into its lock file. | combined cases below |
+| 5.1 combined cases | executor gone, managed descendant remains; missing lock; replaced lock; unreadable process data; registration racing reset; reset racing acceptance; two recovering controllers | `ResetAndQuiescence.test_executor_gone_but_managed_descendant_remains`, `…missing_or_replaced_lock_is_unproven`, `…unreadable_process_data_is_unproven`, `…registration_racing_reset`, `…reset_racing_acceptance`, `…reset_with_an_unreadable_ledger_uses_the_identity_in_the_lock_file`; `Recovery.test_two_recovering_controllers_one_claim` |
+| **5.2** coverage precedence | `derive()` decides coverage first; unidentified rows, an unobservable session insert, a gap, turn rows outside the session set, or a finish fact without `receipts_complete` make coverage incomplete **with or without** `executor_finished`; incomplete never yields `absent`/`none`. Design §4.3.2 corrected. | `Derivation.test_unidentified_clone_rows_then_death_never_become_absence` (derived receipt, not the counter); pinned `PinnedSeams.test_compression_clone_then_death_is_unknown_not_absent` (real `publish_compression_child`, production recorder) |
+| 5.2 owner eligibility | `send_protocol.classify`: `user_turn` requires Phase 1A's structural public eligibility; otherwise `user_internal`. Design §4.10.1 corrected. | `OwnerEligibility.test_negative_controls`; `Launch.test_ineligible_owner_rows_do_not_establish_the_owner_turn` (through the executor); pinned `PinnedSeams.test_hidden_and_summary_owner_rows_are_not_owner_evidence` |
+| **5.3** designated pinned lane | `tools/pinned_hermes_lane.py`, `tests/phase1b_c1/pinned_lane.py` | §2 |
+| **O-E** hold rollout, not engineering | nothing activated; the new path refuses an unproven supervisor (non-Linux platform, missing interpreter, unsupported storage, unreadable or `hidepid` `/proc`) before creating anything; a send inside the protocol has no fallback to the unkeyed path (the service has none) | `SupervisionRefusal.*` (runs on every CI platform) |
+| **O-F** gap latching | the committed write is not failed back into Hermes; later writes are refused before they start; `receipts_complete=false`; never `complete`; settlement still happens | pinned `test_receipt_gap_in_a_real_turn` (real CLI, real exception path: Hermes exited **0** after its reply write was refused, and the receipt is `unknown`/`receipts_incomplete`); pinned `test_receipt_gap_after_a_real_commit`; `RecorderConcurrency.test_concurrent_writers_with_a_receipt_failure` (3 threads; every committed write receipted or recorded as the gap); interrupt cases (below); `Launch.test_receipt_gap_…` (settled) |
+| O-F interruption paths | every fact write carries a per-executor `fid`; an interrupt around the write is settled exactly once before it is re-raised; an interrupt escaping Hermes after the callback returned is `write_unsettled`; the watchdog delivers at most one interrupt and the window is closed before `executor_finished` | `RecorderConcurrency.test_an_interrupt_after_the_fact_commit_does_not_duplicate_it`, `…before_the_fact_commit_still_records_it_once`, `…inside_hermes_after_commit_is_unsettled_not_published`; pinned stop and deadline turns |
+| **O-G** coverage/containment gates | recorded as activation gates (§7); nothing claims them | — |
+| **O-H** structured attempt identity | recorded for C2; nothing implemented | — |
+| CI counts | `Phase1B_C0_Results.md` §1 now separates this host's count from CI run `35999880594` (`1474 passed, 25 skipped`) and states the smoke jobs did not run C0 | — |
+
+---
+
+## 4. Matrix coverage (PHASE1B_DESIGN.md §10)
+
+"fake" = the local fake Hermes double (a protocol double, **not** Hermes evidence; used where a crash must land at an exact boundary). "pinned" = the real pinned CLI/SessionDB in the lane.
+
+| Case | Where | Result |
+|---|---|---|
+| M-1, M-1a, M-5 same key, sequential and while the lease is held | fake + pinned | `200 replay`, same `send_id`, one `executor_started`, no further provider request |
+| M-2 20 concurrent identical requests over 2 controllers | fake | 1×202, 19×200. First run found a real race (two threads creating the controller lock); fixed |
+| M-2a aliases (second app state, symlinked home) | fake | one ledger, one lease; `turn_in_progress` through the alias |
+| M-2b two recoverers | fake (subprocess controller) | exactly one `recovery` fact |
+| M-2d acceptance vs installation mutation | fake | `installation_busy` (acceptance leg; wiring mutations is activation work) |
+| M-3, M-4 | fake | `key_conflict` with the ledger unchanged; `turn_in_progress` |
+| M-6, M-6e, M-6f, M-6a, M-6b, M-6c, M-6d | fake | generation, freshness, POST-never-creates, replay after expiry, expired re-arm, lost/corrupt ledger (`send_ledger_lost`, nothing recreated), bounded pruning with unsettled sends kept |
+| M-7 kill at each §4.8 row (controller) | fake, subprocess controller SIGKILLed by a test-only subclass hook | after acceptance → `not_started` then re-arm with the same `send_id`; after T1 → `not_started`; M-7a between spawn and `go` → executor exits on EOF, **Hermes never ran** (no `state.db`); M-7b after `go` → exactly one of `not_started`/started |
+| M-7 kill of the executor at turn boundaries | fake | before owner row: `unknown/absent/none/bounded`; inside the owner write: `unknown/possible`; after owner row: `unknown/recorded/none`; after reply: `unknown/recorded/partial`; all `executor_lost`, quiescent, settled |
+| M-7c/M-7d lock missing, replaced, symlinked | fake | `unproven`, lease held, reset refused, new send refused |
+| M-7e descendant in the group; `setsid` descendant | fake | lease held until the owner kills the group; the escaped child stays alive and is outside the boundary |
+| M-8 controller dies mid-turn | fake + pinned | executor continues; recovery supervises through lock and facts; `complete`; one launch |
+| M-8a stale owner | fake | its launch and compare-and-set are refused |
+| M-8c new key while a send runs | fake | `turn_in_progress` |
+| M-9 truncated / disconnect before done | pinned | exit 0 with `length` → `failed`, `reply_incomplete`, `reply=partial` |
+| M-9c commit-boundary receipts | pinned seams + fake + recorder unit tests | clone unidentified; gap; eligibility |
+| M-11 provider retry in one executor | pinned | launch counter 1, provider counter 3; see O-12 below |
+| M-12 stop during the stream | pinned | `interrupted`, `stopped`, no assistant row (`reply=none`), quiescent |
+| M-13 deadline; kill fallback | pinned (deadline) + fake (interrupt swallowed → group killed → `unknown/executor_lost`) | as expected |
+| M-14a links withheld when the binding no longer authorises the kind | fake | receipt has no `source_links` (receipt leg; the in-memory legacy branch is activation work) |
+| M-16b two owner rows | fake + pinned (O-12) | `ambiguous`, no candidate chosen |
+| M-17 independent homes, same key and text | fake | two receipts; a `send_id` of one is `NotFound` in the other |
+| M-18a resumed session | pinned | `created_here=false`; its rows link |
+| M-18b fresh vs upsert | pinned | only rowid-new sessions are fresh (see §5) |
+| M-19 bridge / platform unavailable | all platforms | `503 send_supervision_unavailable`, nothing created |
+| M-23 privacy | fake + pinned | no owner, reply or stream text in any file under the send-ledger directory; executor stderr is discarded |
+
+Not covered (activation work or C2/C3): M-10, M-14, M-15, M-16, M-16a, M-18 (kill between session commit and receipt), M-19a, M-20*, M-21, M-22*, M-23 size/latency.
+
+---
+
+## 5. Findings made while building C1
+
+1. **O-12 (new): an unmarked `role=user` continuation note.** When the main reply stream drops mid-reply, the pinned Hermes stores the partial reply (`finish_reason='length'`), then a `role=user` row beginning `[System: The previous response was cut off by a network error mid-stream…` with no `display_kind`, not `observed`, not a summary, `active=1`, then the retried reply. Structure cannot tell it from an owner message, and C1 never reads text, so the receipt is `owner_turn=ambiguous`, `reply=partial`, outcome `unknown`, never `complete`. Made deterministic with an additive mock scenario (`recover_stream`: the drop counts streaming requests only). **The same row passes Phase 1A's structural rule as an owner message.** That is reported for the reviewer (design §12 O-I), not changed.
+2. **Exit 0 after a refused write.** In the real receipt-gap turn, Hermes caught the refused reply write and still exited 0. Exit 0 is again not evidence of a persisted reply; the receipt says `unknown`/`receipts_incomplete`.
+3. **Session freshness by rowid.** The pinned upsert's `VALUES` list contains a literal `NULL`, so mapping `id` to a positional parameter failed (the first real turn came out `receipts_incomplete`). The recorder now reads the ids whose rowid exceeds the pre-statement maximum; see design §4.10.2 (R4).
+4. **Descendants holding the controller's pipe.** A Hermes descendant inherited the executor's stdout, so the controller's reader, and a `close()` of the pipe, waited until the descendant exited (60 s in the test). The executor now keeps its wire on a private non-inheritable fd and gives Hermes `/dev/null` on fds 0 and 1; the controller never closes a pipe its reader is blocked on.
+5. **Implementation defects found by the tests and fixed:** a controller-lock race between threads (M-2); a plain `sqlite3.connect` would have created an empty file over a missing ledger (all opens are now `mode=rw`, only creation uses `rwc`); concurrent first bootstraps could both create (creation is now exclusive under `create.lock`); a reset through one app state made other app states see `ledger_lost` (the new ledger lists previous ledger ids); a connection leaked when a PRAGMA failed on a corrupt file; `reply=final` was reported for an ambiguous owner turn.
+
+---
+
+## 6. Platform outcomes
+
+| Platform | Outcome |
+|---|---|
+| Linux (this host) | all C1 core and pinned cases pass as reported above |
+| Windows, macOS | not available here. On CI they run the C1 core file: refusal of the unverified supervisor, derivation, owner eligibility and the recorder; supervision cases skip (O-8, O-11 not observed) |
+| Android / Termux | not run (O-9) |
+
+---
+
+## 7. Remaining activation gates
+
+Before normal sends go through C1 (C1 activation):
+1. Routes (`/api/chat/sends*`), the legacy route through the ledger, operation views and allowlist (§5.6–§5.8), the Phase 1A fresh-session source, the `correlation.send_id` join, the installation lock around real mutations, and `docs/CHAT_CONTRACT.md` — each with its matrix cases (M-10, M-14, M-15, M-16, M-16a, M-18, M-19a, M-22, M-23 size).
+2. **O-G** for tool-capable chat: a real tool-using turn, interruption during a tool, full CLI compression continuation, and the descendant boundary for tool processes (O-10). Foreign writers (O-5) against the receipt boundary.
+3. **O-12 / O-I**: the reviewer's decision on the unmarked continuation row (C1 is safe as is; Phase 1A shows it as an owner message).
+4. **O-E**: Windows (O-8) and macOS (O-11) supervisor tests on real CI hosts, and Termux device evidence (O-9), before any of those is proposed for activation. Until then the new path refuses them.
+5. Release: the four modules are deliberately **not** in `release-files.json`.
+
+Then C2 (dispatcher, with the structured `attempt` field, O-H) and C3 (the minimal receipt-aware client), each with its own review.
+
+---
+
+## 8. Files
+
+| File | Kind |
+|---|---|
+| `kit/app/chat_sends.py`, `send_executor.py`, `send_protocol.py`, `send_quiescence.py` | new production modules, not activated, not shipped |
+| `tools/pinned_hermes_lane.py` | the designated lane |
+| `tests/test_phase1b_c1_core.py` | 84 tests (derivation, eligibility, quiescence, refusal, admission, launch, crash recovery, reset/quiescence, retention, recorder) |
+| `tests/test_phase1b_c1_pinned.py` | 13 pinned cases (lane) |
+| `tests/phase1b_c1/` | harness, fake Hermes double, subprocess controller, pinned locator, pinned seam driver, test-only fault injector (`inject/sitecustomize.py`, placed on the executor's `PYTHONPATH` by one test) |
+| `tests/mock_provider.py` | additive `recover_stream` scenario |
+| `docs/phase1b_c1_evidence/` | sanitised lane evidence at `425babf` |
+| `.github/workflows/test.yml` | the C1 core file added to the Windows/macOS smoke list |
+| `PHASE1B_DESIGN.md` | R4 corrections, Appendix C |
+| `Phase1B_C0_Results.md` | post-review note; environment-specific CI counts |
+
+---
+
+## 9. CI
+
+Recorded after the push.
+
+---
+
+## 10. Not done, not claimed
+
+- No activation: no route, UI, release entry or real-profile use; normal sending is unchanged. No C2, no C3.
+- No Windows, macOS or Android supervision evidence; no tool-using, compression-continuation, gateway or cron turn.
+- No real provider, credentials or messages; no live profile read or written.
+- No merge, tag, release, deployment, upstream filing, or deletion of historical operation files.
+- The lane's Hermes interpreter is the dependency environment of a locally installed hermes-agent venv; the lane records it and verifies import origins, but it is not a clean dependency install.
