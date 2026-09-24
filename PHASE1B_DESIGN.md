@@ -1,12 +1,12 @@
 # Phase 1B design: send receipts, idempotency and interruption
 
-Status: **design proposal only, revision 2, for review.** Nothing in this document is implemented. No sending code, UI, schema, live record or release was changed to write it.
+Status: **design proposal, revision 3 (focused amendment), for review.** No production sending code, UI, schema, live record or release was changed. The C0 verification changeset adds test-harness and prototype code under `tests/` only; its evidence is in [`Phase1B_C0_Results.md`](Phase1B_C0_Results.md).
 
 - Branch: `test/phase1-conversation-contract`
-- Revision 1: `b074ae9`. Revision 2 (this document) answers PHASE1B_REVIEW_R1 (B1–B5, U1–U9) on top of it.
+- Revision 1: `b074ae9`. Revision 2: `7907066` (answered PHASE1B_REVIEW_R1). Revision 3 (this document) answers PHASE1B_REVIEW_R2 with focused corrections; the structure and numbering of revision 2 are kept. Every passage changed by revision 3 is marked **(R3)**; Appendix B lists them.
 - Designed against: `fc5c1e4` (code identical to `7e616d2`, accepted in PHASE1A_REVIEW_R3). Phase 1A acceptance is retained unchanged.
-- Hermes inspected: installed `hermes-agent` at `0e9fc2cc15`, the same revision as the Phase 1A fixtures. Hermes line references below are to that revision and describe private code that can change; every capability taken from it is detected at run time and has a safe fallback (§8).
-- Gate: Phase 1B implementation needs its own approval after this revision is reviewed.
+- Hermes inspected: `hermes-agent` at `0e9fc2cc15` (full hash `0e9fc2cc152b4a4d9fd736f107412ace2a0c2555`), the same revision as the Phase 1A fixtures. Hermes line references below are to that revision and describe private code that can change; every capability taken from it is detected at run time and has a safe fallback (§8). **(R3)** C0 ran real pinned-Hermes code against synthetic homes; where a statement below rests on a C0 observation it cites the case (`C0:` + test name).
+- Gate: C1–C3 remain separate proposed production changesets. None is authorised by this revision.
 
 Wording used below:
 - **definite** means the app can prove the fact from durable records written by the process that knows it. **Unknown** means it cannot, and the app then says so. It does not guess.
@@ -31,6 +31,15 @@ These are the reviewer's decisions, adopted as the basis of this revision. They 
 | U7 | Proactive transcript linkage stays unsupported in 1B; delivery evidence stays in the outbox. An upstream proposal may be drafted, not filed. Mirror rows are never deduplicated by text or time. | §7.7 |
 | U8 | The durable send ledger lives in the private, canonical profile home. The physical lock identity is shared across app instances and aliases and does not depend on app-local installation labels. Permissions, supported file systems, corruption/missing-file recovery and backup/restore behaviour are defined. The ledger is not a rebuildable cache. | §3, §4.1 |
 | U9 | The argv-to-stdin move is a separate security task. The current exposure stays documented. No new prompt copies are introduced in error, event or operation records. | §4.4.1, §11 |
+
+**(R3) Decisions recorded from PHASE1B_REVIEW_R2.** Again not implementation authorisation.
+
+| ID | Decision | Where applied |
+|---|---|---|
+| O-A | Where safe supervision is unavailable (the bridge cannot run, or the platform's supervision is not established), workspace sends are **refused** before acceptance, on the keyed and the legacy route alike. No "unsafe legacy" escape hatch. Missing source-correlation seams alone may still run as explicitly unverified. | §4.4.4, §4.5 |
+| O-B | Pre-1B chat operation files that contain text: report their count, leave them untouched. Deleting them needs a separate owner decision. Their text is not described as removed. | §5.7 |
+| O-C | Windows kill-on-close on controller death versus POSIX continuation is a **proposed** platform policy. It is not enabled on any platform until that platform's supervision evidence exists (O-8, O-9, O-11). | §4.5 |
+| O-D | Restore: an explicit **Reset send ledger** is mandatory before sends resume after any known ledger rollback or profile restore. An undetected coherent rollback can replay a missing, still-admissible request; this is disclosed, not claimed to be detected. | §4.1 |
 
 ---
 
@@ -63,10 +72,16 @@ These are the reviewer's decisions, adopted as the basis of this revision. They 
 
 - `hermes_stream.py` wraps `cli._configure_quiet_agent` (to attach `stream_delta_callback`) and `cli._run_quiet_single_query`. It emits `session` only in the wrapper's `finally` (`hermes_stream.py:37`), that is, **after** the turn. It emits `final` last.
 - The session id is chosen inside Hermes: `resume or f"{%Y%m%d_%H%M%S}_{uuid6}"` (`cli.py:2825`). No flag lets the caller supply one. `_sync_cli_session_id_from_agent` (`cli.py:4051`) shows the agent can move the session id during a turn (compression starts a continuation session with `parent_session_id`).
-- **Persistence seam.** Every transcript row is inserted through `SessionMessagesMixin` in `hermes_state_messages.py`: `append_message` (`:265-290`, returns the new row id), `append_messages_batch` → `_insert_message_rows` (`:293-315`, `:421-437`, which stores each row id in `msg["_row_id"]`), and `replace_messages` (`:439-470`, which deletes or soft-archives live rows and re-inserts a rewritten set). All of these run inside the Hermes process that runs the turn. Rows are written from many points in the turn loop; **I have not established** whether the owner row is on disk before the first provider request in every path (M-10, observation O-3).
+- **Persistence seam (R3, corrected).** Revision 2 named five methods. That list was incomplete and its commit boundary was wrong:
+  - **The only commit point is `SessionDB._execute_write`** (`hermes_state.py:773-858`). It runs a callback inside `BEGIN IMMEDIATE`, commits, and returns the callback's result. On a `locked`/`busy` error raised inside the callback it rolls back and **re-runs the whole callback** (`:840-842`). If the commit step itself raises after the callback ran, settlement is unknown and the error propagates (`:786-790`).
+  - `_insert_message_rows` (`hermes_state_messages.py:421-437`) inserts **in the caller's transaction** and sets `msg["_row_id"]` before any commit. `append_messages_batch` (`:293-315`) and `replace_messages` (`:439-470`) do more SQL after it returns. A row id seen there is a candidate, not a committed row. SQLite may hand a rolled-back id out again, AUTOINCREMENT included [S]. C0 reproduced all three failure traces on the pinned code: a rolled-back batch, a retried callback that yields the same ids twice, and a rolled-back id that is reused by a foreign writer (C0: `RevisionTwoDefects`).
+  - More row-insert paths exist, all of them inside `_execute_write` callbacks: `archive_and_compact` (`:510-565`), the pure-SQL tail clone `_clone_message_rows` (`:498-506`, a multi-row `INSERT … SELECT` with no per-row id), `rewind_to_message`'s replacement row (`:1071`), `publish_compression_child` (`hermes_state_compression.py:181-245`, which inserts the child **session row directly**, not through `create_session`, then clones rows), and session import (`hermes_state_portability.py:469`).
+  - `create_session` and `ensure_session` are **upserts** (`hermes_state_sessions.py:362-370`). A call does not show that the session was absent.
+  - Every write above runs inside the Hermes process that runs the turn. C0 observed that, before the turn begins, the quiet CLI also commits several maintenance writes in that process (`prune_empty_ghost_sessions`, `prune_sessions`, `sweep_orphaned_sessions`, `update_system_prompt` and others). It did so after `import cli` returned; nothing opened `state.db` during the import (C0: `test_state_db_is_written_before_the_turn_but_not_during_import`).
+  - Owner-row timing (O-3): in the five fresh-session paths and the resume path C0 ran, the owner row was committed **before** the first provider request, 80–150 ms earlier. The paths were normal, provider error before the first byte, disconnect, truncation, and hang/interrupt (C0: `RealTurns`). The protocol does not depend on this order. It is recorded per path and not generalised.
 - **Hermes's own turn lease.** `state.db` has `session_turn_leases` (`hermes_state_common.py:462`). `agent/turn_facade_lease.py:271` acquires one per turn when the database supports it, and appends that carry `turn_lease_holder` are refused when the lease is lost (`hermes_state_messages.py:177-231`). **Not established:** whether every writer (a terminal `--resume`, the gateway, cron) acquires it for the same key, so this revision does not rely on it for exclusion (observation O-5).
-- **Exit codes.** A quiet one-shot run exits `130` after `KeyboardInterrupt` (after `_emit_interrupted_session_end`, `cli.py:4057-4063`), `1` when `run_conversation` returns `failed`, and `0` otherwise (`cli.py:4091-4100`). Exit 0 therefore means "the turn loop returned without `failed`", not "a reply row exists".
-- An API call interrupted mid-stream persists the partial assistant text (`turn_api_call.py:183-191`).
+- **Exit codes.** A quiet one-shot run exits `130` after `KeyboardInterrupt` (after `_emit_interrupted_session_end`, `cli.py:4057-4063`), `1` when `run_conversation` returns `failed`, and `0` otherwise (`cli.py:4091-4100`). Exit 0 therefore means "the turn loop returned without `failed`", not "a reply row exists". **(R3)** It does not mean "the reply finished" either. With the mock `truncated` and `disconnect_before_done` scenarios, the pinned CLI exited 0 and stored an ordinary text assistant row with `finish_reason='length'`, after 4 stream requests inside one executor (C0: `test_truncated_and_disconnected_replies_exit_zero`).
+- **(R3, corrected.)** Revision 2 said an API call interrupted mid-stream persists the partial assistant text (`turn_api_call.py:183-191`). C0 did not observe that on the path it ran. `_thread.interrupt_main()` after two stream deltas from the mock `hang` scenario ended the turn with exit 130, and **no** assistant row was stored (C0: `test_interrupt_main_reaches_the_turn_during_a_stream`). Other interrupt points, a tool call among them, were not observed. The design allows for both results.
 
 ### 1.4 Proactive delivery (`kit/scripts/companion_outbox.py`, `companion_dispatch.py`)
 
@@ -103,7 +118,7 @@ Goals:
 4. Every outcome is established by a named durable fact (§4.3.2). Where no such fact exists, the outcome is **unknown**, even when some content is recorded.
 5. The chain request → executor → owner row → reply rows is recorded from provenance written by the executor itself, never from text or time windows.
 6. Proactive dispatch claims an entry atomically, never resends an ambiguous attempt, and keeps delivery ids.
-7. No chat text is persisted by the app outside Hermes's own store.
+7. **(R3, wording corrected.)** No **new** durable chat text in the send ledger or in new-format (`format: 2`) operation records. This does not cover the retained Phase 1A content projection, client `sessionStorage`, or pre-1B operation files, which are deliberately left as they are (O-B). It is not a claim that the app keeps no chat text outside Hermes.
 
 Non-goals for 1B: exactly-once execution; a new transport; the UI switch to the Phase 1A read contract (Phase 2); any external send from the workspace; new connectors; delivered-proactive transcript linkage (U7); a Hermes schema change or upstream filing; moving the prompt out of argv (U9); multi-host sharing of one profile home.
 
@@ -113,7 +128,8 @@ Non-goals for 1B: exactly-once execution; a new transport; the UI switch to the 
 
 | Name | Made by | Form | Meaning |
 |---|---|---|---|
-| `client_key` | the client, once per compose-and-send intent | ULID (48-bit ms time + 80 random bits) | Idempotency key. Scoped to the **logical scope**. Its time bounds admission (§5.3). |
+| `generation` **(R3)** | the server, when a ledger is created or explicitly reset; returned by bootstrap (§5.1) | 128-bit random, opaque | The reset fence. The client freezes it with the key and resubmits it unchanged. A request carrying a generation that is not the ledger's current one is never accepted as new (§5.3). It is not a rollback detector (§4.1). |
+| `client_key` | the client, once per compose-and-send intent | ULID (48-bit ms time + 80 random bits) | Idempotency key. Scoped to the **logical scope**. Its time bounds freshness only (§5.3), never the reset fence. |
 | logical scope | the server, captured once per request | `conversation_id` from the Phase 1A `ChatScope` (`installation label | resolved home`), plus `binding_digest` | Authorisation. Receipts are looked up only within it. |
 | `home_key` | the server, at ledger open | `sha256(st_dev | st_ino | realpath)` of the profile home directory (Windows: volume serial + file index + final path) | **Physical** exclusion identity. Two labels, symlinks or app states that reach one directory get one `home_key`, one ledger file, one lease. It does not use installation labels. |
 | `request_digest` | the server | `sha256` of canonical JSON `{v:1, conversation_id, destination:"workspace", session: S|null, message}` (exact UTF-8) | Binds the key to the accepted content. |
@@ -122,9 +138,9 @@ Non-goals for 1B: exactly-once execution; a new transport; the UI switch to the 
 | `controller` | each app process at start | `ctl_` + random, plus a held OS lock `<ledger dir>/controllers/<controller>.lock` | The process that accepted a send and reads the executor's pipes. Liveness = that lock is held. |
 | `claim` | the ledger | integer generation per send, plus `claim_owner` (a controller id) | The right to transition a send. Every transition is a compare-and-set on `(state, claim)`. Recovery takes ownership by incrementing it (fencing). |
 | `launch_token` | the claim owner, when committing `launching` | 128-bit random | The executor's authorisation. The executor can start the turn only if its token is still the send's current token (§4.4). |
-| `executor` | the executor process itself, before it enters Hermes | `{launch_token, pid, start_identity}` in `send_facts`, plus a held OS lock `<ledger dir>/executors/<send_id>.lock` | The process that runs the Hermes turn. Liveness = that lock is held (§4.5). |
-| `hermes_sessions` | the executor, from Hermes's in-process state | ordered list with `created_here` flags | Sessions this executor used or created. |
-| source receipts | the executor, from Hermes's insert calls | `(session_id, row_id, role, timestamp, finish_reason, write_kind)` | Causal links: rows **this executor** inserted (§4.10). |
+| `executor` | the executor process itself, before it enters Hermes | `{launch_token, pid, start_identity, pgid, lock_identity}` in `send_facts`, plus a held OS lock `<ledger dir>/executors/<send_id>.lock` | The process that runs the Hermes turn. **(R3)** Liveness of the executor = that lock, checked against the recorded `lock_identity` (§4.5). Quiescence of the managed execution also needs its process group or job to be empty (§4.5). |
+| `hermes_sessions` | the executor, from its committed write receipts | ordered list with `created_here` flags | Sessions this executor used or created. **(R3)** `created_here=true` only from a committed session insert that C0's recorder saw as **fresh** (absent before, present after, in the same transaction). An upsert, an ensure or a failed create never sets it (§4.10.2). |
+| source receipts **(R3)** | the executor, at Hermes's commit boundary | one `write_committed` fact per committed `_execute_write`: `{wid, method, attempts, rows:[(session_id, row_id, role, class)], sessions:[(session_id, fresh)], unidentified}` | Causal links: rows **this executor committed** (§4.10.1). Candidates seen inside a callback that rolled back, was retried or never finished are never published. |
 
 The client owns the key because only an identifier made before sending can close the lost-response gap.
 
@@ -142,27 +158,44 @@ The client owns the key because only an identifier made before sending can close
 
 **Durability.** `journal_mode=DELETE` (not WAL), `synchronous=FULL`, `busy_timeout=5000`, `foreign_keys=ON`. Every state change is one `BEGIN IMMEDIATE` transaction. No transaction is held across a process wait, signal or network call.
 
-**Initialisation, loss and corruption.** Two markers record that a ledger exists:
-- `meta.ledger_id` (random, written at creation) and `meta.admission_floor` (a time before which keys are not admitted; creation time at first init);
-- `<profile home>/.tamanitomo-sends/ledger.id`, a 0600 file holding `ledger_id`, and `<app state>/send-ledgers.json`, where each app state records the `ledger_id` it has seen per `home_key`.
+**Initialisation, loss and corruption (R3).** Revision 2's `admission_floor` compared a server time with a client-minted key time. It failed twice. The first ordinary send could predate a floor its own POST created. A client clock up to five minutes ahead let an old key pass the floor of a reset ledger. C0 reproduced both (C0: `test_revision_two_rejects_the_first_ordinary_send`, `test_revision_two_readmits_an_accepted_key_after_reset`). Both uses of the floor are replaced:
+
+- **First-use bootstrap.** `GET /api/chat/sends/bootstrap` (§5.1) creates the ledger if it does not exist, under the ownership guard below, and returns `{conversation_id, generation}`. The client calls it **before** it mints a key and freezes its pending send (§6). `POST /api/chat/sends` never creates a ledger. On a profile home with no ledger it answers `409 not_bootstrapped` and accepts nothing. So the first ordinary send is ordered after initialisation, with no dependence on clocks (C0: `test_bootstrap_before_minting_admits_the_first_send`).
+- **Generation fence.** `meta.generation` is random at creation and at every explicit reset. The client stores it in `pending` with the key and resubmits both unchanged. With no receipt for the key, a request whose generation is not the current one is refused with `409 generation_changed` and is **never** accepted as new. Changing the key after an ambiguous POST does not change this (§6). Key-time freshness (§5.3) is a separate check and never acts as the fence (C0: `test_generation_fence_refuses_a_prior_generation_request`, `test_freshness_is_separate_from_the_fence`).
+- Loss markers are kept for **detecting a missing or mismatched file**, not rollback: `meta.ledger_id`, `<profile home>/.tamanitomo-sends/ledger.id`, and `<app state>/send-ledgers.json`.
 
 At open:
 
 | Found | Meaning | Behaviour |
 |---|---|---|
-| no ledger, no `ledger.id`, no app-state record for this `home_key` | first initialisation | create; `admission_floor = now` |
+| no ledger, no `ledger.id`, no app-state record for this `home_key` | never initialised | bootstrap creates it; a POST is `409 not_bootstrapped` |
 | ledger opens, `ledger_id` matches both markers | normal | open |
-| ledger missing or unreadable, `integrity_check` fails, or `ledger_id` differs from either marker | **ledger lost** | refuse sends with `503 send_ledger_lost`. Nothing is created over it. |
+| ledger missing or unreadable, `integrity_check` fails, or `ledger_id` differs from either marker | **ledger lost** | refuse sends with `503 send_ledger_lost`. Nothing is created over it, not even by bootstrap. |
 
-Recovery from `ledger_lost` is an explicit owner action (`POST /api/chat/sends/ledger/reset`, confirmed in the UI, with the reason shown). It moves the old file aside as `ledger.lost-<time>.sqlite3` (never deletes it), creates a new ledger with a new `ledger_id` and `admission_floor = now`, and records `reset_at`. Every key minted before the floor is refused with `422 key_predates_ledger`, so a young retry of a send accepted by the lost ledger can never be accepted as new. Before a reset, the owner is shown whether any executor lock in `executors/` is still held; a held lock blocks the reset until it is released (a live executor cannot be un-tracked by a reset).
+**Explicit reset (R3, serialised).** Recovery from `ledger_lost`, and the mandatory step after a known restore, is an owner action: `POST /api/chat/sends/ledger/reset`, confirmed in the UI with the reason shown. It uses the same ownership protocol as acceptance and launch, not a separate path:
 
-**Backup and restore.** The ledger is backed up with the profile home and is excluded from nothing. A restore of the ledger **without** its markers, or of markers without the ledger, is detected as `ledger_lost` above. A restore of the whole profile home including both markers cannot be detected by the ledger alone, because the restored state is internally consistent. Two protections remain: the app-state record (not in the profile home) usually detects it, and the documented restore procedure is "restore, then run *Reset send ledger*". The residual case (profile home and app state both restored to the same point) is stated as a limitation in `docs/CHAT_CONTRACT.md`: keys minted after the backup and within 24 h of the restore could be admitted again. Restoring a backup less than 24 h old is the only way to reach it.
+1. Take `<ledger dir>/guard.lock` **exclusively**. Acceptance (§5.2 step 6), bootstrap and executor registration (S2, §4.4.1) hold it **shared** for the length of their transaction, so none of them can interleave with a reset. A reset that finds it busy answers `409 ledger_busy` and changes nothing (C0: `test_reset_cannot_interleave_with_executor_registration`).
+2. If the old ledger is readable, fence it in one transaction: every send with a `launch_token` gets `launch_token=NULL, claim=claim+1`. An executor that has not yet run S2 can then never register (C0: `test_reset_fences_launch_tokens_before_replacing_the_ledger`).
+3. Check quiescence for every executor lock recorded by an unsettled send, using the identity probe in §4.5. Any `live` or `unproven` result refuses the reset (`409 executor_live`) and nothing is moved (C0: `test_reset_is_refused_while_an_executor_lock_is_held`). If the old ledger is unreadable and its executor records cannot be listed, every lock file in `executors/` is probed. A lock file is never deleted to unblock a reset.
+4. Move the old file aside as `ledger.lost-<time>.sqlite3` (never delete it). Create the new ledger with a new `ledger_id` and a new `generation`. Record `reset_at`.
+
+After a reset, a retry of a key accepted under the old ledger carries the old generation, so it is `409 generation_changed`, and the client says that whether it was sent before is unknown (§6).
+
+**Backup and restore (R3, corrected).** Revision 2 overstated what the markers detect, in three ways.
+- A constant `ledger_id` does **not** detect a rollback within the same ledger. Suppose the ledger is backed up while its id is A, key K is then accepted and executed in ledger A, and only the older ledger file is restored. All three markers still read A, K's receipt is missing, and K can be accepted as new while it is still admissible.
+- The app-state record does not help, because nothing requires it to be restored.
+- The window is not tied to the backup's age. What matters is the missing key's own admission age: 24 h under §5.3.
+
+The generation does not detect this either, because the restored file carries the same generation (C0: `test_a_database_only_rollback_replays_a_missing_key_under_either_rule`). The design therefore claims only this:
+- Loss of the file or of a marker, corruption, and a replaced ledger whose `ledger_id` differs are detected (`ledger_lost`).
+- **After any known restore or rollback of the profile home or of the ledger, *Reset send ledger* is mandatory before sends resume.** It puts every earlier request in an old generation (C0: `test_explicit_reset_after_a_known_restore_closes_it`).
+- **Stated limitation:** an unannounced, coherent rollback of the ledger (with or without its markers) can re-admit a request whose receipt it lost, if that request's key is still within the admission window and its generation still matches. Detecting it automatically would need an external non-rollback checkpoint. That is not designed in 1B and is not promised. `docs/CHAT_CONTRACT.md` will state this with the reset procedure.
 
 ### 4.2 Schema (proposed)
 
 ```sql
 CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
-  -- schema_version=1, ledger_id, home_key, admission_floor, created_at, reset_at
+  -- schema_version=1, ledger_id, home_key, generation (R3; replaces admission_floor), created_at, reset_at
 CREATE TABLE sends(
   send_id TEXT PRIMARY KEY,
   conversation_id TEXT NOT NULL,        -- logical scope
@@ -171,6 +204,9 @@ CREATE TABLE sends(
   request_digest TEXT NOT NULL,
   destination TEXT NOT NULL CHECK(destination='workspace'),
   requested_session TEXT,               -- null = start a new session
+  source_kind TEXT NOT NULL,            -- (R3) 'workspace' | 'terminal': the permitted kind for this send (§4.10.3)
+  source_namespace TEXT,                -- (R3) account/channel namespace for that kind, null for workspace
+  generation TEXT NOT NULL,             -- (R3) the ledger generation the request carried
   legacy INTEGER NOT NULL DEFAULT 0,    -- 1 = unkeyed POST /api/chat
   operation_id TEXT NOT NULL UNIQUE,
   state TEXT NOT NULL,                  -- §4.3.1
@@ -226,7 +262,7 @@ The ledger stores no message text, reply text, stream text, stderr or free-form 
 | `stopping` | Stop or timeout was requested while `generating`; the executor has been asked to interrupt. Not terminal. |
 | `complete`, `failed`, `interrupted`, `not_started`, `unknown` | Outcomes; each needs the evidence in §4.3.2. |
 
-Rejections before acceptance write no row: `409 turn_in_progress`, `409 key_conflict`, `422 key_expired`, `422 key_predates_ledger`, `503 send_storage_unsupported`, `503 send_ledger_lost`, `400` validation.
+Rejections before acceptance write no row: `409 turn_in_progress`, `409 key_conflict`, `409 generation_changed` (R3), `409 not_bootstrapped` (R3), `409 ledger_busy` (R3, a reset is in progress), `422 key_expired`, `503 send_storage_unsupported`, `503 send_supervision_unavailable`, `503 send_ledger_lost`, `400` validation. (`422 key_predates_ledger` is withdrawn with the admission floor.)
 
 Permitted transitions. Each is a compare-and-set on `(state, claim)`, made only by the current `claim_owner`, and appends to `send_events`:
 
@@ -248,21 +284,31 @@ The **lease** is separate from the state: an outcome can be final while the leas
 | Outcome | Durable fact that establishes it | Who may record the fact | Who may transition |
 |---|---|---|---|
 | `not_started` | (a) `spawn_failed` fact: `Popen`/`CreateProcess` raised before returning a process; or (b) the claim owner committed `launching → not_started` in a transaction that **also** replaced `launch_token` with null (fencing), and at that commit no `executor_started` fact with the old token existed. After (b), an executor holding the old token can never record `executor_started` (§4.4.3). | (a) the claim owner; (b) the claim owner's fencing transaction is itself the fact | the claim owner |
-| `complete` | `executor_finished` fact with `exit=0` **and** `interrupted=false`, written by the executor after Hermes's quiet runner returned; **and** at least one assistant row in its source receipts (`reply=final`). | the executor (token-bound) | the claim owner, after ingesting it |
-| `failed` | `executor_finished` with `exit≠0` and not `130`; or `exit=0` with no assistant row in a complete receipt (`error_code=no_reply_recorded`); or `executor_finished` with `timed_out=true` and no `interrupted` marker. `owner_turn` and `reply` are taken from the receipts separately. | the executor | the claim owner |
+| `complete` | **(R3)** `executor_finished` with `exit=0`, `interrupted=false` **and `receipts_complete=true`**, written by the executor after Hermes's quiet runner returned; **and** in its committed receipts, exactly one `user_turn` row and at least one **`public_output`** row for the send's session set, the last of which has `finish_reason='stop'` (`reply=final`). An arbitrary assistant insert does not qualify. Neither does a tool-call-only or text-less row, a display/summary/observed row, or any row copied by a rewrite, compaction, clone or compression (`class ≠ public_output`, §4.10.1). | the executor (token-bound) | the claim owner, after ingesting it |
+| `failed` | `executor_finished` with `exit≠0` and not `130`; or **(R3)** `exit=0` with complete receipts in which the last `public_output` row does not have `finish_reason='stop'` (`error_code=reply_incomplete`, `reply=partial`; C0 observed exit 0 with `finish_reason='length'` for truncation and disconnect); or `exit=0` with complete receipts and no `public_output` row (`error_code=no_reply_recorded`); or `executor_finished` with `timed_out=true` and no `interrupted` marker. `owner_turn` and `reply` are taken from the receipts separately. | the executor | the claim owner |
 | `interrupted` | `executor_finished` with `exit=130`, or `interrupted=true` recorded by the bridge when Hermes's `KeyboardInterrupt` path ran. A stop **request** is never this fact. | the executor | the claim owner |
 | `unknown` | Absence of all of the above while `executor_started` exists (or cannot be excluded), and the executor is dead or unreachable. Includes an executor killed by the kill fallback before it wrote `executor_finished`. | — (it is the absence of a fact) | the claim owner; later replaced if a finishing fact arrives |
 
-`owner_turn`, `reply` and `correlation` are derived from source receipts only (§4.10):
+`owner_turn`, `reply` and `correlation` are derived from source receipts only (§4.10).
+
+**(R3) Receipt coverage** is one of these, and it is decided before any field value below:
+- **complete**: `executor_finished` says `receipts_complete=true`. That means every `write_intent` has its outcome fact, there is no `write_unsettled`, no `receipt_gap`, and `unidentified=0` in every committed write that touched the send's session set.
+- **bounded**: the executor ended without `executor_finished`, but every `write_intent` it recorded has an outcome fact. There is no `write_unsettled` and no `receipt_gap`.
+- **incomplete**: anything else.
+- **unavailable**: `capability=unverified_sources`.
+
+`unverified_sources` and `incomplete` never mean "no row was written". The only thing that means that is complete or bounded coverage together with an absent row.
 
 | Field value | Established by |
 |---|---|
-| `owner_turn=recorded` | one `row_written` fact, `role=user`, `write_kind=turn`, for the send's session set |
-| `owner_turn=possible` | a `row_intent` fact for a user row without its `row_written` fact (the executor died between them) |
-| `owner_turn=absent` | receipts complete (`executor_finished` exists) and no user `row_written`/`row_intent` |
-| `owner_turn=ambiguous` | more than one user `row_written` with `write_kind=turn` |
-| `owner_turn=unknown` | receipts unavailable (`capability=unverified_sources`) or incomplete without an intent fact to bound them |
-| `reply=final` / `partial` / `none` / `unknown` | assistant `row_written` facts, and whether `executor_finished` says the turn completed, was interrupted, or failed; `unknown` when receipts are incomplete or unavailable |
+| `owner_turn=recorded` | exactly one committed `user_turn` row for the send's session set |
+| `owner_turn=absent` | coverage **complete or bounded**, and no committed `user_turn` row. This includes "no `write_intent` after S2 at all": `write_intent` is committed before Hermes's callback and fails closed, so the absence of any intent proves no write was attempted. |
+| `owner_turn=possible` | a transcript `write_intent` with no outcome fact (the executor died inside the write), or a `write_unsettled` fact (the commit raised after the callback). Either way the owner row may or may not be on disk. |
+| `owner_turn=ambiguous` | more than one committed `user_turn` row |
+| `owner_turn=unknown` | coverage **incomplete** (a `receipt_gap`, or unidentified rows in the session set) or **unavailable** |
+| `reply=final` / `partial` / `none` / `unknown` | `final`: the `complete` rule above. `partial`: at least one committed `public_output` row without `final`. `none`: coverage complete or bounded, and no `public_output` row. `unknown`: coverage incomplete or unavailable. |
+
+These are four different observations, and they are never merged: the executor did not run (`not_started`); no committed owner row (`absent`); an unresolved intent (`possible`); receipt coverage unavailable (`unknown`).
 
 Recorded content without completion evidence is reported as such ("Your message and part of a reply were recorded; whether the reply finished is unknown"), never as `complete`. "Source unavailable" (state.db unreadable at read time) is a read error (Phase 1A `503 source_unavailable`), never `owner_turn=absent`.
 
@@ -283,17 +329,21 @@ P  Popen(bridge, stdin=PIPE, stdout=PIPE,  E starts, imports nothing from Hermes
 J  (Windows) assign E to a job object
 G  write {"go": K, "send_id", "ledger"}\n  E reads it.  EOF instead → exit 0 without
    to E's stdin                               running (C died before G)
-                                           S1 acquire executors/<send_id>.lock (non-blocking;
-                                              failure → exit, nothing run)
-                                           S2 BEGIN IMMEDIATE: require sends.launch_token=K
-                                              and state=launching; insert executor_started
-                                              {pid, start_identity}; COMMIT.
+                                           S1 open/create executors/<send_id>.lock, lock it
+                                              (non-blocking; failure → exit, nothing run);
+                                              record its (st_dev, st_ino)
+                                           S2 guard.lock shared; BEGIN IMMEDIATE: require
+                                              sends.launch_token=K and state=launching; insert
+                                              executor_started {pid, start_identity, pgid,
+                                              lock_identity}; COMMIT; release guard.
                                               Token mismatch → exit without running.
-                                           S3 install watchdog, persistence wrappers,
-                                              session wrappers (§4.9, §4.10); enter Hermes
+                                           S3 install watchdog and the commit-boundary
+                                              recorder (§4.9, §4.10.1); then import cli and
+                                              enter Hermes
 C  reads deltas from stdout (streaming only)  … turn …
                                            S4 insert executor_finished {exit, interrupted,
-                                              timed_out}; exit (lock released by the OS)
+                                              timed_out, receipts_complete}; exit (lock
+                                              released by the OS)
 C  on stdout EOF + exit: ingest facts, transition,
    prove quiescence (§4.5), release lease
 ```
@@ -320,29 +370,67 @@ Because S2 and the fencing update both run under `BEGIN IMMEDIATE`, SQLite seria
 |---|---|
 | Ledger storage unsupported (§4.1) | refuse before acceptance (`503 send_storage_unsupported`) |
 | The bridge cannot run (no interpreter beside the binary, or `len(command)!=1`) | refuse before acceptance (`503 send_supervision_unavailable`). The fallback `rt.run` path cannot hold the go-gate, record its own identity or be fenced, so it cannot meet §4.4.2. This **replaces** revision 1's fallback for sends. |
-| The bridge runs, but a Hermes persistence or session seam it wraps is missing | accept with `capability=unverified_sources`; the launch/lease/fencing protocol is unchanged; source links are unverified; no session is registered as `workspace`; the receipt and UI disclose it. |
+| **(R3)** The platform's supervision is not established (§4.5 "Platform enablement") | refuse before acceptance (`503 send_supervision_unavailable`), with the platform named. An "unverified" label is not enough to enable it. |
+| The bridge runs, but the commit-boundary seam (`SessionDB._execute_write` with the pinned calling convention) is missing or changed | accept with `capability=unverified_sources`; the launch/lease/fencing protocol is unchanged; source links are unverified; no session is registered as `workspace`; the receipt and UI disclose it. |
 
-The second row is a behaviour change for installations where the bridge cannot run. The Phase 1A fixture Hermes and every managed install have the interpreter; external installs with a wrapper command do not. See §12, open item O-A.
+**(R3) O-A decided:** the first two rows apply to the keyed route **and** the legacy `POST /api/chat` (§5.8). There is no unsafe legacy escape hatch. The third row is the only degraded mode, and it degrades correlation only, never supervision. This is a behaviour change for installs where the bridge cannot run (external installs with a wrapper command) and, until their evidence exists, for the platforms listed as not enabled in §4.5.
 
 ### 4.5 Executor liveness and lease release
 
-Liveness is an OS lock, not a PID. E holds `executors/<send_id>.lock` from S1 until the process ends. The OS releases it when the process ends, however it ends (`flock` on Linux/macOS/Android; `LockFileEx` on Windows, released at process termination). The bridge child is spawned with `close_fds=True` (POSIX) and a restricted handle list (Windows, Python's default when `close_fds` is true), and Hermes's own subprocesses are spawned the same way, so descendants do not inherit the lock handle. A lock held longer than E (for example by an `os.fork` descendant) only keeps the lease longer; it can never release it early.
+Liveness is an OS lock, not a PID. E holds `executors/<send_id>.lock` from S1 until the process ends. The OS releases it when the process ends, however it ends (`flock` on Linux/macOS/Android; `LockFileEx` on Windows, released at process termination). The bridge child is spawned with `close_fds=True` (POSIX) and a restricted handle list (Windows, Python's default when `close_fds` is true), so a descendant does not inherit the lock handle unless it is forked without exec. A lock held longer than E (for example by an `os.fork` descendant) only keeps the lease longer; it can never release it early.
 
-Proof of quiescence = the claim owner acquires `executors/<send_id>.lock` non-blocking, then releases it. Nothing else counts: a missing PID, a failed process lookup, an unsupported liveness check, a timeout or a lost heartbeat is **not** proof of death.
+**(R3) What the lock proves, and what it does not.** Acquiring E's lock proves **E** has ended. It does not prove every descendant has ended. C0 showed this directly: after E exited, its lock was free while a child in E's process group was still running (C0: `test_lock_release_proves_the_executor_gone_not_its_descendants`). Revision 2 dismissed descendants as "not the transcript writer". That was an assumption about Hermes's tool paths, not something the lock protocol establishes. Revision 3 scopes the claim explicitly:
+
+- **Managed execution** = E plus every process in E's process group (POSIX: E is a session and group leader, `start_new_session=True`) or E's job (Windows).
+- **Quiescence** = both of:
+  - (a) E's lock is acquired by the identity probe below;
+  - (b) the managed execution is empty. On Linux/Android, no non-zombie process has E's `pgid` (C0 enumerates `/proc/<pid>/stat`). On macOS, `sysctl KERN_PROC_PGRP` returns none. On Windows, `JOBOBJECT_BASIC_ACCOUNTING_INFORMATION.ActiveProcesses = 0`.
+
+  Only when both hold is the lease released. If (a) holds and (b) does not, `liveness=live`; the owner kills the group or job (§4.9) and probes again.
+- **Outside the boundary:**
+  - A process that deliberately leaves the group or job: `setsid`/`setpgid` on POSIX (C0: `test_a_descendant_that_leaves_the_group_is_outside_the_boundary`), or a job breakaway on Windows. The design does not claim to contain it or detect it. Whether any Hermes tool path does this at `0e9fc2cc15` is new observation **O-10**.
+  - Unrelated external writers, such as a terminal the owner runs.
+
+  The claim is exactly: **no second managed writer while any managed process may still run.** It is not extended to an arbitrary process tree.
+- Transcript rows written by any process other than E are never receipted, so they can never be linked to the send (§4.10.1). A write by an escaped descendant can therefore not corrupt correlation. It can only be an unreceipted row, like a terminal's.
+- The installation-wide exclusion (§4.7) uses the same quiescence test. An update is refused while any managed process of any profile's open send remains, not only while E does.
+
+**(R3) Lock files are safety objects.** Their lifetime and handling:
+- S1 opens or creates the lock and records its `(st_dev, st_ino)` in `executor_started`.
+- A lock file is **never unlinked, truncated or replaced** while any send that recorded it is unsettled. Retention (§5.5) removes it only together with its settled send. A reset never removes one (§4.1). Nothing deletes a busy lock to unblock the UI.
+- **Identity probe:** open the path **without `O_CREAT`**, lock it non-blocking, then require `fstat(fd)` = recorded identity = `stat(path)`.
+  - Busy → `live`.
+  - Acquired and identical → condition (a) holds.
+  - Missing path, a different identity, or a path replaced between open and stat → **`unproven`**, and the lease stays held.
+
+  Revision 2's probe opened with create. C0 showed that it reports a recreated file as proof that the executor ended while the executor still held the unlinked original (C0: `test_a_replaced_lock_path_is_not_proof`, `test_identity_probe_on_a_live_and_an_ended_executor`).
+
+Proof of quiescence = the identity probe acquires E's lock **and** the managed execution is empty. Nothing else counts: a missing PID, a failed process lookup, an unsupported liveness check, a timeout or a lost heartbeat is **not** proof of death.
+
+**(R3) Platform enablement.** A platform's keyed and legacy sends are enabled only when its supervision behaviour has been observed, not inferred (O-A, O-C):
+
+| Platform | Needs | C0 status | Sends |
+|---|---|---|---|
+| Linux (desktop/server) | flock semantics, group enumeration, `killpg`, controller death leaves E running | observed on this host (C0: `test_phase1b_c0_liveness.py`, 6 cases) | proposed **enabled** |
+| Windows | O-8: job assignment before `go`, `ActiveProcesses`, last-handle kill-on-close, `TerminateJobObject` reaching descendants, breakaway behaviour, lock release timing | **unavailable** (no Windows host; CI runner not used in C0) | **refused** until O-8 passes |
+| macOS | O-11 (new): `KERN_PROC_PGRP` enumeration, `killpg`, flock on APFS | **unavailable** | **refused** until O-11 passes |
+| Android / Termux | O-9: private `$HOME` mount type, flock, `/proc` group enumeration under the app's SELinux domain | **unavailable** (no device test in C0) | **refused** until O-9 passes |
+
+This is the named consequence of the missing evidence. It is a regression for the platforms marked refused, which today can chat without these guarantees. It is §12 item O-E for the owner.
 
 | Situation | Evidence | `liveness` | Lease |
 |---|---|---|---|
 | `accepted`, no executor authorised | no token | `none` | held (acquired at acceptance) |
 | `launching`, fenced, no `executor_started` | fencing commit | `none` | **released** |
 | `spawn_failed` | fact | `none` | **released** |
-| executor lock acquired by the claim owner after `executor_started` | lock acquired | `quiescent` | **released** (outcome may still be `unknown`) |
-| executor lock still held | lock busy | `live` | held |
-| lock file cannot be opened or locked for a reason other than "busy" (I/O error, permission) | none | `unproven` | held; receipt says the app cannot confirm Hermes has stopped |
+| identity probe acquires the executor lock **and** the managed group/job is empty (R3) | lock acquired, group empty | `quiescent` | **released** (outcome may still be `unknown`) |
+| executor lock still held, **or** acquired while a managed process remains (R3) | lock busy / group not empty | `live` | held |
+| lock file missing, replaced (identity mismatch), or not openable/lockable for a reason other than "busy" (R3) | none | `unproven` | held; receipt says the app cannot confirm Hermes has stopped |
 | executor lock busy after interrupt, grace and kill attempts | lock busy | `live` | held; state stays `stopping`/`unknown`; UI says a previous reply may still be running and a new message will wait |
 
 A held lease blocks every new send on that physical home (`409 turn_in_progress`), including a confirmed new-key "Send again" (U2). There is no age-based expiry. A host reboot always resolves `live`/`unproven` for local storage, because it ends every process and lock.
 
-**Descendants.** Hermes tools may start subprocesses. They are not the transcript writer (only the Hermes process inserts rows), so they do not gate the lease. They are still cleaned up (below) and a cleanup that cannot be confirmed is recorded as `descendants=unverified` in the receipt's diagnostic data.
+**Descendants (R3, replaced).** Revision 2's rule ("descendants do not gate the lease") is withdrawn. Descendants inside the managed group or job gate the lease through quiescence condition (b) above. Descendants that leave it are outside the stated boundary (O-10).
 
 **Per-OS process handling.**
 
@@ -353,10 +441,10 @@ A held lease blocks every new send on that physical home (`409 turn_in_progress`
 | Signal target check before any signal | lock still busy **and** a `pidfd_open(pid)` handle whose start time matches (Python ≥ 3.9, Linux ≥ 5.3; otherwise the start-time check without a pidfd, with a residual race stated) | lock busy and start time matches; residual race between check and `killpg` stated | the job handle (no PID signalling) |
 | Graceful interrupt | ledger flag read by E's watchdog → `_thread.interrupt_main()` inside E (§4.9); no signal needed | same | same |
 | Kill tree | `killpg(pgid, SIGKILL)` | same | `TerminateJobObject` |
-| Controller dies, executor alive | E continues; its watchdog enforces `deadline_at`; recovery supervises it through the lock and facts | same | the job handle closes with the controller and the OS kills the job's processes (kill-on-close); recovery then acquires the lock |
-| Proof of death | lock acquired | lock acquired | lock acquired |
+| Controller dies, executor alive | E continues; its watchdog enforces `deadline_at`; recovery supervises it through the lock and facts (C0 observed on Linux: `test_controller_death_leaves_a_posix_executor_running`) | same (not observed) | **proposed** (O-C): kill-on-close ends the job only when the **last** handle to the job closes [W]. The controller must hold the only job handle, and no process in the job may hold one; child association depends on the creation and breakaway flags. None of this is observed yet (O-8). |
+| Proof of quiescence | identity probe acquires the lock **and** no process in E's group | identity probe **and** `KERN_PROC_PGRP` empty | identity probe **and** `ActiveProcesses = 0` |
 
-`CREATE_NEW_PROCESS_GROUP` alone is not used as a kill-tree mechanism: Python documents `send_signal(CTRL_BREAK_EVENT)` separately, and `Popen.kill()` on Windows terminates only the child [E2]. Whether the job handle lifetime and assignment behave as specified on the CI Windows runner is observation O-8; until it is observed, Windows is labelled "orphan recovery not verified on this OS".
+`CREATE_NEW_PROCESS_GROUP` alone is not used as a kill-tree mechanism: Python documents `send_signal(CTRL_BREAK_EVENT)` separately, and `Popen.kill()` on Windows terminates only the child [E2]. **(R3)** Windows sends are refused until O-8 is observed on a real Windows host. A test-status label such as "orphan recovery unverified" does not enable a send path whose safety prerequisites are not established.
 
 ### 4.6 Recovery ownership
 
@@ -392,11 +480,14 @@ This keeps today's rule that an update never runs under a live turn, and extends
 | After T1, `Popen` raised | `launching` + `spawn_failed` | `not_started` | absent | released | re-arm |
 | After T1, before or after `Popen`, before G | `launching` | fence; no start fact → `not_started`; E (if any) exits on EOF | absent | released | re-arm |
 | After G, before S2 commits | `launching` | fence; if S2 lost the race → `not_started`; if S2 won → `generating` path | absent / per receipts | per §4.5 | re-arm or receipt |
-| After S2, before any Hermes write | `generating` | E alive → supervise; E dead without `executor_finished` → `unknown` | absent if no intent fact | released once lock acquired | `unknown` receipt |
-| E between `row_intent` and `row_written` (user row) | `generating` | E dead → `unknown` | possible | released | `unknown` receipt |
+| After S2, before any Hermes write | `generating` | E alive → supervise; E dead without `executor_finished` → `unknown` | **(R3)** `absent` (bounded coverage: no `write_intent` at all, and intents fail closed) | released once quiescent | `unknown` receipt |
+| **(R3)** E between a transcript `write_intent` and its outcome fact (inside Hermes's callback or commit) | `generating` | E dead → `unknown` | `possible` | released once quiescent | `unknown` receipt |
+| **(R3)** Hermes's commit raised after the callback ran (`write_unsettled`) | `generating` | per E; the turn usually fails | `possible` (if it was the owner-row write) | per §4.5 | outcome from `executor_finished`, `owner_turn=possible` |
+| **(R3)** Hermes committed; the receipt write failed (`receipt_gap`) | `generating` | E refuses every later write (fail closed), so Hermes aborts the turn; `executor_finished.receipts_complete=false` | `unknown` | per §4.5 | `failed` or `unknown`; never `complete` |
 | After the owner row, before any reply | `generating` | E alive → supervise; E dead → `unknown` | recorded | released once dead | `unknown` ("recorded; reply not known") |
-| After partial output, E dead | `generating` | `unknown` | recorded | released | `unknown`, `reply=partial` |
+| After partial output, E dead | `generating` | `unknown` | recorded | released | `unknown`, `reply=partial` if a `public_output` row was committed, else `none` (bounded) |
 | After the final reply row, before `executor_finished` | `generating` | E alive → wait for the fact; E dead → `unknown` (a reply row is not completion evidence) | recorded | per §4.5 | `unknown`, `reply=partial` |
+| **(R3)** `executor_finished exit=0`, last public row `finish_reason≠'stop'` | `generating` | ingest → `failed`, `reply_incomplete` | recorded | released once quiescent | `failed`, `reply=partial` |
 | After `executor_finished`, before C's transition | `generating` | ingest → `complete`/`failed`/`interrupted` | per receipts | released once lock acquired | that outcome |
 | After C's final transition, before the HTTP response | outcome | — | — | — | the same outcome |
 | Controller dies, E alive (POSIX) | `generating` | recovery supervises; E finishes or hits its deadline and writes `executor_finished` | per receipts | released after E exits | final outcome later |
@@ -410,29 +501,60 @@ No path launches a second executor for one `send_id` except the re-arm of a defi
 ### 4.9 Stop and timeout
 
 - `POST /api/chat/sends/{send_id}/stop` sets `stop_requested_at` and moves `generating → stopping` (compare-and-set). On `launching` it fences instead (§4.4.3), which yields `not_started` or `generating→stopping` from evidence. It returns the receipt in its current state. It never returns `interrupted` because a stop was requested.
-- E's watchdog thread (installed at S3) reads `stop_requested_at` and `deadline_at` from the ledger once a second with a read-only connection. When either applies, it records `stop_seen` and calls `_thread.interrupt_main()`, which raises `KeyboardInterrupt` in Hermes's main thread, the same path as Ctrl-C (`cli.py:4057-4063`). The same mechanism works on every OS and does not depend on the controller being alive.
-- Grace: 15 s after `stop_seen`. If E's lock is still busy, the owner kills the tree (§4.5 table), records `kill_sent`, and re-probes. The outcome remains whatever the facts establish: a turn that finished before the interrupt landed is `complete`; one that raised `KeyboardInterrupt` is `interrupted`; one killed before writing `executor_finished` is `unknown`. A timeout that ends in `exit=1` is `failed` with `error_code=timeout`.
+- E's watchdog thread (installed at S3) reads `stop_requested_at` and `deadline_at` from the ledger once a second with a read-only connection. When either applies, it records `stop_seen` and calls `_thread.interrupt_main()`, which raises `KeyboardInterrupt` in Hermes's main thread, the same path as Ctrl-C (`cli.py:4057-4063`). The same mechanism is expected on every OS and does not depend on the controller being alive. **(R3)** C0 observed it on Linux during a provider stream only: exit 130, 1.84 s from the interrupt to the end of the turn, and no assistant row stored (C0: `test_interrupt_main_reaches_the_turn_during_a_stream`). The tool-call path and other OSes are not observed (O-6 remains open for those).
+- Grace: 15 s after `stop_seen`. If the managed execution is not quiescent (R3: E's lock busy **or** a process left in its group/job), the owner kills the group/job (§4.5 table), records `kill_sent`, and re-probes. The outcome remains whatever the facts establish: a turn that finished before the interrupt landed is `complete`; one that raised `KeyboardInterrupt` is `interrupted`; one killed before writing `executor_finished` is `unknown`. A timeout that ends in `exit=1` is `failed` with `error_code=timeout`.
 - If the kill cannot be confirmed (lock still busy), the state stays `stopping` and the lease stays held (§4.5).
 
 ### 4.10 Correlation (B2)
 
 #### 4.10.1 Source receipts written by the executor
 
-At S3 the bridge wraps, inside E only, `SessionMessagesMixin.append_message`, `append_messages_batch`, `_insert_message_rows` and `replace_messages` on the `SessionDB` class, and `create_session` (`hermes_state_sessions.py:362`). For each call:
+**(R3, replaced.)** Revision 2 wrapped five methods and wrote `row_written` when each returned. On the pinned code that published rolled-back rows, published the same ids twice on a retried callback, claimed a foreign writer's reuse of a rolled-back id, missed the compression child session and its cloned rows, and raised into Hermes after Hermes had committed (C0: `RevisionTwoDefects`, 6 cases). The replacement records at the commit boundary instead.
 
-- **Before** Hermes's write: a `row_intent` fact `{session_id, role, write_kind}` (no content), committed. If this ledger write fails, the wrapper raises before Hermes writes, so an unrecorded row cannot exist (fail closed; the turn fails and the receipt says why).
-- **After** Hermes's write returns: a `row_written` fact `{session_id, row_id, role, timestamp, finish_reason, write_kind}` using the row id Hermes returned (`append_message`) or stored in `msg["_row_id"]` (`_insert_message_rows`).
-- `write_kind` is `turn` for `append_message`/`append_messages_batch` called by the turn loop, and `rewrite` for inserts made under `replace_messages` or compression. `replace_messages` also records `session_rewritten {session_id, mode}`.
-- `create_session` records `session_created {session_id, parent_session_id}`.
+At S3, inside E only, the bridge wraps **`SessionDB._execute_write`**, the one place where the pinned `SessionDB` commits (§1.3):
 
-These facts are causal: they are written by the process that performed the insert, bound to its `launch_token`, and cover every row **this executor** wrote and no row any other process wrote. A terminal writing into the same session, even with the same text, never appears in them. No watermark, time window or text comparison selects rows, so there is no lower or upper bound to get wrong, and later turns and continuation rewrites by other processes cannot be swept in.
+1. **Write intent.** At the outermost `_execute_write`, before Hermes's callback runs, E commits `write_intent {wid, method}`. `wid` is a per-executor counter; `method` is the calling SessionDB method's name, for diagnostics only. If this ledger write fails, the wrapper raises **before** Hermes's callback, so no write happens without an intent (fail closed).
+2. **Candidates per attempt.** The callback receives a connection proxy. For each `INSERT INTO messages` the proxy records `(session_id, row_id, role, class-inputs)`, read back from the row inside the same transaction, with no content. For each `INSERT INTO sessions` it records whether the id existed just before the statement and exists just after (`fresh`). A multi-row `INSERT … SELECT` (the tail clone) has no per-row id; its row count, from `changes()`, which excludes FTS trigger rows, is recorded as `unidentified`. **When Hermes retries the callback, the previous attempt's candidates are discarded.**
+3. **Publish only after commit.** Only when the outermost `_execute_write` **returns** (Hermes has committed) does E commit `write_committed {wid, method, attempts, rows, sessions, unidentified}`. Nested `_execute_write` calls publish nothing of their own; their observations belong to the enclosing scope.
+4. **Failure outcomes.** If `_execute_write` raises and the callback never returned: `write_rolled_back {wid, attempts, candidates}`, and no rows are published. If the callback returned but the commit step raised: `write_unsettled {wid}`, meaning settlement is unknown.
+5. **Cross-store gap.** Hermes committed but the `write_committed` fact could not be written: E records `receipt_gap {wid}` if it still can, and **never raises into Hermes for that write**, because it succeeded. From then on every `write_intent` fails closed, so no later row, and in particular no owner row in a session the ledger never attributed, can land. `executor_finished` carries `receipts_complete=false`. The gap is never filled later by matching text or by taking whatever row now holds a candidate id.
 
-Whether the turn loop's user-row insert can be told apart from compression copies by these call sites alone is observation O-3/O-4. If a turn records more than one `role=user, write_kind=turn` row, `owner_turn=ambiguous` and no candidate is chosen.
+Row classes, computed at publish time:
+
+| Class | Rows | May support |
+|---|---|---|
+| `user_turn` | `role=user`, written by `append_message`/`append_messages_batch` | `owner_turn` |
+| `public_output` | `role=assistant`, text present, no tool calls, no `display_kind`, not `_compressed_summary`, not `observed`, written by `append_message`/`append_messages_batch` | `reply` (with `finish_reason`, §4.3.2) |
+| `assistant_internal` | assistant rows with tool calls, no text, a display kind, or summary/observed flags | nothing |
+| `internal` | tool/system rows | nothing |
+| `rewrite_copy` | every row inserted by any other method (`replace_messages`, `archive_and_compact`, `publish_compression_child`, rewind replacement, import) | nothing. A copy of historical output is never turn output. |
+
+C0 checked this rule on the pinned code (C0: `CommitAwareReceipts`, 12 cases):
+- rollback after the inner helper → nothing published;
+- a retried callback → one receipt with `attempts=2`;
+- a foreign row reusing a rolled-back id → never claimed;
+- a chunked batch → one receipt per committed chunk;
+- rewrite/compaction rows → `rewrite_copy`, and the clone is counted `unidentified`;
+- tool-call, tool and public rows → correctly separated;
+- a commit failure → `write_unsettled`;
+- a receipt-write failure after the source commit → `receipt_gap`, then fail closed.
+
+For the real CLI turns run, the committed receipts covered exactly the rows in `state.db`: fresh session, resume, provider error, truncation, disconnect, interrupt (C0: `RealTurns`). **Limits:** this is a harness recorder, not production. The CLI compression-continuation path, tool-using turns, gateway and cron were not run. A second concurrent Hermes writer in E's own process was not exercised.
+
+These facts are causal. They are written by the process that performed the commit, bound to its `launch_token`, and cover rows **this executor committed** and no row any other process wrote. A terminal writing into the same session, even with the same text, never appears in them. No watermark, time window or text comparison selects rows.
+
+If a send's committed receipts hold more than one `user_turn` row, `owner_turn=ambiguous` and no candidate is chosen.
 
 #### 4.10.2 Sessions and workspace registration (D5, D6)
 
-- A session is attributed to the send only when a `session_created` fact exists from this executor (a new session or a continuation made during the turn). The resumed `requested_session` is recorded in `hermes_sessions` with `created_here=false` and is **not** relabelled: a terminal session resumed from the workspace stays whatever it was.
-- The Phase 1A classifier gains a second source of workspace sessions: `session_created` facts in the ledger (read-only), unioned with `.tamanitomo-sessions.json`. The `session_created` fact is committed in E before the session row itself is inserted (it is the `row_intent` of `create_session`), so no attributable row exists in a session that the ledger does not already attribute. This closes the crash window revision 1 left between "early event printed" and "parent recorded it".
+- **(R3)** A session is attributed to the send as *created here* only when a `write_committed` fact from this executor lists it with `fresh=true`. That covers a new session and a continuation created during the turn, including `publish_compression_child`, which inserts the session row without `create_session`. A `create_session`/`ensure_session` call on an existing id is an upsert and gives `fresh=false`. A failed insert gives `write_rolled_back` with no session. Neither ever labels the session as created by the workspace (C0: `test_only_a_fresh_insert_is_a_created_session`, `test_compression_child_and_clone_are_seen_and_the_clone_is_unidentified`). The resumed `requested_session` is recorded in `hermes_sessions` with `created_here=false` and is **not** relabelled.
+- The Phase 1A classifier gains a second source of workspace sessions: fresh-session receipts in the ledger (read-only), unioned with `.tamanitomo-sessions.json`.
+- **(R3) Early registration without an upsert-as-proof.** Revision 2 made the *pre-call* intent of `create_session` the attribution. That treated an upsert attempt as proof of creation. Instead:
+  - The fresh-session receipt is committed as soon as Hermes's session-insert transaction returns, and before control goes back to Hermes.
+  - On the pinned CLI path the session row and the owner row are separate `_execute_write` calls, and C0 observed the session row committed first in every fresh turn run.
+  - If that receipt cannot be committed, E is in `receipt_gap` and refuses every later write, so the owner row cannot land in an unattributed session. The turn fails and `owner_turn=unknown` is reported, never `absent`.
+  - If Hermes ever inserted a fresh session and a transcript row in **one** transaction, both would arrive in the same `write_committed` fact, which still precedes any later write.
+  - So no attributable transcript row exists in a session the ledger does not attribute.
 - The post-completion `note_workspace_session` call stays (for older readers of the JSON file) but is no longer the authority.
 - The before/after session diff (D6) is removed from both routes.
 
@@ -441,7 +563,7 @@ Whether the turn loop's user-row insert can be told apart from compression copie
 Links are joined into Phase 1A reads by the full identity envelope, not a row key alone. A link resolves to a projection row only when **all** of these hold for the currently authorised scope:
 - the projection row's `source_session`/`source_message` equal the receipt's `(session_id, row_id)`;
 - its stored fingerprint equals `fingerprint(row_id, session_id, role, timestamp)` computed from the receipt (`chat_sources.py:302`);
-- its source kind and account/channel namespace are the ones this send can produce (`workspace`, no platform account);
+- **(R3)** its source kind and account/channel namespace equal the send's recorded `source_kind`/`source_namespace` (§4.2), **and** that kind and namespace are still authorised by the current binding. At acceptance the server records the permitted kind: `workspace` for a new session or a workspace session; `terminal` (with its namespace) for an authorised terminal session resumed from the workspace. Revision 2 accepted only `workspace` here, which contradicted its own rule that a resumed terminal session stays terminal. The terminal's history is never relabelled to make the join succeed. Authorisation is never widened because the executor wrote a row: if the binding later stops authorising terminal rows, those links resolve to nothing, exactly as a Phase 1A revocation;
 - no known platform message id on the row conflicts with one the receipt knows (`platform_conflict`, `chat_sources.py:308`). Workspace rows normally carry none; if one appears, it is a different message by the R2 rule.
 
 | Case | Result |
@@ -465,7 +587,7 @@ Stream frames carry `send_id`. The client's DOM ids are role- and part-specific:
 
 #### 4.10.6 Unverified fallback (U3)
 
-When a wrapped seam is missing, E records `capability_downgrade {missing:[…]}` at S3 and the send runs with `capability=unverified_sources`: `owner_turn`/`reply` are `unknown` unless `executor_finished` says otherwise, `correlation=unverified`, no session is registered, no link is shown. The launch, fencing, lease and liveness protocol is unchanged. D5 stays open for that turn and the receipt says so.
+When the commit-boundary seam is missing or its calling convention changed (R3: `SessionDB._execute_write(self, fn, patience_s=None)`), E records `capability_downgrade {missing:[…]}` at S3 and the send runs with `capability=unverified_sources`. Then `owner_turn` and `reply` are `unknown` (coverage unavailable, §4.3.2), `correlation=unverified`, no session is registered, and no link is shown. `executor_finished` can still establish `failed` or `interrupted`; `complete` needs complete receipts, so an unverified send whose executor reports `exit=0` ends in state `unknown` with `error_code=sources_unverified`, worded "Hermes finished the turn; the app could not verify what it recorded". It is never `complete`. The launch, fencing, lease and liveness protocol is unchanged. D5 stays open for that turn and the receipt says so.
 
 ### 4.11 Destination
 
@@ -478,14 +600,21 @@ When a wrapped seam is missing, E records `capability_downgrade {missing:[…]}`
 ### 5.1 Routes
 
 ```
+GET  /api/chat/sends/bootstrap          (R3) → {conversation_id, generation}; creates the ledger on
+                                        first use (§4.1); 503 send_ledger_lost / send_storage_unsupported /
+                                        send_supervision_unavailable; 409 ledger_busy during a reset
+
 POST /api/chat/sends
-  body: {client_key, conversation_id, message, session: S|null}
+  body: {client_key, generation, conversation_id, message, session: S|null}
   202 {send: Receipt, operation: {id}}                     new acceptance
   200 {send: Receipt, operation: {id}, replay: true}        existing receipt for this key
   409 {error: "key_conflict", send_id}                     same key, different digest
+  409 {error: "generation_changed"}                        (R3) no receipt, and the request's generation is not current
+  409 {error: "not_bootstrapped"}                          (R3) no ledger exists; call bootstrap first
+  409 {error: "ledger_busy"}                               (R3) an explicit reset is in progress
   409 {error: "turn_in_progress"}                          another send holds the lease (not accepted)
   409 {error: "installation_busy"}                         an installation mutation is running
-  422 {error: "key_expired" | "key_predates_ledger"}
+  422 {error: "key_expired"}
   503 {error: "send_storage_unsupported" | "send_supervision_unavailable" | "send_ledger_lost"}
   400 invalid input, wrong conversation_id, unauthorised session
 
@@ -505,11 +634,11 @@ Every route captures `ChatScope` once, then checks `conversation_id` against it.
 ### 5.2 Order of checks for `POST /api/chat/sends`
 
 1. Validate input and capture scope; reject a `conversation_id` that is not the captured one.
-2. Open the ledger (storage, loss checks).
-3. **Look up `(conversation_id, client_key)`.** If a row exists: equal digest → `200 replay` with that receipt, whatever the lease, age or state (except the `not_started` re-arm below); different digest → `409 key_conflict`. This runs **before** the busy check, so identical concurrent retries all get the one receipt, never a misleading `turn_in_progress` (M-2).
-4. No row: check the key's time against the admission rules (§5.3).
-5. Check supervision availability (§4.4.4).
-6. Installation lock (non-blocking), then one `BEGIN IMMEDIATE`: re-run step 3 inside it (a concurrent identical request may have committed since); if the lease is held → `409 turn_in_progress`; else insert the send with `send_id`, `operation_id`, `claim=1`, `claim_owner=me`, acquire the lease, `COMMIT`. Release the installation lock.
+2. Open the ledger (storage, loss checks). **(R3)** No ledger → `409 not_bootstrapped`; the POST never creates one.
+3. **Look up `(conversation_id, client_key)`.** If a row exists: equal digest → `200 replay` with that receipt, whatever the lease, age, state **or generation** (except the `not_started` re-arm below); different digest → `409 key_conflict`. This runs **before** the busy check, so identical concurrent retries all get the one receipt, never a misleading `turn_in_progress` (M-2).
+4. No row: **(R3)** the request's `generation` must equal the ledger's current one (else `409 generation_changed`); then the key's time is checked for freshness (§5.3).
+5. Check supervision availability (§4.4.4), including platform enablement (§4.5).
+6. Installation lock (non-blocking), then `guard.lock` **shared** (R3; busy with a reset → `409 ledger_busy`), then one `BEGIN IMMEDIATE`: re-run steps 3–4 inside it (a concurrent identical request, or a reset, may have committed since); if the lease is held → `409 turn_in_progress`; else insert the send with `send_id`, `operation_id`, `generation`, `source_kind`/`source_namespace`, `claim=1`, `claim_owner=me`, acquire the lease, `COMMIT`. Release the guard, then the installation lock.
 7. Create the operation view and hand the send to the launcher (§4.4).
 
 Same-key requests in different logical scopes are independent receipts. A wrong `conversation_id` is never permission to look in another scope.
@@ -522,10 +651,12 @@ Same-key requests in different logical scopes are independent receipts. A wrong 
 | Existing `not_started`, same digest, key time within 24 h | re-arm: `not_started → accepted` (same `send_id`, new claim), subject to the lease and installation checks of step 6, then launch |
 | Existing `not_started`, same digest, key older than 24 h | `200 replay` of the `not_started` receipt with `rearm: "expired"`. Nothing launches. The client may offer a new send (a new key; no duplicate risk, because non-execution is definite). |
 | Existing receipt, different digest | `409 key_conflict` |
-| No receipt, key time within 24 h and ≥ `admission_floor`, not > 5 min in the future | accept |
+| No receipt, `generation` current, key time within 24 h and not > 5 min in the future | accept |
+| **(R3)** No receipt, `generation` not current (an earlier ledger, or a request frozen before a reset) | `409 generation_changed`. Never a fresh send, whatever the key's time. |
 | No receipt, key older than 24 h | `422 key_expired`. Never a fresh send. |
-| No receipt, key time < `admission_floor` | `422 key_predates_ledger` |
 | Key > 5 min in the future | `400` |
+
+**(R3)** The generation is the reset fence and the key time is only freshness. A client clock that runs ahead or behind changes only freshness results; it can never make a request from an earlier generation fresh (C0: `test_generation_fence_refuses_a_prior_generation_request`, `test_freshness_is_separate_from_the_fence`). `key_predates_ledger` and `admission_floor` are withdrawn.
 
 The server stores no request text, so it can never relaunch from a digest. The only way the original payload returns after a definite `not_started` is an identical client resubmission (step 3 compares the digest). A newer draft is a different digest and a different key.
 
@@ -539,13 +670,13 @@ The UI first calls `GET /api/chat/sends/{send_id}` (or `?key=`). "Send again" is
 
 A send is **settled** when its lease is released (`liveness` is `none` or `quiescent`) and its state is `complete`, `failed`, `interrupted`, `not_started` or `unknown`. `settled_at` is set in the releasing transaction.
 
-Prune predicate, exactly: delete a send (its facts and events cascade) iff `settled_at IS NOT NULL AND settled_at < now − 30 days`. Unsettled sends (`accepted`, `launching`, `generating`, `stopping`, or any send with `liveness` `live`/`unproven`) are never pruned, whatever their age.
+Prune predicate, exactly: delete a send (its facts and events cascade) iff `settled_at IS NOT NULL AND settled_at < now − 30 days`. **(R3)** Its `executors/<send_id>.lock` is removed in the same pass, only after the row is deleted, and only if the identity probe finds it acquirable. It is never removed while its send is unsettled (§4.5). Unsettled sends (`accepted`, `launching`, `generating`, `stopping`, or any send with `liveness` `live`/`unproven`) are never pruned, whatever their age.
 
 Safety after pruning: every pruned key is at least 30 days past settlement and therefore more than 24 h old, so an absent key is refused by admission (`key_expired`); no tombstone is needed for replay safety. Historical `send_id` correlation on reads is available for 30 days after settlement; after that, rows show no `correlation.send_id` and the contract says so.
 
 Bounded work: one pass deletes at most 500 sends, chosen by `SELECT send_id FROM sends WHERE settled_at < ? ORDER BY settled_at LIMIT 500` on the partial index `sends_settled`. A pass runs after each acceptance, once at app start, and when `GET ?open=1` is served. An installation that stops sending is still pruned at its next app start; an installation that never runs the app again does not grow either. `send_events` per send is bounded by the state machine (at most 12 transitions) plus recovery attempts, which are counted in one fact rather than logged per attempt.
 
-The 200-bytes-per-row figure in revision 1 is withdrawn. M-23 measures the real file size, including facts, events and indexes, at 10,000 settled sends with a realistic fact count per send (about 10–30 `row_intent`/`row_written` facts for a tool-using turn), and the result is reported as measured.
+The 200-bytes-per-row figure in revision 1 is withdrawn. M-23 measures the real file size, including facts, events and indexes, at 10,000 settled sends with a realistic fact count per send (R3: a `write_intent` plus an outcome fact per committed Hermes write; C0 counted 17 committed writes, so about 34 facts, for a plain one-reply turn with no tools, and more for tool-using turns), and the result is reported as measured.
 
 ### 5.6 Operation records as views (B3, B5)
 
@@ -565,15 +696,15 @@ New chat operation records are written through an explicit **allowlist**: `id, s
 Tests read the actual files at an intermediate progress point, at completion and at failure (M-23).
 
 **Legacy response contract.** A client polling a chat operation still receives `result.response` and `result.messages`:
-- while the row is in memory (the live process), from the in-memory result;
+- while the row is in memory (the live process), from the in-memory result, **(R3) but only after the same current-authorisation check as reconstruction**. The request's `ChatScope` is captured, the send's scope and linked sources must still be authorised, and otherwise the in-memory `response`/`messages` are withheld exactly as below. A revocation cannot leak content through the "still in memory" branch (M-14a covers both branches);
 - otherwise, reconstructed at request time from the send's linked source rows through the Phase 1A read path under the **current** authorisation (`messages` from the linked rows; `response` from the linked final assistant row);
 - otherwise (links lost, not authorised, source unavailable, or receipt pruned), `result.response = null`, `result.messages = []`, `result.content_retained = false`. A reply is never regenerated because content is missing.
 
-**Retention of operation files.** Applies to terminal (`status` ≠ `running`) records with `format: 2` in this app state's `operations/` directory. Prune a record iff `finished_at < now − 7 days` **OR** it is not among the newest 500 terminal `format: 2` records by `finished_at`. At most 500 files are removed per pass, oldest first; a pass runs at app start and after each chat operation finishes. `running` records are never pruned by this rule (their safety state is in the ledger). Operation records without `format: 2` (pre-1B chat records and all non-chat operations) are left untouched in 1B; the app reports their count, and removing pre-1B chat records that contain text is a separate owner-approved action (§12, O-B).
+**Retention of operation files.** Applies to terminal (`status` ≠ `running`) records with `format: 2` in this app state's `operations/` directory. Prune a record iff `finished_at < now − 7 days` **OR** it is not among the newest 500 terminal `format: 2` records by `finished_at`. At most 500 files are removed per pass, oldest first; a pass runs at app start and after each chat operation finishes. `running` records are never pruned by this rule (their safety state is in the ledger). Operation records without `format: 2` (pre-1B chat records and all non-chat operations) are left untouched in 1B; the app reports their count, and removing pre-1B chat records that contain text is a separate owner-approved action (O-B, decided: count only). **(R3)** Their text is still on disk; no document or UI says it was removed.
 
 ### 5.8 The legacy `POST /api/chat`
 
-Kept for old clients. Each call gets a ledger row with `client_key = legacy-<uuid>` and `legacy=1`, so it takes part in the lease, launch protocol, receipts and retention. It is **not** idempotent: two calls are two sends. The new UI never falls back to it after a network error (§6).
+Kept for old clients. Each call gets a ledger row with `client_key = legacy-<uuid>` and `legacy=1`, so it takes part in the lease, launch protocol, receipts and retention. It is **not** idempotent: two calls are two sends. The new UI never falls back to it after a network error (§6). **(R3)** The server bootstraps implicitly for it, carrying the current generation, because a legacy call has no retry identity to fence. It is refused on exactly the conditions that refuse the keyed route (§4.4.4, O-A).
 
 ---
 
@@ -583,10 +714,11 @@ Scope: `workspace.js` chat submit, recovery on load, and bubble status only.
 
 State kept in `sessionStorage` under the profile's chat key:
 - `draft`: the editable compose text (as today).
-- `pending`: `{client_key, conversation_id, profile, session, message, send_id?, operation_id?}`, **immutable** once created; one at a time. It is separate from `draft`, so editing or clearing the compose box never changes it, and a new draft never replaces it.
+- `pending`: `{client_key, generation, conversation_id, profile, session, message, send_id?, operation_id?}`, **immutable** once created; one at a time. It is separate from `draft`, so editing or clearing the compose box never changes it, and a new draft never replaces it.
 
 Flow:
-1. Send: mint `client_key`, write `pending`, clear the compose box into a fresh draft, draw `snd_pending:owner` "sending…", `POST /api/chat/sends`.
+0. **(R3)** Before the first send of a page load (and after any `generation_changed`), `GET /api/chat/sends/bootstrap` to get the current `generation`. A failure here means nothing is sent and the compose box keeps the text as a draft.
+1. Send: mint `client_key`, write `pending` with the bootstrapped `generation`, clear the compose box into a fresh draft, draw `snd_pending:owner` "sending…", `POST /api/chat/sends`.
 2. `202`/`200`: store `send_id`/`operation_id` in `pending`; rename DOM ids to the `send_id` forms (§4.10.4); poll.
 3. Network error or lost response: retry the **same** `pending` payload and key (bounded backoff). A `GET ?key=` 404 while the original POST may still be in flight is not permission to mint a new key; the client keeps retrying the POST with the same key, which the server resolves (§5.2).
 4. On reload: if `pending` exists for this profile, resume with step 3, then poll. A `pending` from another profile is left alone and never attached to this chat.
@@ -603,6 +735,8 @@ Wording (receipt facts decide it; nothing else):
 | `interrupted` | "Stopped" (+ partial reply shown as partial) | — |
 | `unknown`, acceptance confirmed | **"The app accepted your request. Whether Hermes recorded it or finished a reply is unknown."** Send again only per §5.4 | not restored |
 | acceptance itself not confirmed (all retries failed) | "Not confirmed. The app will check again with the same request." | kept in `pending`, not as a draft |
+| **(R3)** `409 generation_changed` for a `pending` send | "The app's send records were reset. Whether this message was sent before the reset is unknown." **Send again** is a new intent (new key, new generation), after the confirmation of §5.4 | not restored; `pending` cleared |
+| **(R3)** `409 not_bootstrapped` | treated as a failed bootstrap (step 0): "Not sent" | offered back as a draft |
 
 "Ask again" and "Send again" are new user intents with new keys, never transport retries.
 
@@ -626,7 +760,10 @@ An attempt is identified by `attempt = <run_id>:<n>` where `run_id` is random pe
 
 1. **Claim.** `_append(outbox_update{status: dispatching, attempt, run_id}, guard=…)`. The guard, under the outbox lock, re-reads the fold and refuses unless the entry's current status is exactly `queued`. Only the run whose append succeeds may continue. A dispatcher holding a stale snapshot fails here and does nothing further for that entry.
 2. **Checks that do not send.** Image review and `verdict()` as today. A hold/withhold appends its outcome **with the attempt** (`withheld`, `expired`) or releases (`queued`, `release_reason`, attempt) — permitted only while the attempt is at `dispatching`.
-3. **Slot.** `outreach.claim()` as today. Refused → append `queued` with `release_reason=cap` and the attempt (the entry waits; no slot was used). Granted → append `slot_reserved {attempt}`.
+3. **Slot (R3, split in two).** The daily-slot charge (`outreach.jsonl`) and the outbox marker are separate durable writes. A file lock does not make them one transaction.
+   - **3a. Reservation intent.** Append `reserving_slot {attempt}` (guarded: the current status must be `dispatching` with this attempt) **before** any charge.
+   - **3b. Charge by attempt identity.** `outreach.claim()` appends its charge row with the attempt id. C2 adds an explicit `attempt` field. The pinned outreach row already stores `reason` (≤ 200 characters), and the C0 prototype carries `attempt=<id>` there without changing production code. Refused → append `queued` with `release_reason=cap` and the attempt. That is definite: `claim()` appends nothing when it refuses.
+   - **3c.** Granted → append `slot_reserved {attempt}`.
 4. **Send marker.** Append `sending {attempt}` immediately before starting `hermes send`.
 5. **Outcome.** Append exactly one of `sent`, `failed`, `unknown`, `withheld` with the attempt (§7.5), only if the entry's current status is `sending` with the same attempt (guarded).
 
@@ -636,11 +773,18 @@ Every guarded append validates `(attempt, expected status)`. A late update for a
 
 At the start of a run (holding the run lock), any entry whose last update is from a different `run_id` and is not an outcome belongs to a dispatcher that is no longer running (only one run can hold the run lock). It is resolved from its last phase:
 
-| Last phase | Meaning | Resolution |
-|---|---|---|
-| `dispatching` | no slot, no send | back to `queued` (definite non-dispatch; no slot was used) |
-| `slot_reserved` | slot used, not sent | `failed` with `not_dispatched: true` (definite non-dispatch; the existing rule that a used slot is not retried) |
-| `sending` | `hermes send` may have run | `unknown`, "the dispatcher stopped mid-send; delivery is not known". **Never resent.** |
+**(R3)** Revision 2 resolved `dispatching` as "no slot was used". That did not follow from the durable state. A crash after `claim()` committed its charge but before `slot_reserved` was appended left `dispatching`. The next run requeued the entry and charged a second slot for one message. C0 reproduced this with the real outreach ledger: one delivery, two slots (C0: `test_revision_two_charges_twice_after_a_charge_before_marker_crash`). This is a quota-accounting and classification defect; no `sending` marker was reached, so it is not a duplicate delivery. The rule for each boundary:
+
+| Crash boundary | Last phase | What is durable | Resolution |
+|---|---|---|---|
+| before the reservation intent | `dispatching` | no intent, so no charge can exist for this attempt (the charge follows the intent) | back to `queued` (definite non-dispatch, no slot used) |
+| after the intent, before the charge | `reserving_slot` | intent; charge row for this attempt absent | resolved under the outreach lock by looking up the attempt's charge row: **absent and the ledger readable** → back to `queued` (definitely not charged) |
+| after the charge, before its marker | `reserving_slot` | intent and a charge row for this attempt | **present** → `failed`, `not_dispatched: true`; the slot stays consumed, with no refund and no requeue |
+| any `reserving_slot` whose charge cannot be established | `reserving_slot` | outreach ledger unreadable/corrupt | `reservation_unresolved`: "definitely not dispatched; slot consumption unknown". No automatic requeue and no refund; the owner sees it. |
+| after the slot marker | `slot_reserved` | slot used, not sent | `failed`, `not_dispatched: true` (the existing rule that a used slot is not retried) |
+| after the `sending` marker | `sending` | `hermes send` may have run | `unknown`, "the dispatcher stopped mid-send; delivery is not known". **Never resent.** |
+
+The charge-row lookup is sound only because the run lock proves the earlier dispatcher is no longer running, and its charge append (one line, `fsync`ed under the outreach lock) is either wholly present or makes the ledger unreadable (a torn line). C0 asserted, at every boundary, the status after the next run, the delivery-call count and `outreach.sent_today`: `(sent,1,1)`, `(sent,1,1)`, `(failed,0,1)`, `(failed,0,1)`, `(unknown,0,1)`, plus `reservation_unresolved` for a torn ledger (C0: `test_amended_rule_at_every_boundary`, `test_an_unreadable_slot_ledger_leaves_the_reservation_unresolved`). These results come from the prototype attempt protocol over the production outbox format and the production `claim()`; they are not an integrated C2 result.
 
 A timeout is not the evidence here; the run lock is. An old dispatcher that is still running holds the run lock, so its attempts are never resolved under it.
 
@@ -670,7 +814,7 @@ The app knows that and where it attempted delivery and holds the platform id Her
 
 ### 7.8 Mixed versions
 
-- A pre-1B dispatcher reading a 1B outbox: `fold()` keeps the last status, so `dispatching`/`slot_reserved`/`sending`/`unknown` entries are not `queued` to it and are not sent again (M-20 variant).
+- A pre-1B dispatcher reading a 1B outbox: `fold()` keeps the last status, so `dispatching`/`reserving_slot`/`reservation_unresolved`/`slot_reserved`/`sending`/`unknown` entries are not `queued` to it and are not sent again (M-20d; C0: `test_pre_1b_fold_does_not_requeue_new_phases`, with the unchanged production `fold()`/`waiting()`).
 - A pre-1B dispatcher **already running** with a stale snapshot does not take the run lock or the claim guard, so it can still send an entry that a 1B dispatcher claimed. Running old and new dispatchers on one life directory at the same time is **unsupported**; the upgrade path is to stop the old one first. This limit is stated in the release notes when 1B ships (release work is not authorised here).
 
 ---
@@ -678,6 +822,24 @@ The app knows that and where it attempted delivery and holds the platform id Her
 ## 8. Observations still needed
 
 Each is a synthetic, pinned observation against Hermes `0e9fc2cc15` (the fixture revision) with `tests/mock_provider.py`, not a live run. The design is safe whatever each one shows; the right column says what changes.
+
+**(R3) C0 status.** The full results, commands and platform limits are in `Phase1B_C0_Results.md`. In summary:
+
+| # | C0 status | Consequence recorded in this revision |
+|---|---|---|
+| O-1 | **Observed (Linux, pinned code).** No `state.db` open during `import cli`. Several committed maintenance writes happen after import and before `_run_quiet_single_query`. | The go-gate and S2 precede `import cli` (§4.4.1). Those writes are executor writes, receipted with no transcript rows; they are not "harmless reads" as revision 2 said. |
+| O-2 | **Partly observed.** The five named seams were **not** the complete insert surface (§1.3). The commit-boundary recorder covered every row in 6 real CLI paths and 13 SessionDB scenarios. | §4.10.1 replaced. CLI compression continuation, tool-using turns, gateway and cron remain unobserved; a path that yields `unidentified` rows makes coverage incomplete (`owner_turn=unknown`), never assumed. |
+| O-3 | **Observed for 6 paths:** owner row committed before the first provider request each time. | Recorded, not relied on. |
+| O-4 | **Observed at the SessionDB level:** compaction/compression/rewrite rows are inserted by non-turn methods and are classified `rewrite_copy`; the tail clone has no per-row id. The CLI-triggered compression path is not observed. | Rewrites can never supply `user_turn` or `public_output`. |
+| O-5 | **Not observed.** Source reading only: `agent/turn_facade_lease.py` claims coverage of resume, gateway and background delivery. | Still not relied on. |
+| O-6 | **Observed for the provider-stream path on Linux:** exit 130, no partial row. The tool-call path is not observed. | §4.9 unchanged; the kill fallback still covers a missed interrupt. |
+| O-7 | Not run; the pre-platform error list stays **empty** (safe fallback: every `error` is `unknown`). | none |
+| O-8 | **Unavailable** (no Windows host). | Windows sends refused (§4.5). |
+| O-9 | **Unavailable** (no device test). | Android/Termux sends refused (§4.5). |
+| O-10 (new) | Whether any Hermes tool path at `0e9fc2cc15` starts a process that leaves E's group or job. **Not observed.** | Outside the stated boundary until observed (§4.5). |
+| O-11 (new) | macOS process-group enumeration, `killpg`, flock on APFS. **Unavailable.** | macOS sends refused (§4.5). |
+
+The table of revision 2 follows unchanged for reference.
 
 | # | Observation | How | If unknown or unsupported |
 |---|---|---|---|
@@ -701,15 +863,16 @@ Three separable changesets, each with its tests, in this order. This sequencing 
 
 | Changeset | Files | Contents |
 |---|---|---|
-| **C1** durable send and recovery | `kit/app/chat_sends.py` (new): ledger, storage checks, states, facts, fencing, lease, liveness, recovery, retention. `kit/app/hermes_stream.py`: go-gate, executor lock, S2, watchdog, persistence/session wrappers, `executor_finished`. `kit/app/runtime.py`: `Runtime.chat()` launch protocol and process group/job; `Operations.submit(ident=)`, persisted-field allowlist, operation retention; installation lock helper. `kit/app/chat_routes.py`: `/api/chat/sends*`, `correlation.send_id` join. `kit/app/manage.py`: legacy `/api/chat` through the ledger, before/after guess removed; installation lock around mutations. `kit/app/chat_sources.py`: workspace sessions from `session_created` facts; capability table. `docs/CHAT_CONTRACT.md`: "Sending" section, restore limitation. `release-files.json`. | Tests: `tests/test_chat_sends.py`, `tests/test_send_recovery_subprocess.py`, `tests/test_operations_privacy.py`; `tests/mock_provider.py` gains `hang`. |
-| **C2** dispatcher safety | `kit/scripts/companion_outbox.py`: statuses, guarded claim/outcome appends, lock order. `kit/scripts/companion_dispatch.py`: run lock, attempt phases, abandoned-attempt resolution, classification, delivery record. `kit/app/chat_sources.py`: proactive capability "ids captured; transcript linkage unsupported". | `tests/test_dispatch_claim.py` |
+| **C0** verification (R3; **this changeset**, test/harness only) | `tests/phase1b_c0/` (`receipt_probe.py`, `seam_scenarios.py`, `turn_driver.py`, `pinned.py`, `admission_proto.py`, `dispatch_proto.py`, `liveness_proto.py`); `tests/test_phase1b_c0_{receipts,admission,dispatch,liveness}.py`; `tests/mock_provider.py` gains `hang`, `error_before_first_byte` and `request_times` | Observations and prototypes only. No production module is changed. Results: `Phase1B_C0_Results.md`. |
+| **C1** durable send and recovery | `kit/app/chat_sends.py` (new): ledger, storage checks, states, facts, fencing, lease, liveness, recovery, retention. `kit/app/hermes_stream.py`: go-gate, executor lock with recorded identity, S2 under the shared guard, watchdog, the commit-boundary recorder (§4.10.1), `executor_finished` with `receipts_complete`. `kit/app/runtime.py`: `Runtime.chat()` launch protocol and process group/job; `Operations.submit(ident=)`, persisted-field allowlist, operation retention; installation lock helper. `kit/app/chat_routes.py`: `/api/chat/sends*`, `correlation.send_id` join. `kit/app/manage.py`: legacy `/api/chat` through the ledger, before/after guess removed; installation lock around mutations. `kit/app/chat_sources.py`: workspace sessions from fresh-session receipts (R3); capability table. `docs/CHAT_CONTRACT.md`: "Sending" section, restore limitation. `release-files.json`. | Tests: `tests/test_chat_sends.py`, `tests/test_send_recovery_subprocess.py`, `tests/test_operations_privacy.py`. (`tests/mock_provider.py` already gained `hang` in C0.) |
+| **C2** dispatcher safety | `kit/scripts/companion_outbox.py`: statuses (incl. `reserving_slot`, `reservation_unresolved`), guarded claim/outcome appends, lock order. `kit/scripts/companion_outreach.py`: an `attempt` field on charge rows and a lookup by attempt (R3). `kit/scripts/companion_dispatch.py`: run lock, attempt phases, abandoned-attempt resolution per §7.3, classification, delivery record. `kit/app/chat_sources.py`: proactive capability "ids captured; transcript linkage unsupported". | `tests/test_dispatch_claim.py` |
 | **C3** minimal client correction | `kit/app/static/workspace.js` (chat submit, `pending`, recovery on load, wording, DOM ids). | synthetic browser checks (M-22) |
 
 ---
 
 ## 10. Synthetic acceptance matrix
 
-Every case uses a synthetic Hermes home, the fixture `state.db` schema (v30), the pinned Hermes revision where the case touches Hermes code, and `tests/mock_provider.py`. No real credentials, source data or messages. **Crash tests** run the app (or the executor) as a subprocess started by the test harness; the harness injects a test-only subclass or monkeypatches the production module at import (via a `sitecustomize` placed only on the test's `PYTHONPATH`), so the production transition functions run unmodified and the crash is a `SIGKILL`/`TerminateProcess` sent at a hook the double exposes. No environment variable read by shipped code triggers a crash (U6). Nothing below is a result; all are proposed.
+Every case uses a synthetic Hermes home, the fixture `state.db` schema (v30), the pinned Hermes revision where the case touches Hermes code, and `tests/mock_provider.py`. No real credentials, source data or messages. **Crash tests** run the app (or the executor) as a subprocess started by the test harness; the harness injects a test-only subclass or monkeypatches the production module at import (via a `sitecustomize` placed only on the test's `PYTHONPATH`), so the production transition functions run unmodified and the crash is a `SIGKILL`/`TerminateProcess` sent at a hook the double exposes. No environment variable read by shipped code triggers a crash (U6). Nothing below is a result; all are proposed. **(R3)** Where a row says "C0 …: passed", that is a **harness or prototype** result from `Phase1B_C0_Results.md`, run against the pinned Hermes or the production file formats. It is not an integrated production result. The case stays proposed for C1/C2.
 
 "Provider counter" counts requests reaching the mock provider; "launch counter" counts executors that recorded `executor_started`. They are reported separately (M-11).
 
@@ -726,20 +889,27 @@ Every case uses a synthetic Hermes home, the fixture `state.db` schema (v30), th
 | M-4 | Different keys racing on one home | one accepted; the other `409 turn_in_progress` |
 | M-5 | Lost HTTP response; client retries with the key | same receipt; launch counter 1 |
 | M-5a | POST outcome unknown to the client; `GET ?key=` returns 404 while the POST is still in flight | client retries the same key, never mints a new one; one receipt |
-| M-6 | Key older than 24 h with no row; key 10 min in the future; key before `admission_floor` | 422 / 400 / 422; nothing launched |
+| M-6 | **(R3)** Key older than 24 h with no row; key 10 min in the future; request with a non-current generation | 422 / 400 / `409 generation_changed`; nothing launched |
+| M-6e (R3) | First send on an empty ledger: POST without bootstrap; bootstrap, then mint, then POST | `409 not_bootstrapped` and no ledger created; then accepted (C0 prototype: passed) |
+| M-6f (R3) | Client clock 4 min ahead and 1 h behind; accept, explicit reset, retry the old key with its frozen generation | ahead/behind change only freshness; the retry is `409 generation_changed`, never a second launch (C0 prototype: passed; the revision 2 rule re-admitted it) |
+| M-6g (R3) | Reset attempted during S2 registration and during acceptance; reset with a live executor lock; reset then an old launch token's S2 | `409 ledger_busy`; `409 executor_live`; S2 refused (C0 prototype: passed) |
+| M-6h (R3) | Database-only rollback to a backup taken before key K was accepted (same `ledger_id`, same generation); then explicit reset | K is re-admitted before the reset (the **stated limitation**, demonstrated); `generation_changed` after it (C0 prototype: passed) |
 | M-6a | Existing receipt replayed after its key is older than 24 h | `200 replay`; nothing launched |
 | M-6b | `not_started` re-arm with a key older than 24 h | replay with `rearm: "expired"`; nothing launched |
-| M-6c | Ledger deleted / corrupted / `ledger_id` mismatched after sends were accepted; then a retry of a young key | `503 send_ledger_lost`; after an explicit reset, the young key is `422 key_predates_ledger` |
+| M-6c | Ledger deleted / corrupted / `ledger_id` mismatched after sends were accepted; then a retry of a young key | `503 send_ledger_lost`; after an explicit reset, the young key is **(R3)** `409 generation_changed` |
 | M-6d | Pruning with unsettled sends older than 30 days present | unsettled sends survive; settled ones older than 30 days are removed, ≤ 500 per pass |
 | M-7 | Kill at every row of §4.8 | recovered state, `owner_turn`, `reply`, lease and retry result exactly as the table says |
 | M-7a | Kill the controller between `Popen` returning and `go` | executor exits on EOF without importing Hermes; recovery fences → `not_started`; provider counter 0 |
 | M-7b | Kill the controller after `go`, before S2; recovery fences concurrently with S2 | exactly one of: `not_started` (S2 refused) or `generating` (S2 first); never both, never an unrecorded executor |
 | M-7c | Executor lock file unlockable for a reason other than busy | `liveness=unproven`, lease held, no new send accepted |
+| M-7d (R3) | Executor lock path unlinked and recreated (cleanup/reset race) while E holds the original; lock path missing | identity probe `unproven`, lease held; the create-on-open probe of revision 2 would report `quiescent` (C0 prototype: both observed) |
+| M-7e (R3) | E exits while a child in its group runs; a child that calls `setsid` | lease held until the group is empty (then kill → quiescent); the escaped child is outside the boundary and is reported as such (C0 prototype: both observed on Linux) |
 | M-8 | Controller killed, executor alive (POSIX) | recovery supervises; executor finishes and writes `executor_finished`; outcome from it; lease released after exit; no second launch |
 | M-8a | Stale callback: the old controller wakes after losing its claim | its transitions are refused by the claim check |
 | M-8b | PID reuse: executor dead, its PID reused by an unrelated process | lock acquirable → quiescent; no signal sent to the unrelated process |
 | M-8c | A new-key "Send again" while the old executor may still run | `409 turn_in_progress` |
-| M-9 | Provider `disconnect_before_done`, `truncated`, `malformed` | `failed` with `owner_turn` from receipts; never "Not sent" |
+| M-9 | Provider `disconnect_before_done`, `truncated`, `malformed` | `failed` with `owner_turn` from receipts; never "Not sent". **(R3)** For the first two the pinned CLI exits 0 with a `finish_reason='length'` row, so the expected outcome is `failed`, `reply_incomplete`, `reply=partial` (C0: exit 0 and `length` observed) |
+| M-9c (R3) | Commit-boundary receipts: rollback after the inner helper; retried callback; foreign reuse of a rolled-back id; nested chunked batch; rewrite/compaction/compression copies; public vs tool-call/internal rows; commit raised after callback; receipt write failed after source commit | no false receipt, no duplicate receipt, copies never `user_turn`/`public_output`, `write_unsettled` → `possible`, `receipt_gap` → later writes refused and `owner_turn=unknown` (C0 on pinned SessionDB: passed; revision 2's recorder failed each of the first five as the review predicted) |
 | M-9a | Assistant row written, executor killed before `executor_finished` | `unknown`, `reply=partial`; never `complete` |
 | M-9b | `state.db` unreadable at read time | links `unavailable`; `owner_turn` unchanged; never `absent` |
 | M-10 | O-3 per path: fresh, resumed, continuation, provider error before first byte | records when the owner row is inserted relative to the provider request, per path, as observed |
@@ -749,18 +919,20 @@ Every case uses a synthetic Hermes home, the fixture `state.db` schema (v30), th
 | M-13 | Deadline with `hang` (timeout shortened by the test double) | interrupt, then kill if needed → outcome from facts; lock acquirable afterwards; no descendant left (checked per OS) |
 | M-13a | Kill cannot be confirmed (lock stays busy, simulated by a double holding the lock) | `stopping`, lease held |
 | M-14 | Projection rebuild while authorised | `correlation.send_id` resolves to the new ids |
-| M-14a | Binding change revokes workspace rows | receipt and operation routes return no links and no content |
+| M-14a | Binding change revokes workspace rows | receipt and operation routes return no links and no content. **(R3)** Checked on both branches: the live in-memory result and the reconstruction after restart |
 | M-15 | Source replaced / fingerprint changed / conflicting known platform id / different source namespace | `correlation=lost`; never attached to the new holder |
 | M-16 | Foreign terminal writes exactly one user row in the session during the turn, with **equal text**, while the executor writes none | not linked; `owner_turn=absent` (receipts complete) |
 | M-16a | Foreign rows after the turn, and a continuation rewrite by another process | never linked to the older send |
-| M-16b | Two `write_kind=turn` user rows from the executor (forced) | `owner_turn=ambiguous` |
-| M-18 | New session, kill after `session_created` fact, before the session row / after it | session attributed from the fact; no attributed row exists without it |
-| M-18a | Resume of a pre-existing terminal session | not relabelled workspace |
-| M-19 | Bridge unavailable | `503 send_supervision_unavailable`; nothing accepted |
+| M-16b | Two `user_turn` rows committed by the executor (forced) | `owner_turn=ambiguous` |
+| M-17 (R3, restored) | Two **independent** profile homes, each with its own ledger, the **same** `client_key` and the same text sent to both | two receipts, two launches (one per profile); no receipt, link, content or lease of one profile is visible or effective in the other; a `send_id` of one returns 404 in the other. The aliasing test (M-2a) and a UI profile switch (M-22a) do not replace this. |
+| M-18 | **(R3)** New session: kill E after Hermes commits the session row but before the fresh-session receipt; kill after the receipt; receipt write fails | no receipt → the session is not attributed, and no owner row can exist in it (fail closed); with the receipt → attributed; never attributed from a pre-call intent |
+| M-18a | Resume of a pre-existing terminal session | not relabelled workspace. **(R3)** Its rows link with `source_kind=terminal` while the binding authorises terminal rows, and resolve to nothing after revocation |
+| M-18b (R3) | `create_session` on an existing id, `ensure_session` on an existing id, a failed create, a compression child created by direct INSERT | only the genuinely fresh inserts are `created_here` (C0 on pinned SessionDB: passed) |
+| M-19 | Bridge unavailable; **(R3)** platform not enabled (§4.5); both on the keyed and the legacy route | `503 send_supervision_unavailable`; nothing accepted |
 | M-19a | A wrapped seam missing (patched out) | `capability=unverified_sources`; no session registered; launch/lease protocol unchanged |
 | M-20 | Dispatcher crash after `sending`, before the outcome | next run resolves `unknown`; nothing resent |
 | M-20a | Two dispatchers load the same queued entry before either claims | second fails the run lock, or, with the run lock bypassed by a double, fails the claim guard; one send |
-| M-20b | Crash after `dispatching`; after `slot_reserved` | `queued` (no slot used); `failed, not_dispatched` |
+| M-20b | **(R3)** Crash at each boundary of §7.3: before the intent; after the intent, before the charge; **after the charge, before its marker**; after `slot_reserved`; after `sending`; plus an unreadable outreach ledger | status, delivery calls and `sent_today` per §7.3: `(sent,1,1)`, `(sent,1,1)`, `(failed,0,1)`, `(failed,0,1)`, `(unknown,0,1)`, `reservation_unresolved` (C0 prototype: passed; revision 2's rule gave 2 slots for 1 delivery at the charge-before-marker boundary) |
 | M-20c | Late same-attempt outcome after `unknown`; late outcome for a different attempt | same attempt with evidence replaces `unknown`; different attempt refused |
 | M-20d | Pre-1B `fold()` reading a 1B outbox | claimed/unknown entries not `queued` |
 | M-21 | `hermes send` returns id / no id / `skipped` / partial media error / other error / timeout | outcomes per §7.5; `recipient_resolved: null` when not reported; `mirrored: null` when not reported; `id_scope` present |
@@ -768,7 +940,7 @@ Every case uses a synthetic Hermes home, the fixture `state.db` schema (v30), th
 | M-22a | New client: double submit, lost response, reload, failed generation, unknown, draft edited mid-turn, profile switch, status lookup from another app instance | behaviours of §6; the UI never falls back to the unkeyed route |
 | M-23 | Size and privacy: 10,000 settled sends with realistic facts | measured ledger size and acceptance latency (desktop, labelled); prune pass bounded by the index; operation files at progress/complete/failure contain no prompt, reply, stream or stderr text |
 
-Local full suite plus the CI matrix (Linux 3.11/3.13/3.14, Windows and macOS smoke), as in 1A. Windows and macOS each need at least one real (unmocked) executor-death and kill-tree test, or an explicit "not verified on this OS" line.
+Local full suite plus the CI matrix (Linux 3.11/3.13/3.14, Windows and macOS smoke), as in 1A. **(R3)** Windows and macOS each need their real (unmocked) supervision observations (O-8, O-11) before sends are enabled there. Without them the platform is **refused** (§4.5); a "not verified on this OS" line documents the refusal and does not replace the evidence.
 
 ---
 
@@ -787,26 +959,28 @@ Local full suite plus the CI matrix (Linux 3.11/3.13/3.14, Windows and macOS smo
 
 ## 12. Remaining open items
 
-The reviewer's U1–U9 are decided (§0). These are the choices this revision had to make that the reviewer or owner may want to change:
+The reviewer's U1–U9 and O-A–O-D are decided (§0). **(R3)** These remain for the reviewer or owner:
 
 | # | Item | Proposal in this revision |
 |---|---|---|
-| O-A | Installs where the bridge cannot run lose workspace chat (§4.4.4), where revision 1 kept them on an unverified fallback | refuse, per U3's "reject before acceptance if safe supervision is unavailable". Alternative: allow those installs only the legacy route with a visible "unsafe retry" warning. |
-| O-B | Pre-1B chat operation files that contain text | report the count; delete only on an explicit owner action (a later task) |
-| O-C | On Windows, controller death kills the turn (kill-on-close); on POSIX the turn continues under recovery supervision | accept the difference and document it; the alternative (no kill-on-close) leaves no way to reach the job after the controller dies |
-| O-D | Whole-profile-home restores within 24 h can re-admit a key (§4.1) | document the "Reset send ledger after restore" procedure |
+| O-E (R3) | Platform enablement (§4.5). Windows, macOS and Android/Termux have no supervision evidence yet, so under O-A their workspace sends would be **refused** once C1 ships. That is a regression for those users. | Keep them refused until O-8 / O-11 / O-9 pass on real hosts. The alternative, delaying C1 until they pass, is the owner's call. An "unverified" label is not offered as an alternative (review R2 §5). |
+| O-F (R3) | After a receipt gap the executor refuses every later write, so the Hermes turn aborts (§4.10.1). | Keep: it is the only way to ensure no owner row lands in an unattributed session. The cost is a failed turn in a case that needs a ledger write failure right after a Hermes commit. |
+| O-G (R3) | Paths not observed in C0: CLI-triggered compression, tool-using turns, gateway/cron writers (O-5), the tool-call interrupt (O-6), descendant escape by tools (O-10). | Keep the conservative results: unidentified rows → `unknown`; kill fallback; stated boundary. Observe them in C1's test work before claiming them. |
+| O-H (R3) | The C0 prototype carries the attempt id in the outreach row's `reason`. | C2 adds an explicit `attempt` field (additive; `sent_today` counts rows and ignores it). |
 
 ---
 
 ## 13. What this document does not claim
 
-- No Phase 1B code, test or result exists. The matrix is proposed, not passing.
-- When Hermes first persists the owner row is **not established** (O-3/M-10). The protocol does not depend on it.
-- The Hermes seams in §4.10.1 are private code at `0e9fc2cc15`; their completeness (O-2) is not established.
-- The Windows job-object behaviour and Termux storage behaviour (O-8, O-9) are not observed.
+- **(R3)** No Phase 1B **production** code exists. C0 added test-harness and prototype code only. Its passing tests are evidence about the pinned Hermes boundaries and about prototype rules; they are not integrated results, and the matrix remains proposed for C1–C3.
+- When Hermes first persists the owner row was observed for 6 paths only (O-3/M-10). The protocol does not depend on it.
+- The commit-boundary seam in §4.10.1 is private code at `0e9fc2cc15`. Its coverage was observed for the paths listed in §8 and is not established for the rest (O-2, O-G).
+- The Windows job-object behaviour, macOS process groups and Termux storage (O-8, O-11, O-9) are not observed; those platforms are refused, not labelled.
+- Automatic detection of a coherent ledger rollback is **not** claimed (§4.1).
+- Containment of a process that leaves E's group or job is **not** claimed (§4.5).
 - Mirror linkage (§7.7) is unsolved; delivered-proactive provenance remains unsupported.
 - Exactly-once execution is not claimed. At most one executor per key, and no second writer beside a possibly-live one, are the claims.
-- `ASTRA_PHASE0_REVIEW_R2.md` and `PHASE1A_HANDOFF.md` were not on disk; this revision does not claim compliance with them. It follows PHASE1B_REVIEW_R1, PHASE1A_REVIEW_R3 and the code at `fc5c1e4`.
+- `ASTRA_PHASE0_REVIEW_R2.md` and `PHASE1A_HANDOFF.md` were not on disk; this revision does not claim compliance with them. It follows PHASE1B_REVIEW_R2, PHASE1B_REVIEW_R1, PHASE1A_REVIEW_R3 and the code at `fc5c1e4`.
 - Nothing was merged, tagged, released or deployed; no live record, credential or message was touched; nothing was filed upstream.
 
 ---
@@ -821,3 +995,20 @@ The reviewer's U1–U9 are decided (§0). These are the choices this revision ha
 | B4 dispatcher claim | One outbox lock with a guarded claim that requires `queued`; attempt ids validated on every later update; run lock identifies abandoned attempts; phase-based resolution; slot released only when no slot was used; same-attempt late resolution; resolved recipient nullable; last-chunk scope kept; mixed-version limit stated (§7). |
 | B5 client and persisted text | Corrected the `stream_text` inventory (§1.2). Persisted-field allowlist; no stderr-derived text (§5.7). Operation retention predicate stated exactly, only for `format: 2` records (§5.7). Legacy `result.response`/`messages` through an authorised transient view (§5.7). Minimal client contract with an immutable `pending` send, same-key recovery, receipt-driven wording and role-specific DOM ids (§6). |
 | Matrix | M-1–M-23 kept; variants added per the reviewer's table (§10). Crash harness per U6. |
+
+## Appendix B. Change summary against revision 2 (`7907066`), answering PHASE1B_REVIEW_R2
+
+| Review item | What changed |
+|---|---|
+| §1 O-A–O-D | Decisions recorded (§0). O-A: refusal applies to legacy and keyed routes, and to platforms without supervision evidence (§4.4.4, §4.5). O-B: count-only; the text is not described as removed (§5.7). O-C: proposed policy, not enabled until O-8 (§4.5). O-D: mandatory reset after known restores, limitation corrected (§4.1). |
+| B2.1 commit receipts | The recorder moved to `SessionDB._execute_write`, the only commit point. It publishes candidates only after the outermost call returns, discards retried attempts, and records `write_rolled_back` / `write_unsettled` / `receipt_gap`, failing closed after a gap (§4.10.1). §1.3 corrected: more insert paths, callback retry, maintenance writes before the turn. |
+| B2.2 creation vs upsert | `created_here` only from a fresh insert observed inside the transaction. Upsert, ensure and failure never count; the compression child is covered. Early registration without treating an intent as proof (§3, §4.10.2). |
+| B2.3 terminal resume | `source_kind`/`source_namespace` recorded per send and validated under current authorisation. No relabelling, no widened authorisation (§4.2, §4.10.3). |
+| B2.4 completeness | Receipt coverage (complete / bounded / incomplete / unavailable) decided first. `complete` needs complete receipts and a `public_output` row with `finish_reason='stop'`; new `reply_incomplete`. The crash table and the evidence table reconciled (§4.3.2, §4.8). |
+| B3.1 first use | Bootstrap before the client mints; a POST never initialises (§4.1, §5.1, §6). |
+| B3.2 reset fence | Server-made `generation` frozen with the key; `admission_floor`/`key_predates_ledger` withdrawn; reset serialised by the shared/exclusive `guard.lock`, fencing tokens and checking quiescence before replacement (§4.1, §5.2, §5.3). |
+| B3.3 rollback | The detection claim was withdrawn. The same-generation rollback limitation is stated, and the reset is mandatory after known restores (§4.1). |
+| B4 slot boundary | A `reserving_slot` phase and a charge row identified by attempt. Per-boundary recovery with `reservation_unresolved`, and no requeue or refund when consumption is unknown (§7.2, §7.3). |
+| B1 executor lock | Quiescence = identity-checked lock **and** an empty process group/job. The escape boundary is stated (O-10). Lock files are safety objects: never unlinked while referenced, probed without create, missing/replaced → `unproven`. Platform enablement table; unverified platforms refused (§4.5). |
+| B5 | In-memory legacy results pass the current-authorisation check (§5.7); goal 7 wording (§2); M-17 restored (§10). |
+| §7 C0 | C0 changeset (§9); status per observation (§8); matrix rows marked with harness/prototype results (§10); open items O-E–O-H (§12). |

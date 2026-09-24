@@ -71,6 +71,10 @@ def scenarios():
         'malformed': [role, *_deltas('Before the bad line. ', 8), b'data: {"choices": [\n\n', DONE],
         'disconnect_before_done': [role, *_deltas(PUBLIC_TEXT, 7)[:3], ('close',)],
         'disconnect_after_done': [role, *_deltas(PUBLIC_TEXT, 7), stop, DONE, ('close',)],
+        # Phase 1B C0: a stream that stalls after two deltas (stop/deadline tests), and a
+        # provider that fails before sending any stream byte.
+        'hang': [role, *_deltas(PUBLIC_TEXT, 7)[:2], ('sleep', 30), *_deltas(PUBLIC_TEXT, 7)[2:], stop, DONE],
+        'error_before_first_byte': [('status', 500)],
         # The first request drops mid-stream; the retry completes (recovery).
         'recover': {1: [role, *_deltas(PUBLIC_TEXT, 7)[:2], ('close',)], 'default': [role, *_deltas(PUBLIC_TEXT, 7), stop, DONE]},
     }
@@ -80,6 +84,7 @@ class MockProvider:
     def __init__(self):
         self.token = secrets.token_urlsafe(24)
         self.requests = []           # (scenario, stream, attempt) per request, in order
+        self.request_times = []      # time.time() at each request's arrival, same order
         self._counts = {}
         self._lock = threading.Lock()
         self.server = None
@@ -104,9 +109,12 @@ class MockProvider:
                 with provider._lock:
                     attempt = provider._counts[name] = provider._counts.get(name, 0) + 1
                     provider.requests.append((name, bool(body.get('stream')), attempt))
+                    provider.request_times.append(time.time())
                 steps = table[name]
                 if isinstance(steps, dict):
                     steps = steps.get(attempt, steps['default'])
+                if steps and isinstance(steps[0], tuple) and steps[0][0] == 'status':
+                    return self._json(steps[0][1], {'error': {'message': 'mock provider error', 'type': 'server_error'}})
                 if not body.get('stream'):
                     return self._json(200, provider.completion(name))
                 self.send_response(200)
