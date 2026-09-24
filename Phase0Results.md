@@ -70,7 +70,11 @@ env PATH=/usr/local/bin:/usr/bin:/bin TAMANITOMO_REQUIRE_NODE=1 .venv/bin/python
 node tests/test_us_ui.js -> passed
 ```
 
-Environment: Linux (CachyOS, kernel 7.2), Python 3.14 (repo venv), Node 26.7.0. CI for the closure commit: see below once run.
+Environment: Linux (CachyOS, kernel 7.2), Python 3.14 (repo venv), Node 26.7.0.
+
+**CI for the closure commit** `7fef922` (run 35955872873, GitHub-hosted, Node 22): all 5 jobs passed. `linux (3.11)`, `linux (3.13)` and `linux (3.14)` ran the full suite with Node required. `smoke (windows-latest)` and `smoke (macos-latest)` ran on Python 3.13, including the thread and OS-process held-decision races on `msvcrt` and `flock`.
+
+Phase 1A was branched from `7fef922` as `test/phase1-conversation-contract`; see its `Phase1AResults.md`.
 
 Not re-verified in a browser for the closure. The Needs review UI is covered by the Node VM test only.
 
