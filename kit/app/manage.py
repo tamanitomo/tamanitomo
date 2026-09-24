@@ -1694,6 +1694,7 @@ def register(app, select, load, operations):
         return {'bars':(__import__('companion_bars').compute(c) if c.bars else None),'moments':rows,'kinds':notes.LABELS,'boundary':c.boundary,'settings':{k:getattr(c,k) for k in ('relationship_progression','relationship_pace','peer_interaction','bars','explicit')},
                 'milestones':[{'label':label,'earned':kind in kinds} for kind,label in [('first','A first to remember'),('joke','An inside joke'),('ritual','A shared ritual'),('nickname','A name between you'),('milestone','A meaningful milestone')]],
                 'intimacy':intimacy,
+                'pronoun_set':c.pronoun_set,
                 'integrity_lockout':False,
                 'integrity_warning':None,
                 'note':'Milestones reflect saved shared history. Time away never removes progress.'}

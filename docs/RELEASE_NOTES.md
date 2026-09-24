@@ -1,7 +1,9 @@
-Tamanitomo 3.0.23: small fixes to the Us page.
+Tamanitomo 3.0.24: cleaner memories, and your companion's own pronouns.
 
-- **Loose threads show up.** "Still between you" alternates your companion's questions with the threads they are carrying, so a long list of questions no longer hides the rest.
-- **No repeats up front.** A memory written down twice in slightly different words appears once in the preview.
+- **Her own, his own.** The Us page uses your companion's pronouns instead of a generic "their".
+- **Questions asked to you.** New questions your companion wants to ask are written the way they would ask them: "Why did you stop playing guitar?", not "Why did he…".
+- **Memories that read like memories.** New facts are short statements about you rather than a raw quote, with your exact words kept as the reason they are remembered.
+- **Fewer repeats.** Your companion sees what it already knows before writing something new, and an identical memory is not written twice. Existing memories are left exactly as they are.
 
 ### Install
 

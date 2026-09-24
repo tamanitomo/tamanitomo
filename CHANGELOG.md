@@ -1,3 +1,14 @@
+## 3.0.24 — Pronouns, questions asked to you, facts as statements (2026-09-24)
+
+- Use the companion's configured pronouns on Us. `/api/relationship` returns `pronoun_set`; "preferences of her/his/their own" follows it, and singular they is used only for a they/them companion or an unknown set. The test that required neutral copy is replaced by one per pronoun set.
+- Author curiosity questions as the companion would ask them. The reflection prompt asks for "you"/"your", and a new question that names the human or says "the human"/"the user" is rejected; he/she/they stay allowed because a question can be about someone else. Stored questions are not rewritten; Talk about this drafts `You had this question for me: "…"` for old and new alike.
+- Store reflection facts as propositions. Each fact now carries a `statement` (a concise durable claim wholly supported by the selected quote); the exact quote stays the evidence. Statements shaped like "<human> said/mentioned/told me …" are rejected. A plan saved under the old contract still applies as it was authored.
+- Show reflection the facts already known (`existing_facts`, newest first, within 6,000 characters, with a note when older ones are left out) and tell it not to restate them.
+- Refuse a fact whose canonical statement (Unicode form, case, whitespace, quote style and punctuation outside words and numbers) matches an active fact, whatever its category, source or evidence: `written: false`, `duplicate_of`. A correction may restate the fact it supersedes; retractions and history are unchanged.
+- Add `companion_self.py duplicate-facts`: likely duplicate pairs with ids, categories, statements, similarity and reason, flagging pairs that differ by a number, ordinal or negation. Report only; the ledger is not changed.
+- Replace the preview's first-seven-words collapse, which merged facts that only opened alike ("the first spare PC" / "the second spare PC"). A preview row is now hidden only when every content word appears in another fact and nothing differs by a number, ordinal or negation. It is documented as legacy display protection; the library lists every active record.
+- Let `tests/test_onboarding_ui.js` run directly (it fetches the catalog keys from Python when the wrapper does not pass them), and run `tests/test_updates_ui.js` from pytest.
+
 ## 3.0.23 — Us: threads and repeats (2026-09-23)
 
 - Alternate open questions with carried threads in "Still between you". Questions were listed first, and a profile with 35 open questions showed no carried thread in the first five rows.

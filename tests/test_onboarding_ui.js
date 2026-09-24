@@ -1,9 +1,19 @@
 // Exercise the creation interview's derivation without a browser.
-// The real persona and relationship-frame catalogs are passed in by the Python
-// wrapper, so this fails if the interview can ever propose something the
-// backend would reject.
+// The real persona and relationship-frame catalogs come from the backend, so
+// this fails if the interview can ever propose something the backend would
+// reject. The Python wrapper passes them in; run directly, the script asks
+// Python for the same keys, so both paths test the same thing.
 const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const assert=require('node:assert/strict');
+if(!process.argv[2]){
+  const repo=path.join(__dirname,'..');
+  const venv=path.join(repo,'.venv',process.platform==='win32'?'Scripts/python.exe':'bin/python');
+  const python=fs.existsSync(venv)?venv:(process.platform==='win32'?'python':'python3');
+  const keys=require('node:child_process').execFileSync(python,['-c',
+    "import sys;sys.path[:0]=['.','kit/scripts'];import companion_catalog as c;from kit.cli.questions import known_answer_keys as k;"+
+    "print(','.join(c.BOUNDARIES));print(','.join(sorted(k())))"],{cwd:repo,encoding:'utf8'}).trim().split('\n');
+  process.argv.splice(2,2,...keys);
+}
 
 const source=fs.readFileSync(path.join(__dirname,'../kit/app/static/onboarding.js'),'utf8');
 assert.match(source,/id="ob-api-model" value="openrouter\/auto"/);

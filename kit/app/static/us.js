@@ -19,6 +19,13 @@ const FACT_ICON={likes:'♡',dislikes:'✕',people:'👥',places:'📍',work:'�
 const PREF_MARK={like:['♡','Likes'],dislike:['✕','Not a fan'],curious:['?','Curious about'],mixed:['~','Mixed feelings']};
 const ROMANTIC_STAGE_NAMES=['Just Met','Friends','Chemistry','Intimacy','Bonded'];
 const usCap=s=>s?s[0].toUpperCase()+s.slice(1):'';
+/* The companion's configured pronouns, from /relationship. A she is she and a
+   he is he; singular they is for a they, or when the set is not known. */
+const US_PRONOUNS={
+  she:{subj:'she',obj:'her',poss:'her',possPron:'hers',refl:'herself'},
+  he:{subj:'he',obj:'him',poss:'his',possPron:'his',refl:'himself'},
+  they:{subj:'they',obj:'them',poss:'their',possPron:'theirs',refl:'themselves'}};
+const usPronouns=set=>US_PRONOUNS[set]||US_PRONOUNS.they;
 
 /* A record's own date, or none. `happened_on` is free text, so only a real
    calendar date is trusted with a place in the chronology. */
@@ -194,20 +201,37 @@ function memoryPreviewScore(f){
   if(text.length>140)score-=1;
   return score;
 }
+/* The same fact is sometimes filed twice in different words or categories;
+   one of each is enough for a preview. This is legacy display protection, not
+   the authoritative duplicate definition: it only hides a preview row, the
+   library still lists every active record, and the ledger is never touched.
+   Conservative on purpose -- two statements count as one only when every
+   content word of one appears in the other and they differ by no number,
+   ordinal or negation, so "likes"/"dislikes", Alice/Beth, or the first and
+   second spare PC stay two memories. A statement that only adds detail to
+   another (the same card, "to install in" it) may be hidden behind it here. */
+const US_FILLER=new Set(['a','an','the','to','in','into','for','of','on','at','by','from','with','and','his','her','their','its','my','your']);
+const US_DISTINCT=/^(\d.*|no|not|never|none|nor|doesn|don|didn|isn|wasn|won|can|cannot|t|first|second|third|fourth|fifth|last|next|previous|other|another|former|latter|one|two|three|four|five|six|seven|eight|nine|ten)$/;
+const usFactWords=f=>new Set(String(f.statement||'').toLowerCase().normalize('NFKC').replace(/[’']s\b/g,'').split(/[^\p{L}\p{N}.]+/u)
+  .map(w=>w.replace(/^\.+|\.+$/g,'')).filter(w=>w&&!US_FILLER.has(w)));
+function usLikelySameFact(a,b){
+  const x=usFactWords(a),y=usFactWords(b);
+  const [small,big]=x.size<=y.size?[x,y]:[y,x];
+  if(small.size<4)return small.size===big.size&&[...small].every(w=>big.has(w));
+  if(![...small].every(w=>big.has(w)))return false;
+  return ![...big].some(w=>!small.has(w)&&US_DISTINCT.test(w));
+}
 function usMemoryPreview(facts,limit=US_LIMITS.memories){
   const byCat=new Map();
   const ranked=(facts||[]).map(f=>[memoryPreviewScore(f),f]).sort((a,b)=>b[0]-a[0]||String(b[1].recorded_at||'').localeCompare(String(a[1].recorded_at||''))).map(([,f])=>f);
   for(const f of ranked){
     const key=f.category||'other';if(!byCat.has(key))byCat.set(key,[]);byCat.get(key).push(f);
   }
-  // The same fact is sometimes filed twice in different words or categories;
-  // one of each is enough for a preview.
-  const gist=f=>String(f.statement||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().split(' ').slice(0,7).join(' ');
-  const lanes=[...byCat.values()],out=[],seen=new Set();
+  const lanes=[...byCat.values()],out=[];
   for(let round=0;out.length<limit&&lanes.some(l=>l.length>round);round++)
     for(const lane of lanes){
-      const f=lane[round];if(!f||out.length>=limit||seen.has(gist(f)))continue;
-      seen.add(gist(f));out.push(f);
+      const f=lane[round];if(!f||out.length>=limit||out.some(g=>usLikelySameFact(f,g)))continue;
+      out.push(f);
     }
   return out;
 }
@@ -273,8 +297,8 @@ function openMemoryLibrary(facts,onForget){
 
 /* ----------------------------------------------- the companion's own tastes */
 /* Read-only by design: these are theirs to write, not yours to edit. */
-function usDiscoveriesHTML(prefs,limit=US_LIMITS.discoveries,companionName='They'){
-  if(!prefs.length)return `<p class="dim us-empty">${esc(companionName)} has not recorded any preferences of their own yet.</p>`;
+function usDiscoveriesHTML(prefs,limit=US_LIMITS.discoveries,companionName='Your companion',pronounSet=''){
+  if(!prefs.length)return `<p class="dim us-empty">${esc(companionName)} has not recorded any preferences of ${usPronouns(pronounSet).poss} own yet.</p>`;
   const rows=prefs.slice(0,limit);
   return `<ul class="us-discoveries">${rows.map(p=>{const [mark,word]=PREF_MARK[p.valence]||PREF_MARK.mixed;return `<li class="us-discovery pref-${esc(p.valence||'mixed')}">
       <span class="us-discovery-mark" aria-label="${esc(word)}">${mark}</span>
@@ -294,7 +318,9 @@ function usOpenThreads(questions,loops){
   return out;
 }
 function threadDraft(x){
-  return x.kind==='question'?`You’ve been wanting to ask me something: “${x.text}”`:`Can we come back to “${x.text}”?`;
+  // New questions are stored as she would ask them; older ones may describe
+  // you in the third person. Quoting either reads fine, so neither is rewritten.
+  return x.kind==='question'?`You had this question for me: “${x.text}”`:`Can we come back to “${x.text}”?`;
 }
 function usOpenThreadsHTML(threads,limit=US_LIMITS.threads){
   if(!threads.length)return '<p class="dim us-empty">Nothing is hanging between conversations right now.</p>';
@@ -354,7 +380,7 @@ function relationshipDetails(relationship,feelings,standing,companionName){
     <div class="actions"><button type="button" class="quiet" data-us-action="history">View emotional history</button></div>
     ${platonic?'<p class="dim small">Shared experience builds familiarity and trust. This connection has no romantic stages.</p>'
       :'<p class="dim small">Closeness grows through shared experience over time. Companions banter, tease and reciprocate affection as mutual trust deepens; at Bonded, warmth is expressed freely and naturally.</p>'}
-    <p class="dim small">${esc(companionName)} holds genuine agency and has preferences and boundaries of their own. Mutual respect is the condition of all of it — repeated boundary violations step the relationship back to friendship permanently.</p>
+    <p class="dim small">${esc(companionName)} holds genuine agency and has preferences and boundaries of ${usPronouns(relationship?.pronoun_set).poss} own. Mutual respect is the condition of all of it — repeated boundary violations step the relationship back to friendship permanently.</p>
   </details>`;
 }
 function openEmotionalHistory(){
@@ -433,7 +459,7 @@ workspaceHandlers.relationship=async()=>{
     ${section('us-recent','Recently','',renderUsStory(story,storyShown))}
     ${section('us-keepsakes','Things that became ours','',usKeepsakesHTML(keep,relationship.moments))}
     ${section('us-memories','Remembered about you','',usMemoryPreviewHTML(facts))}
-    ${section('us-discoveries',`Things ${esc(companionName)} has discovered`,'Preferences and little opinions that have emerged along the way.',usDiscoveriesHTML(prefs,US_LIMITS.discoveries,companionName))}
+    ${section('us-discoveries',`Things ${esc(companionName)} has discovered`,'Preferences and little opinions that have emerged along the way.',usDiscoveriesHTML(prefs,US_LIMITS.discoveries,companionName,relationship.pronoun_set))}
     ${section('us-threads','Still between you','Questions, promises, and loose threads that have carried into another conversation.',usOpenThreadsHTML(threads))}
     <div class="us-section us-advanced" id="us-advanced">${relationshipDetails(relationship,feelings,ledgers.standing||[],companionName)}</div>
   </div>`;
@@ -451,7 +477,7 @@ workspaceHandlers.relationship=async()=>{
     else if(act==='moments')openSharedMoments(relationship);
     else if(act==='library')openMemoryLibrary(facts,forget);
     else if(act==='forget'){b.disabled=true;await forget(b.dataset.fact);}
-    else if(act==='discoveries-all')$('us-discoveries').innerHTML=usDiscoveriesHTML(prefs,Infinity,companionName);
+    else if(act==='discoveries-all')$('us-discoveries').innerHTML=usDiscoveriesHTML(prefs,Infinity,companionName,relationship.pronoun_set);
     else if(act==='threads-all')$('us-threads').innerHTML=usOpenThreadsHTML(threads,Infinity);
     else if(act==='talk')await openChatWithDraft(b.dataset.draft);
     else if(act==='history')openEmotionalHistory();

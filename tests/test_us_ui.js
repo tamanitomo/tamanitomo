@@ -84,7 +84,7 @@ const moment=(id,kind,n,status='active')=>({id,kind:'moment',moment:kind,text:'M
 function dataset({facts=0,moments=[],experiences=[],prefs=0,questions=0,loops=0,standing=0,intimacy=romantic}={}){
   const cats=['likes','people','places','work','history','other'];
   return {
-    '/relationship':{bars:{feelings:warm},intimacy,moments,kinds:{first:'Firsts'},milestones:[{label:'A first to remember',earned:true},{label:'An inside joke',earned:false}],settings:{relationship_progression:'milestones'}},
+    '/relationship':{bars:{feelings:warm},pronoun_set:'she',intimacy,moments,kinds:{first:'Firsts'},milestones:[{label:'A first to remember',earned:true},{label:'An inside joke',earned:false}],settings:{relationship_progression:'milestones'}},
     '/ledgers':{facts:Array.from({length:facts},(_,i)=>({id:'f'+i,category:cats[i%cats.length],statement:(i===3?'You drink coffee black':'Fact number '+i),evidence:'Said so on day '+i,recorded_at:day(i%30)})),
       standing:Array.from({length:standing},(_,i)=>({instruction:'Please do not message before 8am',evidence:'asked'})),
       questions:Array.from({length:questions},(_,i)=>({text:'Why did you stop playing guitar? '+i})),
@@ -177,6 +177,23 @@ same(sandbox.usMemoryPreview([
   {id:'a',category:'logistics',statement:'Robin has an older 4 GB GTX 1050 Ti available to install in a spare PC.'},
   {id:'b',category:'other',statement:'Robin has an older 4 GB GTX 1050 Ti available for the spare PC.'},
   {id:'c',category:'likes',statement:'Robin likes tea'}],5).map(f=>f.id),['c','a'],'a fact filed twice shows once');
+// ...but the preview never collapses facts that only open alike.
+for(const [a,b] of [['Robin likes Fire Emblem.','Robin dislikes Fire Emblem.'],
+  ["Robin's sister Alice lives in Raleigh.","Robin's sister Beth lives in Raleigh."],
+  ['Robin has a GTX 1050 Ti in the first spare PC.','Robin has a GTX 1050 Ti in the second spare PC.'],
+  ['Robin has a 4 GB GTX 1050 Ti in the spare PC.','Robin has an 8 GB GTX 1050 Ti in the spare PC.'],
+  ['Robin has a GTX 1050 Ti in the spare PC.','Robin has a GTX 1060 in the spare PC.'],
+  ['Robin keeps a GTX 1050 Ti in the spare PC at home.','Robin keeps a GTX 1050 Ti in the spare PC at the office.'],
+  ['Robin likes tea.','Robin does not like tea.'],['Robin likes tea.','Robin never likes tea.']])
+  assert.equal(sandbox.usMemoryPreview([{id:'a',category:'likes',statement:a},{id:'b',category:'likes',statement:b}],5).length,2,`distinct: ${a} / ${b}`);
+// The preview may hide a likely duplicate; the library never does.
+{
+  const pair=[{id:'a',category:'logistics',statement:'Robin has an older 4 GB GTX 1050 Ti available to install in a spare PC.'},
+    {id:'b',category:'other',statement:'Robin has an older 4 GB GTX 1050 Ti available for the spare PC.'}];
+  assert.equal(sandbox.usMemoryPreview(pair,5).length,1);
+  assert.equal(sandbox.renderMemoryLibrary(pair).matches,2,'the library lists every active record');
+}
+assert.match(us,/legacy display protection, not\s+the authoritative duplicate definition/);
 // A long list of questions does not hide every carried thread.
 same(sandbox.usOpenThreads([{text:'q1'},{text:'q2'},{text:'q3'}],[{title:'t1'}]).map(x=>x.text),['q1','t1','q2','q3']);
 
@@ -212,9 +229,10 @@ const store=new Map();let posted=0;
 Object.assign(sandbox,{chatKey:k=>'chat-'+k,sessionStorage:{getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v)},
   post:async()=>{posted++;},showTab:async name=>{run(`current=${JSON.stringify(name)}`);elements['chat-message']=box;},
   requestAnimationFrame:fn=>fn()});
-await click('talk',{draft:'You’ve been wanting to ask me something: “Why did you stop playing guitar?”'});
+assert.equal(sandbox.threadDraft({kind:'question',text:'Why did you stop playing guitar?'}),'You had this question for me: “Why did you stop playing guitar?”','legacy and new questions share one neutral wrapper');
+await click('talk',{draft:'You had this question for me: “Why did you stop playing guitar?”'});
 assert.equal(run('current'),'chat');
-assert.equal(store.get('chat-draft'),'You’ve been wanting to ask me something: “Why did you stop playing guitar?”','19: the composer holds the draft');
+assert.equal(store.get('chat-draft'),'You had this question for me: “Why did you stop playing guitar?”','19: the composer holds the draft');
 assert.equal(box.value,store.get('chat-draft'));assert.ok(box.focused);assert.deepEqual(box.dispatched,['input']);
 assert.equal(posted,0,'19: nothing was sent');
 assert.equal(calls.filter(([p])=>p.includes('chat')).length,0);
@@ -240,7 +258,7 @@ assert.equal(store.get('chat-draft'),'half a thought\n\nCan we come back to “x
 // 20: a brand-new companion reads as new, not broken.
 await renderPage(dataset({intimacy:{...romantic,stage:0,stage_name:'Just Met'}}));
 for(const copy of ['Your shared story is still beginning','Firsts, rituals, nicknames and little traditions','Nothing has been written down about you yet',
-  'Nova has not recorded any preferences of their own yet','Nothing is hanging between conversations right now'])
+  'Nova has not recorded any preferences of her own yet','Nothing is hanging between conversations right now'])
   assert.ok(page.includes(copy),'20: empty state: '+copy);
 assert.doesNotMatch(page,/See all shared moments|View all 0/);
 // Experiences failing must not take the page down.
@@ -258,10 +276,25 @@ assert.ok(page.length<60000,'21: page stays small with 500 facts ('+page.length+
 await click('story-more');
 assert.equal((element('us-recent').innerHTML.match(/class="us-story-event /g)||[]).length,24,'Show earlier adds a page');
 
-// 22: generic copy is neutral about the companion's pronouns.
-for(const html of [page,sandbox.relationshipHero({intimacy:{...romantic,permanent_friend:true}},warm,'Nova'),
-  sandbox.relationshipDetails({intimacy:romantic},warm,[{instruction:'x'}],'Nova'),feelings])
-  assert.doesNotMatch(html.replace(/<[^>]+>/g,' '),/\b(she|her|hers|herself)\b/i,'22: no hardcoded feminine pronouns');
+// 22: copy about the companion uses the configured pronouns, not a flattened they.
+for(const [set,name,poss] of [['she','Nova','her'],['he','Kit','his'],['they','Alex','their']]){
+  assert.match(sandbox.usDiscoveriesHTML([],5,name,set),new RegExp(`${name} has not recorded any preferences of ${poss} own yet\\.`),'22: '+set);
+  assert.match(sandbox.relationshipDetails({intimacy:romantic,pronoun_set:set},warm,[],name),
+    new RegExp(`${name} holds genuine agency and has preferences and boundaries of ${poss} own\\.`),'22: '+set);
+  if(set!=='they'){
+    assert.doesNotMatch(sandbox.usDiscoveriesHTML([],5,name,set),/of their own/,'22: a '+set+' is not flattened to they');
+    assert.doesNotMatch(sandbox.relationshipDetails({intimacy:romantic,pronoun_set:set},warm,[],name),/of their own/);
+  }
+}
+// Unknown pronouns fall back to singular they.
+assert.match(sandbox.usDiscoveriesHTML([],5,'Nova'),/Nova has not recorded any preferences of their own yet/);
+// The page reads the set from /relationship.
+{
+  const he=dataset({intimacy:romantic});he['/relationship'].pronoun_set='he';
+  await renderPage(he);
+  assert.match(page,/Nova has not recorded any preferences of his own yet/,'22: from the endpoint');
+  assert.match(page,/boundaries of his own/);
+}
 
 // 23: Us touches no media and makes no profile-less requests.
 assert.doesNotMatch(us,/mediaUrl|rawMediaUrl|\.src=|fetch\(/,'23: no media or raw fetches on Us');

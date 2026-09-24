@@ -18,6 +18,10 @@ import companion_loops as loops
 from companion_platform import file_lock,atomic_write
 
 KINDS=('daily','weekly','monthly','checkin')
+# Plans saved before facts carried their own statement lack one; a resumed plan
+# from then is applied the way it was authored.
+PLAN_CONTRACT=2
+FACT_EXISTING_CHARS=6000
 
 def journal_period(c,target,start,end,limit=10000):
     from companion_rotate import split_entries,entry_date
@@ -90,6 +94,8 @@ def context(c,kind,start,end,day,rows):
     out={'kind':kind,'period_start':start.isoformat(),'period_end':end.isoformat(),'journal_date':day,
          'real_conversation_messages':rows,'existing_preferences':slf.summary(c)['preferences'],
          'existing_questions':slf.questions(c.life),'human_name':c.human}
+    known=slf.fact_statements(c.human_dir,FACT_EXISTING_CHARS)
+    out['existing_facts']=known['facts'];out['existing_facts_note']=known['note']
     if kind=='daily':
         digest=[];offset=0
         while True:
@@ -114,7 +120,7 @@ def schema(kind,sources,question_ids):
     fields={'reflection':text(4000) if kind!='checkin' else {'type':'string','enum':['']},
       'preferences':arr(obj({'subject':text(120),'text':text(600),'valence':{'type':'string','enum':list(slf.VALENCE)}}),4),
       'questions':arr(text(400),2),
-      'facts':arr(obj({**evidence,'category':{'type':'string','enum':list(slf.CATEGORIES)}}),allowed),
+      'facts':arr(obj({**evidence,'category':{'type':'string','enum':list(slf.CATEGORIES)},'statement':text(400)}),allowed),
       'standing':arr(obj(evidence),allowed),'moments':arr(obj(evidence),allowed),
       'answers':arr(obj({**evidence,'question_id':{'type':'string','enum':question_ids or ['no-question']}}),4 if sources and question_ids else 0),
       'open_loops':arr(obj({**evidence,'title':text(120)}),3 if sources else 0),
@@ -130,11 +136,21 @@ def request_plan(c,kind,data,sources,base_url,model,slot,allow_remote=False,api_
       'reflection is your diary entry for the day: first person, past tense, written the way a person '
       'writes at night, never mentioning records, sessions, logs or evidence, with no heading. '
       'Record only durable new preferences or questions; empty arrays are welcome. '
-      'questions contains actual new questions in natural language, never existing IDs or already asked questions. '
+      f'questions contains actual new questions you may someday ask {c.human} directly, never existing IDs '
+      'or already asked questions. Write each exactly as a natural question addressed to '
+      f'{c.human}: use "you"/"your" when referring to {c.human}, not {c.human}\'s name, "the human", or '
+      f'third-person pronouns for {c.human}. A question may still use he/she/they when referring to some '
+      'other person. Do not invent a question merely to fill the array. '
       'facts, standing, moments, answers and open_loops select a quote_id from evidence_quotes. '
-      'The code will store that exact human quote, not a model paraphrase. '
+      'The code will store that exact human quote as the evidence, not a model paraphrase. '
       'A source is not evidence for anything it does not say. Facts describe durable information the human '
-      'stated; never put your own feelings, weather, scenery or your own days there. standing is only an '
+      'stated; never put your own feelings, weather, scenery or your own days there. '
+      f'facts[].statement is a concise durable proposition about {c.human} supported completely by the '
+      f'selected quote, for example {c.human} plays in a board-game group on Thursdays. It is not a quote, '
+      f'not commentary about the quote (never "{c.human} said" or "{c.human} mentioned"), and not permission '
+      'to infer additional facts. existing_facts lists what is already known (existing_facts_note says '
+      'whether the list is complete). Do not record a fact that merely restates an existing fact. Repeated '
+      'evidence for something already known is not a new fact. standing is only an '
       'enduring instruction the human explicitly wants applied in future conversations, such as Always ask before sending audio. '
       'A one-time request such as send me a photo, check it again or do not run anything in that situation '
       'is NOT a standing instruction. moments are meaningful real exchanges. Ignore routine greetings, '
@@ -159,7 +175,24 @@ def request_plan(c,kind,data,sources,base_url,model,slot,allow_remote=False,api_
     if choice.get('finish_reason')!='stop':raise ValueError('reflection was truncated; nothing recorded')
     return json.loads(choice['message']['content']),reply.get('usage')
 
-def validate(plan,kind,sources,question_ids):
+def _transcript_wrapper(statement,human):
+    """The exact shape this contract replaced: "<human> said: ...". Narrow on
+    purpose; other prose is not policed here."""
+    who=r'the (?:human|user)'+('|'+re.escape(human.strip()) if (human or '').strip() else '')
+    return bool(re.match(r'^\W*(?:'+who+r')\s+(?:said|mentioned|told (?:me|you|us))\b',statement.strip(),re.I))
+
+def _about_the_human(question,human):
+    """A new question that names the human, or calls them the human/user, is
+    written about them rather than to them. He/she/they are allowed: a
+    question can be about someone else."""
+    if re.search(r'\bthe (?:human|user)\b',question,re.I):return True
+    name=(human or '').strip()
+    return bool(name and name.lower() not in ('the user','the human')
+                and re.search(r'(?<!\w)'+re.escape(name)+r'(?!\w)',question,re.I))
+
+def validate(plan,kind,sources,question_ids,human='',legacy=False):
+    """`legacy` is only for resuming a plan saved under the previous contract,
+    whose facts carried no statement and whose questions were never checked."""
     expected={'reflection','preferences','questions','facts','standing','moments','answers','open_loops','soul_append'}
     if not isinstance(plan,dict) or set(plan)!=expected:raise ValueError('unexpected reflection fields')
     def text(value,limit,empty=False):
@@ -176,13 +209,19 @@ def validate(plan,kind,sources,question_ids):
     for q in plan['questions']:
         text(q,400)
         if re.fullmatch(r'q-[a-f0-9]+',q.strip()):raise ValueError('new questions must be prose, not existing IDs')
+        if not legacy and _about_the_human(q,human):
+            raise ValueError('new questions are asked to the human directly: use "you", not their name or "the human"')
     for key in ('facts','standing','moments','answers','open_loops'):
         for p in plan[key]:
-            allowed={'quote_id'}|({'category'} if key=='facts' else {'question_id'} if key=='answers' else {'title'} if key=='open_loops' else set())
+            allowed={'quote_id'}|({'category'}|(set() if legacy else {'statement'}) if key=='facts' else {'question_id'} if key=='answers' else {'title'} if key=='open_loops' else set())
             if not isinstance(p,dict) or set(p)!=allowed:raise ValueError('invalid '+key+' entry')
             source=sources.get(p['quote_id'])
             if not source or source['role']!='user':raise ValueError('human evidence must select a trusted user quote')
             if key=='facts' and p['category'] not in slf.CATEGORIES:raise ValueError('invalid category')
+            if key=='facts' and not legacy:
+                text(p['statement'],400)
+                if _transcript_wrapper(p['statement'],human):
+                    raise ValueError('a fact statement is a proposition about the human, not a transcript ("X said: ...")')
             if key=='answers' and p['question_id'] not in question_ids:raise ValueError('unknown question')
             if key=='open_loops':text(p['title'],120)
 
@@ -200,7 +239,10 @@ def apply_plan(c,kind,day,plan,sources,now):
             s=sources[p['quote_id']];when=dt.datetime.fromtimestamp(s['timestamp'],now.tzinfo).isoformat()
             source=f"session:{s['session_id']} message:{s['id']} {when}"
             quote=s['content'];evidence=f'{when}: {quote}'
-            if key=='facts':out=slf.record_fact(c.human_dir,f'{c.human} said: "{quote}"',evidence,now,p['category'],'stated',source,human=c.human)
+            if key=='facts':
+                # The statement is the readable memory; the quote is why it may be remembered.
+                statement=p['statement'].strip() if 'statement' in p else f'{c.human} said: "{quote}"'
+                out=slf.record_fact(c.human_dir,statement,evidence,now,p['category'],'stated',source,human=c.human)
             elif key=='standing':out=notes.add_standing(c,{'instruction':quote,'evidence':evidence,'scope':''},now)
             elif key=='moments':out=notes.add_moment(c,{'moment':'note','text':f'{c.human} said: "{quote}"','happened_on':when[:10]},now)
             elif key=='answers':
@@ -237,9 +279,11 @@ def reflect(c,kind,base_url,model,human_id='',slot=1,now=None,planner=None,
         else:
             plan,usage=(planner or request_plan)(c,kind,data,sources,base_url,model,slot,
                                                  allow_remote,api_key_env)
-        validate(plan,kind,sources,[q['id'] for q in data['existing_questions']])
+        legacy=bool(saved) and saved.get('contract',1)<PLAN_CONTRACT
+        validate(plan,kind,sources,[q['id'] for q in data['existing_questions']],c.human,legacy)
         if not saved:
-            saved={'id':key,'kind':kind,'day':day,'plan':plan,'sources':sources,'usage':usage,'authored_at':now.isoformat(),'complete':False}
+            saved={'id':key,'kind':kind,'day':day,'plan':plan,'sources':sources,'usage':usage,'authored_at':now.isoformat(),
+                   'contract':PLAN_CONTRACT,'complete':False}
             atomic_write(path,json.dumps(saved,ensure_ascii=False,indent=2))
         results=apply_plan(c,kind,day,plan,sources,dt.datetime.fromisoformat(saved['authored_at']))
         if kind=='checkin':

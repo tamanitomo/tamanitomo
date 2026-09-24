@@ -12,7 +12,7 @@ without saying so.
 """
 from __future__ import annotations
 import uuid
-import argparse, datetime as dt, hashlib, json, os, pathlib, re, sys
+import argparse, datetime as dt, hashlib, json, os, pathlib, re, sys, unicodedata
 from zoneinfo import ZoneInfo
 from companion_platform import file_lock, atomic_write
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
@@ -48,7 +48,9 @@ def _read(path,kind=None):
     except FileNotFoundError:pass
     return rows
 
-def _append(path,row,dedupe_id=True):
+def _append(path,row,dedupe_id=True,guard=None):
+    """Append one row. `guard` runs under the same lock after the ID check; a
+    dict it returns is the answer instead of a write."""
     path=pathlib.Path(path);path.parent.mkdir(parents=True,exist_ok=True)
     with file_lock((path.parent/('.'+path.name+'.lock'))):
         if dedupe_id:
@@ -58,6 +60,7 @@ def _append(path,row,dedupe_id=True):
                     if {k:v for k,v in e.items() if k not in ignored}!={k:v for k,v in row.items() if k not in ignored}:
                         raise ValueError('Entry ID already exists with different content; original retained')
                     return {'written':False,'entry':e}
+        if guard and (refused:=guard()):return refused
         fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_APPEND,0o600)
         with os.fdopen(fd,'a', encoding='utf-8') as f:
             f.write(json.dumps(row,ensure_ascii=False)+'\n');f.flush();os.fsync(f.fileno())
@@ -71,6 +74,20 @@ def _text(value,limit,label):
     return value
 
 # ---- ledgers -------------------------------------------------------------
+_QUOTES=str.maketrans({'\u2018':"'",'\u2019':"'",'\u201a':"'",'\u201b':"'",'\u2032':"'",
+                       '\u201c':'"','\u201d':'"','\u201e':'"','\u201f':'"','\u2033':'"'})
+
+def canonical_statement(text):
+    """The form two fact statements must share to be the same proposition.
+
+    Only differences that cannot change meaning are erased: Unicode form, case,
+    whitespace, quote style, and punctuation that is not inside a word or
+    number ("tea." == "tea", but "4.5" != "45" and "Robin's" keeps its
+    apostrophe). Anything more generous would merge different memories.
+    """
+    text=unicodedata.normalize('NFKC',str(text or '')).translate(_QUOTES).casefold()
+    text=re.sub(r"(?<!\w)[^\w\s]+|[^\w\s]+(?!\w)",' ',text)
+    return ' '.join(text.split())
 def record_fact(root,statement,evidence,now,category='other',confidence='stated',
                 source='',supersedes='',human='the human'):
     if category not in CATEGORIES:raise ValueError(f'category must be one of {CATEGORIES}')
@@ -86,7 +103,16 @@ def record_fact(root,statement,evidence,now,category='other',confidence='stated'
          'provenance':f'Recorded from stated or observed evidence about {human}; not imagined'}
     if supersedes and not any(f['id']==supersedes for f in facts(root)):
         raise ValueError('supersedes must refer to an active fact')
-    return _append(pathlib.Path(root)/'facts.jsonl',row)
+    key=canonical_statement(statement)
+    def already_known():
+        # The same proposition is one memory whatever its category, source or
+        # evidence. A correction may restate the fact it replaces. Only an exact
+        # canonical match is refused; near-matches are for duplicate_facts().
+        for f in facts(root):
+            if f['id']!=row['supersedes'] and canonical_statement(f.get('statement'))==key:
+                return {'written':False,'reason':'fact already recorded','duplicate_of':f['id']}
+        return None
+    return _append(pathlib.Path(root)/'facts.jsonl',row,guard=already_known)
 
 def record_pref(root,text,now,valence='like',subject='',agent='the companion'):
     if valence not in VALENCE:raise ValueError(f'valence must be one of {VALENCE}')
@@ -144,6 +170,57 @@ def facts(root,category=None):
         seen[r['id']]=r
     rows=list(seen.values())
     return [r for r in rows if r['category']==category] if category else rows
+
+def fact_statements(root,limit_chars=6000):
+    """Active fact statements, newest first, within a character budget, so a
+    reflection can tell whether something is actually new. Evidence is left out
+    on purpose; the statement is what would be restated."""
+    rows=sorted(facts(root),key=lambda f:f.get('recorded_at',''),reverse=True)
+    kept,used=[],0
+    for f in rows:
+        item={'id':f['id'],'category':f.get('category','other'),'statement':f.get('statement','')}
+        size=len(item['statement'])+len(item['category'])+40
+        if used+size>limit_chars:break
+        kept.append(item);used+=size
+    omitted=len(rows)-len(kept)
+    return {'facts':kept,'omitted':omitted,
+            'note':(f'{omitted} older facts are not listed here for space; this list is not everything already known.'
+                    if omitted else 'This is every fact currently recorded.')}
+
+_FILLER=frozenset('a an the to in into for of on at by from with and his her their its my your'.split())
+_DISTINCT=re.compile(r"^(\d.*|no|not|never|none|nor|doesn't|don't|didn't|isn't|wasn't|won't|can't|cannot|"
+                     r"first|second|third|fourth|fifth|last|next|previous|other|another|former|latter|"
+                     r"one|two|three|four|five|six|seven|eight|nine|ten)$")
+
+def _words(statement):
+    return {w for w in re.sub(r"'s\b",'',canonical_statement(statement)).split() if w not in _FILLER}
+
+def duplicate_facts(root,threshold=.6):
+    """Pairs of active facts that may say the same thing, for a person to review.
+
+    Report only: nothing is retracted, superseded or merged. A pair whose words
+    differ by a number, an ordinal or a negation is flagged as such rather than
+    hidden, because "likes"/"dislikes" and "first"/"second" are the cases where
+    a guess would be worst.
+    """
+    rows=facts(root);words=[_words(f.get('statement')) for f in rows];out=[]
+    for i in range(len(rows)):
+        for j in range(i+1,len(rows)):
+            a,b=words[i],words[j]
+            if not a or not b:continue
+            shared=len(a&b);score=shared/len(a|b)
+            contained=a<=b or b<=a
+            if score<threshold and not (contained and score>=.5 and min(len(a),len(b))>=4):continue
+            differ=sorted(a^b)
+            reason=('identical wording' if not differ else
+                    'one statement contains every word of the other' if contained else
+                    f'{round(score*100)}% of content words shared')
+            if any(_DISTINCT.match(w) for w in differ):reason+='; differs by a number, ordinal or negation -- probably distinct'
+            out.append({'similarity':round(score,3),'reason':reason,'differing_words':differ,
+                        'facts':[{k:rows[x].get(k) for k in ('id','category','statement','evidence','recorded_at')} for x in (i,j)]})
+    out.sort(key=lambda p:-p['similarity'])
+    return {'candidates':out,'count':len(out),
+            'note':'Candidates only. Nothing has been changed; retract or correct a fact yourself if it is really a duplicate.'}
 
 def retract_fact(root,fact_id,reason,now):
     """Withdraw a mistaken claim without inventing a replacement claim."""
@@ -330,6 +407,8 @@ def main():
     r=s.add_parser('resolve');r.add_argument('--id',required=True)
     r.add_argument('--status',required=True,choices=['asked','answered','dropped']);r.add_argument('--answer',default='')
     s.add_parser('profile');s.add_parser('summary')
+    df=s.add_parser('duplicate-facts',help='List likely duplicate facts for review; changes nothing')
+    df.add_argument('--threshold',type=float,default=.6)
     w=s.add_parser('wonder');w.add_argument('--status',choices=['open','asked','answered','dropped'])
     ph=s.add_parser('pref-history');ph.add_argument('--valence',choices=VALENCE)
     so=s.add_parser('soul');so.add_argument('--show',action='store_true');so.add_argument('--init',action='store_true')
@@ -344,6 +423,7 @@ def main():
     elif x.cmd=='ask':out=ask(c.life,x.text,now)
     elif x.cmd=='resolve':out=resolve(c.life,x.id,x.status,now,x.answer)
     elif x.cmd=='profile':out={'facts':facts(c.human_dir)}
+    elif x.cmd=='duplicate-facts':out=duplicate_facts(c.human_dir,x.threshold)
     elif x.cmd=='wonder':out={'questions':questions(c.life,x.status)}
     elif x.cmd=='pref-history':
         rows=_read(c.life/'preferences.jsonl',kind='companion_preference')

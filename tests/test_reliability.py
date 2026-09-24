@@ -232,6 +232,15 @@ class ReliabilityTests(unittest.TestCase):
             self.skipTest('Node is needed for the Us page regressions')
         subprocess.run([node, str(Path(__file__).with_name('test_us_ui.js'))], check=True)
 
+    def test_update_notice_ui(self):
+        """Shipped with the release but was only ever run by hand."""
+        import shutil
+        import subprocess
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('Node is needed for the update notice regressions')
+        subprocess.run([node, str(Path(__file__).with_name('test_updates_ui.js'))], check=True)
+
     def test_media_urls_keep_their_profile(self):
         """A URL escaped for an HTML attribute must not be assigned to a
         property: the entities stay literal, `profile` arrives as `amp;profile`,
