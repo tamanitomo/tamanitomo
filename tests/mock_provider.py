@@ -77,6 +77,10 @@ def scenarios():
         'error_before_first_byte': [('status', 500)],
         # The first request drops mid-stream; the retry completes (recovery).
         'recover': {1: [role, *_deltas(PUBLIC_TEXT, 7)[:2], ('close',)], 'default': [role, *_deltas(PUBLIC_TEXT, 7), stop, DONE]},
+        # Phase 1B C1: like `recover`, but the drop is counted over STREAMING requests only, so
+        # it always hits the main reply stream (an auxiliary non-stream request cannot absorb it).
+        'recover_stream': {'by': 'stream', 1: [role, *_deltas(PUBLIC_TEXT, 7)[:2], ('close',)],
+                           'default': [role, *_deltas(PUBLIC_TEXT, 7), stop, DONE]},
     }
 
 
@@ -110,9 +114,12 @@ class MockProvider:
                     attempt = provider._counts[name] = provider._counts.get(name, 0) + 1
                     provider.requests.append((name, bool(body.get('stream')), attempt))
                     provider.request_times.append(time.time())
+                    if body.get('stream'):
+                        streamed = provider._counts[(name, 'stream')] = provider._counts.get((name, 'stream'), 0) + 1
                 steps = table[name]
                 if isinstance(steps, dict):
-                    steps = steps.get(attempt, steps['default'])
+                    key = streamed if steps.get('by') == 'stream' and body.get('stream') else attempt
+                    steps = steps.get(key, steps['default'])
                 if steps and isinstance(steps[0], tuple) and steps[0][0] == 'status':
                     return self._json(steps[0][1], {'error': {'message': 'mock provider error', 'type': 'server_error'}})
                 if not body.get('stream'):

@@ -1,12 +1,12 @@
 # Phase 1B design: send receipts, idempotency and interruption
 
-Status: **design proposal, revision 3 (focused amendment), for review.** No production sending code, UI, schema, live record or release was changed. The C0 verification changeset adds test-harness and prototype code under `tests/` only; its evidence is in [`Phase1B_C0_Results.md`](Phase1B_C0_Results.md).
+Status: **design, revision 3 with the focused corrections requested by PHASE1B_REVIEW_R3, marked (R4).** C0 was accepted as verification work. The **C1 core** now exists as isolated, callable components (`kit/app/chat_sends.py`, `send_executor.py`, `send_protocol.py`, `send_quiescence.py`) exercised by synthetic tests only; **no route, UI, release file or real profile uses it**, and the current workspace send path is unchanged. Evidence: [`Phase1B_C0_Results.md`](Phase1B_C0_Results.md), [`Phase1B_C1_Results.md`](Phase1B_C1_Results.md).
 
 - Branch: `test/phase1-conversation-contract`
 - Revision 1: `b074ae9`. Revision 2: `7907066` (answered PHASE1B_REVIEW_R1). Revision 3 (this document) answers PHASE1B_REVIEW_R2 with focused corrections; the structure and numbering of revision 2 are kept. Every passage changed by revision 3 is marked **(R3)**; Appendix B lists them.
 - Designed against: `fc5c1e4` (code identical to `7e616d2`, accepted in PHASE1A_REVIEW_R3). Phase 1A acceptance is retained unchanged.
 - Hermes inspected: `hermes-agent` at `0e9fc2cc15` (full hash `0e9fc2cc152b4a4d9fd736f107412ace2a0c2555`), the same revision as the Phase 1A fixtures. Hermes line references below are to that revision and describe private code that can change; every capability taken from it is detected at run time and has a safe fallback (§8). **(R3)** C0 ran real pinned-Hermes code against synthetic homes; where a statement below rests on a C0 observation it cites the case (`C0:` + test name).
-- Gate: C1–C3 remain separate proposed production changesets. None is authorised by this revision.
+- Gate: **(R4)** PHASE1B_REVIEW_R3 authorised the isolated C1 core and its synthetic tests on an unmerged branch (`test/phase1b-c1-core`). Routing normal sends through it (C1 activation), C2 and C3 remain separate, later changesets, each with its own review.
 
 Wording used below:
 - **definite** means the app can prove the fact from durable records written by the process that knows it. **Unknown** means it cannot, and the app then says so. It does not guess.
@@ -40,6 +40,15 @@ These are the reviewer's decisions, adopted as the basis of this revision. They 
 | O-B | Pre-1B chat operation files that contain text: report their count, leave them untouched. Deleting them needs a separate owner decision. Their text is not described as removed. | §5.7 |
 | O-C | Windows kill-on-close on controller death versus POSIX continuation is a **proposed** platform policy. It is not enabled on any platform until that platform's supervision evidence exists (O-8, O-9, O-11). | §4.5 |
 | O-D | Restore: an explicit **Reset send ledger** is mandatory before sends resume after any known ledger rollback or profile restore. An undetected coherent rollback can replay a missing, still-admissible request; this is disclosed, not claimed to be detected. | §4.1 |
+
+**(R4) Decisions recorded from PHASE1B_REVIEW_R3.** Implementation of the isolated C1 core is authorised; activation is not.
+
+| ID | Decision | Where applied |
+|---|---|---|
+| O-E | **Hold migration and rollout, not engineering.** The current user-facing route stays unchanged while the C1 core is developed, so no platform loses chat because its supervisor is untested. The **new** path refuses activation on an unsupported or unverified supervisor, and a send that has entered the new protocol never falls back to the unkeyed old path. Windows/macOS need real supervisor tests on CI hosts, and Termux needs synthetic device evidence, before their activation is proposed. | §4.4.4, §4.5 |
+| O-F | **Gap latching without re-failing a committed source write.** A receipt gap is latched, later unreceipted work is refused before it starts, and no clean completion is claimed. Shown with the real exception, interruption and cleanup paths and in-process concurrency; reporting failure never blocks quiescence recovery. | §4.10.1; C1 results §3 |
+| O-G | **Coverage and containment are activation gates.** Before the new path is activated for ordinary tool-capable chat: a real tool-using turn, interruption during a tool, full CLI compression continuation, and the declared descendant boundary must be exercised. A process that might still write is not made safe by labelling its correlation unverified. | §4.5, §8, §12 |
+| O-H | **Structured attempt identity in C2.** Charge records gain an explicit `attempt` field; substring matching of `reason` is never production identity. Additive; quota calculation unchanged. C2 remains separate. | §7.2 |
 
 ---
 
@@ -176,7 +185,7 @@ At open:
 
 1. Take `<ledger dir>/guard.lock` **exclusively**. Acceptance (§5.2 step 6), bootstrap and executor registration (S2, §4.4.1) hold it **shared** for the length of their transaction, so none of them can interleave with a reset. A reset that finds it busy answers `409 ledger_busy` and changes nothing (C0: `test_reset_cannot_interleave_with_executor_registration`).
 2. If the old ledger is readable, fence it in one transaction: every send with a `launch_token` gets `launch_token=NULL, claim=claim+1`. An executor that has not yet run S2 can then never register (C0: `test_reset_fences_launch_tokens_before_replacing_the_ledger`).
-3. Check quiescence for every executor lock recorded by an unsettled send, using the identity probe in §4.5. Any `live` or `unproven` result refuses the reset (`409 executor_live`) and nothing is moved (C0: `test_reset_is_refused_while_an_executor_lock_is_held`). If the old ledger is unreadable and its executor records cannot be listed, every lock file in `executors/` is probed. A lock file is never deleted to unblock a reset.
+3. Check quiescence for every executor recorded by an unsettled send, using **(R4) the one quiescence contract of §4.5** (identity-checked lock **and** a demonstrably empty group), the same function used for lease release, retention and installation mutations. Any `live` or `unproven` result refuses the reset (`409 executor_live`) and nothing is moved. A lock file with no recorded executor is probed for "busy" (its executor never entered Hermes). If the old ledger is unreadable, the executor's identity that it wrote **into its lock file** at S1 (pid, pgid, lock identity) is the record, checked by the same contract; an empty acquirable lock file belongs to an executor that died before S2. **(R4)** The C0 admission prototype's reset opened locks with `open('a+b')` (creating them) and checked only "busy"; that is not the contract and is not used. A lock file is never deleted to unblock a reset.
 4. Move the old file aside as `ledger.lost-<time>.sqlite3` (never delete it). Create the new ledger with a new `ledger_id` and a new `generation`. Record `reset_at`.
 
 After a reset, a retry of a key accepted under the old ledger carries the old generation, so it is `409 generation_changed`, and the client says that whether it was sent before is unknown (§6).
@@ -291,10 +300,11 @@ The **lease** is separate from the state: an outcome can be final while the leas
 
 `owner_turn`, `reply` and `correlation` are derived from source receipts only (§4.10).
 
-**(R3) Receipt coverage** is one of these, and it is decided before any field value below:
-- **complete**: `executor_finished` says `receipts_complete=true`. That means every `write_intent` has its outcome fact, there is no `write_unsettled`, no `receipt_gap`, and `unidentified=0` in every committed write that touched the send's session set.
-- **bounded**: the executor ended without `executor_finished`, but every `write_intent` it recorded has an outcome fact. There is no `write_unsettled` and no `receipt_gap`.
-- **incomplete**: anything else.
+**(R3, corrected R4) Receipt coverage** is one of these, and it is decided before any field value below. The same restrictions apply **whether or not `executor_finished` exists** (review R3 5.2: revision 3's *bounded* definition omitted unidentified rows, contradicting the field table):
+- **complete**: `executor_finished` exists and says `receipts_complete=true`, **and** every restriction below holds.
+- **bounded**: no `executor_finished`, **and** every restriction below holds.
+- Restrictions: every `write_intent` has its outcome fact; there is no `write_unsettled` and no `receipt_gap`; **no committed write carries unidentified rows** (`unidentified=0` everywhere, including a session insert whose effect could not be observed); and no `user_turn`/`public_output` row lies outside the send's session set.
+- **incomplete**: anything else. Incomplete coverage never establishes an absence: a clone that produced unidentified rows followed by executor death is `owner_turn=unknown`, `reply=unknown`, never `absent`/`none` (tested on the derived receipt, not only the recorder's counter).
 - **unavailable**: `capability=unverified_sources`.
 
 `unverified_sources` and `incomplete` never mean "no row was written". The only thing that means that is complete or bounded coverage together with an absent row.
@@ -303,9 +313,9 @@ The **lease** is separate from the state: an outcome can be final while the leas
 |---|---|
 | `owner_turn=recorded` | exactly one committed `user_turn` row for the send's session set |
 | `owner_turn=absent` | coverage **complete or bounded**, and no committed `user_turn` row. This includes "no `write_intent` after S2 at all": `write_intent` is committed before Hermes's callback and fails closed, so the absence of any intent proves no write was attempted. |
-| `owner_turn=possible` | a transcript `write_intent` with no outcome fact (the executor died inside the write), or a `write_unsettled` fact (the commit raised after the callback). Either way the owner row may or may not be on disk. |
+| `owner_turn=possible` | a transcript `write_intent` with no outcome fact (the executor died inside the write), or a `write_unsettled` fact (the commit raised after the callback), with no `receipt_gap` and no unidentified rows, and no committed `user_turn` row. Either way the owner row may or may not be on disk. |
 | `owner_turn=ambiguous` | more than one committed `user_turn` row |
-| `owner_turn=unknown` | coverage **incomplete** (a `receipt_gap`, or unidentified rows in the session set) or **unavailable** |
+| `owner_turn=unknown` | coverage **incomplete** because of a `receipt_gap`, unidentified rows, turn rows outside the session set, or a finish fact without `receipts_complete`; or coverage **unavailable** |
 | `reply=final` / `partial` / `none` / `unknown` | `final`: the `complete` rule above. `partial`: at least one committed `public_output` row without `final`. `none`: coverage complete or bounded, and no `public_output` row. `unknown`: coverage incomplete or unavailable. |
 
 These are four different observations, and they are never merged: the executor did not run (`not_started`); no committed owner row (`absent`); an unresolved intent (`possible`); receipt coverage unavailable (`unknown`).
@@ -384,7 +394,8 @@ Liveness is an OS lock, not a PID. E holds `executors/<send_id>.lock` from S1 un
 - **Managed execution** = E plus every process in E's process group (POSIX: E is a session and group leader, `start_new_session=True`) or E's job (Windows).
 - **Quiescence** = both of:
   - (a) E's lock is acquired by the identity probe below;
-  - (b) the managed execution is empty. On Linux/Android, no non-zombie process has E's `pgid` (C0 enumerates `/proc/<pid>/stat`). On macOS, `sysctl KERN_PROC_PGRP` returns none. On Windows, `JOBOBJECT_BASIC_ACCOUNTING_INFORMATION.ActiveProcesses = 0`.
+  - (b) the managed execution is **demonstrably** empty. On Linux/Android, no non-zombie process has E's `pgid` (enumerating `/proc/<pid>/stat`). On macOS, `sysctl KERN_PROC_PGRP` returns none. On Windows, `JOBOBJECT_BASIC_ACCOUNTING_INFORMATION.ActiveProcesses = 0`.
+  - **(R4) An incomplete observation is not an empty group.** Only a process that is demonstrably gone (`ENOENT`/`ESRCH` on its entry) is skipped. A permission, I/O or parse failure on any entry, an unreadable `/proc`, a `/proc` mounted with `hidepid`, or a platform without supported enumeration makes (b) **unproven**, and the lease, reset refusal and installation exclusion stay in force. The C0 prototype caught every `OSError` and returned an empty list; the reviewer's probe showed one unreadable process read as "no members". C1: `send_quiescence.group_members` returns `complete=false` for all of these.
 
   Only when both hold is the lease released. If (a) holds and (b) does not, `liveness=live`; the owner kills the group or job (§4.9) and probes again.
 - **Outside the boundary:**
@@ -523,7 +534,8 @@ Row classes, computed at publish time:
 
 | Class | Rows | May support |
 |---|---|---|
-| `user_turn` | `role=user`, written by `append_message`/`append_messages_batch` | `owner_turn` |
+| `user_turn` | `role=user`, written by `append_message`/`append_messages_batch`, **and (R4) publicly eligible by Phase 1A's structural rule**: no `display_kind`, not `_compressed_summary`, not `observed`, active (or a compacted original), text present, no tool calls | `owner_turn` |
+| `user_internal` **(R4)** | a `role=user` turn-method row that fails that eligibility (hidden, display-only, summary, observed, empty) | nothing. Thread/call provenance alone is not message eligibility (review R3 5.2). |
 | `public_output` | `role=assistant`, text present, no tool calls, no `display_kind`, not `_compressed_summary`, not `observed`, written by `append_message`/`append_messages_batch` | `reply` (with `finish_reason`, §4.3.2) |
 | `assistant_internal` | assistant rows with tool calls, no text, a display kind, or summary/observed flags | nothing |
 | `internal` | tool/system rows | nothing |
@@ -547,6 +559,7 @@ If a send's committed receipts hold more than one `user_turn` row, `owner_turn=a
 
 #### 4.10.2 Sessions and workspace registration (D5, D6)
 
+- **(R4) How freshness is observed.** Inside the write transaction the recorder reads `max(rowid)` of `sessions` before an `INSERT INTO sessions` and the ids with a higher rowid after it. A new row always receives a rowid above the previous maximum, so this names exactly the sessions the statement created and does not depend on the statement's text. (Mapping the `id` column to a positional parameter failed on the pinned upsert, whose `VALUES` list contains a literal `NULL`.) If the rowid cannot be read, the insert is recorded with `fresh=null` and counts as unidentified.
 - **(R3)** A session is attributed to the send as *created here* only when a `write_committed` fact from this executor lists it with `fresh=true`. That covers a new session and a continuation created during the turn, including `publish_compression_child`, which inserts the session row without `create_session`. A `create_session`/`ensure_session` call on an existing id is an upsert and gives `fresh=false`. A failed insert gives `write_rolled_back` with no session. Neither ever labels the session as created by the workspace (C0: `test_only_a_fresh_insert_is_a_created_session`, `test_compression_child_and_clone_are_seen_and_the_clone_is_unidentified`). The resumed `requested_session` is recorded in `hermes_sessions` with `created_here=false` and is **not** relabelled.
 - The Phase 1A classifier gains a second source of workspace sessions: fresh-session receipts in the ledger (read-only), unioned with `.tamanitomo-sessions.json`.
 - **(R3) Early registration without an upsert-as-proof.** Revision 2 made the *pre-call* intent of `create_session` the attribution. That treated an upsert attempt as proof of creation. Instead:
@@ -838,6 +851,7 @@ Each is a synthetic, pinned observation against Hermes `0e9fc2cc15` (the fixture
 | O-9 | **Unavailable** (no device test). | Android/Termux sends refused (§4.5). |
 | O-10 (new) | Whether any Hermes tool path at `0e9fc2cc15` starts a process that leaves E's group or job. **Not observed.** | Outside the stated boundary until observed (§4.5). |
 | O-11 (new) | macOS process-group enumeration, `killpg`, flock on APFS. **Unavailable.** | macOS sends refused (§4.5). |
+| O-12 **(R4, new, observed in C1)** | When the main reply stream drops mid-reply, the pinned Hermes stores the partial reply (`finish_reason='length'`), then a **`role=user` continuation note with no structural marker** (no `display_kind`, not `observed`, not a summary, active), then the retried reply. | Structure cannot distinguish it from an owner message and text is never read, so the receipt is `owner_turn=ambiguous`, outcome `unknown`, never `complete` (C1: `test_a_dropped_main_stream_adds_an_unmarked_user_row`). The same row would pass Phase 1A's structural rule as an owner message; that is reported for the reviewer, not changed here. |
 
 The table of revision 2 follows unchanged for reference.
 
@@ -864,7 +878,8 @@ Three separable changesets, each with its tests, in this order. This sequencing 
 | Changeset | Files | Contents |
 |---|---|---|
 | **C0** verification (R3; **this changeset**, test/harness only) | `tests/phase1b_c0/` (`receipt_probe.py`, `seam_scenarios.py`, `turn_driver.py`, `pinned.py`, `admission_proto.py`, `dispatch_proto.py`, `liveness_proto.py`); `tests/test_phase1b_c0_{receipts,admission,dispatch,liveness}.py`; `tests/mock_provider.py` gains `hang`, `error_before_first_byte` and `request_times` | Observations and prototypes only. No production module is changed. Results: `Phase1B_C0_Results.md`. |
-| **C1** durable send and recovery | `kit/app/chat_sends.py` (new): ledger, storage checks, states, facts, fencing, lease, liveness, recovery, retention. `kit/app/hermes_stream.py`: go-gate, executor lock with recorded identity, S2 under the shared guard, watchdog, the commit-boundary recorder (§4.10.1), `executor_finished` with `receipts_complete`. `kit/app/runtime.py`: `Runtime.chat()` launch protocol and process group/job; `Operations.submit(ident=)`, persisted-field allowlist, operation retention; installation lock helper. `kit/app/chat_routes.py`: `/api/chat/sends*`, `correlation.send_id` join. `kit/app/manage.py`: legacy `/api/chat` through the ledger, before/after guess removed; installation lock around mutations. `kit/app/chat_sources.py`: workspace sessions from fresh-session receipts (R3); capability table. `docs/CHAT_CONTRACT.md`: "Sending" section, restore limitation. `release-files.json`. | Tests: `tests/test_chat_sends.py`, `tests/test_send_recovery_subprocess.py`, `tests/test_operations_privacy.py`. (`tests/mock_provider.py` already gained `hang` in C0.) |
+| **C1 core (R4, implemented, not activated)** | `kit/app/chat_sends.py`, `kit/app/send_executor.py`, `kit/app/send_protocol.py`, `kit/app/send_quiescence.py` (all new, not in `release-files.json`); `tools/pinned_hermes_lane.py`; tests `tests/test_phase1b_c1_core.py`, `tests/test_phase1b_c1_pinned.py`, `tests/phase1b_c1/`; additive `recover_stream` mock scenario | The ledger, states, bootstrap/generation, acceptance and launch ownership, supervised executor, commit-boundary receipts, recovery/quiescence, reset and retention as callable components. The executor is a new file beside `hermes_stream.py`, which is unchanged. See `Phase1B_C1_Results.md`. |
+| **C1 activation** (later, separate review) | `kit/app/chat_sends.py` (new): ledger, storage checks, states, facts, fencing, lease, liveness, recovery, retention. `kit/app/hermes_stream.py`: go-gate, executor lock with recorded identity, S2 under the shared guard, watchdog, the commit-boundary recorder (§4.10.1), `executor_finished` with `receipts_complete`. `kit/app/runtime.py`: `Runtime.chat()` launch protocol and process group/job; `Operations.submit(ident=)`, persisted-field allowlist, operation retention; installation lock helper. `kit/app/chat_routes.py`: `/api/chat/sends*`, `correlation.send_id` join. `kit/app/manage.py`: legacy `/api/chat` through the ledger, before/after guess removed; installation lock around mutations. `kit/app/chat_sources.py`: workspace sessions from fresh-session receipts (R3); capability table. `docs/CHAT_CONTRACT.md`: "Sending" section, restore limitation. `release-files.json`. | Tests: `tests/test_chat_sends.py`, `tests/test_send_recovery_subprocess.py`, `tests/test_operations_privacy.py`. (`tests/mock_provider.py` already gained `hang` in C0.) |
 | **C2** dispatcher safety | `kit/scripts/companion_outbox.py`: statuses (incl. `reserving_slot`, `reservation_unresolved`), guarded claim/outcome appends, lock order. `kit/scripts/companion_outreach.py`: an `attempt` field on charge rows and a lookup by attempt (R3). `kit/scripts/companion_dispatch.py`: run lock, attempt phases, abandoned-attempt resolution per §7.3, classification, delivery record. `kit/app/chat_sources.py`: proactive capability "ids captured; transcript linkage unsupported". | `tests/test_dispatch_claim.py` |
 | **C3** minimal client correction | `kit/app/static/workspace.js` (chat submit, `pending`, recovery on load, wording, DOM ids). | synthetic browser checks (M-22) |
 
@@ -963,16 +978,17 @@ The reviewer's U1–U9 and O-A–O-D are decided (§0). **(R3)** These remain fo
 
 | # | Item | Proposal in this revision |
 |---|---|---|
-| O-E (R3) | Platform enablement (§4.5). Windows, macOS and Android/Termux have no supervision evidence yet, so under O-A their workspace sends would be **refused** once C1 ships. That is a regression for those users. | Keep them refused until O-8 / O-11 / O-9 pass on real hosts. The alternative, delaying C1 until they pass, is the owner's call. An "unverified" label is not offered as an alternative (review R2 §5). |
-| O-F (R3) | After a receipt gap the executor refuses every later write, so the Hermes turn aborts (§4.10.1). | Keep: it is the only way to ensure no owner row lands in an unattributed session. The cost is a failed turn in a case that needs a ledger write failure right after a Hermes commit. |
-| O-G (R3) | Paths not observed in C0: CLI-triggered compression, tool-using turns, gateway/cron writers (O-5), the tool-call interrupt (O-6), descendant escape by tools (O-10). | Keep the conservative results: unidentified rows → `unknown`; kill fallback; stated boundary. Observe them in C1's test work before claiming them. |
-| O-H (R3) | The C0 prototype carries the attempt id in the outreach row's `reason`. | C2 adds an explicit `attempt` field (additive; `sent_today` counts rows and ignores it). |
+| O-E | **Decided (R4):** hold migration/rollout pending platform evidence, not engineering. The current route stays; the new path refuses unverified supervisors and never falls back to the unkeyed path once a send has entered it. | Real Windows/macOS supervisor tests on CI hosts and synthetic Termux device evidence before their activation is proposed. |
+| O-F | **Decided (R4):** gap latching without re-failing a committed source write. | Shown in C1 with the real CLI exception path, the real SessionDB, an in-process multi-thread case and interrupt-safe fact writes (C1 results §3). |
+| O-G | **Decided (R4):** explicit coverage and containment activation gates. | Still open before activation for tool-capable chat: a real tool-using turn, interruption during a tool, full CLI compression continuation, descendant containment for tool processes (O-10), foreign writers (O-5). |
+| O-H | **Decided (R4):** structured `attempt` identity on charge records in C2. | C2, later. |
+| O-I **(R4, new)** | O-12: an unmarked `role=user` continuation note after a dropped stream. | C1 reports `ambiguous`/`unknown`. Whether Phase 1A should exclude it needs a structural marker that the pinned Hermes does not write; the reviewer's call. |
 
 ---
 
 ## 13. What this document does not claim
 
-- **(R3)** No Phase 1B **production** code exists. C0 added test-harness and prototype code only. Its passing tests are evidence about the pinned Hermes boundaries and about prototype rules; they are not integrated results, and the matrix remains proposed for C1–C3.
+- **(R4)** The C1 core exists but is **not activated**: no route, UI, release manifest or real profile uses it, and no normal send goes through it. Its results are integrated synthetic results on Linux only (`Phase1B_C1_Results.md`); they are not a production-send certification, and C1 activation, C2 and C3 remain proposed.
 - When Hermes first persists the owner row was observed for 6 paths only (O-3/M-10). The protocol does not depend on it.
 - The commit-boundary seam in §4.10.1 is private code at `0e9fc2cc15`. Its coverage was observed for the paths listed in §8 and is not established for the rest (O-2, O-G).
 - The Windows job-object behaviour, macOS process groups and Termux storage (O-8, O-11, O-9) are not observed; those platforms are refused, not labelled.
@@ -1012,3 +1028,14 @@ The reviewer's U1–U9 and O-A–O-D are decided (§0). **(R3)** These remain fo
 | B1 executor lock | Quiescence = identity-checked lock **and** an empty process group/job. The escape boundary is stated (O-10). Lock files are safety objects: never unlinked while referenced, probed without create, missing/replaced → `unproven`. Platform enablement table; unverified platforms refused (§4.5). |
 | B5 | In-memory legacy results pass the current-authorisation check (§5.7); goal 7 wording (§2); M-17 restored (§10). |
 | §7 C0 | C0 changeset (§9); status per observation (§8); matrix rows marked with harness/prototype results (§10); open items O-E–O-H (§12). |
+
+## Appendix C. (R4) Corrections made alongside the C1 core, answering PHASE1B_REVIEW_R3
+
+| Review item | What changed |
+|---|---|
+| §4 O-E–O-H | Decisions recorded (§0, §12). |
+| §5.1 incomplete observation | §4.5 (b): permission/I/O/parse/unsupported/hidepid = unproven; §4.1 step 3 uses the one contract; the create-on-open reset probe is not used. |
+| §5.2 coverage precedence | §4.3.2: the bounded definition carries the same restrictions as complete (no unidentified rows); the field table matches. |
+| §5.2 owner eligibility | §4.10.1: `user_turn` requires Phase 1A's public/trusted structural eligibility; new class `user_internal`. |
+| C1 findings | §4.10.2 freshness by rowid; O-12 continuation note (§8, §12 O-I); §9 C1 split into core (done) and activation (later). |
+| Implementation details found in C1 | The executor moves the controller's pipes off fds 0/1 before Hermes runs, so a Hermes descendant cannot hold the stream open after the executor exits (the controller also never blocks closing a pipe a descendant holds). `tmpfs` is added to the supported local file systems (flock and rollback-journal locking work there). A ledger on tmpfs disappears at reboot: if the app-state marker survives on persistent storage this is `ledger_lost`; if the whole profile home and app state are on tmpfs it is indistinguishable from a new profile, which is stated, not detected.. |

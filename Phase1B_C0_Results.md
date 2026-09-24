@@ -13,6 +13,8 @@
 
 **What a pass means here.** The Hermes-backed tests exercise the real pinned `SessionDB` and real quiet one-shot CLI turns. The rules they check (the commit-boundary recorder, the generation fence, the slot-reservation phases, the identity-checked liveness probe) are **harness/prototype** implementations in `tests/phase1b_c0/`. A pass shows how the pinned Hermes behaves at these boundaries and that the prototype rule holds there. It is not an integrated production result: C1–C3 do not exist.
 
+**Post-review note (PHASE1B_REVIEW_R3).** C0 was accepted as the requested verification work, not as production Phase 1B. Two corrections are recorded here rather than rewritten: the CI counts in §1 are environment-specific (the CI row is added), and `liveness_proto.group_members` treats *any* unreadable process as absent, so an incomplete observation could read as an empty group. The C1 core does not reuse it; see `kit/app/send_quiescence.py` and `Phase1B_C1_Results.md`.
+
 ---
 
 ## 1. Commands, platform and counts
@@ -33,7 +35,9 @@ These two variables are read only by `tests/phase1b_c0/pinned.py`. If they are u
 |---|---|
 | `pytest -q tests/test_phase1b_c0_receipts.py tests/test_phase1b_c0_admission.py tests/test_phase1b_c0_dispatch.py tests/test_phase1b_c0_liveness.py` (pinned configured) | **48 passed**, 14 subtests passed, 0 failed, 0 skipped |
 | `env PATH=/usr/local/bin:/usr/bin:/bin TAMANITOMO_REQUIRE_NODE=1 pytest -q -rs` (pinned configured) | **1499 passed**, 478 subtests passed, 0 skipped, 1 warning (the existing Starlette/httpx deprecation) |
-| the same, pinned **not** configured (as in CI) | **1475 passed, 24 skipped** (all 24 are the Hermes-backed C0 tests, reason printed), 476 subtests passed, 1 warning |
+| the same, pinned **not** configured, **on this host** | **1475 passed, 24 skipped** (all 24 are the Hermes-backed C0 tests, reason printed), 476 subtests passed, 1 warning |
+| **(corrected after PHASE1B_REVIEW_R3)** CI run `35999880594`, job `linux (3.14)`, log inspected by the reviewer | **1474 passed, 25 skipped**, 476 subtests passed, 1 warning. 24 skips are the Hermes-backed C0 cases (pinned Hermes not configured); 1 more is `tests/test_installers.py:250: needs uv`. The row above is this host's count, not the CI count. |
+| CI Windows / macOS smoke jobs of the same run | Successful, but their explicit test lists do **not** include the C0 test files. They are **not** C0 supervision results. |
 | `python -X dev -W always::ResourceWarning -m pytest tests/test_phase1b_c0_*.py` | 0 ResourceWarnings |
 
 Per file: `test_phase1b_c0_receipts.py` has 24 tests (6 reproductions of revision 2 defects, 12 commit-aware seam cases, 6 real CLI turns). `test_phase1b_c0_admission.py` has 12, `test_phase1b_c0_dispatch.py` 6 and `test_phase1b_c0_liveness.py` 6. The admission, dispatch and liveness tests are POSIX-only and skip on Windows with a stated reason. The liveness tests need Linux `/proc`.
