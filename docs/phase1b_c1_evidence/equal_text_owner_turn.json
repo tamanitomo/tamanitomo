@@ -1,7 +1,6 @@
 {
   "fact_kinds": [
     "executor_started",
-    "recovery",
     "write_intent",
     "write_committed",
     "write_intent",
@@ -29,8 +28,8 @@
     "write_intent",
     "write_committed",
     "write_intent",
-    "write_committed",
     "write_intent",
+    "write_committed",
     "write_committed",
     "write_intent",
     "write_committed",
@@ -40,13 +39,13 @@
   ],
   "provider_requests": [
     [
-      "delayed_first_delta",
-      true,
+      "deltas",
+      false,
       1
     ],
     [
-      "delayed_first_delta",
-      false,
+      "deltas",
+      true,
       2
     ]
   ],
@@ -66,13 +65,13 @@
       "finish_reason": null,
       "role": "user",
       "row_id": 1,
-      "session_id": "20260924_114216_c17101"
+      "session_id": "20260924_114214_7526c9"
     },
     {
       "finish_reason": "stop",
       "role": "assistant",
       "row_id": 2,
-      "session_id": "20260924_114216_c17101"
+      "session_id": "20260924_114214_7526c9"
     }
   ]
 }

@@ -31,6 +31,7 @@
     "write_committed",
     "write_intent",
     "write_committed",
+    "row_provenance",
     "write_intent",
     "write_committed",
     "write_intent",
@@ -56,13 +57,13 @@
   ],
   "row": {
     "capability": "full",
-    "correlation": "ambiguous",
+    "correlation": "linked",
     "coverage": "complete",
-    "error_code": "owner_turn_not_established",
+    "error_code": null,
     "liveness": "quiescent",
-    "owner_turn": "ambiguous",
-    "reply": "partial",
-    "state": "unknown"
+    "owner_turn": "recorded",
+    "reply": "final",
+    "state": "complete"
   },
   "settled": true,
   "state_rows": [
@@ -70,25 +71,25 @@
       "finish_reason": null,
       "role": "user",
       "row_id": 1,
-      "session_id": "20260924_104356_39f394"
+      "session_id": "20260924_114206_89f6d6"
     },
     {
       "finish_reason": "length",
       "role": "assistant",
       "row_id": 2,
-      "session_id": "20260924_104356_39f394"
+      "session_id": "20260924_114206_89f6d6"
     },
     {
       "finish_reason": null,
       "role": "user",
       "row_id": 3,
-      "session_id": "20260924_104356_39f394"
+      "session_id": "20260924_114206_89f6d6"
     },
     {
       "finish_reason": "stop",
       "role": "assistant",
       "row_id": 4,
-      "session_id": "20260924_104356_39f394"
+      "session_id": "20260924_114206_89f6d6"
     }
   ]
 }

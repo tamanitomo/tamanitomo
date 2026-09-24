@@ -31,23 +31,29 @@
     "write_committed",
     "write_intent",
     "write_committed",
+    "row_provenance",
     "write_intent",
     "write_committed",
     "write_intent",
     "write_committed",
     "executor_finished"
   ],
-  "path": "single_owner_row",
+  "path": "continuation_note_row",
   "provider_requests": [
     [
       "recover",
-      false,
+      true,
       1
     ],
     [
       "recover",
-      true,
+      false,
       2
+    ],
+    [
+      "recover",
+      true,
+      3
     ]
   ],
   "row": {
@@ -66,13 +72,25 @@
       "finish_reason": null,
       "role": "user",
       "row_id": 1,
-      "session_id": "20260924_104359_dc562d"
+      "session_id": "20260924_114211_c89d37"
+    },
+    {
+      "finish_reason": "length",
+      "role": "assistant",
+      "row_id": 2,
+      "session_id": "20260924_114211_c89d37"
+    },
+    {
+      "finish_reason": null,
+      "role": "user",
+      "row_id": 3,
+      "session_id": "20260924_114211_c89d37"
     },
     {
       "finish_reason": "stop",
       "role": "assistant",
-      "row_id": 2,
-      "session_id": "20260924_104359_dc562d"
+      "row_id": 4,
+      "session_id": "20260924_114211_c89d37"
     }
   ]
 }

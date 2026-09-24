@@ -1,5 +1,50 @@
 # Phase 1B C1 core results: isolated send service, supervised executor, receipts
 
+## 0. Closure for PHASE1B_REVIEW_R4 (read this first)
+
+| | |
+|---|---|
+| Answers | `PHASE1B_REVIEW_R4.md` (C1 retained; two attempt-lifecycle defects; lane completeness; O-12 decision; annotation hygiene) |
+| Branch | `test/phase1b-c1-core`, reviewed commits preserved; closure code commit `1e161c3` |
+| Activated | **No.** No route, UI, release entry, real profile, C2 or C3. The current send path is unchanged. |
+
+**C1-R4-1 (refused reset erased start identity) and C1-R4-2 (stale executor rewrote a newer attempt's lock).** Integrated reproductions were added to `tests/test_phase1b_c1_core.py::AttemptLifecycle` and run against the reviewed code (`428bef7` modules plus two no-op test hooks, `started_event` and `before_finalize`) before any fix:
+
+| Case | Reviewed code | After `1e161c3` |
+|---|---|---|
+| S2 committed, controller paused before `generating`; reset refused while E runs; controller killed; another controller recovers | **FAILED**: settled `not_started`, lease released, executor running | pass: `generating`, `liveness=live`, lease held, new key `turn_in_progress`, same key replays (no re-arm); after the executor is killed it settles `unknown`, never `not_started` |
+| same, controller survives; the refused reset repeated twice | **FAILED**: receipt `not_started` although the turn completed | pass: `complete/recorded/final`, quiescent |
+| reset wins before S2 (before `go`) | pass | pass: executor refused, Hermes never ran |
+| stale E1 held **after `go`, before S1** (test-only S1 gate), fence + re-arm, E2 completes, E1 released before E2's settlement | **FAILED** (`test_stale_executor_released_after_the_newer_attempt_finished`) | pass: E2 `complete`, quiescent; one lock file per attempt |
+| same, E1 paused before `go` | **FAILED**: E2 `unproven`/`lock_replaced`, lease stuck | pass |
+| E1 released while E2 holds its own lock (both gate positions) | pass | pass |
+| stale launcher losing T1 | pass | pass (cleanup is now also bound to its claim/attempt) |
+
+Fix: `attempt_id` is the **immutable** identity of a launch attempt, separate from the **revocable** `launch_token` and from the recovery claim. S2 requires both; `executor_started` records the attempt; start evidence is read by attempt in fencing, recovery, promotion to `generating` and receipt derivation; a refused reset still revokes tokens but can no longer erase history. Executor locks are per attempt (`executors/<send_id>.<attempt_id>.lock`), so a stale executor can only open its own; the nonce check is unchanged. Every launcher/finaliser callback carries its attempt (or, before T1, its claim) and returns without acting on any other.
+
+**Lane completeness.** `tools/pinned_hermes_lane.py` now has an explicit 15-case `REQUIRED_CASES` manifest; the verdict fails on a missing, skipped, duplicated, failed or errored case, or any other failure. `LaneVerdict` tests the reviewer's one-case subset (now `fail`), each failure mode, and that the manifest equals the pinned test module. A real lane run with `-k fresh` returned verdict **fail** ("required case did not run: …", exit 1).
+
+**O-12 decision recorded and followed up.** Design §12 O-I records the decision. Investigation of the pinned code: Hermes creates the note in `agent/turn_truncation.py` as a `role=user` dict tagged `_length_continuation_nudge`; the SessionDB projection drops the tag, and `agent/turn_final_response.py` pops it from the live dict when the continued reply finishes, so a flush-time check sees nothing (probed: no tag at `_db_flush_collect`). The executor therefore keeps references to the dicts Hermes created **with** the tag and, at `_db_flush_write` after the commit, matches them **by identity** to the rows whose committed ids Hermes copies back, recording `row_provenance`. Derivation treats only a row committed in this attempt's own receipts and named by that provenance as internal (`internal_rows` in the receipt). Pinned results: the dropped-stream turn is now `complete` with the real owner row and the note listed as internal; an owner message with the note's exact words stays owner speech; with the provenance write forced to fail the receipt stays `ambiguous`/`unknown`; a same-key retry replays the same receipt. No text matching, no Hermes change, no historical reclassification. The Phase 1A read-boundary change (excluding that exact row by provenance) and non-C1 rows remain an activation gate.
+
+**CI annotations.** Only test id, file and exception class are published; the step tolerates a missing `junit.xml`.
+
+**Counts at `1e161c3`** (environment-specific):
+
+| Command | Result |
+|---|---|
+| lane (`tools/pinned_hermes_lane.py …`), run twice | **pass** both: 15/15 required cases, 0 skipped, 59 s each; evidence in `docs/phase1b_c1_evidence/` |
+| lane with `-k fresh` (diagnostic subset) | verdict **fail**, exit 1 (14 required cases did not run) |
+| `pytest tests/test_phase1b_c1_core.py` | **100 passed**, 20 subtests; 11 clean runs, 8 of them four-way concurrent; 0 unclosed resources under `-X dev` |
+| full suite, pinned not configured, this host | **1575 passed, 39 skipped** (24 C0 + 15 C1 pinned, reasons printed), 496 subtests, 1 warning |
+| full suite, C0 and C1 pinned configured | **1614 passed, 0 skipped**, 500 subtests, 1 warning |
+| CI | see §9 |
+
+The lane interpreter is an existing, inventoried dependency environment (the local hermes-agent venv; `environment.json` lists its 134 distributions), not a clean dependency install; every Hermes import resolved inside the verified export; no profile data was read.
+
+The sections below are the R3-round report, kept as written except where marked; where they differ from §0, §0 is current.
+
+---
+
 | | |
 |---|---|
 | Answers | `PHASE1B_REVIEW_R3.md` (acceptance of C0 at `8735557`; authorisation of the isolated C1 core) |
@@ -172,7 +217,8 @@ Then C2 (dispatcher, with the structured `attempt` field, O-H) and C3 (the minim
 |---|---|---|
 | `36010308868` | `2f11faf` | Windows and macOS smoke **passed** (now including the C1 core file). Linux 3.11/3.13/3.14 **failed**: finding 5 (inode reuse) and a test that did not wait for a killed executor's lock release. Job logs need a signed-in viewer, so `6b4b2a4` added a failure-only step that publishes failed tests as check-run annotations. |
 | `36012008668` | `6b4b2a4` | same failures, now readable as annotations; fixed in `97bb3a1` |
-| `36015884514` | `84cc9d0` (code `97bb3a1`) | **all 5 jobs passed**: Linux 3.11, 3.13, 3.14 (the 13 C1 pinned and 24 C0 pinned cases skip there with the reason printed; the lane is where they run), Windows and macOS smoke (C1 core: refusal, derivation, eligibility and recorder cases run; supervision cases skip). Detailed per-job pass/skip counts were not read: job logs need a signed-in viewer. |
+| `36015884514` | `84cc9d0` (code `97bb3a1`; not a separate full-suite run at `428bef7`) | **all 5 jobs passed**: Linux 3.11, 3.13, 3.14 (the 13 C1 pinned and 24 C0 pinned cases skip there with the reason printed; the lane is where they run), Windows and macOS smoke (C1 core: refusal, derivation, eligibility and recorder cases run; supervision cases skip). Detailed per-job pass/skip counts were not read: job logs need a signed-in viewer. |
+| CLOSURE_CI | `1e161c3` + report | recorded after the push |
 
 ---
 
