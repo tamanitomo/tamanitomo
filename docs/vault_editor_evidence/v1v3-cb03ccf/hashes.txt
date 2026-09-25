@@ -1,0 +1,16 @@
+# SHA-256 of the corrected artifact and its inputs (tree cb03ccf)
+5d77e548e5d6c3c36faf4637cce1e87ed8ca71cdb5e3be4eaac5413cda7fdf1a  tamanitomo-vault-cb03ccf.zip
+cc5a9918b3d393717b7150e6a90e8e372c1cb4a546b31f9a2633117c7784add0  kit/app/static/vault-editor.js
+d218422caf7ec65565f9a004f16272122e979d1c1620d60991a5c18a38c30ab5  kit/app/static/vault-editor.bundle.js
+b41b8ebb94a209aacf81b1a04988cff13120278d8b7428ba0fd60ddc4559e15a  kit/app/static/vault-editor.LICENSES.txt
+b889254311df39100a0432949441052b4451d562be9208c1cf94a8bd5386cf27  tests/test_vault_review.py
+b7974fdbb89c1c4d23552573489e4b3d0ec86cae7d92dcd2f9fd06da86bae3e2  tests/observe_vault_review.js
+# submitted controller (11ce49a) for comparison
+282abc9fad4d5bc1a30f06edce76ae628edc9c6c5b8173533162c064f36eb95b  kit/app/static/vault-editor.js@11ce49a
+# reviewer inputs as received
+722651a6d08f060dc62d464cf21d2a44cccf5bc352e4e26608ec4bae6bba0487  patches/vault_recovery_copy_close_candidate.patch
+b889254311df39100a0432949441052b4451d562be9208c1cf94a8bd5386cf27  reviewer_tests/test_vault_review.py
+b7974fdbb89c1c4d23552573489e4b3d0ec86cae7d92dcd2f9fd06da86bae3e2  reviewer_tests/observe_vault_review.js
+ac61585beaa281b75d90a5ac0d332fae132d7f4708b0b50b178cde59bd0f042a  TAMANITOMO_VAULT_REVIEW_6d72013.zip (review packet)
+# screenshot copied byte-for-byte
+c62f12e85471c34bc22c8f8d8fa6a4afc89398733e6182197646bca5dc661ae4  screenshots/09-packaged-smoke-cb03ccf.png

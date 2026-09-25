@@ -1,0 +1,66 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="6" skipped="0" tests="8" time="0.151" timestamp="2026-09-25T12:01:49.529152-04:00" hostname="&lt;host&gt;"><testcase classname="tests.test_vault_review" name="test_v1_offline_recovered_edits_remain_dirty_and_kept" time="0.090"><failure message="AssertionError: {'buffer': 'recovered owner draft plus newer typing', 'dirty': False, 'status': 'offline', 'kept': None}&#10;assert (False)">outcomes = {'offline_edit': {'buffer': 'recovered owner draft plus newer typing', 'dirty': False, 'status': 'offline', 'kept': No..., ...}, 'delayed_copy_navigation': {'active': 'notes/a (my copy 2026-09-25 160149).md', 'expected': 'notes/b.md'}, ...}
+
+    #x1B[0m#x1B[94mdef#x1B[39;49;00m#x1B[90m #x1B[39;49;00m#x1B[92mtest_v1_offline_recovered_edits_remain_dirty_and_kept#x1B[39;49;00m(outcomes):#x1B[90m#x1B[39;49;00m
+        r=outcomes[#x1B[33m'#x1B[39;49;00m#x1B[33moffline_edit#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m]#x1B[90m#x1B[39;49;00m
+&gt;       #x1B[94massert#x1B[39;49;00m r[#x1B[33m'#x1B[39;49;00m#x1B[33mdirty#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m] #x1B[95mand#x1B[39;49;00m r[#x1B[33m'#x1B[39;49;00m#x1B[33mkept#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m] #x1B[95mand#x1B[39;49;00m r[#x1B[33m'#x1B[39;49;00m#x1B[33mkept#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m][#x1B[33m'#x1B[39;49;00m#x1B[33mtext#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m]==r[#x1B[33m'#x1B[39;49;00m#x1B[33mbuffer#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m], r#x1B[90m#x1B[39;49;00m
+#x1B[1m#x1B[31mE       AssertionError: {'buffer': 'recovered owner draft plus newer typing', 'dirty': False, 'status': 'offline', 'kept': None}#x1B[0m
+#x1B[1m#x1B[31mE       assert (False)#x1B[0m
+
+#x1B[1m#x1B[31mtests/test_vault_review.py#x1B[0m:28: AssertionError</failure></testcase><testcase classname="tests.test_vault_review" name="test_v1_external_revalidation_preserves_recovered_text_as_conflict" time="0.001"><failure message="AssertionError: {'buffer': 'external editor text', 'status': 'saved', 'conflict': None, 'kept': {'text': 'recovered owner draft', 'base': 'rev0', 'at': 1790352109602}}&#10;assert ('external editor text' == 'recovered owner draft'&#10;  &#10;  #x1B[0m#x1B[91m- recovered owner draft#x1B[39;49;00m#x1B[90m#x1B[39;49;00m&#10;  #x1B[92m+ external editor text#x1B[39;49;00m#x1B[90m#x1B[39;49;00m)">outcomes = {'offline_edit': {'buffer': 'recovered owner draft plus newer typing', 'dirty': False, 'status': 'offline', 'kept': No..., ...}, 'delayed_copy_navigation': {'active': 'notes/a (my copy 2026-09-25 160149).md', 'expected': 'notes/b.md'}, ...}
+
+    #x1B[0m#x1B[94mdef#x1B[39;49;00m#x1B[90m #x1B[39;49;00m#x1B[92mtest_v1_external_revalidation_preserves_recovered_text_as_conflict#x1B[39;49;00m(outcomes):#x1B[90m#x1B[39;49;00m
+        r=outcomes[#x1B[33m'#x1B[39;49;00m#x1B[33moffline_external_read#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m]#x1B[90m#x1B[39;49;00m
+&gt;       #x1B[94massert#x1B[39;49;00m r[#x1B[33m'#x1B[39;49;00m#x1B[33mbuffer#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m]==#x1B[33m'#x1B[39;49;00m#x1B[33mrecovered owner draft#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m #x1B[95mand#x1B[39;49;00m r[#x1B[33m'#x1B[39;49;00m#x1B[33mstatus#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m]==#x1B[33m'#x1B[39;49;00m#x1B[33mconflict#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m, r#x1B[90m#x1B[39;49;00m
+#x1B[1m#x1B[31mE       AssertionError: {'buffer': 'external editor text', 'status': 'saved', 'conflict': None, 'kept': {'text': 'recovered owner draft', 'base': 'rev0', 'at': 1790352109602}}#x1B[0m
+#x1B[1m#x1B[31mE       assert ('external editor text' == 'recovered owner draft'#x1B[0m
+#x1B[1m#x1B[31mE         #x1B[0m
+#x1B[1m#x1B[31mE         #x1B[0m#x1B[91m- recovered owner draft#x1B[39;49;00m#x1B[90m#x1B[39;49;00m#x1B[0m
+#x1B[1m#x1B[31mE         #x1B[92m+ external editor text#x1B[39;49;00m#x1B[90m#x1B[39;49;00m)#x1B[0m
+
+#x1B[1m#x1B[31mtests/test_vault_review.py#x1B[0m:32: AssertionError</failure></testcase><testcase classname="tests.test_vault_review" name="test_v2_copy_receipt_does_not_clear_later_edits" time="0.000"><failure message="AssertionError: {'buffer': 'external disk', 'status': 'saved', 'kept': None, 'savedCopy': 'copy request text', ...}&#10;assert ('external disk' == 'copy request... NEWER TYPING'&#10;  &#10;  #x1B[0m#x1B[91m- copy request text PLUS NEWER TYPING#x1B[39;49;00m#x1B[90m#x1B[39;49;00m&#10;  #x1B[92m+ external disk#x1B[39;49;00m#x1B[90m#x1B[39;49;00m)">outcomes = {'offline_edit': {'buffer': 'recovered owner draft plus newer typing', 'dirty': False, 'status': 'offline', 'kept': No..., ...}, 'delayed_copy_navigation': {'active': 'notes/a (my copy 2026-09-25 160149).md', 'expected': 'notes/b.md'}, ...}
+
+    #x1B[0m#x1B[94mdef#x1B[39;49;00m#x1B[90m #x1B[39;49;00m#x1B[92mtest_v2_copy_receipt_does_not_clear_later_edits#x1B[39;49;00m(outcomes):#x1B[90m#x1B[39;49;00m
+        r=outcomes[#x1B[33m'#x1B[39;49;00m#x1B[33mdelayed_copy#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m]#x1B[90m#x1B[39;49;00m
+        expected=#x1B[33m'#x1B[39;49;00m#x1B[33mcopy request text PLUS NEWER TYPING#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m#x1B[90m#x1B[39;49;00m
+&gt;       #x1B[94massert#x1B[39;49;00m r[#x1B[33m'#x1B[39;49;00m#x1B[33mbuffer#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m]==expected #x1B[95mand#x1B[39;49;00m r[#x1B[33m'#x1B[39;49;00m#x1B[33mkept#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m] #x1B[95mand#x1B[39;49;00m r[#x1B[33m'#x1B[39;49;00m#x1B[33mkept#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m][#x1B[33m'#x1B[39;49;00m#x1B[33mtext#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m]==expected, r#x1B[90m#x1B[39;49;00m
+#x1B[1m#x1B[31mE       AssertionError: {'buffer': 'external disk', 'status': 'saved', 'kept': None, 'savedCopy': 'copy request text', ...}#x1B[0m
+#x1B[1m#x1B[31mE       assert ('external disk' == 'copy request... NEWER TYPING'#x1B[0m
+#x1B[1m#x1B[31mE         #x1B[0m
+#x1B[1m#x1B[31mE         #x1B[0m#x1B[91m- copy request text PLUS NEWER TYPING#x1B[39;49;00m#x1B[90m#x1B[39;49;00m#x1B[0m
+#x1B[1m#x1B[31mE         #x1B[92m+ external disk#x1B[39;49;00m#x1B[90m#x1B[39;49;00m)#x1B[0m
+
+#x1B[1m#x1B[31mtests/test_vault_review.py#x1B[0m:38: AssertionError</failure></testcase><testcase classname="tests.test_vault_review" name="test_v2_copy_receipt_does_not_navigate_away_from_newer_note" time="0.000"><failure message="AssertionError: {'active': 'notes/a (my copy 2026-09-25 160149).md', 'expected': 'notes/b.md'}&#10;assert 'notes/a (my ...25 160149).md' == 'notes/b.md'&#10;  &#10;  #x1B[0m#x1B[91m- notes/b.md#x1B[39;49;00m#x1B[90m#x1B[39;49;00m&#10;  #x1B[92m+ notes/a (my copy 2026-09-25 160149).md#x1B[39;49;00m#x1B[90m#x1B[39;49;00m">outcomes = {'offline_edit': {'buffer': 'recovered owner draft plus newer typing', 'dirty': False, 'status': 'offline', 'kept': No..., ...}, 'delayed_copy_navigation': {'active': 'notes/a (my copy 2026-09-25 160149).md', 'expected': 'notes/b.md'}, ...}
+
+    #x1B[0m#x1B[94mdef#x1B[39;49;00m#x1B[90m #x1B[39;49;00m#x1B[92mtest_v2_copy_receipt_does_not_navigate_away_from_newer_note#x1B[39;49;00m(outcomes):#x1B[90m#x1B[39;49;00m
+        r=outcomes[#x1B[33m'#x1B[39;49;00m#x1B[33mdelayed_copy_navigation#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m]#x1B[90m#x1B[39;49;00m
+&gt;       #x1B[94massert#x1B[39;49;00m r[#x1B[33m'#x1B[39;49;00m#x1B[33mactive#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m]==r[#x1B[33m'#x1B[39;49;00m#x1B[33mexpected#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m],r#x1B[90m#x1B[39;49;00m
+#x1B[1m#x1B[31mE       AssertionError: {'active': 'notes/a (my copy 2026-09-25 160149).md', 'expected': 'notes/b.md'}#x1B[0m
+#x1B[1m#x1B[31mE       assert 'notes/a (my ...25 160149).md' == 'notes/b.md'#x1B[0m
+#x1B[1m#x1B[31mE         #x1B[0m
+#x1B[1m#x1B[31mE         #x1B[0m#x1B[91m- notes/b.md#x1B[39;49;00m#x1B[90m#x1B[39;49;00m#x1B[0m
+#x1B[1m#x1B[31mE         #x1B[92m+ notes/a (my copy 2026-09-25 160149).md#x1B[39;49;00m#x1B[90m#x1B[39;49;00m#x1B[0m
+
+#x1B[1m#x1B[31mtests/test_vault_review.py#x1B[0m:44: AssertionError</failure></testcase><testcase classname="tests.test_vault_review" name="test_v3_closed_offline_note_has_no_unsent_retry" time="0.000"><failure message="AssertionError: {'writes': ['discarded edit'], 'kept': None, 'active': None}&#10;assert (['discarded edit'] == []&#10;  &#10;  Left contains one more item: #x1B[0m#x1B[33m'#x1B[39;49;00m#x1B[33mdiscarded edit#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m#x1B[90m#x1B[39;49;00m&#10;  Use -v to get more diff)">outcomes = {'offline_edit': {'buffer': 'recovered owner draft plus newer typing', 'dirty': False, 'status': 'offline', 'kept': No..., ...}, 'delayed_copy_navigation': {'active': 'notes/a (my copy 2026-09-25 160149).md', 'expected': 'notes/b.md'}, ...}
+
+    #x1B[0m#x1B[94mdef#x1B[39;49;00m#x1B[90m #x1B[39;49;00m#x1B[92mtest_v3_closed_offline_note_has_no_unsent_retry#x1B[39;49;00m(outcomes):#x1B[90m#x1B[39;49;00m
+        r=outcomes[#x1B[33m'#x1B[39;49;00m#x1B[33mclosed_offline_retry#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m]#x1B[90m#x1B[39;49;00m
+&gt;       #x1B[94massert#x1B[39;49;00m r[#x1B[33m'#x1B[39;49;00m#x1B[33mwrites#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m]==[] #x1B[95mand#x1B[39;49;00m r[#x1B[33m'#x1B[39;49;00m#x1B[33mkept#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m] #x1B[95mis#x1B[39;49;00m #x1B[94mNone#x1B[39;49;00m,r#x1B[90m#x1B[39;49;00m
+#x1B[1m#x1B[31mE       AssertionError: {'writes': ['discarded edit'], 'kept': None, 'active': None}#x1B[0m
+#x1B[1m#x1B[31mE       assert (['discarded edit'] == []#x1B[0m
+#x1B[1m#x1B[31mE         #x1B[0m
+#x1B[1m#x1B[31mE         Left contains one more item: #x1B[0m#x1B[33m'#x1B[39;49;00m#x1B[33mdiscarded edit#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m#x1B[90m#x1B[39;49;00m#x1B[0m
+#x1B[1m#x1B[31mE         Use -v to get more diff)#x1B[0m
+
+#x1B[1m#x1B[31mtests/test_vault_review.py#x1B[0m:48: AssertionError</failure></testcase><testcase classname="tests.test_vault_review" name="test_v3_closed_note_failed_request_does_not_restart_saves" time="0.000"><failure message="AssertionError: {'writes': ['submitted edit'], 'kept': None, 'known': None}&#10;assert (['submitted edit'] == []&#10;  &#10;  Left contains one more item: #x1B[0m#x1B[33m'#x1B[39;49;00m#x1B[33msubmitted edit#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m#x1B[90m#x1B[39;49;00m&#10;  Use -v to get more diff)">outcomes = {'offline_edit': {'buffer': 'recovered owner draft plus newer typing', 'dirty': False, 'status': 'offline', 'kept': No..., ...}, 'delayed_copy_navigation': {'active': 'notes/a (my copy 2026-09-25 160149).md', 'expected': 'notes/b.md'}, ...}
+
+    #x1B[0m#x1B[94mdef#x1B[39;49;00m#x1B[90m #x1B[39;49;00m#x1B[92mtest_v3_closed_note_failed_request_does_not_restart_saves#x1B[39;49;00m(outcomes):#x1B[90m#x1B[39;49;00m
+        r=outcomes[#x1B[33m'#x1B[39;49;00m#x1B[33mclosed_inflight_failure#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m]#x1B[90m#x1B[39;49;00m
+&gt;       #x1B[94massert#x1B[39;49;00m r[#x1B[33m'#x1B[39;49;00m#x1B[33mwrites#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m]==[] #x1B[95mand#x1B[39;49;00m r[#x1B[33m'#x1B[39;49;00m#x1B[33mkept#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m] #x1B[95mis#x1B[39;49;00m #x1B[94mNone#x1B[39;49;00m #x1B[95mand#x1B[39;49;00m r[#x1B[33m'#x1B[39;49;00m#x1B[33mknown#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m] #x1B[95mis#x1B[39;49;00m #x1B[94mNone#x1B[39;49;00m,r#x1B[90m#x1B[39;49;00m
+#x1B[1m#x1B[31mE       AssertionError: {'writes': ['submitted edit'], 'kept': None, 'known': None}#x1B[0m
+#x1B[1m#x1B[31mE       assert (['submitted edit'] == []#x1B[0m
+#x1B[1m#x1B[31mE         #x1B[0m
+#x1B[1m#x1B[31mE         Left contains one more item: #x1B[0m#x1B[33m'#x1B[39;49;00m#x1B[33msubmitted edit#x1B[39;49;00m#x1B[33m'#x1B[39;49;00m#x1B[90m#x1B[39;49;00m#x1B[0m
+#x1B[1m#x1B[31mE         Use -v to get more diff)#x1B[0m
+
+#x1B[1m#x1B[31mtests/test_vault_review.py#x1B[0m:52: AssertionError</failure></testcase><testcase classname="tests.test_vault_review" name="test_control_serial_save_keeps_newer_buffer_and_revisions" time="0.000" /><testcase classname="tests.test_vault_review" name="test_control_unchanged_copy_retains_expected_behavior" time="0.000" /></testsuite></testsuites>

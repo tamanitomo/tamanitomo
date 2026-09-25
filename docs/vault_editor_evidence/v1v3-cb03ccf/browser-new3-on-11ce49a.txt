@@ -1,0 +1,115 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+_ VaultEditor.test_14_a_draft_recovered_while_the_disk_is_unreadable_stays_unsaved _
+
+self = <test_vault_editor_browser.VaultEditor testMethod=test_14_a_draft_recovered_while_the_disk_is_unreadable_stays_unsaved>
+
+    def test_14_a_draft_recovered_while_the_disk_is_unreadable_stays_unsaved(self):
+        self.vault_page()
+        self.open(OTHER)
+        self.hold('PUT')
+        self.select(0, 0)
+        self.page.keyboard.type('Kept draft. ')
+        until(lambda: self.held, what='save held')
+        pause(0.4)
+        self.lose_held()
+        # Reload with the note unreadable: the kept draft is restored with no disk snapshot.
+        self.page.route('**/api/vault/file**', lambda r: r.abort('internetdisconnected'))
+        self.page.reload()
+        self.page.wait_for_selector('#vault-tree .vault-node', state='attached')
+        self.wait_status('offline', path=OTHER)
+        self.assertEqual(self.text(OTHER), 'Kept draft. # Other\n\nThe other note.\n')
+        self.select(0, 0)
+        self.page.keyboard.type('More. ')
+        mine = 'More. Kept draft. # Other\n\nThe other note.\n'
+>       until(lambda: self.kept(OTHER) == mine, what='the newer text kept, not dropped')
+
+tests/test_vault_editor_browser.py:472: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pred = <function VaultEditor.test_14_a_draft_recovered_while_the_disk_is_unreadable_stays_unsaved.<locals>.<lambda> at 0x7fa73d6ab480>
+timeout = 30.0, interval = 0.05, what = 'the newer text kept, not dropped'
+
+    def until(pred, timeout=30.0, interval=0.05, what='condition'):
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            value = pred()
+            if value:
+                return value
+            pause(interval)
+>       raise AssertionError(f'timed out waiting for {what}')
+E       AssertionError: timed out waiting for the newer text kept, not dropped
+
+tests/test_phase1b_c3_browser.py:58: AssertionError
+_ VaultEditor.test_15_a_late_copy_receipt_keeps_newer_typing_and_the_newer_note _
+
+self = <test_vault_editor_browser.VaultEditor testMethod=test_15_a_late_copy_receipt_keeps_newer_typing_and_the_newer_note>
+
+    def test_15_a_late_copy_receipt_keeps_newer_typing_and_the_newer_note(self):
+        self.vault_page()
+        self.open(OTHER)
+        self.hold('PUT')
+        self.select(0, 0)
+        self.page.keyboard.type('Mine. ')
+        until(lambda: self.held, what='save in flight')
+        (self.vault / OTHER).write_text('Theirs.\n', encoding='utf-8')
+        self.release_all()
+        self.wait_status('conflict')
+    
+        # Typing while the copy request is held: the receipt covers only the submitted text.
+        self.hold('PUT')
+        self.page.click('#vault-save-copy')
+        until(lambda: self.held, what='copy request held')
+        submitted = json.loads(self.held[0].request.post_data)['text']
+        self.assertTrue(submitted.startswith('Mine. '))
+        self.select(0, 0)
+        self.page.keyboard.type('Newer. ')
+        newer = 'Newer. ' + submitted
+        until(lambda: self.kept(OTHER) == newer, what='newer typing kept')
+        self.release_all()
+        until(lambda: len(list((self.vault / 'notes').glob('Other (my copy *).md'))) == 1, what='copy written')
+        pause(0.5)
+        first = next((self.vault / 'notes').glob('Other (my copy *).md'))
+        self.assertEqual(first.read_text(encoding='utf-8'), submitted, 'the copy holds what was submitted')
+>       self.assertEqual(self.page.evaluate('VaultEditor.active()'), OTHER, 'still on the original')
+E       AssertionError: 'notes/Other (my copy 2026-09-25 160430).md' != 'notes/Other.md'
+E       - notes/Other (my copy 2026-09-25 160430).md
+E       + notes/Other.md
+E        : still on the original
+
+tests/test_vault_editor_browser.py:518: AssertionError
+___________ VaultEditor.test_16_a_discarded_note_sends_no_later_save ___________
+
+self = <test_vault_editor_browser.VaultEditor testMethod=test_16_a_discarded_note_sends_no_later_save>
+
+    def test_16_a_discarded_note_sends_no_later_save(self):
+        self.vault_page()
+        self.open(OTHER)
+        # A queued offline retry
+        self.page.route('**/api/vault/file**', lambda r: r.abort('internetdisconnected') if r.request.method == 'PUT' else r.continue_())
+        self.select(0, 0)
+        self.page.keyboard.type('Discarded words. ')
+        self.wait_status('offline')
+        self.page.click(f'.vault-tab-close[data-close-path="{OTHER}"]')
+        self.page.click('dialog[aria-label="Unsaved changes"] [data-discard]')
+        until(lambda: self.status(OTHER) is None, what='note closed')
+        self.page.unroute('**/api/vault/file**')
+        puts = self.record_puts()
+        self.page.evaluate("()=>window.dispatchEvent(new Event('online'))")
+        pause(6.0)                                                    # past the 4 s retry
+>       self.assertEqual(puts, [], 'no retry for the discarded note')
+E       AssertionError: Lists differ: ['Discarded words. # Other\n\nThe other note.\n'] != []
+E       
+E       First list contains 1 additional elements.
+E       First extra element 0:
+E       'Discarded words. # Other\n\nThe other note.\n'
+E       
+E       - ['Discarded words. # Other\n\nThe other note.\n']
+E       + [] : no retry for the discarded note
+
+tests/test_vault_editor_browser.py:556: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_vault_editor_browser.py::VaultEditor::test_14_a_draft_recovered_while_the_disk_is_unreadable_stays_unsaved - AssertionError: timed out waiting for the newer text kept, not dropped
+FAILED tests/test_vault_editor_browser.py::VaultEditor::test_15_a_late_copy_receipt_keeps_newer_typing_and_the_newer_note - AssertionError: 'notes/Other (my copy 2026-09-25 160430).md' != 'notes/Othe...
+FAILED tests/test_vault_editor_browser.py::VaultEditor::test_16_a_discarded_note_sends_no_later_save - AssertionError: Lists differ: ['Discarded words. # Other\n\nThe other note....
+3 failed, 13 deselected in 43.51s

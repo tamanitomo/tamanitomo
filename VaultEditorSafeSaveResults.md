@@ -168,3 +168,82 @@ and no persistent-Chat asset in the page.
 
 Nothing was pushed from this branch, installed, activated, merged, tagged or published. No live
 profile, vault, model, service or job was touched.
+
+## 6. Correction addendum: review findings V1/V2/V3
+
+Review packet `TAMANITOMO_VAULT_REVIEW_6d72013.zip` (sha256 `ac61585b…f042a`). Branch
+`test/vault-v1-v3-corrections`, a local child of `6d72013`; nothing above was reset, rebased or amended.
+Local only: nothing pushed, merged, tagged, installed or activated. Keyed sends and continuity options
+stay off.
+
+**On §1's "Report only" row.** `6d72013` is not prose only: besides this report and
+`docs/vault_editor_evidence/`, it added `tools/vault_packaged_smoke.py`, a development tool that is not
+in `release-files.json`. It changes no shipped file.
+
+| | SHA |
+|---|---|
+| Correction and tests (**tested code**) | `cb03ccf` (child of `6d72013`) |
+| Report and evidence | the commit adding this section, `docs/vault_editor_evidence/v1v3-cb03ccf/` and the register update. It adds no tool and changes no shipped file. |
+
+**Change.** `kit/app/static/vault-editor.js` only, 20 lines added and 12 removed: the reviewer's
+inspected candidate `vault_recovery_copy_close_candidate.patch` (sha256 `722651a6…0487`), applied
+unchanged.
+- V1: a buffer loaded without a verified disk snapshot is unsaved (`dirty()`), so edits keep its draft,
+  and a read of a different revision reaches the existing conflict flow.
+- V2: `keepMineAsCopy()` captures the submitted text, conflict and storage scope. Its receipt resets the
+  original and opens the copy only when the note is still live, unchanged and active. Otherwise the
+  original keeps its newer text as a draft and the selected note stays selected. The copy holds the
+  submitted text either way.
+- V3: `close()` cancels the note's save and draft timers. `save()` requires the same live model at entry
+  and after each await, including the 409 re-read. A write the server accepted before the discard is
+  not undone; the guarantee covers later queued sends and retries after close.
+
+**Tests added.** The reviewer's pair, byte-identical to the packet (`tests/test_vault_review.py` beside
+`tests/observe_vault_review.js`). These are Node state/request witnesses on the real controller and
+CodeMirror state classes, not browser journeys. Three browser journeys were added to
+`tests/test_vault_editor_browser.py` on the normal page, with the existing fixtures and route holds:
+- 14: kept draft, reload with the note unreadable, more typing (the draft follows the buffer), an external
+  write, revalidation. The result is a conflict with both texts in Compare, and the disk is unchanged.
+- 15: a held copy request with typing during it. The copy holds the submitted text, the original keeps
+  the newer text, draft and conflict, and stays active. A second held copy with navigation to another
+  note in between: the other note stays active.
+- 16: close and discard an offline note with a queued retry (no PUT reaches the server after `online` and
+  the retry delay), and close a note whose PUT is held and then fails (no later PUT). No draft is kept,
+  and the disk is unchanged in both cases.
+
+The thirteen existing journeys are unchanged.
+
+**Results (this executor; synthetic fixtures only).** Python 3.14.7 (repository `.venv`), pytest 9.1.1,
+Node v26.7.0, headless Chromium via Playwright 1.63.0, `TMPDIR` job-local, `hermes` off `PATH`.
+
+| Run | Tree | Result |
+|---|---|---|
+| Reviewer's eight regressions, submitted controller | `6d72013` + the pair | **6 failed, 2 passed** (two failures per finding; both controls pass) |
+| Same eight, after applying the candidate | working tree = `cb03ccf` | **8 passed** |
+| Exact affected selection: `TMPDIR=… TAMANITOMO_REQUIRE_NODE=1 python -m pytest -q tests/test_vault_review.py tests/test_vault_editor_api.py tests/test_vault_editor_bundle.py tests/test_studios.py tests/test_reliability.py` | `cb03ccf` | **68 passed, 0 skipped, 16 subtests passed** |
+| Vault browser file, `TAMANITOMO_C3_REQUIRE_BROWSER=1` | `cb03ccf` | **16 passed** (13 existing + 14–16) |
+| Journeys 14–16 against the submitted controller (restored temporarily, then put back) | `cb03ccf` tests + `11ce49a` controller | **3 failed**, at the defect points: the newer text not kept (V1), the active note became the copy (V2), `['Discarded words. …']` reached the server (V3) |
+| Packaged smoke, `tools/vault_packaged_smoke.py`, normal entry `python -m kit.app.hosted` | `cb03ccf` ZIP | **15/15** |
+
+The selection ran `test_fresh_build_matches_the_committed_bundle` because this host has the editor build
+dependencies installed; the reviewer's environment skipped it. The counts overlap: the eight regressions
+are inside the 68.
+
+**Artifact.** `build/tamanitomo-vault-cb03ccf.zip` has 301 files plus the manifest, sha256
+`5d77e548e5d6c3c36faf4637cce1e87ed8ca71cdb5e3be4eaac5413cda7fdf1a`. Two builds were identical. Its
+`kit/app/static/vault-editor.js` is the corrected controller (`cc5a9918…d0`, also in its
+`SHA256SUMS.json`), and the packaged smoke checks that the served file matches the manifest. The smoke
+also checks an autosave, recovery of an unsaved edit after a reload (saved only on request), selection
+kept after a Chat round-trip, no page errors and no off-host requests. **The packaged page's Chat is the
+legacy one (`POST /api/chat`), with no persistent-Chat assets.** The persistent-Chat development harness
+was not re-run: the change is note-local and does not touch the Chat dock, so the earlier 12/12 remains
+a separate, earlier, development-harness result.
+
+**Evidence** is in `docs/vault_editor_evidence/v1v3-cb03ccf/`: JUnit and text for each run above, the
+packaged-smoke JSON and screenshot, `MANIFEST.json` from `tools/evidence_export.py`, and `hashes.txt`.
+Host paths and the hostname are placeholders, and ANSI colour codes were stripped from the logs. The
+outcomes are unchanged.
+
+**Not run, and not claimed:** the full suite, the persistent-Chat and Journal browser suites, the
+pinned-Hermes lane, CI (nothing was pushed) and any native device. §5's limitations stand. So does the
+same-second copy-name collision; journey 15 waits a second between its copies because of it.

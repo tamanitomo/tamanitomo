@@ -1,0 +1,92 @@
+FFFFFF..                                                                 [100%]
+=================================== FAILURES ===================================
+____________ test_v1_offline_recovered_edits_remain_dirty_and_kept _____________
+
+outcomes = {'offline_edit': {'buffer': 'recovered owner draft plus newer typing', 'dirty': False, 'status': 'offline', 'kept': No..., ...}, 'delayed_copy_navigation': {'active': 'notes/a (my copy 2026-09-25 160149).md', 'expected': 'notes/b.md'}, ...}
+
+    def test_v1_offline_recovered_edits_remain_dirty_and_kept(outcomes):
+        r=outcomes['offline_edit']
+>       assert r['dirty'] and r['kept'] and r['kept']['text']==r['buffer'], r
+E       AssertionError: {'buffer': 'recovered owner draft plus newer typing', 'dirty': False, 'status': 'offline', 'kept': None}
+E       assert (False)
+
+tests/test_vault_review.py:28: AssertionError
+______ test_v1_external_revalidation_preserves_recovered_text_as_conflict ______
+
+outcomes = {'offline_edit': {'buffer': 'recovered owner draft plus newer typing', 'dirty': False, 'status': 'offline', 'kept': No..., ...}, 'delayed_copy_navigation': {'active': 'notes/a (my copy 2026-09-25 160149).md', 'expected': 'notes/b.md'}, ...}
+
+    def test_v1_external_revalidation_preserves_recovered_text_as_conflict(outcomes):
+        r=outcomes['offline_external_read']
+>       assert r['buffer']=='recovered owner draft' and r['status']=='conflict', r
+E       AssertionError: {'buffer': 'external editor text', 'status': 'saved', 'conflict': None, 'kept': {'text': 'recovered owner draft', 'base': 'rev0', 'at': 1790352109602}}
+E       assert ('external editor text' == 'recovered owner draft'
+E         
+E         - recovered owner draft
+E         + external editor text)
+
+tests/test_vault_review.py:32: AssertionError
+_______________ test_v2_copy_receipt_does_not_clear_later_edits ________________
+
+outcomes = {'offline_edit': {'buffer': 'recovered owner draft plus newer typing', 'dirty': False, 'status': 'offline', 'kept': No..., ...}, 'delayed_copy_navigation': {'active': 'notes/a (my copy 2026-09-25 160149).md', 'expected': 'notes/b.md'}, ...}
+
+    def test_v2_copy_receipt_does_not_clear_later_edits(outcomes):
+        r=outcomes['delayed_copy']
+        expected='copy request text PLUS NEWER TYPING'
+>       assert r['buffer']==expected and r['kept'] and r['kept']['text']==expected, r
+E       AssertionError: {'buffer': 'external disk', 'status': 'saved', 'kept': None, 'savedCopy': 'copy request text', ...}
+E       assert ('external disk' == 'copy request... NEWER TYPING'
+E         
+E         - copy request text PLUS NEWER TYPING
+E         + external disk)
+
+tests/test_vault_review.py:38: AssertionError
+_________ test_v2_copy_receipt_does_not_navigate_away_from_newer_note __________
+
+outcomes = {'offline_edit': {'buffer': 'recovered owner draft plus newer typing', 'dirty': False, 'status': 'offline', 'kept': No..., ...}, 'delayed_copy_navigation': {'active': 'notes/a (my copy 2026-09-25 160149).md', 'expected': 'notes/b.md'}, ...}
+
+    def test_v2_copy_receipt_does_not_navigate_away_from_newer_note(outcomes):
+        r=outcomes['delayed_copy_navigation']
+>       assert r['active']==r['expected'],r
+E       AssertionError: {'active': 'notes/a (my copy 2026-09-25 160149).md', 'expected': 'notes/b.md'}
+E       assert 'notes/a (my ...25 160149).md' == 'notes/b.md'
+E         
+E         - notes/b.md
+E         + notes/a (my copy 2026-09-25 160149).md
+
+tests/test_vault_review.py:44: AssertionError
+_______________ test_v3_closed_offline_note_has_no_unsent_retry ________________
+
+outcomes = {'offline_edit': {'buffer': 'recovered owner draft plus newer typing', 'dirty': False, 'status': 'offline', 'kept': No..., ...}, 'delayed_copy_navigation': {'active': 'notes/a (my copy 2026-09-25 160149).md', 'expected': 'notes/b.md'}, ...}
+
+    def test_v3_closed_offline_note_has_no_unsent_retry(outcomes):
+        r=outcomes['closed_offline_retry']
+>       assert r['writes']==[] and r['kept'] is None,r
+E       AssertionError: {'writes': ['discarded edit'], 'kept': None, 'active': None}
+E       assert (['discarded edit'] == []
+E         
+E         Left contains one more item: 'discarded edit'
+E         Use -v to get more diff)
+
+tests/test_vault_review.py:48: AssertionError
+__________ test_v3_closed_note_failed_request_does_not_restart_saves ___________
+
+outcomes = {'offline_edit': {'buffer': 'recovered owner draft plus newer typing', 'dirty': False, 'status': 'offline', 'kept': No..., ...}, 'delayed_copy_navigation': {'active': 'notes/a (my copy 2026-09-25 160149).md', 'expected': 'notes/b.md'}, ...}
+
+    def test_v3_closed_note_failed_request_does_not_restart_saves(outcomes):
+        r=outcomes['closed_inflight_failure']
+>       assert r['writes']==[] and r['kept'] is None and r['known'] is None,r
+E       AssertionError: {'writes': ['submitted edit'], 'kept': None, 'known': None}
+E       assert (['submitted edit'] == []
+E         
+E         Left contains one more item: 'submitted edit'
+E         Use -v to get more diff)
+
+tests/test_vault_review.py:52: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_vault_review.py::test_v1_offline_recovered_edits_remain_dirty_and_kept - AssertionError: {'buffer': 'recovered owner draft plus newer typing', 'dirt...
+FAILED tests/test_vault_review.py::test_v1_external_revalidation_preserves_recovered_text_as_conflict - AssertionError: {'buffer': 'external editor text', 'status': 'saved', 'conf...
+FAILED tests/test_vault_review.py::test_v2_copy_receipt_does_not_clear_later_edits - AssertionError: {'buffer': 'external disk', 'status': 'saved', 'kept': None...
+FAILED tests/test_vault_review.py::test_v2_copy_receipt_does_not_navigate_away_from_newer_note - AssertionError: {'active': 'notes/a (my copy 2026-09-25 160149).md', 'expec...
+FAILED tests/test_vault_review.py::test_v3_closed_offline_note_has_no_unsent_retry - AssertionError: {'writes': ['discarded edit'], 'kept': None, 'active': None}
+FAILED tests/test_vault_review.py::test_v3_closed_note_failed_request_does_not_restart_saves - AssertionError: {'writes': ['submitted edit'], 'kept': None, 'known': None}
+6 failed, 2 passed in 0.15s

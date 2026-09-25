@@ -1,0 +1,119 @@
+{
+  "files": {
+    "baseline-6d72013.txt": {
+      "bytes": 6219,
+      "format": "text",
+      "repaired": [],
+      "sha256": "df8f25b6812c543006ea51ef42d634f6226fe0af1ab654a66829b92888c27dad",
+      "source": "<job>/stage/baseline-6d72013.txt",
+      "source_sha256": "df8f25b6812c543006ea51ef42d634f6226fe0af1ab654a66829b92888c27dad",
+      "validated": true
+    },
+    "baseline-6d72013.xml": {
+      "bytes": 11987,
+      "format": "xml",
+      "junit_cases": 8,
+      "junit_status_counts": {
+        "failure": 6,
+        "passed": 2
+      },
+      "repaired": [],
+      "sha256": "1dfbe3d222f607ab3c1752771c507eb7fd624872e9bfd89cddbb765642bcbd02",
+      "source": "<job>/stage/baseline-6d72013.xml",
+      "source_sha256": "828d9f4af1ab204c1286a6e12c83b22e610a8936da9cdc78958bf41b64919ff5",
+      "validated": true
+    },
+    "browser-cb03ccf.txt": {
+      "bytes": 2377,
+      "format": "text",
+      "repaired": [],
+      "sha256": "cfa354b4ae00745ec542f3c7abb44eab65f468668667bbd01949c7d5d75c5366",
+      "source": "<job>/stage/browser-cb03ccf.txt",
+      "source_sha256": "a81a0480e60efa16a0038d3e833b5d8ab4a01a23fa41dbe06153f238d5c4b130",
+      "validated": true
+    },
+    "browser-cb03ccf.xml": {
+      "bytes": 2582,
+      "format": "xml",
+      "junit_cases": 16,
+      "junit_status_counts": {
+        "passed": 16
+      },
+      "repaired": [],
+      "sha256": "c3c250ab353c52902f9be8d6b869c58e531879ad396dcc0fb8668306ca100407",
+      "source": "<job>/stage/browser-cb03ccf.xml",
+      "source_sha256": "01ac7d7b1e30d161dc40b84f860d3106803d408d1c7af34a2be3f7d61a742bc6",
+      "validated": true
+    },
+    "browser-new3-on-11ce49a.txt": {
+      "bytes": 6224,
+      "format": "text",
+      "repaired": [],
+      "sha256": "66cc215f817eec8e0e21eee7bccd2dda7178726939b84f595559c733b13356d8",
+      "source": "<job>/stage/browser-new3-on-11ce49a.txt",
+      "source_sha256": "66cc215f817eec8e0e21eee7bccd2dda7178726939b84f595559c733b13356d8",
+      "validated": true
+    },
+    "focused-cb03ccf.txt": {
+      "bytes": 692,
+      "format": "text",
+      "repaired": [],
+      "sha256": "ffbad2057ff4fe34d636fabd0ed9b960ee546abd61c4e0a3d4806a5d64516a25",
+      "source": "<job>/stage/focused-cb03ccf.txt",
+      "source_sha256": "50980cd810270f01f971558a5b2f48b4f21dda3ca4b2119b60182a861ad356c6",
+      "validated": true
+    },
+    "focused-cb03ccf.xml": {
+      "bytes": 9661,
+      "format": "xml",
+      "junit_cases": 68,
+      "junit_status_counts": {
+        "passed": 68
+      },
+      "repaired": [],
+      "sha256": "e082f50f553c93fe63bf58af13aaee281a6f90eae81ee52d3d25d78f89961098",
+      "source": "<job>/stage/focused-cb03ccf.xml",
+      "source_sha256": "e1e3edd7833e66d440936e2112281aa827eff95985a4fc7661348c41ad60bf7c",
+      "validated": true
+    },
+    "head.txt": {
+      "bytes": 41,
+      "format": "text",
+      "repaired": [],
+      "sha256": "40c47a7dcc3f5450122e2919946cd206de163adfc4431eb09a01e318f30b4960",
+      "source": "<job>/stage/head.txt",
+      "source_sha256": "40c47a7dcc3f5450122e2919946cd206de163adfc4431eb09a01e318f30b4960",
+      "validated": true
+    },
+    "packaged-smoke-cb03ccf.json": {
+      "bytes": 1935,
+      "format": "json",
+      "repaired": [],
+      "sha256": "f6b1aa5e1f6360f8b0b2146248d2ebcdcedf1d84ada074324c2387c12d360444",
+      "source": "<job>/stage/packaged-smoke-cb03ccf.json",
+      "source_sha256": "7caca3e636f28b68cd13b6fdd00261d31464389fc718a918cdcf95c8d8ce2fef",
+      "validated": true
+    },
+    "packaged-smoke-cb03ccf.txt": {
+      "bytes": 847,
+      "format": "text",
+      "repaired": [],
+      "sha256": "881cecd53feb525b75a799abb81c906bf58c624927e5a0ad8739cdf572c52e8d",
+      "source": "<job>/stage/packaged-smoke-cb03ccf.txt",
+      "source_sha256": "881cecd53feb525b75a799abb81c906bf58c624927e5a0ad8739cdf572c52e8d",
+      "validated": true
+    },
+    "status_before.txt": {
+      "bytes": 0,
+      "format": "text",
+      "repaired": [],
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source": "<job>/stage/status_before.txt",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "validated": true
+    }
+  },
+  "kind": "executed",
+  "note": "newly executed evidence, sanitised by a format-aware export",
+  "source_note": "V1/V2/V3 correction runs by this executor on cb03ccf (and the unchanged-controller baseline); ANSI colour codes stripped from .txt before export; the packaged-smoke PNG is copied byte-for-byte outside this manifest (see hashes.txt)"
+}

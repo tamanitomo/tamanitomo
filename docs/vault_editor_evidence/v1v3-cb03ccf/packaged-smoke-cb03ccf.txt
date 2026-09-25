@@ -1,0 +1,16 @@
+PASS packaged entry point kit.app.hosted serves
+PASS page loads the local editor bundle and script
+PASS kit/app/static/vault-editor.bundle.js shipped, served and matches the manifest
+PASS kit/app/static/vault-editor.LICENSES.txt shipped, served and matches the manifest
+PASS kit/app/static/vault-editor.js shipped, served and matches the manifest
+PASS no persistent-Chat assets in the page (normal build)
+PASS no build tooling shipped
+PASS the bundle defined the editor API
+PASS Chat implementation on this page is the legacy one
+PASS edit autosaved through the revision contract
+PASS unsaved text recovered after reload, not saved behind the owner
+PASS recovered draft saved on request
+PASS after a legacy Chat round-trip the note keeps its selection
+PASS no page errors
+PASS no request left the local server (no CDN)
+{"passed": 15, "failed": 0}
