@@ -83,7 +83,7 @@ function model(path){
   return m;
 }
 const text=m=>m.state?m.state.sliceDoc():'';
-const dirty=m=>!!(m.state&&m.disk&&text(m)!==m.disk.text);
+const dirty=m=>!!(m.state&&(!m.disk||text(m)!==m.disk.text));
 const editable=m=>!!(m.meta&&m.meta.editable);
 const separator=s=>s.includes('\r\n')?'\r\n':'\n';
 
@@ -190,7 +190,7 @@ function keep(m){
 function schedule(m,delay){clearTimeout(m.timer);m.timer=setTimeout(()=>save(m),delay);}
 function flush(m){clearTimeout(m.timer);return save(m);}
 async function save(m){
-  if(!editable(m)||!m.state||m.status==='conflict'||m.status==='missing')return;
+  if(notes.get(m.path)!==m||!editable(m)||!m.state||m.status==='conflict'||m.status==='missing')return;
   if(m.inflight){m.again=true;return;}
   const body=text(m);
   if(m.disk&&body===m.disk.text){if(UNSAVED.has(m.status)&&m.status!=='conflict'){m.status='saved';drafts.drop(m.path);paintStatus(m);}return;}
@@ -199,20 +199,21 @@ async function save(m){
   let d;
   try{d=await api('/vault/file',{method:'PUT',body:JSON.stringify({path:m.path,text:body,revision:base||''})});}
   catch(e){
-    m.inflight=false;if(gen!==generation)return;
+    m.inflight=false;if(gen!==generation||notes.get(m.path)!==m)return;
     if(e.status===409){
       try{const now=await api('/vault/file?path='+encodeURIComponent(m.path));
+        if(gen!==generation||notes.get(m.path)!==m)return;
         // Our own earlier save may have landed without its answer reaching us.
         if(now.text===text(m)){m.disk={text:now.text,revision:now.revision};m.base=now.revision;m.status='saved';drafts.drop(m.path);return paintStatus(m);}
         conflict(m,{text:now.text,revision:now.revision});}
-      catch(err){conflict(m,{text:null,revision:null});}
+      catch(err){if(gen===generation&&notes.get(m.path)===m)conflict(m,{text:null,revision:null});}
       return;
     }
     if(!e.status){m.status='offline';m.retry=Math.min((m.retry||2)*2,60);schedule(m,m.retry*1000);}
     else{m.status='failed';m.error=e.message;}
     keep(m);return paintStatus(m);
   }
-  m.inflight=false;if(gen!==generation)return;
+  m.inflight=false;if(gen!==generation||notes.get(m.path)!==m)return;
   m.retry=0;m.disk={text:d.text,revision:d.revision};m.base=d.revision;
   if(text(m)===d.text){m.status='saved';drafts.drop(m.path);}
   else{m.status='dirty';schedule(m,SAVE_DELAY);}
@@ -229,13 +230,19 @@ function copyPath(path){
   return path.replace(/\.md$/i,'')+` (my copy ${stamp}).md`;
 }
 async function keepMineAsCopy(m){
-  const target=copyPath(m.path);
-  const d=await api('/vault/file',{method:'PUT',body:JSON.stringify({path:target,text:text(m),revision:''})});
-  // The copy holds this buffer; the note itself now shows the disk version (undoable).
-  if(m.conflict&&m.conflict.text!=null){replaceBuffer(m,m.conflict.text);m.disk=m.conflict;m.base=m.conflict.revision;}
-  m.conflict=null;m.status='saved';drafts.drop(m.path);
-  const copy=model(d.path);adopt(copy,d);open(d.path);
-  notice('Your version was saved as '+d.path.split('/').pop()+'. The original shows the version from disk.');
+  const target=copyPath(m.path),body=text(m),priorConflict=m.conflict,requestScope=scope();
+  const d=await api('/vault/file',{method:'PUT',body:JSON.stringify({path:target,text:body,revision:''})});
+  // This receipt covers the submitted text, not edits or navigation made while it was pending.
+  if(requestScope!==scope()||notes.get(m.path)!==m)return;
+  const unchanged=text(m)===body&&m.conflict===priorConflict&&m.status==='conflict';
+  if(unchanged){
+    if(m.conflict&&m.conflict.text!=null){replaceBuffer(m,m.conflict.text);m.disk=m.conflict;m.base=m.conflict.revision;}
+    m.conflict=null;m.status='saved';drafts.drop(m.path);
+  }else keep(m);
+  const copy=model(d.path);adopt(copy,d);
+  if(unchanged&&active===m.path)open(d.path);
+  notice('Your submitted version was saved as '+d.path.split('/').pop()+
+    (unchanged?'. The original shows the version from disk.':'. Newer edits remain in the original note.'));
 }
 async function useDisk(m){
   if(!m.conflict||m.conflict.text==null)return load(m);
@@ -303,6 +310,7 @@ async function close(path){
     drafts.drop(path);
   }
   const i=ui.tabs.indexOf(path);if(i>=0)ui.tabs.splice(i,1);
+  if(m){clearTimeout(m.timer);clearTimeout(m.draftTimer);}
   notes.delete(path);delete ui.places[path];
   if(active===path){active=null;ui.active=null;const next=ui.tabs[Math.min(i,ui.tabs.length-1)];if(next)return open(next);openNote=null;}
   saveUI();paint(null,true);renderVaultTree();
