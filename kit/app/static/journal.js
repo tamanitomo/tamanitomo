@@ -368,14 +368,14 @@ workspaceHandlers.journals=async()=>{
   document.addEventListener('click',journalOutsideClick);
 
   /* --------------------------------------------------------------- load */
-  // Read before anything awaits: the address, and whether another page (Home,
-  // Timeline) asked for a particular entry by setting selectedJournal.
-  const route=journalRouteParse(location.hash);
+  // Capture another page's entry request before awaiting, but resolve the
+  // address afterwards so a newer date/view selection remains authoritative.
   const asked=selectedJournal;
   try{
     const [list,archive]=await Promise.all([api('/journals?limit=1000'),
       api('/journal/archive').catch(error=>({days:{},error:error.message}))]);
     if(!alive())return;
+    const route=journalRouteParse(location.hash);
     profileTimezone=list.timezone;
     entries=list.entries;warnings=list.warnings||[];index=archive;
     today=archive.today||companionToday();

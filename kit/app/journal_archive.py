@@ -88,7 +88,7 @@ def _episodes(c,day,tz):
             elif offset==0:
                 rows.append((None,row))
     # Rows keep file order within an instant; untimed rows go last, unordered claims aside.
-    timed=sorted((x for x in rows if x[0] is not None),key=lambda x:x[0])
+    timed=sorted((x for x in rows if x[0] is not None),key=lambda x:x[0].astimezone(dt.timezone.utc))
     return timed+[x for x in rows if x[0] is None],unavailable,found
 
 
