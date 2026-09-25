@@ -192,6 +192,34 @@ class JournalArchive(Browser):
         self.assertIn('Reading by the window', self.page_text())
         self.assertNotIn('No scenes were recorded', self.page_text())
 
+    def newer_choice_survives_a_held_initial_read(self, pattern):
+        """A date chosen while Journal's first reads are still out is not undone when they land."""
+        import re
+        held = []
+        self.page.route(re.compile(pattern), lambda route: held.append(route))
+        self.open('nova', 'journals/2026-09-18/day')
+        until(lambda: held, what='initial read held')
+        self.page.evaluate("()=>{location.hash='#journals/2026-09-20/day'}")
+        self.at_route('2026-09-20', 'day', 'Reading by the window')
+        held[0].continue_()
+        self.page.wait_for_timeout(800)          # let the released read and initialization finish
+        self.assertEqual(self.hash(), '#journals/2026-09-20/day')
+        self.assertEqual(self.page.evaluate('journalState.day'), '2026-09-20')
+        self.assertEqual(self.page.get_attribute('#journal-page .journal-day', 'data-day'), '2026-09-20')
+        self.assertIn('Reading by the window', self.page_text())
+        self.assertNotIn('No scenes were recorded', self.page_text())
+        # the released read did land: the calendar has both the reflection list and the index
+        self.page.click('#journal-browse')
+        self.page.wait_for_selector('[data-pick-day="2026-09-18"].has-entry')
+        self.page.wait_for_selector('[data-pick-day="2026-09-20"].has-scenes')
+        self.assertEqual(self.hash(), '#journals/2026-09-20/day')
+
+    def test_a_held_archive_index_does_not_restore_the_opening_date(self):
+        self.newer_choice_survives_a_held_initial_read(r'/api/journal/archive\?')
+
+    def test_a_held_reflection_list_does_not_restore_the_opening_date(self):
+        self.newer_choice_survives_a_held_initial_read(r'/api/journals\?limit=1000')
+
     def test_another_profile_sees_only_its_own_empty_archive(self):
         self.open('rowan', 'journals/2026-09-20/day')
         self.at_route('2026-09-20', 'day', 'Nothing on record for this day')
