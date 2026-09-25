@@ -9,13 +9,15 @@ import socket
 import uvicorn
 from .server import build
 from .runtime import app_directory
+from .chat_send_routes import Options as ChatSendOptions
 import companion_platform as cp
 
 
 def main():
     state=app_directory();state.mkdir(parents=True,exist_ok=True)
     token = (os.environ.get('TAMANITOMO_TOKEN') or os.environ.get('COMPANION_TOKEN', '')).strip()
-    app=build(home=Path(os.environ.get('HERMES_HOME',str(Path.home()/'.hermes'))),token=token,state_dir=state)
+    app=build(home=Path(os.environ.get('HERMES_HOME',str(Path.home()/'.hermes'))),token=token,state_dir=state,
+              chat_sends=ChatSendOptions(client=True))
     @app.get('/api/instance')
     def instance():return {'app':'tamanitomo','root':str(app.state.runtimes['existing'].root),'protocol':1}
     port=int(os.environ.get('TAMANITOMO_PORT') or os.environ.get('COMPANION_PORT','38439'));sockets=[]

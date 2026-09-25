@@ -115,15 +115,21 @@ class Builds(unittest.TestCase):
         self.assertEqual([{k: v for k, v in m.items() if k != 'source_message'} for m in client], default)
         self.assertTrue(all(isinstance(m['source_message'], str) for m in client))
 
-    def test_nothing_new_is_shipped_and_no_entry_point_enables_the_client(self):
+    def test_shipped_and_activated_by_exactly_the_known_entry_points(self):
+        """Persistent Chat is now ACTIVATED for the normal installed app (kit/app/hosted.py,
+        kit/cli/app.py): the client assets ship and those two -- no others -- pass
+        client=True (see also test_phase1b_c1_integration.py::Activated, which pins the
+        same entry points for chat_sends= itself). index.html stays untouched: the signal
+        meta and script/style tags are injected by server.py at request time (the previous
+        two tests), never baked into the static template."""
         shipped = json.loads((ROOT / 'release-files.json').read_text())
         self.assertIn('kit/app/static/index.html', shipped)
         for name in NEW_FILES:
-            self.assertNotIn('kit/app/static/' + name, shipped)
+            self.assertIn('kit/app/static/' + name, shipped)
             self.assertNotIn(name, (ROOT / 'kit/app/static/index.html').read_text(encoding='utf-8'))
-        callers = [p for p in list(ROOT.glob('*.py')) + list((ROOT / 'kit').rglob('*.py'))
-                   if 'client=True' in p.read_text(encoding='utf-8')]
-        self.assertEqual(callers, [])
+        callers = {str(p.relative_to(ROOT)) for p in list(ROOT.glob('*.py')) + list((ROOT / 'kit').rglob('*.py'))
+                   if 'client=True' in p.read_text(encoding='utf-8')}
+        self.assertEqual(callers, {'kit/app/hosted.py', 'kit/cli/app.py'})
 
     def test_the_client_file_is_inert_without_the_signal(self):
         src = (ROOT / 'kit/app/static/chat-sends.js').read_text(encoding='utf-8')

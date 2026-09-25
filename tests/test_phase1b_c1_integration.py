@@ -6,8 +6,11 @@ state.db -> the Phase 1A read routes. The fake Hermes is a PROTOCOL DOUBLE, not 
 about Hermes; the same lifecycle against the pinned Hermes and the mock provider is in
 tests/test_phase1b_c1_pinned.py::PinnedHttp (the designated lane).
 
-The app is built with an explicit `chat_sends=Options(...)`. Without it (every shipped
-entry point) the routes do not exist: see Disabled. Matrix ids are PHASE1B_DESIGN.md 10.
+The app is built with an explicit `chat_sends=Options(...)`; with it absent, the routes do
+not exist (see Disabled -- still a supported, tested configuration, e.g. a future opt-out).
+Persistent Chat is ACTIVATED for the normal installed app: kit/app/hosted.py (the systemd
+--user entry point) and kit/cli/app.py (`hermes app` / `companion app`) both pass
+`chat_sends=Options(client=True)`; see Activated. Matrix ids are PHASE1B_DESIGN.md 10.
 """
 import json
 import os
@@ -602,17 +605,48 @@ class Disabled(unittest.TestCase):
         sp.ledger_dir(a.home()).mkdir()
         self.assertEqual(a.snapshot()['provenance']['state'], 'not_applied')
 
-    def test_no_entry_point_enables_it_and_shipped_files_stand_alone(self):
-        """No caller passes `chat_sends`; the files release-files.json ships import without any
-        unshipped Phase 1B module (no release entry is added in this changeset)."""
-        callers = [p for p in list(ROOT.glob('*.py')) + list((ROOT / 'kit').rglob('*.py'))
+    def test_fingerprints_agree(self):
+        for args in ((1, 's', 'user', 1.5), (99, 'x_y', 'assistant', 1758700000.123456), (3, 's', 'user', None)):
+            self.assertEqual(csrc.fingerprint(*args), sp.fingerprint(*args))
+
+
+class Activated(unittest.TestCase):
+    """Persistent Chat is now ACTIVATED for the normal installed app (issue #2/#3/#4 pass,
+    process-group supervision accepted as the baseline; RUN-01/RUN-02 cgroup containment
+    explicitly waived for this release by owner instruction, not attempted here). This class
+    pins the entry-point and packaging half of that: EXACTLY the known production entry
+    points enable it, the C1 modules and keyed client assets are shipped, and the shipped
+    subset still imports standalone with no missing module (X-05)."""
+
+    KNOWN_ENTRY_POINTS = {'kit/app/hosted.py', 'kit/cli/app.py'}
+
+    def test_exactly_the_known_entry_points_enable_it(self):
+        """A caller found here that is not in KNOWN_ENTRY_POINTS is either a regression (an
+        untracked activation) or this test needs updating alongside the new entry point --
+        either way, silence is not acceptable for what turns on a live keyed send path."""
+        callers = {str(p.relative_to(ROOT)) for p in list(ROOT.glob('*.py')) + list((ROOT / 'kit').rglob('*.py'))
                    if 'build(' in p.read_text(encoding='utf-8') and 'chat_sends=' in p.read_text(encoding='utf-8')
-                   and p.name not in ('server.py',)]
-        self.assertEqual(callers, [])
+                   and p.name != 'server.py'}
+        self.assertEqual(callers, self.KNOWN_ENTRY_POINTS)
+        for path in self.KNOWN_ENTRY_POINTS:
+            text = (ROOT / path).read_text(encoding='utf-8')
+            self.assertIn('client=True', text, f'{path} must also serve the keyed browser client')
+
+    def test_shipped_files_include_the_c1_modules_and_client_assets(self):
         shipped = json.loads((ROOT / 'release-files.json').read_text())
         for name in ('kit/app/chat_sends.py', 'kit/app/chat_send_routes.py', 'kit/app/send_protocol.py',
-                     'kit/app/send_executor.py', 'kit/app/send_quiescence.py'):
-            self.assertNotIn(name, shipped)
+                     'kit/app/send_executor.py', 'kit/app/send_quiescence.py',
+                     'kit/app/static/chat-store.js', 'kit/app/static/chat-sends.js',
+                     'kit/app/static/chat-view.js', 'kit/app/static/chat-controller.js',
+                     'kit/app/static/chat.css'):
+            self.assertIn(name, shipped, name)
+
+    def test_shipped_files_stand_alone_with_the_c1_modules_importable(self):
+        """The extracted-package import check PKG-02 found broken (owner_evidence's unconditional
+        `import chat_sends` raised ImportError when chat_sends.py was not shipped): with the
+        module now shipped, the whole shipped subset -- including the now-activated C1 modules
+        -- must still import as a standalone tree, with nothing reaching outside it."""
+        shipped = json.loads((ROOT / 'release-files.json').read_text())
         with tempfile.TemporaryDirectory() as tmp:
             for name in shipped:
                 src = ROOT / name
@@ -622,13 +656,11 @@ class Disabled(unittest.TestCase):
                     dst.write_bytes(src.read_bytes())
             code = ('import sys; sys.path[:0]=[sys.argv[1], sys.argv[1]+"/kit/scripts"]; '
                     'import kit.app.server, kit.app.chat_routes, kit.app.chat_sources, kit.app.chat_projection, '
-                    'kit.app.manage, kit.app.runtime, kit.app.terminal')
+                    'kit.app.manage, kit.app.runtime, kit.app.terminal, '
+                    'kit.app.chat_sends, kit.app.chat_send_routes, kit.app.send_protocol, '
+                    'kit.app.send_executor, kit.app.send_quiescence, kit.app.hosted')
             proc = subprocess.run([sys.executable, '-c', code, tmp], capture_output=True, text=True, cwd=tmp)
             self.assertEqual(proc.returncode, 0, proc.stderr[-2000:])
-
-    def test_fingerprints_agree(self):
-        for args in ((1, 's', 'user', 1.5), (99, 'x_y', 'assistant', 1758700000.123456), (3, 's', 'user', None)):
-            self.assertEqual(csrc.fingerprint(*args), sp.fingerprint(*args))
 
 
 @unittest.skipUnless(LINUX, POSIX_ONLY)

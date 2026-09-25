@@ -29,6 +29,7 @@ def cmd_app(args):
     import uvicorn
     from kit.app.server import build
     from kit.app.runtime import app_directory
+    from kit.app.chat_send_routes import Options as ChatSendOptions
     import companion_platform as cp
     state=app_directory()
     state.mkdir(parents=True,exist_ok=True)
@@ -75,7 +76,7 @@ def cmd_app(args):
         for address in lan_addresses():print('Local network: '+url.replace(browser_host,address,1))
         print('Other devices: use this host’s LAN IP with the same port and access token. Use --host 127.0.0.1 for host-only access.')
     print('Close with Ctrl-C. Installed Hermes gateway jobs run independently.')
-    app=build(home=c.home,token=token,state_dir=state)
+    app=build(home=c.home,token=token,state_dir=state,chat_sends=ChatSendOptions(client=True))
     @app.get('/api/instance')
     def instance():return {'app':'tamanitomo','root':str(c.hermes_root),'protocol':1}
     server=uvicorn.Server(uvicorn.Config(app,host=host,port=port,log_level='warning',access_log=False))
