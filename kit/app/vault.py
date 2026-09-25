@@ -114,18 +114,60 @@ def restore(c,ident):
         (folder/'metadata.json').unlink();folder.rmdir()
     return {'restored':row['path']}
 
+BACKUPS='.companion-editor-backups'
+BACKUP_WINDOW=600      # seconds: saves closer together than this share one backup
+BACKUP_KEEP=20         # per note, newest kept
+
+def backup_folder(c,relative):
+    """This note's editor-backup folder inside the vault, never through a link."""
+    base=c.vault/BACKUPS
+    folder=base/hashlib.sha256(relative.encode('utf-8')).hexdigest()[:24]
+    if any(p.is_symlink() for p in (base,folder)):raise ValueError('Editor backups must not be a symbolic link')
+    folder.mkdir(parents=True,exist_ok=True)
+    if not folder.resolve().is_relative_to(c.vault.resolve()):raise ValueError('Editor backups must stay inside the vault')
+    return folder
+
+def backup(c,relative,data,now=None):
+    """Keep the bytes a save is about to replace, exactly (BOM, CRLF and all).
+
+    The editor saves every few seconds while someone types, so one backup per save
+    would grow without bound. Backups are grouped per note and coalesced: when the
+    bytes being replaced are exactly what this editor itself last wrote AND the
+    newest backup is younger than BACKUP_WINDOW, a save adds none, so the version
+    from before an editing session survives it. Bytes written by anything else (an
+    external editor, sync, the companion) are always backed up before they are
+    replaced. At most BACKUP_KEEP are kept per note. Returns the new backup path,
+    or None when coalesced."""
+    import time
+    now=time.time() if now is None else now
+    folder=backup_folder(c,relative)
+    kept=sorted(p for p in folder.glob('*.bak') if p.is_file() and not p.is_symlink())
+    last=folder/'last-write'
+    ours=last.is_file() and not last.is_symlink() and last.read_text().strip()==hashlib.sha256(data).hexdigest()
+    if ours and kept and now-kept[-1].stat().st_mtime<BACKUP_WINDOW:return None
+    stamp=dt.datetime.fromtimestamp(now,dt.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+    target=folder/f'{stamp}-{hashlib.sha256(data).hexdigest()[:12]}.bak'
+    handle=folder/('.tmp-'+uuid.uuid4().hex)
+    with open(handle,'wb') as out:out.write(data);out.flush();os.fsync(out.fileno())
+    os.replace(handle,target);os.utime(target,(now,now))
+    source=folder/'source.json'
+    if not source.exists():cp.atomic_write(source,json.dumps({'path':relative}))
+    for old in (kept+[target])[:-BACKUP_KEEP]:old.unlink(missing_ok=True)
+    return target
+
 def write(c,relative,text,revision):
     path=resolve(c,relative)
     if not editable(c,relative): raise ValueError('The document editor writes Markdown files only.')
     if not isinstance(text,str) or len(text.encode('utf-8'))>MAX_TEXT: raise ValueError('Note exceeds 2 MB')
     with cp.file_lock(c.vault/'.companion-editor.lock'):
-        current=hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else ''
+        data=path.read_bytes() if path.exists() else None
+        current=hashlib.sha256(data).hexdigest() if data is not None else ''
         if current!=revision: raise FileExistsError('This file changed since you opened it. Reload before saving.')
-        if path.exists():
-            import uuid
-            backup=c.vault/'.companion-editor-backups'/uuid.uuid4().hex
-            cp.atomic_write(backup,path.read_text(encoding='utf-8'))
+        folder=backup_folder(c,relative)          # refuses a linked folder before anything is written
+        if data is not None:backup(c,relative,data)
         cp.atomic_write(path,text)
+        # What this editor wrote, so the next save can tell its own bytes from an external edit.
+        cp.atomic_write(folder/'last-write',hashlib.sha256(text.encode('utf-8')).hexdigest())
     return read(c,relative)
 
 def files(c,limit=20000):
