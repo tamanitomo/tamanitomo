@@ -278,6 +278,9 @@ def owner_evidence(c, fn, binding=None, provenance=None):
     if provenance is None:
         from . import chat_sends
         provenance = chat_sends.read_model(c.home)
+    if provenance.state == 'incomplete':
+        raise EvidenceUnavailable('The send ledger records lost continuation-note provenance after a reset; '
+                                  'those rows cannot be certified as the owner\'s words, so evidence is not read this time.')
     if provenance.state == 'unavailable':
         raise EvidenceUnavailable('The send ledger cannot be read, so Hermes continuation notes cannot be told '
                                   'from the owner\'s messages; evidence is not read this time.')
