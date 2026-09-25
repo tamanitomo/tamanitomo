@@ -62,6 +62,9 @@ _REASONING = re.compile(r'<(think|thinking|reasoning)>[\s\S]*?(</\1>|$)', re.I)
 _TAGS = ('<think>', '<thinking>', '<reasoning>')
 _CLOSE = {t: '</' + t[1:] for t in _TAGS}
 _LONGEST = max(map(len, _TAGS))
+# Only ASCII tag names are case-insensitive. Preserve offsets into the original Unicode
+# string: full str.lower() can expand characters (for example U+0130) and shift indices.
+_ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 REFUSALS = {
     'installation_busy': 'Another action is running for this Hermes installation; try again when it finishes.',
     'chat_reply_running': 'A chat reply is still running; wait for it to finish first.',
@@ -129,7 +132,7 @@ class PublicFilter:
 
     def feed(self, text):
         s = self.pending + str(text or '')
-        low, n, i, out = s.lower(), len(s), 0, []
+        low, n, i, out = s.translate(_ASCII_LOWER), len(s), 0, []
         self.pending = ''
         while i < n:
             if self.close:
