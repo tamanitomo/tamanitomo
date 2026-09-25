@@ -1,0 +1,96 @@
+{
+  "files": {
+    "runs/c3_and_shared.txt": {
+      "bytes": 1360,
+      "format": "text",
+      "repaired": [],
+      "sha256": "b54497186b91c87aeea80d121db5cb28b00164e18c26be90f0ef1a39144f8673",
+      "source": "<job>/runs/c3_and_shared.txt",
+      "source_sha256": "2e9fc035988c86be5df533b639e9c38f63ddb35f0a1b12b1b49bd4e1bef11d53",
+      "validated": true
+    },
+    "runs/c3_and_shared.xml": {
+      "bytes": 10575,
+      "format": "xml",
+      "junit_cases": 71,
+      "junit_status_counts": {
+        "passed": 71
+      },
+      "repaired": [],
+      "sha256": "b20e6241c6d94a1d2e22d7ca2d280e5476c17d93a550135826d9e2beb713d5be",
+      "source": "<job>/runs/c3_and_shared.xml",
+      "source_sha256": "a15a2c107654f8c0222e545b4717d2b0491763ee0b2b929b09fd521cf6a34377",
+      "validated": true
+    },
+    "runs/environment.json": {
+      "bytes": 261,
+      "format": "json",
+      "repaired": [],
+      "sha256": "6732fa96a320d993681866f08e279922e3c346baf2b56624bb8200e6ac6bb673",
+      "source": "<job>/runs/environment.json",
+      "source_sha256": "7564c18fe4bef97f4a426389aed11a38514c3e665f464fac93688d7b8662f506",
+      "validated": true
+    },
+    "runs/full_suite.txt": {
+      "bytes": 9564,
+      "format": "text",
+      "repaired": [],
+      "sha256": "19027618914eabb0fd4da25fbd87ad51e14e261ebfe9547dff7015374cef8ecf",
+      "source": "<job>/runs/full_suite.txt",
+      "source_sha256": "5602d1c24e23d80a2330d27504dbb6331ef5b57e739655fc5976057a47d33092",
+      "validated": true
+    },
+    "runs/head.txt": {
+      "bytes": 147,
+      "format": "text",
+      "repaired": [],
+      "sha256": "246d73fb05aa08d40c7e9e8520dd06dad43476364985bff4e586ec7f6d600053",
+      "source": "<job>/runs/head.txt",
+      "source_sha256": "246d73fb05aa08d40c7e9e8520dd06dad43476364985bff4e586ec7f6d600053",
+      "validated": true
+    },
+    "runs/persistent_chat_browser.txt": {
+      "bytes": 276,
+      "format": "text",
+      "repaired": [],
+      "sha256": "c9a1e8b651542ee964243cfeb8ad0cc05e089e6f85024e80ef30c6e2bfc32a37",
+      "source": "<job>/runs/persistent_chat_browser.txt",
+      "source_sha256": "c9a1e8b651542ee964243cfeb8ad0cc05e089e6f85024e80ef30c6e2bfc32a37",
+      "validated": true
+    },
+    "runs/persistent_chat_browser.xml": {
+      "bytes": 2018,
+      "format": "xml",
+      "junit_cases": 12,
+      "junit_status_counts": {
+        "passed": 12
+      },
+      "repaired": [],
+      "sha256": "a437e829c34c00fb28a49e1c0d7f7e8273624aeed0921604a5f2443ff1ba15d7",
+      "source": "<job>/runs/persistent_chat_browser.xml",
+      "source_sha256": "bbe8b6b3adb5c6c4b82cb08c2c52cbf2dd7f0afb7663776891451d6f0b6da34f",
+      "validated": true
+    },
+    "runs/status_after.txt": {
+      "bytes": 0,
+      "format": "text",
+      "repaired": [],
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source": "<job>/runs/status_after.txt",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "validated": true
+    },
+    "runs/status_before.txt": {
+      "bytes": 0,
+      "format": "text",
+      "repaired": [],
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source": "<job>/runs/status_before.txt",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "validated": true
+    }
+  },
+  "kind": "executed",
+  "note": "newly executed evidence, sanitised by a format-aware export",
+  "source_note": "persistent-chat-ui runs at cf7b56f (synthetic fixtures, loopback)"
+}

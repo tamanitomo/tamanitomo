@@ -1,0 +1,12 @@
+{
+  "PATH": "/usr/bin:/bin",
+  "TMPDIR": "job scratch (host /tmp full)",
+  "chromium": "153.0.8010.12",
+  "env": [
+    "TAMANITOMO_REQUIRE_NODE=1",
+    "TAMANITOMO_C3_REQUIRE_BROWSER=1"
+  ],
+  "node": "v26.7.0",
+  "playwright": "1.63.0",
+  "python": "3.14.7"
+}
