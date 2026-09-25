@@ -1,0 +1,92 @@
+{
+  "files": {
+    "runs/browser-chat.txt": {
+      "bytes": 122,
+      "sha256": "c840e023fabbaf4047f57447d820d2cb3ff09f3593a326b068164a218efc167e",
+      "source": "<job>/journal-ev/browser-chat.txt",
+      "source_sha256": "f6caf621cbafc65492d7c8d9dd5c1559f351fbfaa2f0f302e2cf58a65dc70e77"
+    },
+    "runs/browser-chat.xml": {
+      "bytes": 5953,
+      "junit_status_counts": {
+        "passed": 38
+      },
+      "sha256": "6fabe422cff5ea653c35b03a68b14a2df21535bee5a2f161d3f912ac446c2af3",
+      "source": "<job>/journal-ev/browser-chat.xml",
+      "source_sha256": "cae3813ba10a5d66f303d39d47be35936431cf6fce6aac1a66a6f7a903a7e629"
+    },
+    "runs/browser-journal.txt": {
+      "bytes": 451,
+      "sha256": "e98109ca513295c27fb0567f3edd3bf1d20d89aae83ac668bd1e306b99a1c17b",
+      "source": "<job>/journal-ev/browser-journal.txt",
+      "source_sha256": "fd112ba10bb432bd969a2009b3bd867756746af3361725613549abf6e6f46cfb"
+    },
+    "runs/browser-journal.xml": {
+      "bytes": 980,
+      "junit_status_counts": {
+        "passed": 5
+      },
+      "sha256": "f42f553033be21d671e086192f4c2eb9adb095dd2a4942875ee885d414d4b44e",
+      "source": "<job>/journal-ev/browser-journal.xml",
+      "source_sha256": "364260e8a2573eefd4270c93e708d67485188007b87b5659092c59619f25249b"
+    },
+    "runs/browser-version.txt": {
+      "bytes": 23,
+      "sha256": "c9fd3020da5492d62d4d699bd0b33acd630830d987282a0c6eae669ce3f1b011",
+      "source": "<job>/journal-ev/browser-version.txt",
+      "source_sha256": "c9fd3020da5492d62d4d699bd0b33acd630830d987282a0c6eae669ce3f1b011"
+    },
+    "runs/tested-sha.txt": {
+      "bytes": 41,
+      "sha256": "719a1e7040b309ae7ed733413876a6b8452b5f73810cf394a7867d78a2686974",
+      "source": "<job>/journal-ev/tested-sha.txt",
+      "source_sha256": "719a1e7040b309ae7ed733413876a6b8452b5f73810cf394a7867d78a2686974"
+    },
+    "runs/unit.txt": {
+      "bytes": 649,
+      "sha256": "c56b5f585f0fe54b18a0b9376bdf60a3af4b2543e752528ad1a97573a6f98628",
+      "source": "<job>/journal-ev/unit.txt",
+      "source_sha256": "e5726050c75de4b0e231bf1716aa47c9241f67f82767c1ad6ec668c9d24718e5"
+    },
+    "runs/unit.xml": {
+      "bytes": 72369,
+      "junit_status_counts": {
+        "passed": 535
+      },
+      "sha256": "e4dac876d3127dc94f161704f852221012162af4aa8edef0b69bb90a4dc60300",
+      "source": "<job>/journal-ev/unit.xml",
+      "source_sha256": "16838552856d10b4ea4fcf23a49f0db765c7935880eb2df70c53ffb3cb4c0e3a"
+    },
+    "screens/desktop-day.png": {
+      "bytes": 118551,
+      "sha256": "17cc9e389237a52f456db582e02e1bcd0698e674da6b8132a44f16dff7e3d11f",
+      "synthetic": true
+    },
+    "screens/desktop-reflection.png": {
+      "bytes": 80846,
+      "sha256": "ced55a9921810d6cff2689bce85948cf1a0b866e6384676a95c02d004c46f878",
+      "synthetic": true
+    },
+    "screens/phone-day.png": {
+      "bytes": 77437,
+      "sha256": "7750fb52ccead786a2d0e763570ffe9950b005c61abeedb416952c34bcfc87a1",
+      "synthetic": true
+    },
+    "screens/phone-picker.png": {
+      "bytes": 68346,
+      "sha256": "2f95e4ea67c35ebf6ffa78b24116360dbe61f959ebc264409417f3f3b4542ff9",
+      "synthetic": true
+    },
+    "screens/phone-reflection.png": {
+      "bytes": 49697,
+      "sha256": "e6d6f4eeb795de52c64c59af5b1d304e4767ac8b1e356434b093a57380a7c7ac",
+      "synthetic": true
+    },
+    "screens/tablet-day.png": {
+      "bytes": 88410,
+      "sha256": "e0c72d517921af6aa27880aa584c3c6d5e9bdfd62bf1dac1e6f86ef14e6fc05e",
+      "synthetic": true
+    }
+  },
+  "tested_commit": "c3c31dfc06c39516edafe32e07e46e8d44b7adf0"
+}
