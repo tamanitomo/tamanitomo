@@ -1,0 +1,18 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.7, pytest-9.1.1, pluggy-1.6.0 -- <repo>/.venv/bin/python
+rootdir: <repo>
+configfile: pytest.ini
+plugins: anyio-4.15.1
+collecting ... collected 7 items
+
+tests/test_journal_archive_browser.py::JournalArchive::test_a_held_archive_index_does_not_restore_the_opening_date PASSED [ 14%]
+tests/test_journal_archive_browser.py::JournalArchive::test_a_held_reflection_list_does_not_restore_the_opening_date PASSED [ 28%]
+tests/test_journal_archive_browser.py::JournalArchive::test_a_slow_answer_for_an_old_date_does_not_replace_the_new_one PASSED [ 42%]
+tests/test_journal_archive_browser.py::JournalArchive::test_another_profile_sees_only_its_own_empty_archive PASSED [ 57%]
+tests/test_journal_archive_browser.py::JournalArchive::test_archive_journey_with_back_refresh_timeline_and_chat_draft PASSED [ 71%]
+tests/test_journal_archive_browser.py::JournalArchive::test_back_from_another_tab_returns_to_the_journal_date PASSED [ 85%]
+tests/test_journal_archive_browser.py::JournalArchive::test_representative_widths PASSED [100%]
+
+- generated xml file: <job>/jcorr-ev/browser-journal.xml -
+============================== 7 passed in 8.13s ===============================
+exit=0

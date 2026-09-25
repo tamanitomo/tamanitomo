@@ -1,0 +1,86 @@
+FF.FF                                                                    [100%]
+=================================== FAILURES ===================================
+_ JournalReviewChronology.test_fall_back_collapsed_snapshots_keep_chronological_endpoints _
+
+self = <test_journal_review.JournalReviewChronology testMethod=test_fall_back_collapsed_snapshots_keep_chronological_endpoints>
+
+    def test_fall_back_collapsed_snapshots_keep_chronological_endpoints(self):
+        self.record('2025-11-02T05:50:00+00:00', 'reading', 'first')
+        self.record('2025-11-02T06:10:00+00:00', 'reading', 'second')
+        before = tree(self.f.nova.life)
+        row, = self.day()
+>       self.assertEqual(row['ids'], ['first', 'second'])
+E       AssertionError: Lists differ: ['second', 'first'] != ['first', 'second']
+E       
+E       First differing element 0:
+E       'second'
+E       'first'
+E       
+E       - ['second', 'first']
+E       + ['first', 'second']
+
+tests/test_journal_review.py:52: AssertionError
+_ JournalReviewChronology.test_fall_back_distinct_scenes_follow_instants_not_wall_clock _
+
+self = <test_journal_review.JournalReviewChronology testMethod=test_fall_back_distinct_scenes_follow_instants_not_wall_clock>
+
+    def test_fall_back_distinct_scenes_follow_instants_not_wall_clock(self):
+        self.record('2025-11-02T05:50:00+00:00', 'first hour scene', 'first')
+        self.record('2025-11-02T06:10:00+00:00', 'second hour scene', 'second')
+        self.record('2025-11-02T07:00:00+00:00', 'after rollback', 'after')
+        before = tree(self.f.nova.life)
+        rows = self.day()
+>       self.assertEqual([r['id'] for r in rows], ['first', 'second', 'after'])
+E       AssertionError: Lists differ: ['second', 'first', 'after'] != ['first', 'second', 'after']
+E       
+E       First differing element 0:
+E       'second'
+E       'first'
+E       
+E       - ['second', 'first', 'after']
+E       + ['first', 'second', 'after']
+
+tests/test_journal_review.py:38: AssertionError
+_ JournalReviewInitialRoute.test_pending_archive_index_does_not_restore_old_route _
+
+self = <test_journal_review.JournalReviewInitialRoute testMethod=test_pending_archive_index_does_not_restore_old_route>
+
+    def test_pending_archive_index_does_not_restore_old_route(self):
+>       self.assert_latest(self.observe())
+
+tests/test_journal_review.py:84: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_journal_review.py:77: in assert_latest
+    self.assertEqual(result['after']['day'], '2026-09-20',
+E   AssertionError: '2026-09-18' != '2026-09-20'
+E   - 2026-09-18
+E   ?         ^^
+E   + 2026-09-20
+E   ?         ^^
+E    : initial data arrival must not replace the newer date
+_ JournalReviewInitialRoute.test_pending_reflection_list_does_not_restore_old_route _
+
+self = <test_journal_review.JournalReviewInitialRoute testMethod=test_pending_reflection_list_does_not_restore_old_route>
+
+    def test_pending_reflection_list_does_not_restore_old_route(self):
+>       self.assert_latest(self.observe(deferred_list=True))
+
+tests/test_journal_review.py:87: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_journal_review.py:77: in assert_latest
+    self.assertEqual(result['after']['day'], '2026-09-20',
+E   AssertionError: '2026-09-18' != '2026-09-20'
+E   - 2026-09-18
+E   ?         ^^
+E   + 2026-09-20
+E   ?         ^^
+E    : initial data arrival must not replace the newer date
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/test_journal_review.py::JournalReviewInitialRoute::test_initial_shared_route_still_opens_without_new_selection
+FAILED tests/test_journal_review.py::JournalReviewChronology::test_fall_back_collapsed_snapshots_keep_chronological_endpoints - AssertionError: Lists differ: ['second', 'first'] != ['first', 'second']
+FAILED tests/test_journal_review.py::JournalReviewChronology::test_fall_back_distinct_scenes_follow_instants_not_wall_clock - AssertionError: Lists differ: ['second', 'first', 'after'] != ['first', 'se...
+FAILED tests/test_journal_review.py::JournalReviewInitialRoute::test_pending_archive_index_does_not_restore_old_route - AssertionError: '2026-09-18' != '2026-09-20'
+FAILED tests/test_journal_review.py::JournalReviewInitialRoute::test_pending_reflection_list_does_not_restore_old_route - AssertionError: '2026-09-18' != '2026-09-20'
+4 failed, 1 passed in 0.60s
+exit=1

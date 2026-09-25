@@ -24,7 +24,7 @@ The Reflection view uses the existing `/api/journals` and `/api/journals/<id>` r
 ## Dates
 
 - The date is taken from the profile's configured timezone (`companion.json` `timezone`). A scene belongs to the date of its `recorded_at` instant in that timezone, not to the name of the file it sits in. The files for the dates either side are also read, so a row written just before midnight, or written while the profile had a different timezone, is placed by its instant.
-- Across daylight-saving changes, instants are converted with `zoneinfo`: the missing spring hour and the repeated autumn hour both stay on their correct date and in order.
+- Across daylight-saving changes, instants are converted with `zoneinfo`: the missing spring hour and the repeated autumn hour both stay on their correct date. Scenes are ordered by their UTC instant, not by local wall time, so 01:10-05:00 after the fall-back follows 01:50-04:00 (J1).
 - Date-only values stay dates. A journal heading (`## 2026-09-20`) and a moment's `happened_on` are compared as dates. A `recorded_at` value that is only a date, is naive, or does not parse gets no time: the row is kept only from the file named for that date and is shown as "Time not recorded", never given midnight or a guessed zone.
 - Client-side date stepping uses calendar arithmetic in UTC (`journalAddDays`), so it cannot skip or repeat a day around a DST change. Invalid dates such as `2026-02-30` are refused by the route (400) and ignored in the address.
 
@@ -53,7 +53,7 @@ Each source reports `available`, `none` (nothing on record), `empty` (the day's 
 - Choosing a date or view pushes a history entry and `popstate` replays it, so back/forward move between chosen dates. Tab switches still replace the address, as they always have. `showTab` keeps a page's own sub-route when that page is the one shown, and the boot code reads the tab from the first path segment.
 - Home ("Read … journal") and Timeline ("Read her diary for this day") still set `selectedJournal`. Journal treats that as a one-time request and opens that entry's date in Reflection.
 - Controls: a Day/Reflection tab pair (`role=tablist`, arrow keys switch), Older/Newer buttons that step to the nearest date on record (in Reflection, the nearest reflection), and the existing date panel. The panel now has a date input, Today, Latest reflection, reflection search, and a calendar where every date can be chosen and dates with reflections or scenes are marked.
-- Stale answers: each request carries a token, and results are drawn only if the same date, view, installation and profile are still selected.
+- Stale answers: each request carries a token, and results are drawn only if the same date, view, installation and profile are still selected. The opening route is read after Journal's initial list and index arrive, so a date chosen while they were pending stands (J2).
 - Timeline's handler, `#timeline` route, navigation entries and saved `nav_pins` are unchanged. No preference or data migration.
 
 ## What remains in Timeline (not yet in Journal)

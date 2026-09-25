@@ -101,3 +101,22 @@ Coverage against the assignment's list:
 - Timeline parity gaps are listed in `docs/JOURNAL_ARCHIVE.md`. Timeline is not retired and its preferences are not migrated.
 
 Keyed activation and the Phase 1C continuity options remain OFF. No live profile, model, platform or dispatcher was used. Nothing was pushed, merged, released or deployed.
+
+## Addendum: J1/J2 review corrections
+
+The Journal review of `92b83af` kept the implementation and asked for two narrow corrections. They are on branch `test/journal-archive-review-corrections`, a child of `92b83af`, unpushed.
+
+- `4bda237`: the reviewer's candidate patch, applied unchanged (sha256 `46469fe7…3dd44d`), plus the reviewer regressions `tests/test_journal_review.py` and its Node companion `tests/observe_initial_route.js`. Both files were vendored byte-identical, with no environment repair.
+  - **J1.** Timed scene rows are sorted by their UTC instant, and profile-local timestamps are kept for display. Before this, at New York's fall-back, 01:10-05:00 sorted ahead of 01:50-04:00 even though it happened 20 minutes later. That reversed scene order, interval ends and a collapsed scene's `ids`/`at`/`last_at`. Date grouping, untimed rows, collapse rules and photo association are unchanged.
+  - **J2.** The Journal address is resolved after the initial reflection list and archive index arrive and the page is confirmed still alive. Before this, a date or view chosen while those reads were pending was overwritten by the route captured at open. The one-time Home/Timeline `selectedJournal` request is still captured before awaiting.
+- `dc14b0c` (**tested code commit**): `tests/test_journal_archive_browser.py` gains two real-browser journeys. Each opens `#journals/2026-09-18/day` with either the archive index or the reflection list held, moves to 2026-09-20, and then releases the held read. Both assert that the newer hash, `journalState.day`, the rendered day and its scenes remain. Both also confirm through the calendar markers that the released data landed. With only the J2 hunk reversed, both fail (`'#journals/2026-09-18/day' != '#journals/2026-09-20/day'`).
+
+Results by this executor, synthetic fixtures only (Python 3.14.7, Node v26.7.0, headless Chromium 153.0.8010.12). The correction runs used `TMPDIR` pointing at a job-local directory; the reproduction run used the job tmp directory.
+
+| Run | Tree | Result |
+|---|---|---|
+| Reviewer regressions on unmodified Journal code | `92b83af` + the two copied reviewer files | 1 passed, 4 failed (both J1 cases and both J2 cases fail; the untouched shared-route control passes) |
+| `python -m pytest -q tests/test_journal_review.py tests/test_journal_archive.py tests/test_content.py tests/test_journal.py tests/test_reliability.py` | `dc14b0c` | **90 passed, 26 subtests passed, 0 failed, 0 skipped** |
+| `TAMANITOMO_C3_REQUIRE_BROWSER=1 python -m pytest -v tests/test_journal_archive_browser.py` | `dc14b0c` | **7 passed, 0 skipped**: the 5 existing journeys and the 2 new held-initial-read journeys. The existing journeys still include the ordinary journey, the Timeline link and pin, and the Chat draft. |
+
+Raw outputs are in `docs/journal_archive_corrections_evidence/` (sanitized; `MANIFEST.json` has hashes and JUnit counts). The earlier results in this report remain those of the same executor at `c3c31df`. The reviewer's independent counts are theirs and are not repeated here. As assigned, no full suite, 535-case selection, Chat browser suite, workspace profile-creation lane or pinned lane was rerun for these two Journal-only edits. The known limitations and Timeline parity list above are unchanged.
