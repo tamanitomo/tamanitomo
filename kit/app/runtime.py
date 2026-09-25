@@ -552,7 +552,7 @@ def messages(c, session, limit=200):
 FEED_EXCLUDED_SOURCES=('cron','subagent','tool','config-audit','local-default-audit','local-tool-proof')
 
 
-def feed_page(c, limit=60, before=None):
+def feed_page(c, limit=60, before=None, source_ids=False):
     """Every message the person and the companion have exchanged, on any channel.
 
     Hermes keeps one session per conversation and one row per channel, so the
@@ -560,6 +560,7 @@ def feed_page(c, limit=60, before=None):
     this workspace at night is split across rows that each tell only part of it.
     This reads across all of them at once, newest first, and hands back the
     channel each message arrived on so the feed can show where it happened.
+    `source_ids` adds each row's Hermes id as `source_message` (the keyed client only).
     """
     if type(limit)!=int or not 1<=limit<=200:raise ValueError('History page size must be 1-200')
     cursor=_page_cursor(before)
@@ -584,7 +585,8 @@ def feed_page(c, limit=60, before=None):
         if cursor:
             if type(cursor[1])!=int:raise ValueError('Invalid message cursor')
             conditions.append('(coalesce(m.timestamp,0),m.rowid)<(?,?)');values.extend(cursor)
-        sql=(f'SELECT m.rowid AS _cursor_id,m.role,m.content,m.timestamp,'
+        ident='m.id AS source_message,' if source_ids and 'id' in cols else ''
+        sql=(f'SELECT m.rowid AS _cursor_id,{ident}m.role,m.content,m.timestamp,'
              f'm.session_id AS session,{source} AS source '
              f'FROM messages m JOIN sessions s ON s.id=m.session_id '
              f"WHERE {' AND '.join(conditions)} "
@@ -595,6 +597,7 @@ def feed_page(c, limit=60, before=None):
         mine=read_workspace_sessions(c)
         for row in rows:
             del row['_cursor_id']
+            if 'source_message' in row:row['source_message']=str(row['source_message'])
             if row.get('session') in mine:row['source']='tamanitomo'
         return {'messages':list(reversed(rows)),'next_cursor':next_cursor}
 

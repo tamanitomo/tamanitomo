@@ -80,6 +80,10 @@ class Options:
     stop_grace: float = 15.0
     watchdog_interval: float = 1.0
     platform_check: Callable | None = None
+    # C3: also serve the keyed browser client (static/chat-sends.js) and the page signal
+    # for it. A separate explicit opt-in: an app built with keyed routes alone keeps the
+    # ordinary client. NOT ACTIVATED: no shipped entry point sets it.
+    client: bool = False
 
 
 def _iso(stamp):

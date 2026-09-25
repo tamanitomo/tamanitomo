@@ -110,6 +110,11 @@ def build(home=None,token='',state_dir=None,chat_sends=None):
         from .chat_sends import read_model as provenance
     chat_routes.register(app,state,selection.get,load,lambda c,rows:app.state.attach_media(c,rows),provenance)
     app.state.chat_selection=selection.get
+
+    def keyed_client():
+        sends=getattr(app.state,'chat_sends',None)
+        return bool(sends is not None and getattr(sends.options,'client',False))
+    app.state.keyed_client=keyed_client
     if chat_sends is not None:
         from . import chat_send_routes
         chat_send_routes.register(app,state,select,load,selection.get,app.state.operations,chat_sends)
@@ -973,6 +978,11 @@ def build(home=None,token='',state_dir=None,chat_sends=None):
             digest=hashlib.sha256(path.read_bytes()).hexdigest()[:16]
             return f'{match[1]}="{match[2]}?v={digest}"'
         html=(STATIC/'index.html').read_text(encoding='utf-8')
+        if keyed_client():
+            # Phase 1B C3, only when explicitly enabled: the signal and the keyed client,
+            # loaded after every script it builds on. Absent, the page is unchanged.
+            html=html.replace('<meta charset="utf-8">','<meta charset="utf-8">\n<meta name="tamanitomo-chat-sends" content="keyed">',1)
+            html=html.replace('</html>','<script src="/static/chat-sends.js"></script>\n</html>',1)
         html=re.sub(r'(src|href)="(/static/[^"?]+)"',versioned,html)
         return HTMLResponse(html,headers={'Cache-Control':'no-cache'})
 

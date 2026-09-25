@@ -291,6 +291,8 @@ workspaceHandlers.chat=async()=>{
 
   $('chat-form').onsubmit=async e=>{
     e.preventDefault();
+    // Keyed sends (Phase 1B C3) exist only on a page the server explicitly enabled them for.
+    if(window.KeyedChat)return window.KeyedChat.submit(box,grow);
     const message=box.value;
     if(!message.trim())return;
     if(activeOperation)throw Error('Wait for the current action to finish.');
@@ -352,6 +354,7 @@ workspaceHandlers.chat=async()=>{
       throw error;
     }
   };
+  if(window.KeyedChat)await window.KeyedChat.attach();
 };
 
 /* A marker pinned to the head of the log. When it scrolls into view there is
@@ -495,7 +498,9 @@ function chatMessagesHtml(messages){
       ?`<small>${badge}<span>${esc(at.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}))}</span></small>`:'';
     const shape=[startsRun?'starts-run':'',endsRun?'ends-run':''].filter(Boolean).join(' ');
     const face=m.role!=='user'&&endsRun?faceHtml(chatName(),'bubble-face'):'';
-    return divider+`<div class="bubble ${m.role==='user'?'user':''} ${shape}" data-channel="${esc(channel.key)}">
+    // Row identity, present only for the keyed client (Phase 1B C3): matched by id, never by text.
+    const source=m.source_message!=null?` data-source-session="${esc(m.session)}" data-source-message="${esc(m.source_message)}"`:'';
+    return divider+`<div class="bubble ${m.role==='user'?'user':''} ${shape}" data-channel="${esc(channel.key)}"${source}>
       ${face}
       <div class="message-body">${richText(text)}</div>
       ${attachments.map(inlineMedia).join('')}

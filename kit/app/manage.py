@@ -1528,7 +1528,11 @@ def register(app, select, load, operations):
     @app.get('/api/feed')
     def conversation_feed(before:str|None=None,limit:int=60):
         """One conversation, across every channel it happened on."""
-        c=load();page=hr.feed_page(c,limit,before)
+        c=load()
+        # Source row ids only for the explicitly enabled keyed client (Phase 1B C3), which
+        # matches its own send's rows by id; the ordinary page gets exactly what it did.
+        keyed=getattr(app.state,'keyed_client',None)
+        page=hr.feed_page(c,limit,before,source_ids=bool(keyed and keyed()))
         return {**page,'messages':_attach_media(c,page['messages']),
                 'session':hr.latest_session(c),'agent':c.agent}
 
