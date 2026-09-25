@@ -1,0 +1,174 @@
+{
+  "fact_kinds": [
+    "executor_started",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "executor_finished"
+  ],
+  "foreign_rows": [
+    [
+      false,
+      2,
+      "user"
+    ],
+    [
+      false,
+      3,
+      "assistant"
+    ],
+    [
+      true,
+      5,
+      "user"
+    ],
+    [
+      true,
+      6,
+      "assistant"
+    ]
+  ],
+  "keyed_still_running_after_foreign": true,
+  "lease_during": 1,
+  "linked": [
+    [
+      "20260924_214329_6d7100",
+      1
+    ],
+    [
+      "20260924_214329_6d7100",
+      4
+    ]
+  ],
+  "provider_requests": [
+    [
+      "hang",
+      true,
+      1
+    ],
+    [
+      "hang",
+      false,
+      2
+    ],
+    [
+      "deltas",
+      false,
+      1
+    ],
+    [
+      "deltas",
+      true,
+      2
+    ],
+    [
+      "deltas",
+      true,
+      3
+    ]
+  ],
+  "row": {
+    "capability": "full",
+    "correlation": "linked",
+    "coverage": "complete",
+    "error_code": null,
+    "liveness": "quiescent",
+    "owner_turn": "recorded",
+    "reply": "final",
+    "state": "complete"
+  },
+  "same_session_after": {
+    "exit": 0,
+    "seconds": 2.79,
+    "stderr_tail": [
+      "↻ Resumed session 20260924_214329_6d7100 \"Hello there. I kept the kettle warm\" (1 user message, 2 total messages)",
+      "",
+      "session_id: 20260924_214329_6d7100"
+    ]
+  },
+  "same_session_during": {
+    "exit": 1,
+    "seconds": 1.14,
+    "stderr_tail": [
+      "hermes-refusal-reason: SESSION_NOT_OWNED",
+      "Session 20260924_214329_6d7100 already has a live owner (cli, pid 242598, lease age 0m). Its turn activity is unknown; an open lease does not mean a turn is running. Attach through a compatible owner, or close the session in its owning surface before resuming here. Do not delete a live owner's lease to force a takeover."
+    ]
+  },
+  "settled": true,
+  "state_rows": [
+    {
+      "finish_reason": null,
+      "role": "user",
+      "row_id": 1,
+      "session_id": "20260924_214329_6d7100"
+    },
+    {
+      "finish_reason": null,
+      "role": "user",
+      "row_id": 2,
+      "session_id": "20260924_214332_060bdd"
+    },
+    {
+      "finish_reason": "stop",
+      "role": "assistant",
+      "row_id": 3,
+      "session_id": "20260924_214332_060bdd"
+    },
+    {
+      "finish_reason": "stop",
+      "role": "assistant",
+      "row_id": 4,
+      "session_id": "20260924_214329_6d7100"
+    },
+    {
+      "finish_reason": null,
+      "role": "user",
+      "row_id": 5,
+      "session_id": "20260924_214329_6d7100"
+    },
+    {
+      "finish_reason": "stop",
+      "role": "assistant",
+      "row_id": 6,
+      "session_id": "20260924_214329_6d7100"
+    }
+  ],
+  "unrelated": {
+    "exit": 0,
+    "seconds": 2.42,
+    "stderr_tail": [
+      "session_id: 20260924_214332_060bdd"
+    ]
+  }
+}

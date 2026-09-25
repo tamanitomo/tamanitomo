@@ -1,0 +1,6 @@
+cwd=<source-only export of b14477d working files (git ls-files -co, no .git)>
+ls -a .git: 0 entries
+git rev-parse --show-toplevel: fatal: not a git repository (or any parent up to mount point /)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+63e116839cc5443e30998cbac631d5f6bfdd4a0e08365df14be07a6cb14b8159  tests/fixtures/phase1b_pre_c2/companion_dispatch.py
+(companion_outbox.py was deliberately tampered afterwards for the tamper check; see t1_tamper_check.txt)

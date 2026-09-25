@@ -1,0 +1,89 @@
+{
+  "fact_kinds": [
+    "executor_started",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "executor_finished"
+  ],
+  "provider_requests": [
+    [
+      "error_before_first_byte",
+      true,
+      1
+    ],
+    [
+      "error_before_first_byte",
+      false,
+      2
+    ],
+    [
+      "error_before_first_byte",
+      false,
+      3
+    ],
+    [
+      "error_before_first_byte",
+      true,
+      4
+    ],
+    [
+      "error_before_first_byte",
+      false,
+      5
+    ],
+    [
+      "error_before_first_byte",
+      true,
+      6
+    ]
+  ],
+  "row": {
+    "capability": "full",
+    "correlation": "linked",
+    "coverage": "complete",
+    "error_code": "hermes_failed",
+    "liveness": "quiescent",
+    "owner_turn": "recorded",
+    "reply": "none",
+    "state": "failed"
+  },
+  "settled": true,
+  "state_rows": [
+    {
+      "finish_reason": null,
+      "role": "user",
+      "row_id": 1,
+      "session_id": "20260924_214143_42a88f"
+    }
+  ]
+}

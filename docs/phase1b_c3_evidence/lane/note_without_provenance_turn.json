@@ -1,0 +1,94 @@
+{
+  "fact_kinds": [
+    "executor_started",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_intent",
+    "write_committed",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "write_intent",
+    "write_committed",
+    "executor_finished"
+  ],
+  "provider_requests": [
+    [
+      "recover_stream",
+      false,
+      1
+    ],
+    [
+      "recover_stream",
+      true,
+      2
+    ],
+    [
+      "recover_stream",
+      true,
+      3
+    ]
+  ],
+  "row": {
+    "capability": "full",
+    "correlation": "ambiguous",
+    "coverage": "complete",
+    "error_code": "owner_turn_not_established",
+    "liveness": "quiescent",
+    "owner_turn": "ambiguous",
+    "reply": "partial",
+    "state": "unknown"
+  },
+  "settled": true,
+  "state_rows": [
+    {
+      "finish_reason": null,
+      "role": "user",
+      "row_id": 1,
+      "session_id": "20260924_214119_94ed70"
+    },
+    {
+      "finish_reason": "length",
+      "role": "assistant",
+      "row_id": 2,
+      "session_id": "20260924_214119_94ed70"
+    },
+    {
+      "finish_reason": null,
+      "role": "user",
+      "row_id": 3,
+      "session_id": "20260924_214119_94ed70"
+    },
+    {
+      "finish_reason": "stop",
+      "role": "assistant",
+      "row_id": 4,
+      "session_id": "20260924_214119_94ed70"
+    }
+  ]
+}

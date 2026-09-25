@@ -1,0 +1,5 @@
+[32m[32m[1m16 passed[0m[32m in 19.74s[0m[0m
+[32m[32m[1m16 passed[0m[32m in 19.74s[0m[0m
+[32m[32m[1m16 passed[0m[32m in 19.65s[0m[0m
+[32m[32m[1m16 passed[0m[32m in 19.24s[0m[0m
+[32m[32m[1m16 passed[0m[32m in 19.32s[0m[0m

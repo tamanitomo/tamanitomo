@@ -1,0 +1,3 @@
+[1m[31mE   AssertionError: pre-C2 fixture checksum mismatch: companion_outbox.py[0m
+[1m[31m<job>/export-t1/tests/test_dispatch_claim.py[0m:412: AssertionError: pre-C2 fixture checksum mismatch: companion_outbox.py
+[1m[31mE   AssertionError: pre-C2 fixture checksum mismatch: companion_outbox.py[0m

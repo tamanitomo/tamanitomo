@@ -1,0 +1,10 @@
+[32m.[0m[32m.[0m[32m.[0m[32m                                                                [100%][0m
+==================================== PASSES ====================================
+[32m[1m________ Compatibility.test_the_pre_1b_fold_does_not_requeue_new_phases ________[0m
+----------------------------- Captured stdout call -----------------------------
+[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m
+[36m[1m=========================== short test summary info ============================[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mCompatibility::test_a_running_pre_1b_dispatcher_is_not_excluded[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mCompatibility::test_an_existing_outbox_stays_readable_and_its_queued_entry_is_dispatched[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mCompatibility::test_the_pre_1b_fold_does_not_requeue_new_phases[0m
+[32m[32m[1m3 passed[0m, [32m[1m6 subtests passed[0m[32m in 0.07s[0m[0m

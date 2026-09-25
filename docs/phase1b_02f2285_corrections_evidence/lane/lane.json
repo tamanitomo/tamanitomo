@@ -1,0 +1,163 @@
+{
+  "app_commit": "b14477d13fa875e41002ac7c8274733fce2a570b",
+  "app_dirty": false,
+  "app_python": "3.14.7 (main, Aug 13 2026, 07:40:04) [GCC 16.2.1 20260810]",
+  "cases": [
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedTurns::test_a_dropped_main_stream_adds_an_unmarked_user_row",
+      "seconds": 3.148,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedTurns::test_a_note_without_its_provenance_stays_conservative",
+      "seconds": 2.907,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedTurns::test_a_provider_retry_inside_one_turn_is_one_launch",
+      "seconds": 3.048,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedTurns::test_an_owner_message_equal_to_the_note_text_is_still_owner_speech",
+      "seconds": 3.032,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedTurns::test_controller_death_mid_turn_then_recovery",
+      "seconds": 3.428,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedTurns::test_deadline_interrupts_a_hung_turn",
+      "seconds": 8.426,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedTurns::test_fresh_turn_completes_and_the_same_key_replays",
+      "seconds": 3.035,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedTurns::test_provider_error_before_the_first_byte",
+      "seconds": 11.849,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedTurns::test_receipt_gap_in_a_real_turn",
+      "seconds": 2.95,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedTurns::test_resumed_session_is_not_created_here",
+      "seconds": 5.195,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedTurns::test_stop_during_a_stream_is_interrupted",
+      "seconds": 4.798,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedTurns::test_truncated_and_disconnected_replies_fail_as_incomplete",
+      "seconds": 5.674,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedHttp::test_http_dropped_stream_note_is_excluded_from_reads",
+      "seconds": 3.038,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedHttp::test_http_fresh_turn_links_reads_and_replays",
+      "seconds": 2.846,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedHttp::test_http_note_without_provenance_reads_as_recorded",
+      "seconds": 3.47,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedHttp::test_http_owner_text_equal_to_the_note_stays_owner_speech",
+      "seconds": 3.534,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedSeams::test_compression_clone_then_death_is_unknown_not_absent",
+      "seconds": 0.412,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedSeams::test_hidden_and_summary_owner_rows_are_not_owner_evidence",
+      "seconds": 0.392,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedSeams::test_receipt_gap_after_a_real_commit",
+      "seconds": 0.379,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedActivation::test_controller_death_during_a_tool",
+      "seconds": 49.065,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedActivation::test_deadline_during_a_tool",
+      "seconds": 8.978,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedActivation::test_executor_killed_during_a_tool_leaves_the_tool_running",
+      "seconds": 2.901,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedActivation::test_foreign_writers_are_never_attributed",
+      "seconds": 35.468,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedActivation::test_real_cli_compression_continuation",
+      "seconds": 5.841,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedActivation::test_stop_during_a_tool",
+      "seconds": 5.917,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedActivation::test_tool_descendants_escape_the_managed_group",
+      "seconds": 4.1,
+      "status": "passed"
+    },
+    {
+      "id": "tests.test_phase1b_c1_pinned.PinnedActivation::test_tool_turn_completes_with_tool_rows_excluded",
+      "seconds": 4.037,
+      "status": "passed"
+    }
+  ],
+  "command": [
+    "<repo>/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "-rs",
+    "--junitxml=<job>/lane-work/evidence/junit.xml",
+    "tests/test_phase1b_c1_pinned.py"
+  ],
+  "files": 12298,
+  "finished": 1790298347.2544525,
+  "host": "Linux-7.2.0-1-cachyos-x86_64-with-glibc2.44",
+  "import_origins_outside_tree": {},
+  "pinned": "0e9fc2cc152b4a4d9fd736f107412ace2a0c2555",
+  "problems": [],
+  "pytest_exit": 0,
+  "required_cases": 27,
+  "started": 1790298155.7127745,
+  "tree": "a6b86d2af56271ddd677c2d84c330e890b48ff48",
+  "tree_problems": [],
+  "verdict": "pass"
+}

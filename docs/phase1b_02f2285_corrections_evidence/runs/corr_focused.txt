@@ -1,0 +1,142 @@
+[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[33m [ 92%]
+[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[32m.[0m[33m                                                                  [100%][0m
+[33m=============================== warnings summary ===============================[0m
+.venv/lib/python3.14/site-packages/fastapi/testclient.py:1
+  <repo>/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+==================================== PASSES ====================================
+[32m[1m________ F1LegacyFallback.test_unreadable_ledger_authorised_and_revoked ________[0m
+----------------------------- Captured stdout call -----------------------------
+[32mu[0m[32mu[0m
+[32m[1m_____ F3ReceiptPaths.test_completed_turn_all_paths_agree_then_all_withhold _____[0m
+----------------------------- Captured stdout call -----------------------------
+[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m
+[32m[1m________ F3ReceiptPaths.test_open_receipts_for_a_paused_unsettled_turn _________[0m
+----------------------------- Captured stdout call -----------------------------
+[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m
+[32m[1m______ F3ReceiptPaths.test_two_profiles_same_key_and_lost_response_retry _______[0m
+----------------------------- Captured stdout call -----------------------------
+[32mu[0m[32mu[0m
+[32m[1m_________________ PublicFilterUnit.test_every_split_of_a_block _________________[0m
+----------------------------- Captured stdout call -----------------------------
+[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[33m [ 30%]
+[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m
+[32m[1m_____________________ CrashBoundaries.test_every_boundary ______________________[0m
+----------------------------- Captured stdout call -----------------------------
+[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m
+[32m[1m_____ AttemptOwnership.test_mark_cannot_overwrite_an_attempt_or_an_outcome _____[0m
+----------------------------- Captured stdout call -----------------------------
+[32mu[0m[33m [ 46%]
+[0m[32mu[0m[32mu[0m
+[32m[1m________________________ Classification.test_the_table _________________________[0m
+----------------------------- Captured stdout call -----------------------------
+[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m
+[32m[1m________ Compatibility.test_the_pre_1b_fold_does_not_requeue_new_phases ________[0m
+----------------------------- Captured stdout call -----------------------------
+[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m
+[32m[1m______________ SlotBoundaries.test_amended_rule_at_every_boundary ______________[0m
+----------------------------- Captured stdout call -----------------------------
+[32mu[0m[32mu[0m[32mu[0m[32mu[0m[32mu[0m
+[32m[1m_________ SlotBoundaries.test_pre_1b_fold_does_not_requeue_new_phases __________[0m
+----------------------------- Captured stdout call -----------------------------
+[32mu[0m[32mu[0m[32mu[0m
+[36m[1m=========================== short test summary info ============================[0m
+[32mPASSED[0m tests/test_phase1b_c1_closure.py::[1mF1LegacyFallback::test_corrupt_ledger[0m
+[32mPASSED[0m tests/test_phase1b_c1_closure.py::[1mF1LegacyFallback::test_genuine_legacy_operation_and_unknown_id[0m
+[32mPASSED[0m tests/test_phase1b_c1_closure.py::[1mF1LegacyFallback::test_other_profile_is_404_even_with_the_ledger_lost[0m
+[32mPASSED[0m tests/test_phase1b_c1_closure.py::[1mF1LegacyFallback::test_persisted_format_two_after_restart[0m
+[32mPASSED[0m tests/test_phase1b_c1_closure.py::[1mF1LegacyFallback::test_readable_reset[0m
+[32mPASSED[0m tests/test_phase1b_c1_closure.py::[1mF1LegacyFallback::test_readable_reset_authorised_is_restricted_too[0m
+[32mPASSED[0m tests/test_phase1b_c1_closure.py::[1mF1LegacyFallback::test_receipt_pruning[0m
+[32mPASSED[0m tests/test_phase1b_c1_closure.py::[1mF1LegacyFallback::test_unreadable_ledger_authorised_and_revoked[0m
+[32mPASSED[0m tests/test_phase1b_c1_closure.py::[1mF2PublicStream::test_after_restart_a_partial_stream_is_not_fabricated[0m
+[32mPASSED[0m tests/test_phase1b_c1_closure.py::[1mF2PublicStream::test_failure_file_holds_no_text[0m
+[32mPASSED[0m tests/test_phase1b_c1_closure.py::[1mF2PublicStream::test_other_profile_and_lost_ledger[0m
+[32mPASSED[0m tests/test_phase1b_c1_closure.py::[1mF2PublicStream::test_reasoning_markup_never_leaves_the_server[0m
+[32mPASSED[0m tests/test_phase1b_c1_closure.py::[1mF2PublicStream::test_revocation_withholds_the_next_read[0m
+[32mPASSED[0m tests/test_phase1b_c1_closure.py::[1mF2PublicStream::test_snapshot_grows_and_is_not_append_only[0m
+[32mPASSED[0m tests/test_phase1b_c1_closure.py::[1mF3ReceiptPaths::test_completed_turn_all_paths_agree_then_all_withhold[0m
+[32mPASSED[0m tests/test_phase1b_c1_closure.py::[1mF3ReceiptPaths::test_open_receipts_for_a_paused_unsettled_turn[0m
+[32mPASSED[0m tests/test_phase1b_c1_closure.py::[1mF3ReceiptPaths::test_two_profiles_same_key_and_lost_response_retry[0m
+[32mPASSED[0m tests/test_phase1b_c1_closure.py::[1mPublicStreamUnit::test_bounded_tail_and_markup[0m
+[32mPASSED[0m tests/test_phase1b_c1_review_r1.py::[1mStreamPrivacyReview::test_completed_operation_does_not_reintroduce_hidden_delta_text[0m
+[32mPASSED[0m tests/test_phase1b_c1_review_r1.py::[1mStreamPrivacyReview::test_failed_operation_does_not_reintroduce_hidden_delta_text[0m
+[32mPASSED[0m tests/test_phase1b_c1_review_r1.py::[1mStreamPrivacyReview::test_ordinary_public_output_is_still_delivered[0m
+[32mPASSED[0m tests/test_phase1b_c1_review_r1.py::[1mStreamPrivacyReview::test_running_hidden_block_stays_hidden_after_raw_buffer_rollover[0m
+[32mPASSED[0m tests/test_phase1b_c1_review_r1.py::[1mStreamPrivacyCoverage::test_interrupted_keeps_only_public_partial_text[0m
+[32mPASSED[0m tests/test_phase1b_c1_review_r1.py::[1mStreamPrivacyCoverage::test_ledger_loss_is_the_restricted_view[0m
+[32mPASSED[0m tests/test_phase1b_c1_review_r1.py::[1mStreamPrivacyCoverage::test_restart_reconstruction_uses_the_clean_row[0m
+[32mPASSED[0m tests/test_phase1b_c1_review_r1.py::[1mStreamPrivacyCoverage::test_revocation_withholds_everything[0m
+[32mPASSED[0m tests/test_phase1b_c1_review_r1.py::[1mStreamPrivacyCoverage::test_source_unavailable_withholds_content[0m
+[32mPASSED[0m tests/test_phase1b_c1_review_r1.py::[1mPublicFilterUnit::test_bounded_state_inside_a_huge_block[0m
+[32mPASSED[0m tests/test_phase1b_c1_review_r1.py::[1mPublicFilterUnit::test_every_split_of_a_block[0m
+[32mPASSED[0m tests/test_phase1b_c1_review_r1.py::[1mPublicFilterUnit::test_ordinary_text_and_edges[0m
+[32mPASSED[0m tests/test_evidence_export.py::[1mEvidenceExport::test_an_earlier_raw_placeholder_is_repaired_as_a_derivative[0m
+[32mPASSED[0m tests/test_evidence_export.py::[1mEvidenceExport::test_other_malformation_and_leaks_fail[0m
+[32mPASSED[0m tests/test_evidence_export.py::[1mEvidenceExport::test_placeholders_are_escaped_and_cases_preserved[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mOneRunOneClaim::test_a_second_dispatcher_is_refused_by_the_run_lock[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mOneRunOneClaim::test_concurrent_processes_never_deliver_one_entry_twice[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mOneRunOneClaim::test_with_the_run_lock_bypassed_the_claim_guard_admits_one[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mCrashBoundaries::test_a_charge_lookup_error_is_never_read_as_no_charge[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mCrashBoundaries::test_a_crash_while_the_run_lock_is_held_does_not_block_the_next_run[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mCrashBoundaries::test_an_unreadable_charge_ledger_leaves_the_reservation_unresolved[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mCrashBoundaries::test_every_boundary[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mAttemptOwnership::test_a_different_attempt_cannot_move_the_entry[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mAttemptOwnership::test_a_late_outcome_after_recovery_is_refused[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mAttemptOwnership::test_a_requeued_entry_belongs_to_its_new_attempt[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mAttemptOwnership::test_a_stale_expected_phase_is_refused[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mAttemptOwnership::test_mark_cannot_overwrite_an_attempt_or_an_outcome[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mAttemptOwnership::test_unknown_is_replaced_only_by_the_same_attempt_with_evidence[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mClassification::test_reported_values_are_kept_and_nothing_is_invented[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mClassification::test_the_pre_platform_list_starts_empty[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mClassification::test_the_table[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mClassification::test_the_watch_notifier_keeps_its_shape[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mOutcomesThroughTheDispatcher::test_a_cap_refusal_appends_no_charge_and_requeues[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mOutcomesThroughTheDispatcher::test_a_raising_delivery_step_is_unknown[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mOutcomesThroughTheDispatcher::test_an_error_is_unknown_and_never_resent[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mOutcomesThroughTheDispatcher::test_skipped_is_withheld[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mOutcomesThroughTheDispatcher::test_the_record_lands_in_the_outbox[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mChargeLedger::test_a_missing_ledger_is_empty_and_a_torn_one_is_unreadable[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mChargeLedger::test_a_refused_claim_appends_nothing[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mChargeLedger::test_the_charge_row_carries_the_attempt[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mCompatibility::test_a_running_pre_1b_dispatcher_is_not_excluded[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mCompatibility::test_an_existing_outbox_stays_readable_and_its_queued_entry_is_dispatched[0m
+[32mPASSED[0m tests/test_dispatch_claim.py::[1mCompatibility::test_the_pre_1b_fold_does_not_requeue_new_phases[0m
+[32mPASSED[0m tests/test_outbox.py::[1mQueueTests::test_a_full_queue_is_an_error_not_a_bigger_queue[0m
+[32mPASSED[0m tests/test_outbox.py::[1mQueueTests::test_a_message_carries_an_expiry_from_the_moment_it_is_queued[0m
+[32mPASSED[0m tests/test_outbox.py::[1mQueueTests::test_high_priority_goes_to_the_front[0m
+[32mPASSED[0m tests/test_outbox.py::[1mQueueTests::test_media_needs_an_absolute_path_that_exists_by_send_time[0m
+[32mPASSED[0m tests/test_outbox.py::[1mQueueTests::test_the_fold_is_the_state_and_the_file_keeps_everything[0m
+[32mPASSED[0m tests/test_outbox.py::[1mDispatcherTests::test_a_backlog_is_never_flushed_at_once[0m
+[32mPASSED[0m tests/test_outbox.py::[1mDispatcherTests::test_a_dry_run_still_expires_but_sends_nothing[0m
+[32mPASSED[0m tests/test_outbox.py::[1mDispatcherTests::test_a_failed_send_keeps_its_slot_and_is_not_retried[0m
+[32mPASSED[0m tests/test_outbox.py::[1mDispatcherTests::test_a_photo_set_to_ask_is_withheld_with_a_reason_she_can_act_on[0m
+[32mPASSED[0m tests/test_outbox.py::[1mDispatcherTests::test_a_photo_set_to_no_never_goes[0m
+[32mPASSED[0m tests/test_outbox.py::[1mDispatcherTests::test_an_expired_message_is_dropped_and_never_sent_late[0m
+[32mPASSED[0m tests/test_outbox.py::[1mDispatcherTests::test_an_old_message_from_the_human_does_not_count_as_awake[0m
+[32mPASSED[0m tests/test_outbox.py::[1mDispatcherTests::test_being_awake_does_not_raise_the_daily_cap[0m
+[32mPASSED[0m tests/test_outbox.py::[1mDispatcherTests::test_being_visibly_awake_beats_the_sleep_window[0m
+[32mPASSED[0m tests/test_outbox.py::[1mDispatcherTests::test_not_before_holds_without_burning_anything[0m
+[32mPASSED[0m tests/test_outbox.py::[1mDispatcherTests::test_quiet_hours_hold_a_message_rather_than_dropping_it[0m
+[32mPASSED[0m tests/test_outbox.py::[1mDispatcherTests::test_the_daily_cap_holds_and_is_counted_on_disk[0m
+[32mPASSED[0m tests/test_phase1b_c0_dispatch.py::[1mSlotBoundaries::test_a_second_dispatcher_is_refused_by_the_run_lock[0m
+[32mPASSED[0m tests/test_phase1b_c0_dispatch.py::[1mSlotBoundaries::test_a_stale_snapshot_cannot_claim_a_claimed_entry[0m
+[32mPASSED[0m tests/test_phase1b_c0_dispatch.py::[1mSlotBoundaries::test_amended_rule_at_every_boundary[0m
+[32mPASSED[0m tests/test_phase1b_c0_dispatch.py::[1mSlotBoundaries::test_an_unreadable_slot_ledger_leaves_the_reservation_unresolved[0m
+[32mPASSED[0m tests/test_phase1b_c0_dispatch.py::[1mSlotBoundaries::test_pre_1b_fold_does_not_requeue_new_phases[0m
+[32mPASSED[0m tests/test_phase1b_c0_dispatch.py::[1mSlotBoundaries::test_revision_two_charges_twice_after_a_charge_before_marker_crash[0m
+[32mPASSED[0m tests/test_phase1b_review_02f2285.py::[1mUnicodeFilter::test_fragmentation_does_not_change_hidden_block_exclusion[0m
+[32mPASSED[0m tests/test_phase1b_review_02f2285.py::[1mUnicodeFilter::test_lowercase_expansion_preserves_public_characters[0m
+[32mPASSED[0m tests/test_phase1b_review_02f2285.py::[1mUnicodeHttp::test_interruption_does_not_publish_hidden_unicode_prefixed_delta[0m
+[32mPASSED[0m tests/test_phase1b_review_02f2285.py::[1mPrecheckCancellation::test_drop_between_precheck_and_claim_prevents_charge_and_delivery[0m
+[32mPASSED[0m tests/test_phase1b_review_b94caf2_original.py::[1mStreamPrivacyReview::test_completed_operation_does_not_reintroduce_hidden_delta_text[0m
+[32mPASSED[0m tests/test_phase1b_review_b94caf2_original.py::[1mStreamPrivacyReview::test_failed_operation_does_not_reintroduce_hidden_delta_text[0m
+[32mPASSED[0m tests/test_phase1b_review_b94caf2_original.py::[1mStreamPrivacyReview::test_running_hidden_block_stays_hidden_after_raw_buffer_rollover[0m
+[32mPASSED[0m tests/test_phase1b_review_b94caf2_original.py::[1mPublicOutputControl::test_plain_public_text_remains_available_and_bounded[0m
+[32mPASSED[0m tests/test_phase1b_u1_unicode_offsets.py::[1mUnicodeOffsets::test_non_ascii_text_is_returned_unchanged[0m
+[32mPASSED[0m tests/test_phase1b_u1_unicode_offsets.py::[1mUnicodeOffsets::test_partial_state_stays_bounded[0m
+[32mPASSED[0m tests/test_phase1b_u1_unicode_offsets.py::[1mUnicodeOffsets::test_split_tags_and_unclosed_block_after_expanding_characters[0m
+[32mPASSED[0m tests/test_phase1b_u1_unicode_offsets.py::[1mUnicodeOffsets::test_uppercase_tags_after_expanding_characters[0m
+[33m[32m96 passed[0m, [33m[1m1 warning[0m, [32m127 subtests passed[0m[33m in 22.21s[0m[0m

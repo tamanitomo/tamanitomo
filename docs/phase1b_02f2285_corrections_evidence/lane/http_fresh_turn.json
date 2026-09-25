@@ -1,0 +1,34 @@
+{
+  "provider_requests": [
+    [
+      "deltas",
+      false,
+      1
+    ],
+    [
+      "deltas",
+      true,
+      2
+    ]
+  ],
+  "receipt": {
+    "links": "linked",
+    "owner_turn": "recorded",
+    "reply": "final",
+    "state": "complete"
+  },
+  "state_rows": [
+    {
+      "finish_reason": null,
+      "role": "user",
+      "row_id": 1,
+      "session_id": "20260924_210340_65a624"
+    },
+    {
+      "finish_reason": "stop",
+      "role": "assistant",
+      "row_id": 2,
+      "session_id": "20260924_210340_65a624"
+    }
+  ]
+}
