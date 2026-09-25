@@ -7,6 +7,7 @@ release-files.json. The current `POST /api/chat` path is unchanged and there is 
 fallback between the two: an accepted keyed send is never retried on the unkeyed path.
 
   GET  /api/chat/sends/bootstrap          {conversation_id, generation}; creates the ledger
+  GET  /api/chat/continuation            read-only: saved session still eligible? + a suggestion
   POST /api/chat/sends                    keyed acceptance: 202 new, 200 replay, 409/422/503
   GET  /api/chat/sends/{send_id}          receipt (recovery first)
   GET  /api/chat/sends?key=K | ?open=1    receipt by client key | open receipts
@@ -35,7 +36,7 @@ from typing import Callable
 from . import chat_sends as cs
 from . import runtime as hr
 from .chat_projection import ChatScope, Projection
-from .chat_sources import HermesSource, SourceUnavailable, owner_binding, session_kind
+from .chat_sources import LOCAL_SOURCES, HermesSource, SourceUnavailable, owner_binding, session_kind
 
 NOTE = 'Hermes owns this conversation. All channels share this profile’s identity, memory, and lived state.'
 RESET_CONFIRMATION = 'reset send ledger'
@@ -257,27 +258,78 @@ class Integration:
         scope = ChatScope(installation, profile or 'default', home, binding.digest())
         return Context(c, rt, scope, binding, self.service(rt, c.home), cs.read_model(c.home))
 
+    def workspace_sessions(self, ctx):
+        return hr.read_workspace_sessions(ctx.c) | set(ctx.model.workspace_sessions)
+
+    @staticmethod
+    def eligible_kind(row, binding, workspace):
+        """The one predicate for executing in a session: 'workspace' or 'terminal' when the
+        binding would project it as one of this profile's private sessions, else None.
+        Keyed acceptance and the continuation route both use it; a `cli` label alone,
+        a gateway chat id, a group, cron or an unknown participant never qualifies."""
+        kind, _, _ = session_kind(dict(row), binding, workspace)
+        return kind if kind in ('workspace', 'terminal') else None
+
+    def _sessions(self, ctx, sql_tail, params):
+        """Read-only session rows in this profile's scope; 503 when the store is unreadable."""
+        try:
+            with hr.session_db(ctx.c) as state:
+                if state is None:
+                    return []
+                con, columns, where, scope_params = state
+                pick = lambda col: f's.{col}' if col in columns else 'NULL'
+                has_messages = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='messages'").fetchone()
+                last = '(SELECT max(m.timestamp) FROM messages m WHERE m.session_id=s.id)' if has_messages else 'NULL'
+                rows = con.execute(
+                    f"SELECT s.id AS session_id, s.source AS source, {pick('user_id')} AS user_id, "
+                    f"{pick('chat_id')} AS chat_id, {pick('chat_type')} AS chat_type, s.started_at AS started_at, "
+                    f"{last} AS last_at FROM sessions s WHERE {where.replace('profile_name', 's.profile_name')} "
+                    + sql_tail, (*scope_params, *params)).fetchall()
+                return [dict(r) for r in rows]
+        except (ValueError, OSError, cs.sqlite3.Error):
+            raise cs.Refused('source_unavailable', 503) from None
+
     def authorize_session(self, ctx):
         """A resumed session must be one the CURRENT binding would project as a workspace or
         terminal session of this profile (4.10.3); profile membership alone is not enough."""
         def check(scope, session):
-            workspace = hr.read_workspace_sessions(ctx.c) | set(ctx.model.workspace_sessions)
-            try:
-                with hr.session_db(ctx.c) as state:
-                    if state is None:
-                        return None
-                    con, columns, where, params = state
-                    pick = lambda col: col if col in columns else 'NULL'
-                    row = con.execute(f"SELECT id AS session_id, source, {pick('user_id')} AS user_id, "
-                                      f"{pick('chat_id')} AS chat_id, {pick('chat_type')} AS chat_type "
-                                      f'FROM sessions WHERE id=? AND {where}', (session, *params)).fetchone()
-            except (ValueError, OSError, cs.sqlite3.Error):
-                raise cs.Refused('source_unavailable', 503) from None
-            if row is None:
+            rows = self._sessions(ctx, 'AND s.id=?', (session,))
+            if not rows:
                 return None
-            kind, _, _ = session_kind(dict(row), ctx.binding, workspace)
-            return (kind, None) if kind in ('workspace', 'terminal') else None
+            kind = self.eligible_kind(rows[0], ctx.binding, self.workspace_sessions(ctx))
+            return (kind, None) if kind else None
         return check
+
+    # Candidate sessions examined for a suggestion, newest activity first (bounded).
+    CONTINUATION_SCAN = 200
+
+    def continuation(self, ctx, session):
+        """Read-only continuation choice under the captured scope and CURRENT binding.
+
+        `current`: the tab's saved session, re-checked with the same predicate as keyed
+        acceptance. `suggestion`: the most recently active eligible session (latest message
+        timestamp, else started_at; ties by session id, descending), from at most
+        CONTINUATION_SCAN local-source sessions. Nothing is created or changed: no ledger,
+        no turn, no source write; only eligible session ids and their times are returned."""
+        workspace = self.workspace_sessions(ctx)
+        current = None
+        if session:
+            rows = self._sessions(ctx, 'AND s.id=?', (session,))
+            kind = self.eligible_kind(rows[0], ctx.binding, workspace) if rows else None
+            current = {'session': session, 'eligible': bool(kind), **({'kind': kind} if kind else {})}
+        local = ','.join('?' * len(LOCAL_SOURCES))
+        rows = self._sessions(ctx, f"AND lower(coalesce(s.source,'')) IN ({local}) "
+                                   'ORDER BY coalesce(last_at, s.started_at, 0) DESC, s.id DESC LIMIT ?',
+                              (*LOCAL_SOURCES, self.CONTINUATION_SCAN))
+        suggestion = None
+        for row in rows:
+            kind = self.eligible_kind(row, ctx.binding, workspace)
+            if kind:
+                suggestion = {'session': row['session_id'], 'kind': kind,
+                              'last_activity': row['last_at'] if row['last_at'] is not None else row['started_at']}
+                break
+        return {'conversation_id': ctx.scope.conversation_id, 'policy': 'saved_then_most_recent_local',
+                'current': current, 'suggestion': suggestion}
 
     # ----- links, content -----
 
@@ -507,6 +559,15 @@ def register(app, state_dir, select, load, current_selection, operations, option
         def run():
             ctx = capture()
             return ctx.svc.bootstrap(ctx.scope)
+        return guarded(run)
+
+    @app.get('/api/chat/continuation')
+    def send_continuation(session: str | None = None):
+        """Read-only: is the tab's saved session still one keyed acceptance would take, and
+        which eligible session would be suggested. Creates nothing (Integration.continuation)."""
+        def run():
+            ctx = capture()
+            return sends.continuation(ctx, session)
         return guarded(run)
 
     @app.post('/api/chat/sends')

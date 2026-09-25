@@ -22,6 +22,13 @@
    conversation store (chat-store.js), which the Chat page and the dock both render, so a
    send is followed the same way whichever view is open, or none.
 
+   Continuation: before a NEW intent exists, GET /api/chat/continuation re-checks the
+   tab's saved session with the server's own acceptance predicate, or names the most
+   recent eligible one; with none, the intent carries session null (a new session). An
+   ineligible saved session is never swapped silently: nothing is sent and the owner
+   chooses. Once the intent is stored its session never changes, and acceptance re-checks
+   it anyway (a refusal there is "Not sent", draft back, choice shown).
+
    Reads: the existing keyed routes and operation views, plus, only when a pending send
    is picked up again after a reload, one GET /api/chat/snapshot
    (Phase 1A) to learn which already-drawn history rows are this send's (by their
@@ -66,6 +73,11 @@ const WORDS={
   stillRunning:'The earlier attempt is still running or not yet proven finished. Wait, then try again.',
   wait:'Wait for the current action to finish.',
   onePending:'An earlier message is still being sent.',
+  sessionIneligible:'Not sent. The conversation this tab was continuing can no longer be continued from here. Choose how to continue; your draft is kept.',
+  sessionUnchecked:'Not sent: the app could not check which conversation to continue. Your draft is kept.',
+  sessionRefused:' That conversation can no longer be continued from here; choose how to continue.',
+  newSession:'Your first message starts a new session.',
+  signedOutUnsent:'Not sent: your sign-in ended. Sign in again; your draft is kept.',
 };
 
 const boots=new Map();          // scope id -> {conversation_id, generation}
@@ -140,7 +152,7 @@ async function bootstrap(scope,fresh=false){
    store (a bare harness) presenting is a no-op; `shown` still records the last status. */
 const NONE={status(){},stream(){},dropStream(){},replies(){},typing(){},canSend(){},hint(){},confirm(){},
   request(){},promote(){},settled(){},link(){},ownerPresented:()=>false,composer:()=>null,offerDraft:()=>false,
-  arrived(){},signedOut(){},signedIn(){}};
+  arrived(){},signedOut(){},signedIn(){},continued(){},sessionRefused(){}};
 const ui=()=>window.ChatStore?.present||NONE;
 
 function paintStatus(scope,p,text,{bad=false,sent=false,actions=[]}={}){
@@ -170,6 +182,38 @@ function settle(scope,p){
 
 /* ------------------------------------------------------------------ sending */
 
+/* Which session a NEW intent continues, decided before the intent exists (never after):
+   1. the tab's saved session, while the server's acceptance predicate still takes it;
+   2. with nothing saved, the most recent eligible session the server names;
+   3. with none (or after the owner chose "Start a new session"), null: a new session.
+   A saved session that is no longer eligible is not replaced: {ok:false}, and the choice is
+   shown. Without the conversation store (a bare script harness) the page's chatSession is
+   used as before; the enabled page always has the store. */
+async function continuation(scope){
+  const store=window.ChatStore?.present;
+  if(!store)return {ok:true,session:chatSession||null};
+  const saved=store.selection(scope);
+  if(saved&&saved.fresh){store.session(scope,{state:'new'});return {ok:true,session:null};}
+  const r=await call(scope,'/chat/continuation'+(saved?.session?'?session='+encodeURIComponent(saved.session):''));
+  if(!isCurrent(scope))return {ok:false,why:'scope'};
+  if(r.status===401){store.signedOut(scope);return {ok:false,why:'signedOut'};}
+  if(r.status!==200||!r.data||r.data.conversation_id===undefined){store.session(scope,{state:'unavailable'});return {ok:false,why:'unavailable'};}
+  store.signedIn(scope);
+  const {current,suggestion}=r.data;
+  if(saved?.session){
+    if(current?.session===saved.session&&current.eligible===true){store.session(scope,{state:'current',id:saved.session});return {ok:true,session:saved.session};}
+    store.session(scope,{state:'ineligible',id:saved.session,suggestion:suggestion||null});
+    return {ok:false,why:'ineligible'};
+  }
+  if(suggestion?.session){
+    store.choose(scope,{session:suggestion.session});
+    store.session(scope,{state:'current',id:suggestion.session});
+    return {ok:true,session:suggestion.session};
+  }
+  store.session(scope,{state:'new'});
+  return {ok:true,session:null,fresh:true};
+}
+
 async function startIntent(scope,message,{box=null,grow=null}={}){
   if(submitting)return;                                 // a second click or Enter while this one starts
   if(loadPending(scope)){hint(scope,WORDS.onePending);return;}
@@ -178,11 +222,17 @@ async function startIntent(scope,message,{box=null,grow=null}={}){
   const edits=draftEdits;         // R3: any composer edit after this belongs to the owner
   let started=false;
   try{
+    const pick=await continuation(scope);
+    if(!isCurrent(scope))return;
+    if(!pick.ok){
+      hint(scope,pick.why==='signedOut'?WORDS.signedOutUnsent:pick.why==='ineligible'?WORDS.sessionIneligible:WORDS.sessionUnchecked);
+      return;
+    }
     const boot=await bootstrap(scope,true);
     if(!isCurrent(scope))return;
     if(!boot.ok){hint(scope,WORDS.notSent+(boot.status===0?': the app could not be reached.':'.')+' Your draft is kept.');return;}
     const p={v:1,client_key:ulid(),generation:boot.generation,conversation_id:boot.conversation_id,
-             installation:scope.installation,profile:scope.profile,session:chatSession||null,
+             installation:scope.installation,profile:scope.profile,session:pick.session,
              message,created_at:Date.now()};
     if(!savePending(scope,p)){hint(scope,WORDS.storage);return;}
     started=true;
@@ -319,7 +369,7 @@ function finish(scope,p,view,receipt){
   const byId=new Map((result.messages||[]).map(m=>[m.message_id,m]));
   let replies=(receipt.reply_message_ids||[]).map(id=>byId.get(id)).filter(Boolean);
   if(!replies.length&&result.response)replies=[{content:result.response}];
-  if(result.session&&isCurrent(scope)){chatSession=result.session;try{sessionStorage.setItem(chatKey('session'),chatSession);}catch(_){}}
+  if(result.session&&isCurrent(scope)){chatSession=result.session;try{sessionStorage.setItem(chatKey('session'),chatSession);}catch(_){}ui().continued(scope,result.session);}
   const at=new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
   const state=receipt.state;
   settle(scope,p);
@@ -347,7 +397,9 @@ function finish(scope,p,view,receipt){
 function notSent(scope,p,code){
   settle(scope,p);
   const back=offerBack(scope,p.message);
-  const why=code==='turn_in_progress'?' Another reply is still running.':code==='installation_busy'?' Another action is running.':'';
+  if(code==='unauthorised_session')ui().sessionRefused(scope,p.session);
+  const why=code==='turn_in_progress'?' Another reply is still running.':code==='installation_busy'?' Another action is running.':
+    code==='unauthorised_session'?WORDS.sessionRefused:'';
   paintStatus(scope,p,WORDS.notSent,{bad:true});
   hint(scope,WORDS.notSent+'.'+why+(back?' Your message is back in the box.':' Your newer draft was kept.'));
 }
@@ -427,5 +479,6 @@ window.KeyedChat={
   words:WORDS,
   submit:(box,grow)=>{const message=box.value;if(!message.trim())return;return startIntent(scopeNow(),message,{box,grow});},
   attach,
+  continuation:()=>continuation(scopeNow()),
 };
 })();

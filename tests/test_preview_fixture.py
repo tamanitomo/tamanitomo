@@ -29,8 +29,9 @@ class PreviewFixtureTests(unittest.TestCase):
 
     def test_persistent_chat_preview_is_synthetic_and_serves_the_keyed_page(self):
         """--persistent-chat: a second companion and ordinary notes, all in the temporary home;
-        the app it builds serves the persistent Chat, and its newest session is one keyed
-        sends may resume."""
+        the app it builds serves the persistent Chat. No favourable newest session is seeded:
+        the legacy feed still picks the gateway gw-cli, and a keyed send goes through the
+        eligible session GET /api/chat/continuation names."""
         with tempfile.TemporaryDirectory() as tmp:
             root,c=preview_fixture.seed(pathlib.Path(tmp))
             rowan=preview_fixture.seed_persistent_chat(root,c)
@@ -48,7 +49,23 @@ class PreviewFixtureTests(unittest.TestCase):
                 self.assertIn('chat-controller.js',page)
                 auth={'x-companion-token':'disposable'}
                 feed=client.get('/api/feed',params={'profile':'nova'},headers=auth).json()
-                self.assertEqual(feed['session'],'web-evening')
+                self.assertEqual(feed['session'],'gw-cli')
+                cont=client.get('/api/chat/continuation',params={'profile':'nova'},headers=auth).json()
+                self.assertEqual(cont['suggestion']['session'],'term')
+                boot=client.get('/api/chat/sends/bootstrap',params={'profile':'nova'},headers=auth).json()
+                from kit.app import chat_sends as cs
+                body={'client_key':cs.new_ulid(),'generation':boot['generation'],'conversation_id':boot['conversation_id'],
+                      'message':'Preview send','session':cont['suggestion']['session']}
+                accepted=client.post('/api/chat/sends',params={'profile':'nova'},headers=auth,json=body)
+                self.assertEqual(accepted.status_code,202,accepted.text)
+                send_id=accepted.json()['send']['send_id']
+                import time
+                end=time.monotonic()+60
+                while time.monotonic()<end:
+                    receipt=client.get(f'/api/chat/sends/{send_id}',params={'profile':'nova'},headers=auth).json()
+                    if receipt['settled']:break
+                    time.sleep(0.05)
+                self.assertEqual((receipt['state'],receipt['session']),('complete','term'))
                 profiles=[p['id'] for p in client.get('/api/profiles',headers=auth).json()['profiles'] if p['installed']]
                 self.assertEqual(sorted(profiles),['nova','rowan'])
             finally:

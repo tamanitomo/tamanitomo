@@ -118,18 +118,9 @@ def seed_persistent_chat(root: Path, c) -> cc.Companion:
         path = c.vault / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding='utf-8')
-    # The newest session is an ordinary workspace one, so a keyed send resumes a session the
-    # server authorises. (The seeded conversation's newest 'cli' row is deliberately a
-    # gateway chat that keyed sends must refuse; see PersistentChatUIResults.md.)
-    sys.path.insert(0, str(ROOT / 'tests'))
-    from chat_fixtures import HermesStore
-    from kit.app import runtime as hr
-    store = HermesStore(c.home)
-    store.session('web-evening', 'cli', started=20)
-    hr.note_workspace_session(c, 'web-evening')
-    t = dt.datetime(2026, 9, 12, 19, tzinfo=UTC).timestamp()
-    store.say('web-evening', 'user', 'Back from the long walk.', t)
-    store.say('web-evening', 'assistant', 'Welcome home. How were the hills?', t + 30)
+    # No favourable newest session is seeded: the seeded conversation's newest 'cli' session is
+    # a gateway chat (gw-cli) that keyed sends refuse, and the persistent Chat continues the
+    # most recent ELIGIBLE session the server names (GET /api/chat/continuation) instead.
     return rowan
 
 

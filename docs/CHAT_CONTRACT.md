@@ -143,7 +143,7 @@ An owner-binding change is applied and committed before the source is read. A re
 
 **Start of history.** `start_reached: true` means the earliest message the sources still hold. A message a source has deleted is not recoverable by scrolling.
 
-The legacy `GET /api/feed` and `GET /api/sessions/{id}` are unchanged. They still include every non-internal source, groups and unbound accounts among them. Moving the Chat UI onto this contract, which tightens that, is Phase 2 and will be explicit.
+The legacy `GET /api/feed` and `GET /api/sessions/{id}` are unchanged. They still include every non-internal source, groups and unbound accounts among them, and the ordinary Chat page still reads them. The explicitly enabled persistent Chat client (§8.6, not activated) reads this contract instead (§8.8).
 
 ## 5. The persistent file, and its costs
 
@@ -220,6 +220,7 @@ Design: `PHASE1B_DESIGN.md` §4–§5. Results and the exact tests: `Phase1B_C1_
 |---|---|
 | `GET /api/chat/sends/bootstrap` | `{conversation_id, generation}`; creates the ledger on first use. `503 send_ledger_lost / send_storage_unsupported / send_supervision_unavailable`, `409 ledger_busy` |
 | `POST /api/chat/sends` `{client_key, generation, conversation_id, message, session}` | `202` accepted (or a `not_started` send re-armed), `200` replay of the receipt for this key (`replay: true`). `409 key_conflict / generation_changed / not_bootstrapped / ledger_busy / turn_in_progress / installation_busy`, `422 key_expired`, `400` invalid input, wrong conversation, unauthorised session, `503` as above |
+| `GET /api/chat/continuation?session=S` | read-only: whether the saved session is still one acceptance would take, and the most recent eligible one (§8.8). Creates nothing |
 | `GET /api/chat/sends/{send_id}` | receipt (recovery first) |
 | `GET /api/chat/sends?key=K` | receipt, or `404` (a `404` while a POST is in flight means retry the same key, never a new one). Same links as the direct receipt under the same binding |
 | `GET /api/chat/sends?open=1` | unsettled receipts, newest 20. Same links as the direct receipt under the same binding |
@@ -275,7 +276,7 @@ After any known restore or rollback of the profile home or of the ledger, an exp
 - `client_key` is a ULID (the server's format). Every automatic retry is the identical POST with the same key (backoff 0.5–8 s, then every 30 s while the page is open, and on reload). A lost or unreadable answer is followed by `GET ?key=`; a `404` there while the POST may be in flight means retry the same POST, never a new key. A `401` stops protected polling and keeps the intent for "Check now" after signing in.
 - Status polls `GET /api/operations/{id}` (the ledger view). `stream.text` replaces the reply-in-progress bubble (`<send_id>:stream`); it is never appended. The final owner/reply bubbles carry `<send_id>:owner` and `<send_id>:reply:<n>` and are filled from `result.messages` chosen by the receipt's `owner_message_id`/`reply_message_ids`. Replies render through the existing escaping and media paths.
 - Wording is the §6 table: "Not sent" (a refusal that proves non-acceptance, or `not_started`; the message goes back to the box only if the box is empty), "Your message was recorded; the reply failed" + **Ask again**, "The reply failed. Whether your message was recorded is unknown.", "Stopped" with the partial reply marked partial, the `unknown` sentence with **Send again** only while the receipt says `quiescent`/`none`, "Not confirmed. The app will check again with the same request.", and the reset sentence for `409 generation_changed`. Ask again and Send again are new intents with new keys; Send again first asks "This may send your message twice." and re-reads the receipt.
-- **Identity for history rows.** With the client enabled (only then), `/api/feed` rows also carry `source_message` (the Hermes row id, beside `session`), rendered as `data-source-session`/`data-source-message`. When a page returns to a pending send (reload, back to Chat), one `GET /api/chat/snapshot?limit=50` finds rows whose `correlation.send_id` is this send's; at settlement the same match is made from the settled `result.messages[].source`. A matching history row takes over the send's DOM id and the provisional bubble is removed. Nothing is matched by text or time.
+- **Identity for history rows.** With the client enabled (only then), `/api/feed` rows also carry `source_message` (the Hermes row id, beside `session`). The persistent Chat client no longer reads `/api/feed` (§8.8); its rows come from the snapshot/history routes and carry the same source ids, rendered as `data-source-session`/`data-source-message`. When a page returns to a pending send (reload, back to Chat), one `GET /api/chat/snapshot?limit=50` finds rows whose `correlation.send_id` is this send's; at settlement the same match is made from the settled `result.messages[].source`. A matching history row takes over the send's DOM id and the provisional bubble is removed. Nothing is matched by text or time.
 - **Limitation, measured:** a send's links are recorded when it settles (C1), so between a reload and settlement the recorded owner row can show twice (history + provisional). They merge at settlement.
 - Profile isolation: every request carries the scope captured with the intent; a page for another profile never reads, resumes or paints it. A pending intent from a different `conversation_id` is left untouched and blocks new sends on that tab until it is resolved or the tab is closed.
 - A stored reply row that itself contains inline reasoning markup is shown as recorded (the existing read boundary above); the live stream is filtered on the server.
@@ -285,3 +286,36 @@ After any known restore or rollback of the profile home or of the ledger, an exp
 Keyed sends stay off. The gate table is `Phase1B_C1_ActivationReadiness.md` §4 (it supersedes the list that used to be here). Open on Linux: processes the pinned tool starts (every command runs in a new session, outside the managed group), the read side of real CLI compression, and escaped descendants. Not yet observed at all: supervisors on Windows, macOS and Termux.
 
 Until then, unsupported platforms, storage or interpreters are refused before anything is created (`503`). Existing users keep `POST /api/chat`.
+
+### 8.8 Trusted reads and the continuation choice in the enabled client: NOT ACTIVATED
+
+With `chat_sends=Options(client=True)` only (no shipped entry point), the persistent Chat client (`chat-store.js`, `chat-view.js`, `chat-controller.js`, `chat-sends.js`):
+
+**Reads the Phase 1A contract, not `/api/feed`.**
+- Newest page: `GET /api/chat/snapshot?limit=60`. Older pages: `GET /api/chat/history?before=<history.before>&limit=60`. A small adapter maps each message to the row shape the renderer already draws (`occurred_at` as the time, `source.kind` as the channel: workspace → the app's own, terminal, telegram). Rows excluded by the contract (strangers, groups, internal sessions, `gw-cli`-style gateway chats) never reach the page or the dock.
+- **Identity.** A row's view identity is its opaque `message_id`. Equal text is never merged. A send's parts are reconciled only through source identity (session + Hermes row id from the settled result or the receipt's message ids) or the read's own `correlation.send_id` (§8.4), never by text, time or array position.
+- **Failures.** `503 source_unavailable` is shown as "cannot be read right now", never as an empty conversation: rows already read stay, marked as read earlier. `409 resync_required` or `400 invalid_cursor` on an older page causes exactly one fresh snapshot, which replaces the rows (a changed `projection_id` does the same). The draft and a pending intent are not part of the read state and are untouched.
+- Refresh is unchanged: a read when the Chat page opens with nothing pending (and the dock's first open). No changes feed, stream, push or unread state.
+
+**Chooses the session a new message continues before the intent exists.**
+
+`GET /api/chat/continuation[?session=<saved id>]`, registered with the keyed routes only:
+
+```
+-> {conversation_id, policy: "saved_then_most_recent_local",
+    current: {session, eligible, kind?} | null,
+    suggestion: {session, kind: workspace|terminal, last_activity} | null}
+```
+
+- Scope is captured once (installation, profile, home, binding), as for every keyed route. It is read-only: it creates no ledger, launches nothing, writes no source row, and returns only eligible session ids and times. It never returns content. `503 source_unavailable` when the session store cannot be read.
+- `current.eligible` uses **the same predicate as keyed acceptance** (`Integration.eligible_kind`, shared by `authorize_session`): the session must be one the current binding projects as this profile's workspace or terminal session. A `cli` label, a gateway `chat_id`, a group, cron, subagent or unknown participant, a Telegram DM or another profile's session is never eligible.
+- `suggestion` is the most recently active eligible session: latest message `timestamp` in the session, otherwise `started_at`, ties broken by session id descending, from at most 200 `cli`/`desktop`/`tui` sessions in scope. Reading across trusted channels (Telegram included) is separate from choosing where to execute: only workspace or terminal sessions are ever suggested.
+
+Client policy (per installation/profile, in this tab's `sessionStorage` `chat-continuation-<installation>-<profile>` = `{session, fresh}`):
+1. A saved session is kept while `current.eligible` is true. A completed keyed send's `result.session` becomes the saved session.
+2. With nothing saved, the suggestion is used and saved. With no suggestion (a new profile), the intent carries `session: null`, which the existing protocol starts as a new session, and the page says "Your first message starts a new session."
+3. A saved session that is no longer eligible is **not replaced**. Nothing is sent, the draft stays, and the log shows the choice: **Start a new session** (saved as `{session: null, fresh: true}`), or **Continue the most recent conversation** when a suggestion exists. Both are explicit owner actions.
+4. The check runs again for every new intent, then acceptance checks again. If authorisation changes between the two, acceptance refuses with `400 unauthorised_session`: "Not sent", the message goes back to an empty box, and the choice is shown. There is no retry into another session and no fallback to `POST /api/chat`.
+5. Once an intent is stored, its session, key, generation, message and conversation never change (§8.6).
+
+This selects an already-authorised session or a disclosed new one. It does not bring other channels' content into the model's context and makes no Phase 1C claim.

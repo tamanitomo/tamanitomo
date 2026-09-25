@@ -10,6 +10,10 @@
 .keyed-request-label{display:block;margin-bottom:4px}
 .keyed-request small{display:block;font-size:12px;color:var(--ink-2);text-align:right}
 .keyed-confirm{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px}
+/* The saved session can no longer be continued: the owner chooses (nothing is sent). */
+.chat-session-choice{align-self:center;max-width:92%;padding:10px 14px;border:1px solid var(--edge-2,currentColor);
+  border-radius:14px;text-align:center;display:flex;flex-wrap:wrap;justify-content:center;gap:6px}
+.chat-session-choice p{flex-basis:100%;margin:0 0 4px}
 
 /* Someone reading older messages is not scrolled away; they are told instead. */
 .chat-new-messages{position:relative;z-index:3;align-self:center;margin:-46px auto 10px;border-radius:999px;

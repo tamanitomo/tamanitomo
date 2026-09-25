@@ -10,8 +10,13 @@
    What it owns:
    - the keyed send client (chat-sends.js), attached once per page load rather than per
      Chat view, so a reply keeps arriving whichever page is open;
-   - reads of the existing /api/feed (newest page, older pages): once, then refreshed when
-     the Chat page opens with nothing pending;
+   - reads of the trusted Phase 1A contract (docs/CHAT_CONTRACT.md section 4):
+     /api/chat/snapshot for the newest page, /api/chat/history for older pages, through a
+     small adapter to the row shape the renderer already draws. Once, then refreshed when
+     the Chat page opens with nothing pending. The legacy /api/feed (every non-internal
+     source, groups and strangers included) is no longer read by this client;
+   - a continuation check when a view opens, so an ineligible saved session is shown as a
+     choice before the owner sends (chat-sends.js decides again at send time);
    - which single view is mounted: the Chat page on the Chat tab, otherwise the dock (a
      bottom-right launcher and a user-opened mini chat; on a narrow screen a pill above the
      tab bar and a full-height sheet). It never opens itself and never takes focus when
@@ -35,28 +40,49 @@ async function read(scope,path){
   const d=await r.json().catch(()=>({}));
   // The app's own PIN lock, as api() raises it (index.html).
   if(r.status===401&&d.pin_required&&typeof showPinModal==='function'){initPinModal();showPinModal();}
-  if(!r.ok){const e=Error(d.detail||d.error||('Request failed: '+r.status));e.status=r.status;throw e;}
+  if(!r.ok){
+    const e=Error(UNREADABLE[d.error]||d.detail||d.error||('Request failed: '+r.status));
+    e.status=r.status;e.code=d.error;throw e;
+  }
   return d;
+}
+const UNREADABLE={
+  source_unavailable:'The conversation cannot be read right now (its source is unavailable). Nothing was changed; it will be read again when Chat reopens.',
+};
+
+/* The trusted read contract, adapted to the renderer's row shape. The opaque message_id is
+   the row's identity; source ids are kept only to reconcile a send's parts. Channel labels
+   follow the projection's source kind (a workspace session is drawn as the app's own, as
+   the ordinary page draws a session it started). Deleted messages are never on a page. */
+const CHANNEL={workspace:'tamanitomo',terminal:'terminal',telegram:'telegram'};
+function adapt(page){
+  const rows=(page.messages||[]).filter(m=>m&&m.message_id&&m.content!=null&&m.status!=='deleted').map(m=>({
+    message_id:m.message_id,role:m.role,content:m.content,timestamp:m.occurred_at,
+    attachments:m.attachments||[],correlation:m.correlation||null,
+    session:m.source?.session??null,source_message:m.source?.message??null,
+    source:CHANNEL[m.source?.kind]||m.source?.kind||''}));
+  return {messages:rows,next_cursor:page.history?.before||null,projection:page.projection_id||null};
 }
 function pending(scope){
   try{if(sessionStorage.getItem('chat-pending-'+scope.installation+'-'+scope.profile))return true;}catch(_){}
   return [...S.state(scope).intents.values()].some(it=>!it.settled);
 }
 
-async function loadNewest(scope){
+async function loadNewest(scope,{reset=false}={}){
   const s=S.state(scope),gen=++s.gen,since=performance.now();
   if(s.history!=='ready')S.set(scope,{history:'loading'});
   try{
-    const d=await read(scope,'/feed?limit=60');
+    const d=adapt(await read(scope,'/chat/snapshot?limit=60'));
     if(gen!==S.state(scope).gen||!S.isCurrent(scope))return;
-    chatSession=d.session||chatSession;
-    if(chatSession){try{sessionStorage.setItem(chatKey('session'),chatSession);}catch(_){}}
     S.present.signedIn(scope);
-    S.newest(scope,d,since);
+    S.newest(scope,{...d,reset},since);
   }catch(error){
     if(gen!==S.state(scope).gen||!S.isCurrent(scope))return;
     if(error.status===401)S.present.signedOut(scope);
+    // A failed read is "unavailable", never an empty conversation: rows already read stay,
+    // marked as read earlier.
     if(S.state(scope).history!=='ready')S.set(scope,{history:'error',historyError:error.message});
+    else S.set(scope,{stale:error.message});
   }
 }
 async function loadOlder(scope){
@@ -65,15 +91,31 @@ async function loadOlder(scope){
   const cursor=s.cursor,gen=s.gen;
   S.set(scope,{older:'loading'});
   try{
-    const d=await read(scope,'/feed?limit=60&before='+encodeURIComponent(cursor));
+    const d=adapt(await read(scope,'/chat/history?limit=60&before='+encodeURIComponent(cursor)));
     const now=S.state(scope);
-    if(now.gen!==gen||now.cursor!==cursor||!S.isCurrent(scope)){S.set(scope,{older:'idle'});return;}
+    if(now.gen!==gen||now.cursor!==cursor||!S.isCurrent(scope)||d.projection!==now.projection){S.set(scope,{older:'idle'});return;}
     now.older='idle';
     S.older(scope,d);
   }catch(error){
     if(error.status===401)S.present.signedOut(scope);
+    const now=S.state(scope);
+    // The cursor is no longer valid (a rebuilt projection or an expired window): one fresh
+    // snapshot replaces the rows. Drafts and pending intents are not part of this state.
+    if(now.gen===gen&&S.isCurrent(scope)&&(error.code==='resync_required'||error.code==='invalid_cursor')){
+      S.set(scope,{older:'idle'});
+      loadNewest(scope,{reset:true});
+      return;
+    }
     S.set(scope,{older:'error'});
   }
+}
+/* Which session the next message would continue, shown before sending (an ineligible saved
+   one becomes a choice; a new profile says that its first message starts a session). */
+async function checkContinuation(scope){
+  if(pending(scope))return;
+  const pick=await KeyedChat.continuation().catch(()=>null);
+  if(!pick||!S.isCurrent(scope)||pending(scope))return;
+  if(pick.ok&&pick.fresh)S.present.hint(scope,KeyedChat.words.newSession);
 }
 function ensureHistory(scope){if(S.state(scope).history==='idle')loadNewest(scope);}
 
@@ -118,6 +160,7 @@ workspaceHandlers.chat=async()=>{
   pageView.watchTop(()=>loadOlder(scope));
   if(typeof mountBrowserVoice==='function')mountBrowserVoice();
   if(s.history==='idle'||!pending(scope))loadNewest(scope);
+  checkContinuation(scope);
   mood(scope);
   if(focusPage){focusPage=false;$('chat-message')?.focus();}
 };
@@ -212,6 +255,7 @@ function openDock(){
     send:$('chat-dock-send'),status:$('chat-dock-status'),ids:false,limit:40,
     visible:()=>dockOpen&&current!=='chat',after:syncLauncher}).mount();
   ensureHistory(scope);
+  if(S.state(scope).session.state==='unknown')checkContinuation(scope);
   $('chat-dock-message').focus();       // the owner opened it
 }
 function minimise(){
@@ -260,5 +304,5 @@ window.productNavigate=name=>{
   syncDock();
 };
 
-window.PersistentChat={loadNewest,loadOlder,openDock,minimise,maximise,get pageView(){return pageView;},get dockView(){return dockView;},prior};
+window.PersistentChat={loadNewest,loadOlder,adapt,openDock,minimise,maximise,get pageView(){return pageView;},get dockView(){return dockView;},prior};
 })();

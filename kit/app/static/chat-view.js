@@ -17,7 +17,7 @@ const GROUP_WINDOW=5*60;
 
 function items(s,{limit=0}={}){
   const out=[];
-  const linkOf=r=>r._key.startsWith('h:')?s.links.get(r._key.slice(2)):null;
+  const linkOf=r=>{const src=S.sourceOf(r);return src?s.links.get(src)||null:null;};
   const presented=new Set();
   for(const r of s.rows){const l=linkOf(r);if(l)presented.add(l.sendId+':'+l.part);}
   const rows=limit&&s.rows.length>limit?s.rows.slice(-limit):s.rows;
@@ -49,6 +49,7 @@ function items(s,{limit=0}={}){
     }
   }
   if(s.typing&&!streaming)out.push({key:'typing',kind:'typing'});
+  if(s.session.state==='ineligible')out.push({key:'session-choice',kind:'choice',suggestion:s.session.suggestion});
   return out;
 }
 
@@ -82,8 +83,17 @@ function html(item,ids){
       <div class="message-body">${richText(item.text)}</div>${item.media.map(inlineMedia).join('')}
       <small>${it.partial?'<span class="dim">Partial reply</span> ':''}${esc(time(it.at||new Date()))}</small></div>`;
     case 'row':return rowHtml(item,ids);
+    case 'choice':return sessionChoice(item);
   }
   return '';
+}
+
+/* The saved session can no longer be continued: say so and let the owner choose. The draft
+   is untouched, and nothing is sent until a choice is made. */
+function sessionChoice(item){
+  const other=item.suggestion?` <button type="button" class="quiet small" data-session-action="suggested">Continue the most recent conversation</button>`:'';
+  return `<div class="chat-session-choice" role="status"><p class="small">The conversation this tab was continuing can no longer be continued from here. Your draft is kept.</p>
+    <button type="button" class="quiet small" data-session-action="new">Start a new session</button>${other}</div>`;
 }
 
 /* One recorded message, as the Chat page has always drawn it (workspace.js chatMessagesHtml). */
@@ -175,6 +185,7 @@ class View{
 
   click(e){
     const b=e.target.closest('button');if(!b||!this.log.contains(b))return;
+    if(b.dataset.sessionAction){S.chooseSession(this.scope,b.dataset.sessionAction);return;}
     const host=b.closest('[data-item]');const key=host?.dataset.item;
     const it=key&&S.state(this.scope).intents.get(key.split(':')[1]);
     const overlay=!it&&host?.dataset.clientKey?S.state(this.scope).intents.get(host.dataset.clientKey):null;
@@ -192,7 +203,7 @@ class View{
     if(this.nearBottom())return {bottom:true};
     const top=this.log.getBoundingClientRect().top;
     for(const [key,{el}] of this.els){
-      if(key.startsWith('d:')||key==='typing'||key==='welcome')continue;
+      if(key.startsWith('d:')||key==='typing'||key==='welcome'||key==='session-choice')continue;
       const r=el.getBoundingClientRect();
       if(r.bottom>top)return {key,offset:r.top-top};
     }
@@ -218,7 +229,7 @@ class View{
     if(this.visible()&&s.unseen){s.unseen=false;S.changed(this.scope);}
     const before=first?(this.saved||{bottom:true}):this.jump?{bottom:true}:this.anchor();
     this.jump=false;
-    const lastBefore=[...this.els.keys()].filter(k=>k!=='typing').at(-1);
+    const lastBefore=[...this.els.keys()].filter(k=>k!=='typing'&&k!=='session-choice').at(-1);
     const head=this.headHtml(s);
     if(this.headMarkup!==head){this.head.innerHTML=head;this.headMarkup=head;}
     const list=items(s,{limit:this.limit});
@@ -245,16 +256,17 @@ class View{
     if(before?.bottom){this.toBottom();this.follow=true;}
     else{
       this.restore(before);this.follow=false;
-      if(!first&&[...this.els.keys()].filter(k=>k!=='typing').at(-1)!==lastBefore)this.showNew();
+      if(!first&&[...this.els.keys()].filter(k=>k!=='typing'&&k!=='session-choice').at(-1)!==lastBefore)this.showNew();
     }
     if(this.send)this.send.disabled=!s.canSend;
     if(this.status&&this.hintSeq!==(s.hintSeq||0)){this.status.textContent=s.hint;this.hintSeq=s.hintSeq||0;}
     this.after?.(s);
   }
   headHtml(s){
+    const stale=s.stale?`<p class="bad small chat-older" role="status">${esc(s.stale)} What is shown was read earlier.</p>`:'';
     if(this.kind!=='page')return s.history==='loading'&&!s.rows.length?'<p class="dim small chat-loading" role="status">Reading the conversation…</p>':
-      s.history==='error'?'<p class="bad small chat-older">The conversation could not be read. It is kept; try again later.</p>':'';
-    const top='<div class="chat-top-sentinel"></div>';
+      s.history==='error'?`<p class="bad small chat-older">${esc(s.historyError||'The conversation could not be read.')}</p>`:stale;
+    const top='<div class="chat-top-sentinel"></div>'+stale;
     if(s.history==='loading'&&!s.rows.length)return top+'<p class="dim small chat-loading" role="status">Reading the conversation…</p>';
     if(s.history==='error'&&!s.rows.length)return top+`<p class="bad">${esc(s.historyError||'The conversation could not be read.')}</p>`;
     if(s.older==='loading')return top+'<p class="dim small chat-older" role="status">Reading earlier…</p>';
