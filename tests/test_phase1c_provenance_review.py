@@ -59,7 +59,7 @@ class KnownProvenanceLoss(unittest.TestCase):
 
     def test_reflection_refuses_before_model_attempt_or_watermark_movement(self):
         self.lose_provenance()
-        checkin.flag(self.c, at(9000))
+        checkin.flag(self.c, at(9000), platform='telegram')
         before = checkin.read(self.c)
         calls = []
         with self.assertRaises(ValueError):

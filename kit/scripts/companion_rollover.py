@@ -110,7 +110,11 @@ def run(c,now=None,apply=True,ender=None):
     if not apply:return {'rolled':False,'would_end':ids}
     try:
         import companion_checkin
-        companion_checkin.flag(c,now,'nightly-rollover')
+        # A real human conversation was confirmed above (last_human/QUIET_MINUTES);
+        # this closes sessions directly in the DB rather than through a live turn,
+        # so no on_session_end hook fires naturally to flag it. trusted=True is not
+        # a guess: it reflects that verification, not a relayed hook payload.
+        companion_checkin.flag(c,now,'nightly-rollover',trusted=True)
     except (OSError,ValueError):pass
     (ender or end_sessions)(c,ids)
     row={'at':now.isoformat(timespec='seconds'),'ended':ids,'routes':list(targets)}

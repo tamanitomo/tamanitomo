@@ -40,9 +40,9 @@ class ReflectionTests(unittest.TestCase):
     def test_checkin_does_not_clear_a_conversation_that_arrives_during_generation(self):
         db=self.db();stamp=self.now-dt.timedelta(minutes=1)
         db.execute('INSERT INTO messages VALUES(1,?,?,?,?,1,0,0)',('chat','user','My sister is Bee.',stamp.timestamp()));db.commit();db.close()
-        checkin.flag(self.c,self.now)
+        checkin.flag(self.c,self.now,platform='telegram')
         def planner(*args):
-            checkin.flag(self.c,self.now+dt.timedelta(seconds=10));plan=empty('')
+            checkin.flag(self.c,self.now+dt.timedelta(seconds=10),platform='telegram');plan=empty('')
             plan['facts']=[{'quote_id':'1:0','category':'people','statement':"Alex's sister is Bee."}]
             return plan,{}
         result=reflection.reflect(self.c,'checkin','http://127.0.0.1:1','test','human',now=self.now,planner=planner)
@@ -312,12 +312,12 @@ class FactQualityTests(unittest.TestCase):
 
     def test_a_new_checkin_arrival_does_not_reset_the_budget(self):
         self.converse('I play Fire Emblem all the time.')
-        checkin.flag(self.c,self.now-dt.timedelta(hours=1))
+        checkin.flag(self.c,self.now-dt.timedelta(hours=1),platform='telegram')
         def fail(*a):raise OSError('down')
         run=lambda planner:reflection.reflect(self.c,'checkin','http://127.0.0.1:1','m','robin',now=self.now,planner=planner)
         for i in range(reflection.MAX_ATTEMPTS):
             # Every attempt sees a batch the next conversation has grown, so a new plan key.
-            checkin.flag(self.c,self.now);db=sqlite3.connect(self.c.home/'state.db')
+            checkin.flag(self.c,self.now,platform='telegram');db=sqlite3.connect(self.c.home/'state.db')
             db.execute('INSERT INTO messages VALUES (?,?,?,?,?,1,0,0)',(10+i,'chat','user',f'more {i}',self.now.timestamp()-5))
             db.commit();db.close()
             with self.assertRaises(OSError):run(fail)

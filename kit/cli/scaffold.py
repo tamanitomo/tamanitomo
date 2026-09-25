@@ -510,8 +510,17 @@ def install_hook(c,m,report):
         f"home=pathlib.Path({str(c.home)!r}).resolve()\n"
         "active=pathlib.Path(os.environ.get('HERMES_HOME',str(home))).expanduser().resolve()\n"
         "if active != home:\n    print(json.dumps({}));sys.exit(0)\n"
+        # Hermes on_session_end wire payload: {hook_event_name, tool_name, tool_input,
+        # session_id, cwd, extra:{..., platform}}. A cron/subagent/tool turn -- including
+        # the check-in job's own reflection -- must not be counted as owner speech, so the
+        # platform rides along and companion_checkin decides, defensively: any read/parse
+        # failure here leaves platform unset, which flag() treats as internal, not owner.
+        "try:\n    payload=json.load(sys.stdin)\n"
+        "except (ValueError,TypeError):\n    payload={}\n"
+        "extra=payload.get('extra') if isinstance(payload,dict) else None\n"
+        "platform=extra.get('platform') if isinstance(extra,dict) else ''\n"
         f"sys.path.insert(0,{str(KIT/'kit/scripts')!r})\n"
-        "sys.argv=['companion_checkin.py','--home',str(home),'flag']\n"
+        "sys.argv=['companion_checkin.py','--home',str(home),'flag','--platform',str(platform or '')]\n"
         "runpy.run_module('companion_checkin',run_name='__main__')\n")
     if not end_hook.exists() or end_hook.read_text(encoding='utf-8')!=end_source:
         cp.atomic_write(end_hook,end_source)

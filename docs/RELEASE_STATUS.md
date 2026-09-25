@@ -8,8 +8,19 @@ place. Do not add parallel lists.
 - 2026-09-25, pass 2: under a narrow authorization, **only this source branch was published**, with
   its ordinary non-deploying CI. This file was then updated with a report-only descendant. No PR,
   merge, tag, release, version bump, install, service/cron change or live test.
+- 2026-09-25, pass 3: an attempt at the full 3.5.0 goal (this candidate's B scope, plus persistent
+  Chat's C scope, the Vault linked-knowledge layer, events/notifications, a safe public-updater
+  transition, and community issues #2/#3/#4), working directly in this worktree (`release/3.5.0`
+  not created; commits are on this branch's tip). Outcome: **BLOCKED_NOT_RELEASED**. #3 and #4 are
+  fixed and tested below; #2's write-time mechanism was verified already shipped (see below). None
+  of ACT-01/ACT-02 (containment, compression lineage), the Vault linked-knowledge layer (LINK-01–09),
+  events/notifications (EVT-01–06), or REL-03 (safe public-updater transition) were implemented —
+  each needs its own design pass, not a same-session patch; attempting them here risked exactly the
+  process-lifetime and data-loss classes this document exists to catch. Nothing was pushed, merged,
+  tagged, released, version-bumped or installed. Local backup: a full `--all --tags` git bundle
+  (includes `refs/stash`) at `~/tamanitomo-3.5.0-protect/`, verified with `git bundle verify`.
 
-No live profile, model, platform or dispatcher has been exercised in either pass.
+No live profile, model, platform or dispatcher has been exercised in any pass.
 
 ## 1. Candidate identity
 
@@ -109,6 +120,14 @@ defined here), **SCOPED** (an enforceable exclusion holds), **NON-BLOCKING**, **
 | ENV-01 | **NON-BLOCKING** (host) | local testing | The host's `/tmp` tmpfs is full. `test_workflows…download_checks_hash…` fails without `TMPDIR` elsewhere (it also fails on 3.0.24). The gate used a job-local `TMPDIR`. | — | Owner housekeeping. |
 | OWN-01 | **OPEN** | release (tag/merge/publish) | Tag, merge and publish need explicit owner approval. The pass-2 branch push was authorized and done. | Owner decision on B-public/C scope. | Owner. |
 | OWN-02 | **OPEN** | first-host installation | A controlled installation (§6) needs separate owner approval, including pausing and resuming the live dispatcher jobs. | Owner approves a window. | Owner, after REL-04. |
+
+### Community issues (#2, #3, #4) — pass 3, 2026-09-25
+
+| ID | Status | Evidence / executor | Next responsible action |
+|---|---|---|---|
+| ISS-02 (dup. memory, #2) | **VERIFIED ALREADY SHIPPED** (write-time path); **repair path OPEN** | `companion_self.canonical_statement` (NFC + whitespace only, kept in `e28197c`/3.0.24 via `7fef922`/`103eee5`) and `duplicate_facts()` (report-only semantic-restatement reviewer, threshold-scored, never auto-merges) both exist and are covered by `tests/canonical_statement_cases.json` (C/C++/C#, signs, `5!`, Polish/polish, all pass) and `tests/test_local_reflection.py` (50 passed, 5 subtests, this pass). `fact_statements()` already reports an honest `omitted` count rather than implying every fact reached the prompt (the ISS-02B "78 facts stored" concern). **Not verified this pass:** the actual Telegram/reflection/application entry paths end-to-end (only the unit-level fixture), and a backed-up/idempotent/dry-run-first repair tool for facts that were duplicated *before* `7fef922` shipped — no such command exists in `companion_self.py`. | Before closing #2 publicly: confirm the fixture-level behavior through a real Telegram/app write, and decide whether historical (pre-fix) duplicates need the dry-run repair tool ISS-02B asks for, or whether the existing report-only `duplicate_facts()` reviewer already satisfies it. |
+| ISS-03 (check-ins rearm, #3) | **FIXED, tested** | `companion_checkin.flag()` now requires an owner-facing platform (`cli`, `desktop`, `tui`, `telegram` — the same set `chat_sources.session_kind` treats as the owner's conversation) and refuses to flag on `cron`/`subagent`/`tool`/unrecognised platforms, so the check-in job's own reflection turn no longer re-arms itself. The generated `hooks/companion-session-end.py` (`kit/cli/scaffold.py::install_hook`) now parses the real `on_session_end` wire payload (`extra.platform`, confirmed against the pinned Hermes `0e9fc2cc15` source) instead of calling `flag()` blind; `companion doctor`/settings repair already redeploy it on drift, no separate migration needed. `nightly-rollover`'s legitimate non-hook flag (it ends sessions directly in the DB, so no hook fires) is preserved via an explicit `trusted=True`, not a platform guess. Tests: `tests/test_audit_2026_09_23.py::CheckinRearmTests` (4 new, incl. a subprocess test of the actual generated hook file) plus every pre-existing `checkin.flag(...)` call site across 5 files updated to state its platform explicitly; **136 passed** in the affected files, 0 regressions. | Ship as-is; add the issue-comment (ISS-ALL) once other 3.5.0 blockers are resolved or a smaller release carries it. |
+| ISS-04 (pulse/autonomy fingerprint, #4) | **FIXED, tested** (pulse/autonomy only) | `companion_preread.fingerprint()`'s AWAKE branch hashed `activity`/`location`/`mood` directly — prose the model re-authors every tick — so a pure reword opened the `--monitor-script` gate and spent a model call to be told nothing had happened. The ASLEEP branch already used the code-owned `started_at` marker (moves only on a declared `activity_change: transition`, enforced by `companion_day.evolve`'s required enum) plus `confirmed`; the awake branch now uses the same pair. Tests: `tests/test_checkin_and_fingerprint_issues.py` (3 new — reword-invariance, a genuine transition still opens the gate, an unconfirmed/carried-forward scene still opens the gate) plus `tests/test_sleep.py`, `test_day.py`, `test_days_and_photos.py`, `test_lifestyle.py`, `test_missions.py` (66 passed, 4 subtests, 0 regressions). **Scoped, not extended:** `companion_timeline.fingerprint` (the separate image-timeline job's gate) was left untouched — it is intentionally activity-sensitive for a different reason (a new activity can mean a new photo) and was not the reported issue; touching it would be scope creep beyond #4. | Ship as-is; add the issue-comment (ISS-ALL) alongside #3. |
 
 ### Observations (not findings)
 

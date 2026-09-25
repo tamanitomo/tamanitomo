@@ -35,8 +35,27 @@ def read(c):
     try:return json.loads(path_for(c).read_text(encoding='utf-8'))
     except (OSError,ValueError):return {'pending':0,'last_end':'','last_reflected':''}
 
-def flag(c,now=None,session_id=''):
-    """A session ended. Cheap, and safe to call from a hook."""
+# The same owner-facing surfaces the trusted Chat reader treats as the owner's
+# conversation (chat_sources.session_kind: LOCAL_SOURCES plus telegram). Cron,
+# subagent, tool turns and anything unrecognised are internal, never owner speech.
+OWNER_PLATFORMS=frozenset({'cli','desktop','tui','telegram'})
+
+def flag(c,now=None,session_id='',platform='',trusted=False):
+    """A session ended. Cheap, and safe to call from a hook.
+
+    Only a session Hermes attributes to an owner-facing platform re-arms the
+    job. Without this, the check-in's own reflection turn ends on platform
+    'cron' and its session_end flags a new conversation, so the job re-arms
+    itself and never goes quiet -- it was never told the difference between a
+    real conversation ending and its own turn ending. An unset or unrecognised
+    platform is treated as internal, not guessed as owner speech.
+
+    `trusted=True` is for the rare internal caller (nightly rollover) that has
+    already established real human activity by reading the session DB itself,
+    rather than relaying an on_session_end payload; it is never set from hook
+    input.
+    """
+    if not trusted and str(platform or '') not in OWNER_PLATFORMS:return read(c)
     now=now or dt.datetime.now(_tz(c))
     with file_lock(path_for(c).with_suffix('.json.lock')):
         state=read(c)
@@ -82,13 +101,14 @@ def fingerprint(c):
 def main():
     p=argparse.ArgumentParser(description=__doc__,formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--home',type=pathlib.Path)
+    p.add_argument('--platform',default='')
     p.add_argument('mode',choices=['flag','fingerprint','clear','status'],nargs='?',default='fingerprint')
     a=p.parse_args();c=cc.load(a.home)
     if a.mode=='fingerprint':sys.stdout.write(fingerprint(c))
     elif a.mode=='flag':
         # Called from a Hermes hook: say nothing, ever. A hook that prints is a
         # hook that ends up in somebody's chat.
-        try:flag(c)
+        try:flag(c,platform=a.platform)
         except (OSError,ValueError):pass
         print(json.dumps({}))
     elif a.mode=='clear':print(json.dumps(clear(c),ensure_ascii=False))

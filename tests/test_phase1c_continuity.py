@@ -172,7 +172,7 @@ class ReflectionTests(unittest.TestCase):
                             trusted=True, **kw)
 
     def test_quotes_resolve_to_owner_rows_across_channels(self):
-        checkin.flag(self.c, self.now)
+        checkin.flag(self.c, self.now, platform='telegram')
         seen = {}
 
         def planner(c, kind, data, sources, *a):
@@ -195,7 +195,7 @@ class ReflectionTests(unittest.TestCase):
         self.assertEqual(result['evidence']['channels'], ['telegram', 'terminal', 'workspace'])
 
     def test_an_assistant_or_foreign_row_cannot_be_selected_as_evidence(self):
-        checkin.flag(self.c, self.now)
+        checkin.flag(self.c, self.now, platform='telegram')
 
         def planner(c, kind, data, sources, *a):
             plan = empty()
@@ -208,7 +208,7 @@ class ReflectionTests(unittest.TestCase):
     def test_batches_continue_from_the_watermark_without_loss_or_repeats(self):
         for i in range(12):
             self.p.store.say('term', 'user', f'terminal line {i} ' + 'x' * 400, T + 8200 + i)
-        checkin.flag(self.c, self.now)
+        checkin.flag(self.c, self.now, platform='telegram')
         batches = []
 
         def planner(c, kind, data, sources, *a):
@@ -235,7 +235,7 @@ class ReflectionTests(unittest.TestCase):
         self.assertEqual(checkin.read(self.c)['pending'], 0)
 
     def test_an_unreadable_store_spends_no_attempt_and_advances_nothing(self):
-        checkin.flag(self.c, self.now)
+        checkin.flag(self.c, self.now, platform='telegram')
         before = checkin.read(self.c)
         db = self.c.home / 'state.db'
         backup = db.read_bytes()
@@ -259,12 +259,12 @@ class ReflectionTests(unittest.TestCase):
 
     def test_the_source_store_is_never_written(self):
         before = digest(self.c.home / 'state.db')
-        checkin.flag(self.c, self.now)
+        checkin.flag(self.c, self.now, platform='telegram')
         self.checkin(lambda *a: (empty(), {}))
         self.assertEqual(digest(self.c.home / 'state.db'), before)
 
     def test_a_plan_saved_before_channels_existed_still_applies(self):
-        checkin.flag(self.c, self.now)
+        checkin.flag(self.c, self.now, platform='telegram')
         plan = empty()
         calls = []
 

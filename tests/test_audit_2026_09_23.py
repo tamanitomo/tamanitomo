@@ -230,15 +230,78 @@ class SingleSendPathTests(unittest.TestCase):
 
 class CheckinRaceTests(unittest.TestCase):
     def test_a_conversation_ending_mid_reflection_is_not_erased(self):
+        # Both ends here are real owner turns (telegram); the race is about
+        # pending/claimed bookkeeping, not platform classification -- that is
+        # CheckinRearmTests below, issue #3.
         import companion_checkin as checkin
         with tempfile.TemporaryDirectory() as tmp:
             c=companion(Path(tmp))
-            checkin.flag(c)
+            checkin.flag(c,platform='telegram')
             checkin.fingerprint(c)       # the tick that starts the reflection
-            checkin.flag(c)              # another session ends while it runs
+            checkin.flag(c,platform='telegram')  # another session ends while it runs
             self.assertEqual(checkin.clear(c)['pending'],1)
             checkin.fingerprint(c)
             self.assertEqual(checkin.clear(c)['pending'],0)
+
+
+class CheckinRearmTests(unittest.TestCase):
+    """Issue #3: check-ins rearming themselves. The job's own reflection turn
+    ends on platform 'cron'; that must not flag a new conversation, or the
+    fingerprint stays dirty and the job fires again every tick forever."""
+    def test_the_reflection_jobs_own_session_end_does_not_rearm_it(self):
+        import companion_checkin as checkin
+        with tempfile.TemporaryDirectory() as tmp:
+            c=companion(Path(tmp))
+            checkin.flag(c,platform='telegram')                # a real conversation ends
+            self.assertEqual(checkin.fingerprint(c),f"pending 1\nlast_end {checkin.read(c)['last_end']}\n")
+            checkin.flag(c,platform='cron')                     # the check-in job's own turn ends
+            self.assertEqual(checkin.clear(c)['pending'],0)
+            self.assertEqual(checkin.fingerprint(c),"pending 0\nlast_end \n")  # silent: no rearm
+
+    def test_subagent_and_tool_turns_do_not_flag(self):
+        import companion_checkin as checkin
+        with tempfile.TemporaryDirectory() as tmp:
+            c=companion(Path(tmp))
+            for platform in ('subagent','tool','cron'):
+                checkin.flag(c,platform=platform)
+            self.assertEqual(checkin.read(c)['pending'],0)
+
+    def test_unrecognised_or_missing_platform_is_not_treated_as_owner_speech(self):
+        import companion_checkin as checkin
+        with tempfile.TemporaryDirectory() as tmp:
+            c=companion(Path(tmp))
+            for platform in ('','some-future-gateway','RAFT','None'):
+                checkin.flag(c,platform=platform)
+            self.assertEqual(checkin.read(c)['pending'],0)
+
+    def test_real_owner_platforms_still_flag(self):
+        import companion_checkin as checkin
+        with tempfile.TemporaryDirectory() as tmp:
+            c=companion(Path(tmp))
+            for i,platform in enumerate(('telegram','cli','desktop','tui'),start=1):
+                checkin.flag(c,platform=platform)
+                self.assertEqual(checkin.read(c)['pending'],i)
+
+    def test_generated_hook_script_reads_the_wire_payload_and_passes_platform(self):
+        """The installed hook (kit/cli/scaffold.py:install_hook) must parse the
+        real on_session_end stdin contract -- {..., extra:{platform,...}} -- not
+        just call flag() blind, or a fresh install regresses this fix."""
+        import json,subprocess,sys as _sys
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);c=companion(root)
+            import kit.cli.scaffold as scaffold
+            report=[]
+            scaffold.install_hook(c,scaffold.mapping(c,{}),report)
+            hook=c.home/'hooks/companion-session-end.py'
+            self.assertTrue(hook.exists())
+            for platform,expected in (('cron',0),('telegram',1)):
+                payload=json.dumps({'hook_event_name':'on_session_end','session_id':'s1',
+                                     'extra':{'platform':platform}})
+                subprocess.run([_sys.executable,str(hook)],input=payload,text=True,
+                                capture_output=True,check=True,
+                                env={'HERMES_HOME':str(c.home)})
+                import companion_checkin as checkin
+                self.assertEqual(checkin.read(c)['pending'],expected,platform)
 
 
 class KeepsakeTruthTests(unittest.TestCase):

@@ -172,7 +172,13 @@ def fingerprint(c,now=None):
     rows=[f'bucket {bucket}',
           f'day {_digest(json.dumps(state.get("next"),sort_keys=True),json.dumps(state.get("commitments",[]),sort_keys=True),deadlines)}',
           f'missions {len(open_missions)} {_digest(*open_missions)}',
-          f"scene {_digest(state.get('activity'),state.get('location'),state.get('mood'),state.get('confirmed',True))}",
+          # Code-owned, not prose: `started_at` moves only on an actual companion_day
+          # transition (the same mark the sleep branch above uses), and `confirmed`
+          # is a boolean. `activity`/`location`/`mood` are re-authored every tick even
+          # when nothing has changed, so hashing them opened this gate on wording
+          # alone -- the awake half of the same mistake the sleep branch already
+          # fixed (see its comment above).
+          f"scene {_digest(state.get('started_at') or 'static',state.get('confirmed',True))}",
           f'loops {len(open_loops)} {_digest(*[l["id"] for l in open_loops])}',
           f'ambient {_digest(*ambient)}',
           f'queued {queued}']

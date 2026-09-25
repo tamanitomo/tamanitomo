@@ -86,15 +86,15 @@ class CheckinTests(unittest.TestCase):
 
     def test_a_finished_session_changes_it_and_clearing_settles_it(self):
         quiet=self.checkin.fingerprint(self.c)
-        self.checkin.flag(self.c,self.now)
+        self.checkin.flag(self.c,self.now,platform='telegram')
         self.assertNotEqual(self.checkin.fingerprint(self.c),quiet)
         self.checkin.clear(self.c,self.now)
         self.assertEqual(self.checkin.fingerprint(self.c),quiet)
 
     def test_two_sessions_before_a_reflection_still_only_ask_for_one(self):
-        self.checkin.flag(self.c,self.now)
+        self.checkin.flag(self.c,self.now,platform='telegram')
         one=self.checkin.fingerprint(self.c)
-        self.checkin.flag(self.c,self.now+dt.timedelta(minutes=5))
+        self.checkin.flag(self.c,self.now+dt.timedelta(minutes=5),platform='telegram')
         self.assertNotEqual(self.checkin.fingerprint(self.c),one)
         self.checkin.clear(self.c,self.now+dt.timedelta(minutes=6))
         self.assertEqual(int(self.checkin.read(self.c)['pending']),0)
@@ -102,4 +102,4 @@ class CheckinTests(unittest.TestCase):
     def test_an_unreadable_flag_file_does_not_take_the_hook_down(self):
         self.checkin.path_for(self.c).write_text('{not json',encoding='utf-8')
         self.assertEqual(self.checkin.read(self.c)['pending'],0)
-        self.assertTrue(self.checkin.flag(self.c,self.now)['pending'])
+        self.assertTrue(self.checkin.flag(self.c,self.now,platform='telegram')['pending'])
