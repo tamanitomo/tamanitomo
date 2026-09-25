@@ -980,9 +980,14 @@ def build(home=None,token='',state_dir=None,chat_sends=None):
         html=(STATIC/'index.html').read_text(encoding='utf-8')
         if keyed_client():
             # Phase 1B C3, only when explicitly enabled: the signal and the keyed client,
-            # loaded after every script it builds on. Absent, the page is unchanged.
+            # loaded after every script it builds on, and with it the persistent Chat
+            # (store, view, controller: one conversation for the Chat page and the dock).
+            # Absent, the page is unchanged.
             html=html.replace('<meta charset="utf-8">','<meta charset="utf-8">\n<meta name="tamanitomo-chat-sends" content="keyed">',1)
-            html=html.replace('</html>','<script src="/static/chat-sends.js"></script>\n</html>',1)
+            html=html.replace('<link rel="stylesheet" href="/static/product.css">',
+                              '<link rel="stylesheet" href="/static/product.css">\n<link rel="stylesheet" href="/static/chat.css">',1)
+            html=html.replace('</html>',''.join(f'<script src="/static/{name}"></script>\n' for name in
+                                                ('chat-store.js','chat-sends.js','chat-view.js','chat-controller.js'))+'</html>',1)
         html=re.sub(r'(src|href)="(/static/[^"?]+)"',versioned,html)
         return HTMLResponse(html,headers={'Cache-Control':'no-cache'})
 

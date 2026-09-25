@@ -1,0 +1,71 @@
+/* Persistent Chat (served only with the keyed client; see chat-controller.js). Builds on
+   product.css's chat room, bubbles and composer; only the dock/pill and the few new states
+   are defined here. Stacking: above the page and its sticky bars, below the navigation
+   drawer, the operation toast and every <dialog> (media viewer, confirmations), which sit
+   in the top layer. */
+
+/* The restored-request status: the owner's side, set apart from transcript rows (C3 B1). */
+.keyed-request{align-self:flex-end;max-width:85%;padding:10px 14px;border:1px dashed var(--edge-2,currentColor);
+  border-radius:14px;overflow-wrap:anywhere}
+.keyed-request-label{display:block;margin-bottom:4px}
+.keyed-request small{display:block;font-size:12px;color:var(--ink-2);text-align:right}
+.keyed-confirm{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px}
+
+/* Someone reading older messages is not scrolled away; they are told instead. */
+.chat-new-messages{position:relative;z-index:3;align-self:center;margin:-46px auto 10px;border-radius:999px;
+  padding:6px 14px;box-shadow:var(--shadow-1)}
+.chat-log-head{flex:none;display:flex;flex-direction:column;align-items:center}
+.chat-log-head:empty{display:none}
+
+/* ------------------------------------------------------------------ desktop dock */
+.chat-dock{position:fixed;right:24px;bottom:24px;z-index:29;display:flex;flex-direction:column;align-items:flex-end;
+  pointer-events:none}
+.chat-dock[hidden]{display:none}
+.chat-dock>*{pointer-events:auto}
+.menu-open .chat-dock{display:none}
+.chat-dock-launcher{display:flex;align-items:center;gap:10px;max-width:340px;min-height:46px;padding:6px 14px 6px 6px;
+  border-radius:999px;border:1px solid var(--edge);background:color-mix(in srgb,var(--panel) 94%,transparent);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:var(--shadow-1);color:var(--ink);
+  cursor:pointer;text-align:left}
+.chat-dock-launcher:hover{border-color:var(--edge-2)}
+.chat-dock-launcher:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.chat-dock-launcher[hidden]{display:none}
+.chat-dock-avatar{width:34px;height:34px;border-radius:50%;font-size:14px;flex:none}
+.chat-dock-face{display:contents}
+.chat-dock-copy{display:flex;flex-direction:column;min-width:0;line-height:1.25}
+.chat-dock-copy strong{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-dock-preview,.chat-dock-state{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
+.chat-dock.is-active .chat-dock-preview{color:var(--accent-ink,var(--accent))}
+.chat-dock-dot{flex:none;background:var(--accent);color:var(--on-accent);font-size:10.5px;font-weight:700;
+  border-radius:999px;padding:2px 8px;white-space:nowrap}
+.chat-dock-dot[hidden]{display:none}
+
+.chat-dock-panel{width:380px;height:min(560px,calc(100vh - 48px));display:flex;flex-direction:column;
+  border:1px solid var(--edge);border-radius:16px;background:var(--panel);
+  box-shadow:0 24px 60px rgb(0 0 0 / .45);overflow:hidden}
+.chat-dock-panel[hidden]{display:none}
+.chat-dock-bar{flex:none;display:flex;align-items:center;gap:10px;padding:8px 8px 8px 10px;border-bottom:1px solid var(--edge)}
+.chat-dock-bar .chat-dock-copy{flex:1}
+.chat-dock-button{width:34px;height:34px;padding:0;font-size:16px;line-height:1;border-radius:10px}
+.chat-log.chat-dock-log{padding:12px 12px 8px;gap:5px}
+.chat-dock .chat-composer{margin:0 8px 8px}
+#chat-dock-message{flex:1 1 auto;min-width:0;min-height:36px;max-height:140px;resize:none;padding:8px 4px;
+  font-size:14.5px;line-height:1.45;align-self:stretch;background:none;border:0;border-radius:0;scrollbar-width:none}
+#chat-dock-message:focus{outline:none;box-shadow:none}
+.chat-dock-status{flex:none;padding:0 14px 8px;font-size:11px;text-align:center}
+.chat-dock-status:empty{display:none}
+.chat-dock .bubble{max-width:86%;font-size:14px;padding:8px 13px}
+.chat-dock .keyed-request{max-width:90%}
+.chat-dock .chat-media{max-width:100%}
+
+/* ------------------------------------------- narrow screens: a pill and a sheet */
+@media(max-width:900px){
+  .chat-dock{right:12px;bottom:calc(var(--bar) + env(safe-area-inset-bottom) + 10px)}
+  .chat-dock-launcher{max-width:calc(100vw - 24px);min-height:44px}
+  .chat-dock-preview{max-width:52vw}
+  /* Open, it is the whole screen above the tab bar, so navigation stays reachable. */
+  .chat-dock[data-state="open"]{inset:0 0 calc(var(--bar) + env(safe-area-inset-bottom)) 0;align-items:stretch}
+  .chat-dock-panel{width:auto;height:100%;border:0;border-radius:0;box-shadow:none;
+    padding-top:env(safe-area-inset-top)}
+  .chat-dock-button{width:40px;height:40px}
+}

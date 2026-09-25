@@ -10,6 +10,15 @@ model or a messaging platform.
 
     python tools/preview_fixture.py [--port 38500] [--keep]
 
+With --persistent-chat the app is built with keyed sends and their client
+(chat_sends=Options(client=True), NOT activated in any shipped entry point), so
+the persistent Chat page, desktop dock and mobile pill can be tried. Sends go
+to the Phase 1B protocol double (tests/phase1b_c1/fake_hermes) and replies
+stream in a few timed steps; a second companion ("Rowan") and a few ordinary
+vault notes are added for the profile-switch and Vault parts of the journey.
+
+    python tools/preview_fixture.py --persistent-chat [--port 38500]
+
 Screenshots taken from this are safe to share: no live names, transcripts,
 portraits or vault content exist in it.
 """
@@ -83,10 +92,87 @@ def seed_conversation(c, start):
 
 
 
+NOTES = {
+    'notes/Garden plan.md': '# Garden plan\n\nTomatoes along the south fence.\nBasil in the blue pots.\n\n'
+                            'See [[Reading list]] for the seed catalogue.\n',
+    'notes/Reading list.md': '# Reading list\n\n- The seed catalogue\n- A book about bridges\n',
+    'notes/Weekend.md': '# Weekend\n\nSaturday: market, then the long walk.\nSunday: nothing planned.\n',
+}
+# Streamed replies for the persistent Chat preview, one per send, in rotation.
+REPLIES = [
+    ['Oh, that is a lovely thing to hear. ', 'I was just thinking about the garden, ', 'actually: ',
+     'the tomatoes by the south fence ', 'should be ready by the weekend. ', 'Shall we plan the market trip?'],
+    ['Mm, give me a second to think. ', 'I would start with the reading list, ', 'then the walk. ',
+     'The bridge book can wait for a rainy day.'],
+    ['Yes! ', 'Saturday it is. ', 'I will remember the blue pots ', 'and remind you about the basil.'],
+]
+
+
+def seed_persistent_chat(root: Path, c) -> cc.Companion:
+    """A second synthetic companion and a few ordinary, editable vault notes."""
+    rowan = cc.Companion(agent='Rowan', human='Robin', profile='rowan', hermes_root=root, vault=c.vault,
+                         soul_in_vault=False, context_mode='fixed', timezone='UTC')
+    rowan.home.mkdir(parents=True); rowan.life.mkdir(parents=True, exist_ok=True)
+    rowan.save(); rowan.soul.write_text(cr.render_template('SOUL.md.tmpl', cr.mapping_for(rowan, 'warm', 'none')))
+    for relative, text in NOTES.items():
+        path = c.vault / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding='utf-8')
+    # The newest session is an ordinary workspace one, so a keyed send resumes a session the
+    # server authorises. (The seeded conversation's newest 'cli' row is deliberately a
+    # gateway chat that keyed sends must refuse; see PersistentChatUIResults.md.)
+    sys.path.insert(0, str(ROOT / 'tests'))
+    from chat_fixtures import HermesStore
+    from kit.app import runtime as hr
+    store = HermesStore(c.home)
+    store.session('web-evening', 'cli', started=20)
+    hr.note_workspace_session(c, 'web-evening')
+    t = dt.datetime(2026, 9, 12, 19, tzinfo=UTC).timestamp()
+    store.say('web-evening', 'user', 'Back from the long walk.', t)
+    store.say('web-evening', 'assistant', 'Welcome home. How were the hills?', t + 30)
+    return rowan
+
+
+def stream_replies(homes, stop):
+    """Each send streams the next reply in REPLIES, one step every ~1.2 s: the protocol
+    double waits at <pause>/at<i> for go<i>; this writes go<i>, then clears both files so
+    the next turn pauses again. It also rotates the scenario for the next send."""
+    import threading, time
+    turns = {h: 0 for h in homes}
+
+    def scenario(home):
+        steps = REPLIES[turns[home] % len(REPLIES)]
+        (home / 'fake_scenario.json').write_text(json.dumps(
+            {'stream_steps': steps, 'stream_pause_dir': str(home / 'preview-pause')}))
+
+    for home in homes:
+        (home / 'preview-pause').mkdir(exist_ok=True)
+        scenario(home)
+
+    def run():
+        while not stop.is_set():
+            for home in homes:
+                pause = home / 'preview-pause'
+                for at in sorted(pause.glob('at*')):
+                    i = at.name[2:]
+                    if i == '1':                  # a new turn has read its scenario: rotate
+                        turns[home] += 1
+                        scenario(home)
+                    time.sleep(1.2)
+                    go = pause / f'go{i}'
+                    go.write_text('')
+                    time.sleep(0.3)
+                    go.unlink(missing_ok=True); at.unlink(missing_ok=True)
+            time.sleep(0.05)
+    threading.Thread(target=run, daemon=True).start()
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--port', type=int, default=38500)
     p.add_argument('--keep', action='store_true', help='leave the temporary directory behind')
+    p.add_argument('--persistent-chat', action='store_true',
+                   help='build with keyed sends and the persistent Chat UI (synthetic; not activated anywhere else)')
     p.add_argument('--mock-provider', action='store_true',
                    help='also serve tests/mock_provider.py and point the synthetic Hermes home at it (no fallbacks)')
     a = p.parse_args()
@@ -106,8 +192,19 @@ def main() -> int:
         from kit.app.server import build
         import uvicorn
         token = secrets.token_urlsafe(18)
-        app = build(root, token=token, state_dir=tmp / 'state')
+        options = None
+        if a.persistent_chat:
+            import threading
+            from kit.app import chat_send_routes as csr
+            from tests.phase1b_c1 import harness as h
+            rowan = seed_persistent_chat(root, c)
+            stream_replies([c.home, rowan.home], threading.Event())
+            options = csr.Options(executor=lambda rt, home: h.fake_executor(home), client=True)
+        app = build(root, token=token, state_dir=tmp / 'state', chat_sends=options)
         print(f'Synthetic workspace: http://127.0.0.1:{a.port}/  token: {token}', flush=True)
+        if a.persistent_chat:
+            print(f'Persistent Chat: http://127.0.0.1:{a.port}/?installation=existing&profile=nova&token={token}#chat'
+                  '  (keyed sends ON for this synthetic server only; Ctrl-C stops it)', flush=True)
         print(f'Data: {tmp} ({"kept" if a.keep else "removed on exit"})', flush=True)
         uvicorn.run(app, host='127.0.0.1', port=a.port, log_level='warning')
     finally:

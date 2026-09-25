@@ -1,6 +1,7 @@
 """Phase 1B C3: the keyed client is off unless explicitly enabled (no browser needed).
 
-The page gets the keyed client (the signal meta + /static/chat-sends.js) and the feed gets
+The page gets the keyed client (the signal meta + /static/chat-sends.js, and with it the
+persistent Chat store/view/controller and chat.css) and the feed gets
 row ids only for an app built with chat_sends=Options(client=True). The default build, and
 a build with the keyed routes but without the client opt-in, serve the ordinary page and
 feed byte-for-byte as before. release-files.json ships none of it, and a shipped copy's page
@@ -24,6 +25,12 @@ from kit.app.server import build               # noqa: E402
 from tests.phase1b_c1 import harness as h      # noqa: E402
 
 SIGNAL = '<meta name="tamanitomo-chat-sends" content="keyed">'
+# The keyed client and, since the persistent Chat milestone, the store/view/controller it
+# publishes to, in their load order, and the dock's stylesheet. Served only together.
+SCRIPTS = ('chat-store.js', 'chat-sends.js', 'chat-view.js', 'chat-controller.js')
+STYLE = '<link rel="stylesheet" href="/static/chat.css">'
+NEW_FILES = SCRIPTS + ('chat.css',)
+STORE_GUARD = """if(!document.querySelector('meta[name="tamanitomo-chat-sends"][content="keyed"]'))return;"""
 
 
 class Builds(unittest.TestCase):
@@ -79,17 +86,21 @@ class Builds(unittest.TestCase):
         for options in (None, self.keyed(False)):
             html = self.page(self.app(options))
             self.assertNotIn(SIGNAL, html)
-            self.assertNotIn('chat-sends.js', html)
+            for name in NEW_FILES:
+                self.assertNotIn(name, html)
             # the served page is index.html with only the asset-version stamps added
             self.assertEqual(re.sub(r'\?v=[0-9a-f]{16}', '', html), pristine)
 
-    def test_the_explicit_client_build_adds_only_the_signal_and_the_script(self):
+    def test_the_explicit_client_build_adds_only_the_signal_and_the_chat_assets(self):
         html = self.page(self.app(self.keyed(True)))
         self.assertIn(SIGNAL, html)
-        self.assertRegex(html, r'<script src="/static/chat-sends\.js\?v=[0-9a-f]{16}"></script>\n</html>')
+        tail = ''.join(rf'<script src="/static/{re.escape(n)}\?v=[0-9a-f]{{16}}"></script>\n' for n in SCRIPTS)
+        self.assertRegex(html, tail + '</html>')
+        self.assertRegex(html, r'<link rel="stylesheet" href="/static/product\.css\?v=[0-9a-f]{16}">\n'
+                               r'<link rel="stylesheet" href="/static/chat\.css\?v=[0-9a-f]{16}">')
         pristine = (ROOT / 'kit/app/static/index.html').read_text(encoding='utf-8')
-        stripped = re.sub(r'\?v=[0-9a-f]{16}', '', html).replace(SIGNAL + '\n', '', 1)
-        stripped = stripped.replace('<script src="/static/chat-sends.js"></script>\n', '', 1)
+        stripped = re.sub(r'\?v=[0-9a-f]{16}', '', html).replace(SIGNAL + '\n', '', 1).replace(STYLE + '\n', '', 1)
+        stripped = stripped.replace(''.join(f'<script src="/static/{n}"></script>\n' for n in SCRIPTS), '', 1)
         self.assertEqual(stripped, pristine)
 
     @unittest.skipUnless(h.LINUX, 'the seed turn uses the C1 supervision (Linux)')
@@ -106,9 +117,10 @@ class Builds(unittest.TestCase):
 
     def test_nothing_new_is_shipped_and_no_entry_point_enables_the_client(self):
         shipped = json.loads((ROOT / 'release-files.json').read_text())
-        self.assertNotIn('kit/app/static/chat-sends.js', shipped)
         self.assertIn('kit/app/static/index.html', shipped)
-        self.assertNotIn('chat-sends.js', (ROOT / 'kit/app/static/index.html').read_text(encoding='utf-8'))
+        for name in NEW_FILES:
+            self.assertNotIn('kit/app/static/' + name, shipped)
+            self.assertNotIn(name, (ROOT / 'kit/app/static/index.html').read_text(encoding='utf-8'))
         callers = [p for p in list(ROOT.glob('*.py')) + list((ROOT / 'kit').rglob('*.py'))
                    if 'client=True' in p.read_text(encoding='utf-8')]
         self.assertEqual(callers, [])
@@ -118,6 +130,15 @@ class Builds(unittest.TestCase):
         head = src[:src.index("const CROCKFORD")]
         self.assertIn("if(!signal||signal.content!=='keyed')return;", head)
         self.assertNotIn("'/chat'", src.replace("'/chat/", ''), 'the keyed client has no path to POST /api/chat')
+        # The persistent Chat files do nothing without the signal (the store) or the store.
+        static = ROOT / 'kit/app/static'
+        self.assertIn(STORE_GUARD, (static / 'chat-store.js').read_text(encoding='utf-8'))
+        self.assertIn('if(!window.ChatStore)return;', (static / 'chat-view.js').read_text(encoding='utf-8'))
+        self.assertIn('if(!window.ChatStore||!window.ChatView||!window.KeyedChat)return;',
+                      (static / 'chat-controller.js').read_text(encoding='utf-8'))
+        for name in ('chat-store.js', 'chat-view.js', 'chat-controller.js'):
+            code = (static / name).read_text(encoding='utf-8')
+            self.assertNotIn("'/chat'", code.replace("'/chat/", ''), f'{name} has no path to POST /api/chat')
 
 
 if __name__ == '__main__':

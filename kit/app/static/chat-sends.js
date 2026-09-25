@@ -18,8 +18,12 @@
    Send again), and after an unknown outcome only with confirmation and a receipt that
    proves the earlier execution is quiescent.
 
+   Presenting: every status, stream snapshot and reply is published to the persistent
+   conversation store (chat-store.js), which the Chat page and the dock both render, so a
+   send is followed the same way whichever view is open, or none.
+
    Reads: the existing keyed routes and operation views, plus, only when a pending send
-   is picked up again after a reload or a return to Chat, one GET /api/chat/snapshot
+   is picked up again after a reload, one GET /api/chat/snapshot
    (Phase 1A) to learn which already-drawn history rows are this send's (by their
    correlation.send_id and source ids, never by text or time).
 
@@ -32,12 +36,6 @@
 'use strict';
 const signal=document.querySelector('meta[name="tamanitomo-chat-sends"]');
 if(!signal||signal.content!=='keyed')return;
-
-// The restored-request status (paintOwner): the owner's side, set apart from transcript rows.
-document.head?.insertAdjacentHTML('beforeend',`<style>.keyed-request{align-self:flex-end;max-width:85%;
-  padding:10px 14px;border:1px dashed var(--edge-2,currentColor);border-radius:14px;
-  overflow-wrap:anywhere}.keyed-request-label{display:block;margin-bottom:4px}
-  .keyed-request small{display:block;font-size:12px;color:var(--ink-2);text-align:right}</style>`);
 
 const CROCKFORD='0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const BACKOFF=[500,1000,2000,4000,8000];     // then every LATER ms, same key, while the page lives
@@ -75,7 +73,7 @@ const drivers=new Set();        // client keys with a running driver in this pag
 const fresh=new Set();          // keys minted in this page whose every POST so far was provably refused
 const requests=new Set();       // restored keys presented as a request status, not a transcript bubble
 let draftEdits=0;               // owner edits of any chat composer in this page (R3)
-document.addEventListener?.('input',e=>{if(e.target&&e.target.id==='chat-message')draftEdits++;},true);
+document.addEventListener?.('input',e=>{if(e.target&&(e.target.id==='chat-message'||e.target.dataset?.chatComposer!==undefined))draftEdits++;},true);
 const shown=new Map();          // client key -> last painted {text, actions, bad}
 let submitting=false;
 
@@ -84,7 +82,6 @@ const scopeId=s=>s.installation+'\u0000'+s.profile;
 const isCurrent=s=>s.installation===INSTALLATION&&s.profile===(PROFILE||'default');
 const pendingKey=s=>'chat-pending-'+s.installation+'-'+s.profile;
 const draftKey=s=>'chat-draft-'+s.installation+'-'+s.profile;
-const chatVisible=s=>isCurrent(s)&&current==='chat'&&$('chat-log');
 
 function ulid(){
   const random=new Uint8Array(10);crypto.getRandomValues(random);
@@ -135,104 +132,38 @@ async function bootstrap(scope,fresh=false){
   return {ok:false,status:r.status,code:r.data?.error};
 }
 
-/* ------------------------------------------------------------------ painting */
+/* ------------------------------------------------------------------ presenting */
 
-const ownerId=p=>p.send_id?p.send_id+':owner':'pending-'+p.client_key+':owner';
-function ownerEl(p){
-  const log=$('chat-log');if(!log)return null;
-  return $(ownerId(p))||log.querySelector(`[data-client-key="${CSS.escape(p.client_key)}"]`);
-}
-function paintOwner(scope,p){
-  if(!chatVisible(scope))return null;
-  let el=ownerEl(p);
-  if(!el){
-    const log=$('chat-log');log.querySelector('.chat-welcome')?.remove();
-    // A restored intent that no history row is known to be yet: a separate, labelled request
-    // status. Its recorded row may already be drawn above, and nothing here can tell which
-    // one it is until the send's own source ids say so (adoptRow); never by text.
-    log.insertAdjacentHTML('beforeend',requests.has(p.client_key)?
-      `<div class="keyed-request sending" role="status">
-      <span class="keyed-request-label dim small">${esc(WORDS.requestLabel)}</span>
-      <div class="message-body">${richText(p.message)}</div>
-      <small><span class="bubble-status">${esc(WORDS.sending)}</span></small></div>`:
-      `<div class="bubble user sending" data-channel="desktop">
-      <div class="message-body">${richText(p.message)}</div>
-      <small><span class="bubble-status">${esc(WORDS.sending)}</span></small></div>`);
-    el=log.lastElementChild;
-    log.scrollTo({top:log.scrollHeight,behavior:'smooth'});
-  }
-  el.dataset.clientKey=p.client_key;el.id=ownerId(p);
-  return el;
-}
+/* Everything this client shows is published to the persistent conversation store
+   (chat-store.js), which the full page and the dock both render. Only the state is kept
+   here; no view's DOM is touched, so a send outlives the view it started in. Without the
+   store (a bare harness) presenting is a no-op; `shown` still records the last status. */
+const NONE={status(){},stream(){},dropStream(){},replies(){},typing(){},canSend(){},hint(){},confirm(){},
+  request(){},promote(){},settled(){},link(){},ownerPresented:()=>false,composer:()=>null,offerDraft:()=>false,
+  arrived(){},signedOut(){},signedIn(){}};
+const ui=()=>window.ChatStore?.present||NONE;
+
 function paintStatus(scope,p,text,{bad=false,sent=false,actions=[]}={}){
   shown.set(p.client_key,{text,bad,sent,actions});
-  const el=paintOwner(scope,p);if(!el)return;
-  el.classList.toggle('sending',!sent&&!bad);el.classList.toggle('send-error',bad);
-  let small=el.querySelector(':scope > small');
-  if(!small){el.insertAdjacentHTML('beforeend','<small></small>');small=el.querySelector(':scope > small');}
-  small.innerHTML=`<span class="bubble-status">${bad?`<span class="bad">${esc(text)}</span>`:esc(text)}</span>`+
-    actions.map((a,i)=>` <button type="button" class="quiet small" data-keyed-action="${i}">${esc(a.label)}</button>`).join('');
-  small.querySelectorAll('[data-keyed-action]').forEach(b=>{b.onclick=()=>actions[Number(b.dataset.keyedAction)].run(b);});
+  if(!isCurrent(scope))return;
+  ui().status(scope,p,{text,bad,sent,actions});
+  if(text===WORDS.signedOut)ui().signedOut(scope);else ui().signedIn(scope);
 }
-function paintStream(scope,p,text){
-  if(!chatVisible(scope)||!p.send_id||$(p.send_id+':reply:0'))return;   // a reply row is already presented
-  const log=$('chat-log'),follow=log.scrollHeight-log.scrollTop-log.clientHeight<100;
-  let live=$(p.send_id+':stream');
-  if(!live){
-    $('chat-typing-indicator')?.remove();
-    log.insertAdjacentHTML('beforeend',`<div class="bubble" aria-label="Incoming reply"><div class="message-body"></div></div>`);
-    live=log.lastElementChild;live.id=p.send_id+':stream';
-  }
-  live.querySelector('.message-body').textContent=text;     // a snapshot: replaces, never appends
-  if(follow)log.scrollTop=log.scrollHeight;
-}
-function paintReplies(scope,p,replies,{partial=false}={}){
-  if(!chatVisible(scope))return;
-  const log=$('chat-log');
-  const stream=$(p.send_id+':stream');
-  replies.forEach((reply,n)=>{
-    const id=p.send_id+':reply:'+n;
-    if($(id))return;                                   // already presented (history or earlier paint)
-    const {text,extractedMedia}=extractMediaFromContent(reply.content||'');
-    if(!text&&!extractedMedia.length)return;
-    const html=`<div class="bubble animate-in${partial?' partial':''}" data-channel="desktop">
-      <div class="message-body">${richText(text)}</div>${extractedMedia.map(inlineMedia).join('')}
-      <small>${partial?'<span class="dim">Partial reply</span> ':''}${esc(new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}))}</small></div>`;
-    if(stream&&n===0){stream.insertAdjacentHTML('afterend',html);stream.nextElementSibling.id=id;}
-    else{log.insertAdjacentHTML('beforeend',html);log.lastElementChild.id=id;}
-  });
-  stream?.remove();
-  log.scrollTo({top:log.scrollHeight,behavior:'smooth'});
-}
-function composer(scope,enabled){
-  if(!chatVisible(scope))return;
-  const b=$('send-message');if(b)b.disabled=!enabled;
-  const box=$('chat-message');if(box)box.readOnly=false;       // drafting never waits for a send
-}
-function hint(scope,text){if(chatVisible(scope)&&$('chat-status'))$('chat-status').textContent=text;}
-/* A message that was definitely not accepted goes back to the box, never over a newer draft. */
-function offerBack(scope,message){
-  if(!chatVisible(scope))return false;
-  const box=$('chat-message');if(!box||box.value.trim())return false;
-  box.value=message;try{sessionStorage.setItem(draftKey(scope),message);}catch(_){}
-  box.dispatchEvent(new Event('input'));
-  return true;
-}
+function paintStream(scope,p,text){if(isCurrent(scope))ui().stream(scope,p,text);}
+function paintReplies(scope,p,replies,{partial=false}={}){if(isCurrent(scope))ui().replies(scope,p,replies,{partial});}
+function composer(scope,enabled){if(isCurrent(scope))ui().canSend(scope,enabled);}  // drafting never waits
+function hint(scope,text){if(isCurrent(scope))ui().hint(scope,text);}
+/* A message that was definitely not accepted goes back to the draft, never over a newer one. */
+function offerBack(scope,message){return ui().offerDraft(scope,message);}
 /* At a final outcome the request status becomes the ordinary owner bubble, unless a history
-   row is adopted for it (adoptRow removes it then): one presentation either way. */
-function promote(p){
-  requests.delete(p.client_key);
-  const el=$('chat-log')&&ownerEl(p);
-  if(!el||!el.classList.contains('keyed-request'))return;
-  el.querySelector('.keyed-request-label')?.remove();
-  el.classList.remove('keyed-request');el.classList.add('bubble','user');el.removeAttribute('role');
-  el.dataset.channel='desktop';
-}
+   row is linked to it (render then shows that row): one presentation either way. */
+function promote(scope,p){requests.delete(p.client_key);ui().promote(scope,p);}
 function settle(scope,p){
-  promote(p);
+  promote(scope,p);
+  ui().settled(scope,p);
   clearPending(scope,p);
   if(activeOperation==='chat-send:'+p.client_key)activeOperation=null;
-  if(chatVisible(scope)){showTyping(false);voiceControlsBusy(false);}
+  if(isCurrent(scope)){ui().typing(scope,false);if(typeof voiceControlsBusy==='function')voiceControlsBusy(false);}
   composer(scope,true);
   hint(scope,'Enter to send · Shift+Enter for a new line');
 }
@@ -258,7 +189,7 @@ async function startIntent(scope,message,{box=null,grow=null}={}){
     activeOperation='chat-send:'+p.client_key;
     clearSubmittedDraft(scope,message,box,grow,edits);
     paintStatus(scope,p,WORDS.sending);
-    if(chatVisible(scope))showTyping(true);   // the box stays editable: a newer draft is the owner's
+    if(isCurrent(scope))ui().typing(scope,true);   // the box stays editable: a newer draft is the owner's
     drive(scope,p,{freshIntent:true});
   }finally{submitting=false;if(!started&&!loadPending(scope))composer(scope,true);}
 }
@@ -266,13 +197,13 @@ async function startIntent(scope,message,{box=null,grow=null}={}){
 /* R3: bootstrap is awaited between the submit and this point, and the Chat view may have been
    rebuilt meanwhile. Only a draft nobody has edited since the submit, and that still holds the
    submitted text, is cleared; the captured textarea is used only while it is still the
-   current composer. A newer draft (typed here or in a newer view) is never touched. */
+   current composer (page or dock). A newer draft (typed here or in a newer view) is never touched. */
 function clearSubmittedDraft(scope,message,box,grow,edits){
   if(draftEdits!==edits)return;
   let stored=null;try{stored=sessionStorage.getItem(draftKey(scope));}catch(_){}
   if(stored!==null&&stored!==message)return;
   if(stored===message){try{sessionStorage.setItem(draftKey(scope),'');}catch(_){}}
-  const now=chatVisible(scope)?$('chat-message'):null;
+  const now=isCurrent(scope)?ui().composer(scope):null;
   if(!now||now.value!==message)return;
   now.value='';
   if(now===box)grow?.();else now.style.height='auto';
@@ -396,11 +327,11 @@ function finish(scope,p,view,receipt){
   (receipt.reply_message_ids||[]).forEach((id,n)=>adoptRow(scope,p,byId.get(id)?.source,'reply:'+n));
   if(state==='complete'){
     paintStatus(scope,p,at,{sent:true});paintReplies(scope,p,replies);
-    if(!chatVisible(scope)&&isCurrent(scope))notice('Reply received from '+chatName()+'. Open Chat to read it.');
+    if(isCurrent(scope))ui().arrived(scope);       // an in-session "new reply", not a toast
     if(typeof speakBrowserReply==='function')speakBrowserReply(result);
     return;
   }
-  $(p.send_id+':stream')?.remove();
+  if(isCurrent(scope))ui().dropStream(scope,p);
   if(state==='interrupted'){paintStatus(scope,p,WORDS.stopped,{bad:true});paintReplies(scope,p,replies,{partial:true});return;}
   if(state==='failed'){
     if(receipt.owner_turn==='recorded')
@@ -428,48 +359,38 @@ function resetOutcome(scope,p){
 }
 
 /* "Send again": a NEW intent (new key, current generation), after the owner confirms the
-   duplicate risk and, when there is a receipt, after it still proves quiescence. */
+   duplicate risk and, when there is a receipt, after it still proves quiescence. The
+   confirmation is part of this intent's presented status (Send anyway / Cancel). */
 function sendAgain(scope,p,hasReceipt){
-  return {label:'Send again',run:button=>{
-    const small=button.parentElement;
-    small.querySelectorAll('.keyed-confirm').forEach(x=>x.remove());
-    small.insertAdjacentHTML('beforeend',`<span class="keyed-confirm"> ${esc(WORDS.duplicate)}
-      <button type="button" class="quiet small" data-confirm="yes">Send anyway</button>
-      <button type="button" class="quiet small" data-confirm="no">Cancel</button></span>`);
-    small.querySelector('[data-confirm="no"]').onclick=()=>small.querySelector('.keyed-confirm')?.remove();
-    small.querySelector('[data-confirm="yes"]').onclick=async()=>{
-      small.querySelector('.keyed-confirm')?.remove();
+  return {label:'Send again',run:()=>{
+    ui().confirm(scope,p,{text:WORDS.duplicate,no:()=>ui().confirm(scope,p,null),yes:async()=>{
+      ui().confirm(scope,p,null);
       if(hasReceipt){
         const r=await call(scope,'/chat/sends/'+encodeURIComponent(p.send_id));
         if(r.status!==200||r.data.state!=='unknown'||!['quiescent','none'].includes(r.data.liveness)){hint(scope,WORDS.stillRunning);return;}
       }
       startIntent(scope,p.message);
-    };
+    }});
   }};
 }
 
 /* ------------------------------------------------------------------ recovery */
 
-/* A history row that is one of this send's rows takes over that part's DOM id, and a
-   provisional owner bubble for the same row is removed: one presentation per row. The
-   match is by source identity (session + Hermes row id) only, never by text or time. */
+/* A history row that is one of this send's rows presents that part, and the send's own
+   provisional presentation of it gives way: one presentation per row. The match is by
+   source identity (session + Hermes row id) only, never by text or time; the store keeps
+   the link, so it holds whether that row is loaded yet or not. */
 function adoptRow(scope,p,source,part){
-  if(!chatVisible(scope)||!source)return;
-  const el=$('chat-log').querySelector(`[data-source-session="${CSS.escape(String(source.session))}"][data-source-message="${CSS.escape(String(source.message))}"]`);
-  if(!el)return;
-  if(part==='owner'){
-    const mine=ownerEl(p);
-    if(mine&&mine!==el)mine.remove();
-    el.id=p.send_id+':owner';el.dataset.clientKey=p.client_key;
-  }else if(part.startsWith('reply:')){$(p.send_id+':'+part)?.remove();el.id=p.send_id+':'+part;}
+  if(!isCurrent(scope)||!source)return;
+  ui().link(scope,p,source,part);
 }
-/* On return to Chat: rows the Phase 1A snapshot already correlates with this send. Links are
+/* After a reload: rows the Phase 1A snapshot already correlates with this send. Links are
    recorded when a send settles (C1), so mid-turn this finds nothing; finish() repeats the
    match from the settled result. */
 async function reconcile(scope,p){
-  if(!p.send_id||!chatVisible(scope))return;
+  if(!p.send_id||!isCurrent(scope))return;
   const r=await call(scope,'/chat/snapshot?limit=50');
-  if(r.status!==200||!chatVisible(scope))return;
+  if(r.status!==200||!isCurrent(scope))return;
   for(const m of r.data?.messages||[])
     if(m.correlation?.send_id===p.send_id)adoptRow(scope,p,m.source,m.correlation.send_part||'');
 }
@@ -493,14 +414,17 @@ async function attach(){
     if(found.status===200&&found.data?.send_id){q=withIds(q,found.data);savePending(scope,q);}
   }
   await reconcile(scope,q);
-  if(chatVisible(scope)&&!ownerEl(q))requests.add(q.client_key);   // one presentation (see paintOwner)
+  // One presentation: a restored intent that nothing presents yet is a labelled request
+  // status, not a second owner bubble (its recorded row may already be in history).
+  if(isCurrent(scope)&&!ui().ownerPresented(scope,q)){requests.add(q.client_key);ui().request(scope,q);}
   const last=shown.get(q.client_key);
   paintStatus(scope,q,last?.text||WORDS.checking,last||{});
-  if(chatVisible(scope)&&!last?.sent)showTyping(true);
+  if(isCurrent(scope)&&!last?.sent)ui().typing(scope,true);
   drive(scope,q);
 }
 
 window.KeyedChat={
+  words:WORDS,
   submit:(box,grow)=>{const message=box.value;if(!message.trim())return;return startIntent(scopeNow(),message,{box,grow});},
   attach,
 };
