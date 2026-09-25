@@ -299,6 +299,7 @@
   "tests/test_us_ui.js",
   "tests/test_vault.py",
   "tests/test_vault_editor_api.py",
+  "tests/test_vault_editor_browser.py",
   "tests/test_vault_editor_bundle.py",
   "tests/test_vault_index.py",
   "tests/test_vault_link_index.py",

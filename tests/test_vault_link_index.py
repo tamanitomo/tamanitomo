@@ -169,6 +169,68 @@ class SearchTests(unittest.TestCase):
         self.assertEqual(vli.search({'a.md': vli.parse_note('# A')}, ''), [])
 
 
+class SectionByHeadingTests(unittest.TestCase):
+    def test_extracts_the_named_section_up_to_the_next_same_level_heading(self):
+        text = '# Title\nintro\n## A\nbody a\nmore a\n## B\nbody b\n'
+        section = vli.section_by_heading(text, 'A')
+        self.assertEqual(section, '## A\nbody a\nmore a')
+
+    def test_a_deeper_heading_does_not_end_the_section(self):
+        text = '## A\ntext\n### Sub\nsubtext\n## B\n'
+        self.assertEqual(vli.section_by_heading(text, 'A'), '## A\ntext\n### Sub\nsubtext')
+
+    def test_matching_is_case_insensitive(self):
+        text = '## Heading Name\nbody\n'
+        self.assertEqual(vli.section_by_heading(text, 'heading name'), '## Heading Name\nbody')
+
+    def test_missing_heading_returns_none(self):
+        self.assertIsNone(vli.section_by_heading('# Title\ntext', 'Nope'))
+
+    def test_the_last_section_runs_to_the_end(self):
+        text = '## A\nfirst\n## B\nsecond\nthird'
+        self.assertEqual(vli.section_by_heading(text, 'B'), '## B\nsecond\nthird')
+
+    def test_a_heading_inside_a_fence_is_not_a_match(self):
+        text = '## Real\n```\n## Fake\n```\nbody'
+        self.assertEqual(vli.section_by_heading(text, 'Fake'), None)
+
+
+class EmbedTests(unittest.TestCase):
+    def test_is_image_target_recognises_the_allowlist_only(self):
+        for ok in ('a.png', 'sub/dir/b.JPG', 'c.webp', 'd.svg'):
+            self.assertTrue(vli.is_image_target(ok), ok)
+        for bad in ('a.md', 'a.py', 'a.pdf', 'noext'):
+            self.assertFalse(vli.is_image_target(bad), bad)
+
+    def test_embed_note_text_returns_the_whole_note_bounded(self):
+        result = vli.embed_note_text('a.md', lambda rel: 'x' * 10, limit=100)
+        self.assertEqual(result, {'text': 'x' * 10, 'truncated': False})
+
+    def test_embed_note_text_truncates_and_flags_it(self):
+        result = vli.embed_note_text('a.md', lambda rel: 'x' * 50, limit=10)
+        self.assertEqual(result['text'], 'x' * 10)
+        self.assertTrue(result['truncated'])
+
+    def test_embed_note_text_slices_by_heading(self):
+        text = '# Title\n## Keep\nkept text\n## Drop\ndropped text\n'
+        result = vli.embed_note_text('a.md', lambda rel: text, heading='Keep')
+        self.assertEqual(result['text'], '## Keep\nkept text')
+
+    def test_embed_note_text_reports_a_missing_heading_without_the_whole_note_leaking(self):
+        result = vli.embed_note_text('a.md', lambda rel: '# Title\nbody', heading='Nowhere')
+        self.assertIn('Heading not found', result['text'])
+        self.assertNotIn('body', result['text'])
+
+    def test_embed_note_text_is_none_when_the_target_is_unreadable(self):
+        self.assertIsNone(vli.embed_note_text('a.md', lambda rel: None))
+
+    def test_embed_note_text_never_expands_the_targets_own_embeds(self):
+        # get_text returns raw text containing ANOTHER embed marker; embed_note_text
+        # must not recurse into it -- depth-1 by construction, not by a depth counter.
+        result = vli.embed_note_text('a.md', lambda rel: 'Text with ![[b.md]] inside it.')
+        self.assertIn('![[b.md]]', result['text'])  # left as literal text, never fetched
+
+
 class BuildIntegrationTests(unittest.TestCase):
     """Through the real filesystem and kit/app/vault.files()'s authorization boundary."""
 

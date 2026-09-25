@@ -400,6 +400,94 @@ class VaultEditor(Browser):
         until(lambda: self.page.evaluate('VaultEditor.active()') == OTHER, what='wikilink opened')
         self.shot('07-reading')
 
+    def test_11b_embeds_render_an_image_a_note_section_and_stop_at_depth_one(self):
+        (self.vault / 'notes/photo.png').write_bytes(b'\x89PNG\r\n\x1a\nFAKEBYTES')
+        (self.vault / 'notes/Deep.md').write_text('# Deep\n\nBottom text.\n', encoding='utf-8')
+        (self.vault / 'notes/Mid.md').write_text('# Mid\n## Keep\nkept section\n## Skip\nskipped\n',
+                                                   encoding='utf-8')
+        (self.vault / 'notes/Embeds.md').write_text(
+            '# Embeds\n\n![[photo.png]]\n\n![[Mid#Keep]]\n', encoding='utf-8')
+        self.vault_page()
+        self.open('notes/Embeds.md', mode='preview')
+        img = self.page.locator('#vault-preview .vault-embed-img')
+        until(lambda: img.count() == 1, what='embedded image rendered')
+        # Actually fetchable, not just present: the request the <img> made succeeds
+        # and returns real bytes through the authorized embed-image route.
+        src = self.page.evaluate('sel=>document.querySelector(sel).src', '#vault-preview .vault-embed-img')
+        resp = self.page.request.get(src)
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(resp.headers.get('content-type'), 'image/png')
+        note_embed = self.page.locator('#vault-preview .vault-embed-note-body')
+        until(lambda: note_embed.count() == 1, what='note embed fetched and filled')
+        self.assertIn('kept section', note_embed.inner_text())
+        self.assertNotIn('skipped', note_embed.inner_text())
+        self.shot('08-embeds')
+
+    def test_11c_embedding_a_note_that_itself_embeds_does_not_expand_twice(self):
+        (self.vault / 'notes/Leaf.md').write_text('# Leaf\nleaf text\n', encoding='utf-8')
+        (self.vault / 'notes/Wrapper.md').write_text('# Wrapper\n![[Leaf]]\n', encoding='utf-8')
+        (self.vault / 'notes/Outer.md').write_text('# Outer\n![[Wrapper]]\n', encoding='utf-8')
+        self.vault_page()
+        self.open('notes/Outer.md', mode='preview')
+        note_embed = self.page.locator('#vault-preview .vault-embed-note-body')
+        until(lambda: note_embed.count() == 1, what='wrapper embed fetched')
+        # Wrapper's OWN [[Leaf]] embed stays literal text, never a second fetched embed:
+        # the depth-1 bound, verified in the DOM, not only against the backend function.
+        self.assertEqual(self.page.locator('#vault-preview .vault-embed-note').count(), 0)
+        self.assertIn('[[Leaf]]', note_embed.inner_text())
+        self.assertNotIn('leaf text', note_embed.inner_text())
+
+    def test_11d_an_ambiguous_wikilink_offers_a_chooser_instead_of_guessing(self):
+        (self.vault / 'notes/sub').mkdir(exist_ok=True)
+        (self.vault / 'notes/Dup.md').write_text('# Dup one\n', encoding='utf-8')
+        (self.vault / 'notes/sub/Dup.md').write_text('# Dup two\n', encoding='utf-8')
+        (self.vault / 'notes/Ambiguous.md').write_text('# Ambiguous\n\n[[Dup]]\n', encoding='utf-8')
+        self.vault_page()
+        self.open('notes/Ambiguous.md', mode='preview')
+        self.page.click('#vault-preview .wiki-link')
+        until(lambda: self.page.locator('.vault-link-choices button').count() == 2,
+              what='chooser dialog offers both candidates')
+        self.page.click('.vault-link-choices button:has-text("sub/Dup.md")')
+        until(lambda: self.page.evaluate('VaultEditor.active()') == 'notes/sub/Dup.md',
+              what='chosen candidate opened')
+
+    def test_11e_backlinks_panel_shows_real_linked_and_unlinked_notes(self):
+        (self.vault / 'notes/Robin.md').write_text('# Robin\n', encoding='utf-8')
+        (self.vault / 'notes/Diary.md').write_text('Saw [[Robin]] today.\n', encoding='utf-8')
+        (self.vault / 'notes/Mentions.md').write_text('Robin came up in conversation, no link.\n',
+                                                        encoding='utf-8')
+        self.vault_page()
+        self.open('notes/Robin.md', mode='preview')
+        self.page.click('#vault-toggle-toc')
+        linked = self.page.locator('#vault-backlinks .vault-backlink-item')
+        until(lambda: linked.count() >= 1, what='backlinks panel populated')
+        self.assertIn('notes/Diary.md', linked.all_inner_texts())
+        self.page.click('#vault-backlinks .vault-backlink-item:has-text("Diary")')
+        until(lambda: self.page.evaluate('VaultEditor.active()') == 'notes/Diary.md',
+              what='clicking a backlink opens it')
+
+    def test_11f_properties_panel_edits_a_scalar_and_preserves_everything_else(self):
+        raw = ('---\ntitle: Original Title\n# a comment, kept verbatim\ntags: [a, b]\nstatus: draft\n'
+               '---\n# Body\ntext here\n')
+        (self.vault / 'notes/Props.md').write_text(raw, encoding='utf-8')
+        self.vault_page()
+        self.open('notes/Props.md', mode='preview')
+        self.page.click('#vault-toggle-toc')
+        until(lambda: self.page.locator('#vault-properties input').count() == 2,
+              what='the two simple scalar properties (title, status) are editable')
+        # tags: [a, b] is a list -- not offered as an editable input (round-trip safety).
+        self.assertEqual(self.page.locator('#vault-properties input[value="[a, b]"]').count(), 0)
+        title_input = self.page.locator('#vault-properties input').first
+        title_input.fill('Changed Title')
+        title_input.dispatch_event('change')
+        self.wait_status('saved', path='notes/Props.md', timeout=15)
+        saved = self.disk('notes/Props.md')
+        self.assertIn('title: Changed Title', saved)
+        self.assertIn('# a comment, kept verbatim', saved)   # untouched
+        self.assertIn('tags: [a, b]', saved)                  # untouched, byte for byte
+        self.assertIn('status: draft', saved)                 # untouched
+        self.assertTrue(saved.endswith('# Body\ntext here\n'))  # body untouched
+
     def test_12_a_read_sent_before_a_save_cannot_roll_the_buffer_back(self):
         self.vault_page()
         self.open(OTHER)

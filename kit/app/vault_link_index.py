@@ -1,9 +1,10 @@
 """Derived Vault link index: parsed links, headings, block ids, properties and search
 text, incrementally maintained (LINK-01, LINK-02 first slice).
 
-NOT ACTIVATED: no route registers this yet. This is the index and resolver only --
-backlinks, outline, embeds, safe file operations, link-aware rename, the command
-palette and a local graph (LINK-03 through LINK-09) are later work.
+Backlinks and resolution are ACTIVATED (kit/app/manage.py: /api/vault/links/*, wired
+into kit/app/static/vault-editor.js's Reading mode and studios.js's shared renderer).
+Safe file operations, link-aware rename, the command palette and a local graph
+(LINK-05 through LINK-08) remain later work.
 
 Reuses `kit/app/vault.py`'s authorization boundary: `vault.files()` for the walk
 (hidden/symlink/secret exclusion already applied per file via `vault.resolve()`), so
@@ -309,6 +310,79 @@ def search(entries, query, limit=50):
         if len(matches) >= limit:
             break
     return matches
+
+
+# --- Embeds (LINK-03) -------------------------------------------------------------------
+
+# A closed allowlist, never an inferred/guessed content type: an embed only ever
+# serves as one of these, with the matching image/* media type -- nothing else is
+# rendered inline (no arbitrary binary, no HTML, no SVG script risk beyond what the
+# browser's own <img> element already contains for image/svg+xml, which is the one
+# format capable of carrying markup; it is still served strictly as an image, never
+# as a navigable document, and the CSP the app already sends applies to it as to any
+# other image).
+IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'}
+IMAGE_MEDIA_TYPES = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+                     '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+                     '.bmp': 'image/bmp'}
+EMBED_NOTE_CHAR_LIMIT = 20_000
+
+
+def is_image_target(rel):
+    return Path(rel).suffix.lower() in IMAGE_EXTENSIONS
+
+
+def asset_lookup(c):
+    """A by_name/by_alias/by_path lookup covering EVERY file in the vault, not just
+    notes -- build()'s `entries` only ever holds .md files (that is what a "note
+    index" means), so resolving an embed target that names an image needs its own
+    walk. Cheap and uncached on purpose: a single os.walk via vault.files(), no
+    parsing, called only for the one embed-image request that needs it."""
+    return build_lookup({rel: {'aliases': ()} for _full, rel in vault.files(c)})
+
+
+def section_by_heading(text, heading):
+    """The lines from a heading (any level, matched case-insensitively on its text)
+    through the line before the next heading at the SAME OR SHALLOWER level -- the
+    normal "section" a reader means by naming one heading. None if not found. Fence-
+    aware: a line that looks like a heading inside a code block is not one."""
+    lines = text.splitlines()
+    fenced = False
+    start = start_level = None
+    for i, line in enumerate(lines):
+        clean, fenced = _strip_code(line, fenced)
+        if clean is None:
+            continue
+        hm = _HEADING.match(clean)
+        if not hm:
+            continue
+        if start is None:
+            if hm.group(2).strip().casefold() == heading.strip().casefold():
+                start, start_level = i, len(hm.group(1))
+            continue
+        if len(hm.group(1)) <= start_level:
+            return '\n'.join(lines[start:i])
+    if start is None:
+        return None
+    return '\n'.join(lines[start:])
+
+
+def embed_note_text(target_rel, get_text, heading=None, limit=EMBED_NOTE_CHAR_LIMIT):
+    """The bounded, depth-1 content of a note embed: this target's own text (or one
+    heading's section of it), truncated -- but never THAT note's own embeds expanded
+    again. Depth-1 by construction is the recursion bound LINK-03 asks for: it makes
+    an embed cycle (A embeds B embeds A) structurally impossible rather than merely
+    detected, at the cost of not expanding a chain of embeds more than one level.
+    `get_text(rel)` is injected so this stays a pure function, testable without disk
+    I/O; the route supplies the real, authorization-checked reader."""
+    text = get_text(target_rel)
+    if text is None:
+        return None
+    if heading:
+        section = section_by_heading(text, heading)
+        text = section if section is not None else f'[Heading not found: {heading}]'
+    truncated = len(text) > limit
+    return {'text': text[:limit], 'truncated': truncated}
 
 
 def health(c):

@@ -465,6 +465,15 @@ dialog.photo-viewer::backdrop{background:rgba(0,0,0,0.94)}
 .vault-toc-item:hover{background:var(--surface-2);color:#fff}
 .vault-toc-item.h2{padding-left:14px}
 .vault-toc-item.h3{padding-left:22px}
+.vault-toc-panel .vault-toc-header:not(:first-child){margin-top:18px}
+.vault-prop-row{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
+.vault-prop-row span:first-child{color:var(--faint);font-size:11px}
+.vault-prop-row input{background:var(--surface-2);border:1px solid var(--surface-3);border-radius:4px;color:inherit;padding:4px 6px;font-size:12px}
+.vault-backlink-item{display:block;width:100%;text-align:left;padding:4px 6px;border-radius:4px;color:var(--dim);background:transparent;border:0;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:2px}
+.vault-backlink-item:hover{background:var(--surface-2);color:#fff}
+.vault-embed-img{max-width:100%;border-radius:6px;display:block;margin:8px 0}
+.vault-embed-note,.vault-embed-note-body{border-left:3px solid var(--surface-3);padding:2px 12px;margin:8px 0}
+.vault-link-choices{display:flex;flex-direction:column;gap:4px;margin-top:8px}
 
 /* ComfyUI Lite Studio */
 .comfy-lite-container{display:flex;flex-direction:column;gap:20px}

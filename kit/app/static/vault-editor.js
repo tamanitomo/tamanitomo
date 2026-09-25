@@ -375,6 +375,7 @@ function build(m,doc){
       <button class="vault-mode-btn ${mode==='edit'?'active':''}" data-vault-mode="edit" aria-pressed="${mode==='edit'}">Source</button>
       <button class="vault-mode-btn ${mode==='split'?'active':''}" data-vault-mode="split" aria-pressed="${mode==='split'}">Split</button></div>
      <button class="act" id="save-note">Save</button>`:''}
+    <button class="quiet" id="vault-toggle-toc" title="Outline, backlinks and properties">Info</button>
     ${m.meta.deletable?'<button class="quiet" id="trash-open-note">Trash</button>':''}
     <a class="quiet" href="${mediaUrl('/api/vault/download?path='+encodeURIComponent(m.path))}" download>Download</a>
    </div>
@@ -382,14 +383,17 @@ function build(m,doc){
   ${m.meta.protected?`<div class="vault-protected-bar"><span>🔒 <strong>Protected companion record</strong> · ${esc(m.meta.protection_reason||'Read-only in Vault.')}</span><button class="quiet" id="vault-edit-companion-btn">Edit in companion settings →</button></div>`:''}
   <div id="vault-conflict"></div>
   ${ed?`<div class="vault-toolbar-editor" id="vault-toolbar" ${mode==='preview'?'hidden':''}>
-   ${[['bold','<b>B</b>','Bold (**)'],['italic','<i>I</i>','Italic (*)'],['h2','H2','Heading 2'],['h3','H3','Heading 3'],['link','[[ ]]','Wikilink'],['list','• List','Bullet list'],['task','☑ Task','Task list'],['code','&lt;/&gt;','Code block'],['quote','&ldquo; Quote','Quote']].map(([t,l,h])=>`<button class="vault-tool-btn" data-tool="${t}" title="${h}">${l}</button>`).join('')}
-   <div style="flex:1"></div><button class="vault-tool-btn" id="vault-toggle-toc" title="Document outline">TOC</button></div>`:''}
+   ${[['bold','<b>B</b>','Bold (**)'],['italic','<i>I</i>','Italic (*)'],['h2','H2','Heading 2'],['h3','H3','Heading 3'],['link','[[ ]]','Wikilink'],['list','• List','Bullet list'],['task','☑ Task','Task list'],['code','&lt;/&gt;','Code block'],['quote','&ldquo; Quote','Quote']].map(([t,l,h])=>`<button class="vault-tool-btn" data-tool="${t}" title="${h}">${l}</button>`).join('')}</div>`:''}
   <div class="vault-editor-content">
    <div class="vault-split-view" id="vault-views" data-mode="${mode}">
     <div class="vault-source" id="vault-source" ${mode==='preview'?'hidden':''}></div>
     <div class="vault-preview-container document" id="vault-preview" ${mode==='edit'?'hidden':''}></div>
    </div>
-   <div class="vault-toc-panel" id="vault-toc" hidden><div class="vault-toc-header">Document outline</div><div id="vault-toc-list"></div></div>
+   <div class="vault-toc-panel" id="vault-toc" hidden>
+    <div class="vault-toc-header">Outline</div><div id="vault-toc-list"></div>
+    <div class="vault-toc-header">Properties</div><div id="vault-properties"><p class="dim small">Loading…</p></div>
+    <div class="vault-toc-header">Backlinks</div><div id="vault-backlinks"><p class="dim small">Loading…</p></div>
+   </div>
   </div>
   ${ed?`<p class="vault-draft-note dim small" id="vault-draft-note">Unsaved edits are kept in this browser tab until they are saved; they are cleared when the tab closes. <button class="link-button" id="vault-clear-drafts">Clear kept drafts</button></p>`:''}`;
   const v=ensureView();
@@ -460,16 +464,50 @@ function paintStatus(m){
   if($('save-note'))$('save-note').disabled=m.status==='saved'||m.status==='saving';
   paintTabs();
 }
+function chooseVaultLinkTarget(target,candidates){
+  return new Promise(resolve=>{
+    dialog(`"${target}" is ambiguous`,
+      `<p class="dim small">${candidates.length} notes share that name. Choose one:</p>
+       <div class="vault-link-choices">${candidates.map(c=>`<button class="quiet" data-choice="${esc(c)}">${esc(c)}</button>`).join('')}</div>`);
+    const box=$('dialog-body');
+    box.querySelectorAll('[data-choice]').forEach(b=>b.onclick=()=>{$('product-dialog').close();resolve(b.dataset.choice);});
+    $('product-dialog').addEventListener('close',()=>resolve(null),{once:true});
+  });
+}
+async function createAndOpenVaultNote(dest){
+  await api('/vault/file',{method:'PUT',body:JSON.stringify({path:dest,text:'',revision:''})});
+  await open(dest);
+}
 let readingTimer=null;
 function scheduleReading(){clearTimeout(readingTimer);readingTimer=setTimeout(()=>{if(active)paintReading(model(active));},READING_DELAY);}
 function paintReading(m){
   const pane=$('vault-preview');if(!pane||pane.hidden&&$('vault-toc')?.hidden)return;
   const body=text(m),folder=m.path.split('/').slice(0,-1).join('/');
   if(!pane.hidden){
-    pane.innerHTML=renderObsidianMarkdown(body);
-    for(const b of pane.querySelectorAll('.wiki-link'))b.onclick=()=>{
-      const target=b.dataset.link.trim(),file=target.endsWith('.md')?target:target+'.md';
-      open(file.includes('/')?file:(folder?folder+'/'+file:'notes/'+file));
+    pane.innerHTML=renderObsidianMarkdown(body,m.path);
+    fillVaultEmbeds(pane);
+    for(const b of pane.querySelectorAll('.wiki-link'))b.onclick=async()=>{
+      const target=b.dataset.link.trim();
+      b.disabled=true;
+      try{
+        // The real resolver (LINK-02), not a guessed folder+extension join: it
+        // agrees with backlinks and with every other wikilink-aware view by
+        // construction, because they all call the same kit/app/vault_link_index.
+        const r=await api('/vault/links/resolve?'+new URLSearchParams({source:m.path,target,kind:'wiki'}));
+        if(r.candidates.length===1){open(r.candidates[0]);return;}
+        if(r.candidates.length>1){
+          const choice=await chooseVaultLinkTarget(target,r.candidates);
+          if(choice)open(choice);
+          return;
+        }
+        // Unresolved: offer to create it, in the same folder as the note that
+        // linked to it -- the one guess this makes is explicit and confirmed,
+        // never a silent navigation to a path that may not exist.
+        const file=(target.endsWith('.md')?target:target+'.md');
+        const dest=file.includes('/')?file:(folder?folder+'/'+file:file);
+        if(confirm(`"${target}" doesn't exist yet. Create ${dest}?`))await createAndOpenVaultNote(dest);
+      }catch(e){notice(e.message||'Could not resolve that link.',true);}
+      finally{b.disabled=false;}
     };
   }
   const toc=extractVaultTOC(body),list=$('vault-toc-list');
@@ -481,6 +519,83 @@ function paintReading(m){
       else if(view){let seen=-1;for(let n=1;n<=view.state.doc.lines;n++){const line=view.state.doc.line(n);if(/^#{1,3}\s+/.test(line.text)&&++seen===+b.dataset.toc){view.dispatch({selection:{anchor:line.from},scrollIntoView:true});view.focus();break;}}}
     };
   }
+  if(!$('vault-toc').hidden){paintProperties(m,body);paintBacklinks(m);}
+}
+
+/* ---------- Properties (LINK-04): syntax-preserving edits of simple scalar keys only.
+   A list, nested map, or anything this cannot safely round-trip stays READ-ONLY on
+   purpose -- offering to edit it would mean reconstructing YAML from a parsed value,
+   which is exactly the "silent reconstruction" the contract rules out. Edit those in
+   Source mode instead. */
+const FRONTMATTER_RE=/^(﻿?)---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+const SIMPLE_PROP_LINE=/^([A-Za-z_][\w-]*):[ \t]*(.*)$/;
+function parseVaultProperties(body){
+  const m=FRONTMATTER_RE.exec(body);
+  if(!m)return {present:false};
+  const block=m[2],lines=block.split('\n'),props=[];let ok=true;
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+    if(!line.trim()||line.trim().startsWith('#'))continue;
+    const pm=SIMPLE_PROP_LINE.exec(line);
+    if(!pm){ok=false;continue;}
+    const value=pm[2];
+    // A value that opens a list/map/multiline block ([, {, |, >, or nothing before an
+    // indented continuation) is not a simple scalar; leave it read-only rather than
+    // guess at editing structure this parser does not represent.
+    const nextIndented=i+1<lines.length&&/^[ \t]/.test(lines[i+1]||'');
+    const simple=value!==''&&!/^[\[{|>]/.test(value.trim())&&!nextIndented;
+    props.push({key:pm[1],raw:value,simple,line:i});
+  }
+  return {present:true,parseable:ok,props,blockStart:m[0].indexOf(m[2]),block};
+}
+function paintProperties(m,body){
+  const host=$('vault-properties');if(!host)return;
+  const parsed=parseVaultProperties(body);
+  if(!parsed.present){host.innerHTML='<p class="dim small">No properties (frontmatter) on this note.</p>';return;}
+  if(!parsed.props.length){host.innerHTML='<p class="dim small">Frontmatter has no key: value lines.</p>';return;}
+  host.innerHTML=parsed.props.map(p=>p.simple
+    ?`<label class="vault-prop-row"><span>${esc(p.key)}</span><input data-prop-line="${p.line}" value="${esc(p.raw)}"></label>`
+    :`<div class="vault-prop-row dim small"><span>${esc(p.key)}</span><span title="Edit in Source mode">${esc(p.raw||'…')}</span></div>`
+  ).join('')+(parsed.parseable?'':'<p class="dim small">Some lines in the frontmatter could not be parsed as simple properties; edit them in Source mode.</p>');
+  for(const inp of host.querySelectorAll('[data-prop-line]'))inp.onchange=()=>{
+    if(!editable(m))return;
+    const lineIdx=+inp.dataset.propLine;
+    // Recompute fresh (the buffer may have changed since paint) and replace ONLY this
+    // one frontmatter line's text -- every other line, comment and blank stays
+    // byte-for-byte what it was. If the shape moved (e.g. someone edited Source mode
+    // concurrently) this recovers as a no-op-safe failure, never a guessed rewrite.
+    const now=parseVaultProperties(text(m));
+    const row=now.props.find(p=>p.line===lineIdx&&p.key===inp.closest('.vault-prop-row').querySelector('span').textContent);
+    if(!row){notice('Properties changed underneath this edit; reopen the panel.',true);return;}
+    const docLines=text(m).split('\n');
+    const fmStart=docLines.findIndex(l=>l.replace(/^﻿/,'')==='---');
+    const targetLine=fmStart+1+row.line;
+    if(view){
+      const cmLine=view.state.doc.line(targetLine+1);
+      const newText=`${row.key}: ${inp.value}`;
+      view.dispatch({changes:{from:cmLine.from,to:cmLine.to,insert:newText}});
+      schedule(m,SAVE_DELAY);paintStatus(m);
+    }
+  };
+}
+
+/* ---------- Backlinks (LINK-04) --------------------------------------------------- */
+let backlinksSeq=0;
+function paintBacklinks(m){
+  const host=$('vault-backlinks');if(!host)return;
+  const seq=++backlinksSeq;host.dataset.seq=seq;
+  api('/vault/links/backlinks?'+new URLSearchParams({path:m.path})).then(r=>{
+    if(host.dataset.seq!=seq)return;   // a newer note/paint superseded this request
+    const row=(p,extra='')=>`<button class="quiet vault-backlink-item${extra}" data-open="${esc(p)}">${esc(p)}</button>`;
+    const parts=[];
+    if(r.linked.length)parts.push(r.linked.map(x=>row(x.path)).join(''));
+    else parts.push('<p class="dim small">No notes link here yet.</p>');
+    if(r.ambiguous.length)parts.push('<p class="dim small" style="margin-top:8px">Possibly linking here (ambiguous target):</p>'+r.ambiguous.map(x=>row(x.path,' dim')).join(''));
+    if(r.unlinked_mentions.length)parts.push('<p class="dim small" style="margin-top:8px">Mentions this note without a link:</p>'+r.unlinked_mentions.map(x=>row(x.path,' dim')).join(''));
+    if(r.incomplete)parts.push('<p class="dim small" style="margin-top:8px">Some notes could not be read for this scan; results may be incomplete.</p>');
+    host.innerHTML=parts.join('');
+    for(const b of host.querySelectorAll('[data-open]'))b.onclick=()=>open(b.dataset.open);
+  }).catch(()=>{if(host.dataset.seq==seq)host.innerHTML='<p class="dim small">Backlinks could not be loaded.</p>';});
 }
 let treeTimer=null;
 function listTreeQuietly(path){clearTimeout(treeTimer);treeTimer=setTimeout(()=>{if(current==='vault')listVault(path.split('/').slice(0,-1).join('/'),false).catch(()=>{});},800);}

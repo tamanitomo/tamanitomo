@@ -52,7 +52,7 @@ let vaultView='folders';
 let vaultStack=[],vaultRequest=0,vaultDirty=false;
 async function leaveNote(){return confirmEditorLeave('vault');}
 
-function renderObsidianMarkdown(source){
+function renderObsidianMarkdown(source,sourcePath,noEmbeds){
  if(!source)return '<p class="dim">Empty document.</p>';
  const lines=source.split('\n');let html=[],inCode=false,codeLang='',codeLines=[],inList=false,listType='',hIdx=0;
  for(let i=0;i<lines.length;i++){
@@ -68,44 +68,64 @@ function renderObsidianMarkdown(source){
   if(hMatch){
    if(inList){html.push(listType==='ol'?'</ol>':'</ul>');inList=false;}
    const lvl=hMatch[1].length,text=hMatch[2];
-   html.push(`<h${lvl} id="vault-heading-${hIdx++}">${formatInlineMarkdown(text)}</h${lvl}>`);
+   html.push(`<h${lvl} id="vault-heading-${hIdx++}">${formatInlineMarkdown(text,sourcePath,noEmbeds)}</h${lvl}>`);
    continue;
   }
   if(line.startsWith('>')){
    if(inList){html.push(listType==='ol'?'</ol>':'</ul>');inList=false;}
-   html.push(`<blockquote>${formatInlineMarkdown(line.slice(1).trim())}</blockquote>`);
+   html.push(`<blockquote>${formatInlineMarkdown(line.slice(1).trim(),sourcePath,noEmbeds)}</blockquote>`);
    continue;
   }
   const taskMatch=line.match(/^[-*]\s+\[([ xX])\]\s+(.+)$/);
   if(taskMatch){
    if(!inList||listType!=='ul'){if(inList)html.push(listType==='ol'?'</ol>':'</ul>');html.push('<ul class="task-list">');inList=true;listType='ul';}
    const checked=taskMatch[1].toLowerCase()==='x';
-   html.push(`<li class="task-list-item"><input type="checkbox" disabled ${checked?'checked':''}> ${formatInlineMarkdown(taskMatch[2])}</li>`);
+   html.push(`<li class="task-list-item"><input type="checkbox" disabled ${checked?'checked':''}> ${formatInlineMarkdown(taskMatch[2],sourcePath,noEmbeds)}</li>`);
    continue;
   }
   const ulMatch=line.match(/^[-*]\s+(.+)$/);
   if(ulMatch){
    if(!inList||listType!=='ul'){if(inList)html.push(listType==='ol'?'</ol>':'</ul>');html.push('<ul>');inList=true;listType='ul';}
-   html.push(`<li>${formatInlineMarkdown(ulMatch[1])}</li>`);
+   html.push(`<li>${formatInlineMarkdown(ulMatch[1],sourcePath,noEmbeds)}</li>`);
    continue;
   }
   const olMatch=line.match(/^(\d+)\.\s+(.+)$/);
   if(olMatch){
    if(!inList||listType!=='ol'){if(inList)html.push(listType==='ol'?'</ol>':'</ul>');html.push('<ol>');inList=true;listType='ol';}
-   html.push(`<li>${formatInlineMarkdown(olMatch[2])}</li>`);
+   html.push(`<li>${formatInlineMarkdown(olMatch[2],sourcePath,noEmbeds)}</li>`);
    continue;
   }
   if(!line.trim()){if(inList){html.push(listType==='ol'?'</ol>':'</ul>');inList=false;}continue;}
   if(inList){html.push(listType==='ol'?'</ol>':'</ul>');inList=false;}
-  html.push(`<p>${formatInlineMarkdown(line)}</p>`);
+  html.push(`<p>${formatInlineMarkdown(line,sourcePath,noEmbeds)}</p>`);
  }
  if(inCode)html.push(`<pre><code>${esc(codeLines.join('\n'))}</code></pre>`);
  if(inList)html.push(listType==='ol'?'</ol>':'</ul>');
  return html.join('\n');
 }
 
-function formatInlineMarkdown(text){
+const VAULT_IMAGE_EXT=/\.(png|jpe?g|gif|webp|svg|bmp)$/i;
+
+function formatInlineMarkdown(text,sourcePath,noEmbeds){
  let res=esc(text);
+ // Embeds first (LINK-03): ![[target]], with an optional #Heading, ^block or |Label,
+ // consumed whole so the plain wikilink pattern below never re-matches what is left.
+ // `noEmbeds` (set only when rendering content THAT WAS ITSELF FETCHED AS AN EMBED)
+ // leaves a nested embed marker as plain text instead of a fetchable placeholder --
+ // the frontend's half of the depth-1 bound vault_link_index.embed_note_text already
+ // enforces server-side: the fetched text already contains the literal marker
+ // un-expanded, and re-interpreting it here would silently undo that bound.
+ res=res.replace(/!\[\[([^\]|#^]+?)(?:#([^\]|^]+))?(?:\^([^\]|]+))?(?:\|([^\]]+))?\]\]/g,
+  (m,target,heading,block,label)=>{
+   target=target.trim();
+   if(noEmbeds)return `<span class="dim">[[${esc(target)}${heading?'#'+esc(heading):''}]]</span>`;
+   if(!sourcePath)return `<span class="dim" title="Open this note (not a preview) to resolve embeds">[[${esc(target)}]] (embed)</span>`;
+   if(VAULT_IMAGE_EXT.test(target)){
+    const src=mediaUrl('/api/vault/links/embed-image?source='+encodeURIComponent(sourcePath)+'&target='+encodeURIComponent(target));
+    return `<img class="vault-embed-img" src="${src}" alt="${esc(label||target)}" loading="lazy">`;
+   }
+   return `<div class="vault-embed-note" data-embed-source="${esc(sourcePath)}" data-embed-target="${esc(target)}" data-embed-heading="${esc((heading||'').trim())}">Loading ${esc(target)}${heading?' § '+esc(heading.trim()):''}…</div>`;
+  });
  res=res.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g,(m,target,label)=>{
   const disp=label||target;
   return `<button class="quiet wiki-link" data-link="${esc(target.trim())}" title="Follow link [[${esc(target.trim())}]]">[[${esc(disp.trim())}]]</button>`;
@@ -120,6 +140,34 @@ function formatInlineMarkdown(text){
  res=res.replace(/~~([^~]+)~~/g,'<del>$1</del>');
  res=res.replace(/==([^=]+)==/g,'<mark>$1</mark>');
  return res;
+}
+
+let vaultEmbedSeq=0;
+function fillVaultEmbeds(root){
+ const nodes=root.querySelectorAll('.vault-embed-note');
+ for(const node of nodes){
+  const seq=++vaultEmbedSeq;node.dataset.embedSeq=seq;
+  const source=node.dataset.embedSource,target=node.dataset.embedTarget,heading=node.dataset.embedHeading;
+  const params=new URLSearchParams({source,target});if(heading)params.set('heading',heading);
+  api('/vault/links/embed-note?'+params.toString()).then(body=>{
+   if(node.dataset.embedSeq!=seq||!node.isConnected)return;   // stale: the pane redrew or scrolled away
+   if(!body.resolved){
+    node.className='dim small';
+    node.textContent=body.candidates&&body.candidates.length>1
+     ?`[[${target}]] is ambiguous (${body.candidates.length} notes share that name)`
+     :`[[${target}]] could not be embedded (${body.reason||'not found'})`;
+    return;
+   }
+   node.className='vault-embed-note-body';
+   // noEmbeds=true: depth-1 by design. The target's OWN embed markers render as
+   // plain text (matching what the server already left un-expanded), never as a
+   // second round of fetchable placeholders -- see formatInlineMarkdown's comment.
+   node.innerHTML=(body.truncated?'<p class="dim small">Truncated for space.</p>':'')
+    +renderObsidianMarkdown(body.text,body.path,true);
+  }).catch(()=>{
+   if(node.dataset.embedSeq==seq&&node.isConnected){node.className='dim small';node.textContent=`[[${target}]] could not be loaded.`;}
+  });
+ }
 }
 
 function extractVaultTOC(text){
