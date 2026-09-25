@@ -96,11 +96,14 @@ asset is the other source.
 |---|---|---|---|
 | **A.** Publish the accepted source branch without live activation | **DONE** (pass 2): `c3d6bee` published, CI green (run 36143505225) | Push `release/chat-journal-rc` (or the accepted `test/*` heads) to `origin` **without a tag, merge or release**. That runs `test.yml` (CI only, `contents: read`). `release.yml` runs only on `v*` tags. The updater reads only the `latest` release, so no install changes. The pre-push leak guard must pass. | none |
 | **B-controlled.** Journal with the existing Chat on the checked Linux first host, through a managed installation with every dispatcher paused and drained | **PENDING REVIEW / APPROVAL**. There is no code blocker; CI is green on the published candidate. | Only the first host (§2): the exact artifact `b22ca2eb…`, installed by the fixture-tested stage/apply path in §6 with the service stopped and both dispatcher jobs paused and drained. Journal on, legacy Chat, keyed sends absent, **C2 dispatcher live after resume**. | REL-04 (artifact/runbook review), OWN-02 (installation approval). REL-01 is a choice at this step (see REL-01). |
-| **B-public.** A stable/latest release offered through the ordinary updater | **NOT READY** | none claimed | REL-03 (the distribution path cannot enforce dispatcher quiescence or the supported scope), REL-01, OWN-01 |
-| **C.** Release persistent Chat with its live keyed send path | **NOT READY** | Could at most be Linux-only (non-Linux sends refused in code). | ACT-01, ACT-02, ACT-04, PKG-01, PKG-02 (plus B's items) |
+| **B-public.** A stable/latest release offered through the ordinary updater | **NOT READY** | none claimed | REL-03 (the distribution path cannot enforce dispatcher quiescence or the supported scope), REL-01 (done, see pass 4 below), OWN-01 |
+| **C.** Release persistent Chat with its live keyed send path | **ACTIVATED (pass 4), with a stated containment gap** | Linux-only (non-Linux sends refused in code). Containment is the accepted Phase 1B C1 process-group supervisor, **not** a per-attempt cgroup/systemd boundary: ACT-01/RUN-01/RUN-02 are explicitly **WAIVED** by owner instruction for 3.5.0, not resolved. PKG-01/PKG-02 are **CLOSED** (pass 4: `kit/app/hosted.py`/`kit/cli/app.py` build with `chat_sends=Options(client=True)`; the C1 modules and keyed-client assets are in `release-files.json`; a real extracted-package smoke of the built 3.5.0 ZIP confirms all of this reaches the artifact, not only source — see "Pass 4 build and verification evidence" below). | ACT-02, ACT-04's C scope (both **not** covered by the owner's RUN-01/RUN-02 waiver) — plus REL-03, which blocks **B-public and C alike** for a stable/latest release regardless of activation. |
 
-B (either form) is a fallback, not a silent downgrade of C. The combined product (C) remains blocked on the
-activation items below.
+B (either form) is a fallback, not a silent downgrade of C. **REL-03 (the public-updater/dispatcher-race
+problem) is the one gate that was not addressed or waived this pass and blocks every path to a stable/
+latest GitHub release** — B-controlled (a manual, owner-approved, quiescent install on the first host)
+remains the only realistic near-term path; publishing `v3.5.0` as `latest` would violate this document's
+own REL-04 gate ("If the unsafe old-updater transition is unresolved, STOP before tagging").
 
 ## 5. Register
 
@@ -253,6 +256,39 @@ rollback does not re-send recorded attempts. An entry C2 left `unknown` or mid-a
 **running at the same time** (ACT-04), so install and roll back only in the quiescent window from
 step 3. For C (later), the send ledger lives in each profile home, and a ledger reset records lost
 continuation-note provenance, after which trusted evidence reads fail closed (R1).
+
+## 6a. Pass 4 build and verification evidence
+
+Local only; nothing pushed, tagged or published. `VERSION` bumped `3.0.24` → `3.5.0` on
+`release/chat-journal-rc` (commits: `f6c749c` #3/#4 fixes, `54bf873` persistent-Chat activation,
+`4d1a867` Vault merge, plus the version/notes commit). `CHANGELOG.md` and `docs/RELEASE_NOTES.md`
+rewritten for 3.5.0, stating the known limits (process-group containment, ACT-02, Journal/Timeline,
+the Vault linked-knowledge layer, the updater) plainly rather than omitting them.
+
+- **Full local suite** (this candidate, merged, versioned): **1881 passed, 53 skipped** (all
+  "pinned Hermes not configured"), **0 failed**, 640 subtests. All `tests/*_ui.js` files run
+  directly: pass. No regressions from pass 3's baseline (1843 passed before the Vault merge).
+- **Build determinism**: `tools/build_release.py` run twice, independently. Both produced a
+  311-file + manifest archive with **identical sha256**: `bab296e73ac504b7165bb9a0e3772de4c821c5f9292a5253de45d4c47da8db98`.
+  `SECRET` scan (built into the tool) found nothing to flag.
+- **Manifest integrity**: the archive extracted and every one of its 311 `SHA256SUMS.json`
+  entries verified against the extracted bytes — 0 mismatches.
+- **Packaged-build smoke** (`~/tamanitomo-3.5.0-protect/evidence/smoke_3_5_0.py`, synthetic home
+  only, no live profile/credential touched): launches the **extracted package's own entry point**
+  (`python -m kit.app.hosted`, exactly as the systemd unit does) and confirms **13/13**: the app
+  serves; the persistent-Chat signal and all five keyed-client assets are present in the served
+  page *and* actually servable (not merely referenced); the keyed-send bootstrap route is
+  registered (503 `send_supervision_unavailable` is the correct, truthful answer without a
+  configured Hermes interpreter in this throwaway home — RUN-02's refuse-don't-silently-degrade
+  contract; 404 would have meant the route was missing); the Vault editor asset serves; the
+  Journal archive route answers; `/api/instance` identifies the app. This is real evidence that
+  activation reached the **built artifact**, not only the source tree.
+- **Not done this pass** (REL-03's own install/rollback fixture, reused rather than rebuilt):
+  the full old-updater-vs-new-artifact staged upgrade/rollback exercise against a rebuilt 3.0.24
+  install (as pass 2's §6 did for the pre-activation candidate). The packaged-build smoke above is
+  a fresh-launch check, not an upgrade-path proof, and does not by itself close REL-03 or REL-04.
+- Evidence root: `~/tamanitomo-3.5.0-protect/evidence/` (smoke script, its result, build hashes,
+  the extracted `SHA256SUMS.json`); build artifacts at `~/tamanitomo-3.5.0-protect/build/`.
 
 ## 7. Proposed commands (NOT executed; owner approval required)
 

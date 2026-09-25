@@ -1,3 +1,43 @@
+## 3.5.0 — Persistent Chat, the Vault editor, and three reported fixes (2026-09-25)
+
+- Activate persistent Chat for the normal installed app. The Phase 1B keyed-send routes and UI
+  (chat page/dock/mobile sheet, optimistic echo, public streaming, scroll/search-safe history,
+  send/recover controls) are now live in `kit/app/hosted.py` and `hermes app`/`companion app`,
+  not only a test fixture. Containment is the accepted Phase 1B process-group supervisor
+  (`send_executor.py`, `send_quiescence.py`, `os.killpg`, lock-identity nonces) — see "Known
+  limits" below; it is not a per-attempt cgroup/systemd boundary.
+- Add the Vault editor: a locally bundled CodeMirror 6, Source/Reading/Split modes, note tabs,
+  byte-exact per-note backups, autosave with offline/conflict/recovered-draft states, and "save
+  a copy" that never overwrites newer typing. No Node or CDN is needed to run it.
+- Fix check-ins re-arming themselves (#3). The reflection job's own turn ending was
+  indistinguishable from a real conversation ending, so it kept waking itself up after nothing
+  had happened. It now only re-arms on an owner-facing session (terminal, Telegram, the app).
+- Fix the pulse/autonomy scheduler opening on generated wording alone (#4). Its "has anything
+  changed" check hashed free-text scene descriptions, which are reworded every tick even when
+  nothing did; it now uses the same code-owned scene-start marker the overnight version already
+  used correctly.
+- Verified (#2, duplicate memory): the exact-duplicate write-time check and the review queue for
+  possible restatements were already shipped and are unchanged; no new duplicate-memory work
+  landed this release. A dry-run repair tool for facts duplicated before that protection existed
+  is not built.
+
+### Known limits, stated plainly
+
+- **Tool-process containment.** A tool a model turn starts (or a background job it leaves
+  running) is supervised by process group, not by a boundary that also catches a process that
+  detaches its own session. A prototype using a per-attempt Linux cgroup/systemd scope was built
+  and verified to catch that case; it is not shipped in 3.5.0.
+- **Compression-lineage reads.** After Hermes compresses a session in place, the read paths
+  (history, snapshot, search) do not yet carry original-message identity through the rewrite.
+- **Journal/Timeline.** Journal's Day/Reflection archive is complete; Timeline is not yet
+  retired (no multi-day stream, scene/place search, or live "now" marker in Journal) and remains
+  available alongside it.
+- **Vault.** The editor and safe-save are new; backlinks, the note index, wikilink/embed
+  resolution, properties, link-aware rename, the command palette and a local graph are not in
+  this release.
+- **Update path.** The in-app updater does not yet pause a running dispatcher before applying an
+  update; see the owner-facing upgrade guide for the manual quiescent-install procedure.
+
 ## 3.0.24 — Pronouns, questions asked to you, facts as statements (2026-09-24)
 
 - Use the companion's configured pronouns on Us. `/api/relationship` returns `pronoun_set`; "preferences of her/his/their own" follows it, and singular they is used only for a they/them companion or an unknown set. The test that required neutral copy is replaced by one per pronoun set.
