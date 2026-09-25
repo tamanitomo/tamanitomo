@@ -21,11 +21,23 @@
    Reads: the existing keyed routes and operation views, plus, only when a pending send
    is picked up again after a reload or a return to Chat, one GET /api/chat/snapshot
    (Phase 1A) to learn which already-drawn history rows are this send's (by their
-   correlation.send_id and source ids, never by text or time). */
+   correlation.send_id and source ids, never by text or time).
+
+   Clearing a pending intent needs evidence: a settled receipt (settled === true), a
+   refusal of a request whose every earlier POST in this page was provably refused, or
+   the reviewed reset / Send again flow. A missing ledger, an unreadable receipt,
+   `settled: null`, or a refusal of a replay after an unusable answer or a reload is not
+   such evidence: the intent is kept, and Check now asks again with the same request. */
 (function(){
 'use strict';
 const signal=document.querySelector('meta[name="tamanitomo-chat-sends"]');
 if(!signal||signal.content!=='keyed')return;
+
+// The restored-request status (paintOwner): the owner's side, set apart from transcript rows.
+document.head?.insertAdjacentHTML('beforeend',`<style>.keyed-request{align-self:flex-end;max-width:85%;
+  padding:10px 14px;border:1px dashed var(--edge-2,currentColor);border-radius:14px;
+  overflow-wrap:anywhere}.keyed-request-label{display:block;margin-bottom:4px}
+  .keyed-request small{display:block;font-size:12px;color:var(--ink-2);text-align:right}</style>`);
 
 const CROCKFORD='0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const BACKOFF=[500,1000,2000,4000,8000];     // then every LATER ms, same key, while the page lives
@@ -39,6 +51,10 @@ const WORDS={
   replying:'Replying…',
   notSent:'Not sent',
   notConfirmed:'Not confirmed. The app will check again with the same request.',
+  notConfirmedManual:'Not confirmed. Check now to ask again with the same request.',
+  unresolvedAccepted:'The app accepted your request. Its send record is unavailable right now. Check now to ask again with the same request.',
+  unresolvedUnconfirmed:'Whether the app accepted your request is not confirmed, and its send record is unavailable right now. Check now to ask again with the same request.',
+  requestLabel:'Your message, not yet in the conversation record here',
   failedRecorded:'Your message was recorded; the reply failed',
   failedUnknown:'The reply failed. Whether your message was recorded is unknown.',
   stopped:'Stopped',
@@ -56,6 +72,10 @@ const WORDS={
 
 const boots=new Map();          // scope id -> {conversation_id, generation}
 const drivers=new Set();        // client keys with a running driver in this page
+const fresh=new Set();          // keys minted in this page whose every POST so far was provably refused
+const requests=new Set();       // restored keys presented as a request status, not a transcript bubble
+let draftEdits=0;               // owner edits of any chat composer in this page (R3)
+document.addEventListener?.('input',e=>{if(e.target&&e.target.id==='chat-message')draftEdits++;},true);
 const shown=new Map();          // client key -> last painted {text, actions, bad}
 let submitting=false;
 
@@ -127,7 +147,15 @@ function paintOwner(scope,p){
   let el=ownerEl(p);
   if(!el){
     const log=$('chat-log');log.querySelector('.chat-welcome')?.remove();
-    log.insertAdjacentHTML('beforeend',`<div class="bubble user sending" data-channel="desktop">
+    // A restored intent that no history row is known to be yet: a separate, labelled request
+    // status. Its recorded row may already be drawn above, and nothing here can tell which
+    // one it is until the send's own source ids say so (adoptRow); never by text.
+    log.insertAdjacentHTML('beforeend',requests.has(p.client_key)?
+      `<div class="keyed-request sending" role="status">
+      <span class="keyed-request-label dim small">${esc(WORDS.requestLabel)}</span>
+      <div class="message-body">${richText(p.message)}</div>
+      <small><span class="bubble-status">${esc(WORDS.sending)}</span></small></div>`:
+      `<div class="bubble user sending" data-channel="desktop">
       <div class="message-body">${richText(p.message)}</div>
       <small><span class="bubble-status">${esc(WORDS.sending)}</span></small></div>`);
     el=log.lastElementChild;
@@ -190,7 +218,18 @@ function offerBack(scope,message){
   box.dispatchEvent(new Event('input'));
   return true;
 }
+/* At a final outcome the request status becomes the ordinary owner bubble, unless a history
+   row is adopted for it (adoptRow removes it then): one presentation either way. */
+function promote(p){
+  requests.delete(p.client_key);
+  const el=$('chat-log')&&ownerEl(p);
+  if(!el||!el.classList.contains('keyed-request'))return;
+  el.querySelector('.keyed-request-label')?.remove();
+  el.classList.remove('keyed-request');el.classList.add('bubble','user');el.removeAttribute('role');
+  el.dataset.channel='desktop';
+}
 function settle(scope,p){
+  promote(p);
   clearPending(scope,p);
   if(activeOperation==='chat-send:'+p.client_key)activeOperation=null;
   if(chatVisible(scope)){showTyping(false);voiceControlsBusy(false);}
@@ -205,6 +244,7 @@ async function startIntent(scope,message,{box=null,grow=null}={}){
   if(loadPending(scope)){hint(scope,WORDS.onePending);return;}
   if(activeOperation){hint(scope,WORDS.wait);return;}
   submitting=true;composer(scope,false);
+  const edits=draftEdits;         // R3: any composer edit after this belongs to the owner
   let started=false;
   try{
     const boot=await bootstrap(scope,true);
@@ -216,24 +256,41 @@ async function startIntent(scope,message,{box=null,grow=null}={}){
     if(!savePending(scope,p)){hint(scope,WORDS.storage);return;}
     started=true;
     activeOperation='chat-send:'+p.client_key;
-    if(box&&box.value===message){box.value='';try{sessionStorage.setItem(draftKey(scope),'');}catch(_){}grow?.();}
+    clearSubmittedDraft(scope,message,box,grow,edits);
     paintStatus(scope,p,WORDS.sending);
     if(chatVisible(scope))showTyping(true);   // the box stays editable: a newer draft is the owner's
-    drive(scope,p);
+    drive(scope,p,{freshIntent:true});
   }finally{submitting=false;if(!started&&!loadPending(scope))composer(scope,true);}
 }
 
-async function drive(scope,p){
-  if(drivers.has(p.client_key))return;
-  drivers.add(p.client_key);
+/* R3: bootstrap is awaited between the submit and this point, and the Chat view may have been
+   rebuilt meanwhile. Only a draft nobody has edited since the submit, and that still holds the
+   submitted text, is cleared; the captured textarea is used only while it is still the
+   current composer. A newer draft (typed here or in a newer view) is never touched. */
+function clearSubmittedDraft(scope,message,box,grow,edits){
+  if(draftEdits!==edits)return;
+  let stored=null;try{stored=sessionStorage.getItem(draftKey(scope));}catch(_){}
+  if(stored!==null&&stored!==message)return;
+  if(stored===message){try{sessionStorage.setItem(draftKey(scope),'');}catch(_){}}
+  const now=chatVisible(scope)?$('chat-message'):null;
+  if(!now||now.value!==message)return;
+  now.value='';
+  if(now===box)grow?.();else now.style.height='auto';
+}
+
+async function drive(scope,p,{freshIntent=false}={}){
+  const key=p.client_key;       // R1: released on every path, whatever acquire() returns
+  if(drivers.has(key))return;
+  drivers.add(key);
+  if(freshIntent)fresh.add(key);
   try{
-    if(!p.send_id){p=await acquire(scope,p);if(!p)return;}
+    if(!p.send_id){const q=await acquire(scope,p);if(!q)return;p=q;}
     await follow(scope,p);
   }catch(error){
     // A client bug is not an outcome: keep the intent, say nothing untrue.
-    paintStatus(scope,p,WORDS.notConfirmed,{actions:[checkAgain(scope,p)]});
+    paintStatus(scope,p,WORDS.notConfirmedManual,{actions:[checkAgain(scope,p)]});
     console.error(error);
-  }finally{drivers.delete(p.client_key);}
+  }finally{drivers.delete(key);}
 }
 const checkAgain=(scope,p)=>({label:'Check now',run:()=>drive(scope,loadPending(scope)||p)});
 
@@ -248,8 +305,16 @@ async function acquire(scope,p){
     if((r.status===202||r.status===200)&&r.data?.send?.send_id)return adopt(scope,p,r.data.send,r.data);
     if(r.status===401){paintStatus(scope,p,WORDS.signedOut,{bad:true,actions:[checkAgain(scope,p)]});return null;}
     if(r.status===409&&code==='generation_changed'){resetOutcome(scope,p);return null;}
-    if(r.status===409&&code==='not_bootstrapped'){boots.delete(scopeId(scope));notSent(scope,p);return null;}
-    if(NOT_ACCEPTED.has(code)||r.status===400||r.status===422){notSent(scope,p,code);return null;}
+    if((r.status===409&&code==='not_bootstrapped')||NOT_ACCEPTED.has(code)||r.status===400||r.status===422){
+      if(code==='not_bootstrapped')boots.delete(scopeId(scope));
+      if(fresh.has(p.client_key)){notSent(scope,p,code);return null;}
+      // R2: this refuses only the replay. An earlier POST of this key may have been accepted.
+      const known=await call(scope,'/chat/sends?key='+encodeURIComponent(p.client_key));
+      if(known.status===200&&known.data?.send_id)return adopt(scope,p,known.data,null);
+      if(known.status===401){paintStatus(scope,p,WORDS.signedOut,{bad:true,actions:[checkAgain(scope,p)]});return null;}
+      unresolved(scope,p);return null;
+    }
+    fresh.delete(p.client_key);   // no usable answer: this POST may have been accepted
     // Uncertain (no answer, a lost or unreadable body, a missing route, a gateway error):
     // ask by the same key. A 404 there is NOT permission for a new key: the POST may be in flight.
     const found=await call(scope,'/chat/sends?key='+encodeURIComponent(p.client_key));
@@ -292,7 +357,7 @@ async function follow(scope,p){
   if(!view){
     const r=await call(scope,'/chat/sends/'+encodeURIComponent(p.send_id));
     if(r.status===401){paintStatus(scope,p,WORDS.signedOut,{bad:true,actions:[checkAgain(scope,p)]});return;}
-    if(r.status!==200){paintStatus(scope,p,WORDS.hidden,{bad:true});settle(scope,p);return;}
+    if(r.status!==200||!r.data){unresolved(scope,p,r.status);return;}   // R2: unreadable is not settled
     receipt=r.data;
   }
   wait=POLL;
@@ -304,7 +369,18 @@ async function follow(scope,p){
     if(r.status===401){paintStatus(scope,p,WORDS.signedOut,{bad:true,actions:[checkAgain(scope,p)]});return;}
     if(r.status===200)receipt=r.data;
   }
-  finish(scope,p,view,receipt||{state:'unknown'});
+  // R2: settled null (the F1 unresolved view) or missing is unknown settlement, not completion.
+  if(receipt?.settled!==true){unresolved(scope,p);return;}
+  finish(scope,p,view,receipt);
+}
+
+/* The exact stored intent, its slot and the page's exclusion stay; only the owner's explicit
+   Check now asks again, with the same key. No automatic check is promised here. */
+function unresolved(scope,p,status){
+  fresh.delete(p.client_key);
+  const text=!p.send_id?WORDS.unresolvedUnconfirmed:status===403||status===404?
+    WORDS.hidden+' It is kept; Check now asks again with the same request.':WORDS.unresolvedAccepted;
+  paintStatus(scope,p,text,{bad:true,actions:[checkAgain(scope,p)]});
 }
 
 function finish(scope,p,view,receipt){
@@ -417,6 +493,7 @@ async function attach(){
     if(found.status===200&&found.data?.send_id){q=withIds(q,found.data);savePending(scope,q);}
   }
   await reconcile(scope,q);
+  if(chatVisible(scope)&&!ownerEl(q))requests.add(q.client_key);   // one presentation (see paintOwner)
   const last=shown.get(q.client_key);
   paintStatus(scope,q,last?.text||WORDS.checking,last||{});
   if(chatVisible(scope)&&!last?.sent)showTyping(true);

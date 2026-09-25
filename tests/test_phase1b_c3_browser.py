@@ -241,13 +241,19 @@ class KeyedSends(Browser):
         self.page.wait_for_selector('#chat-message')
         until(lambda: self.pending() and self.pending().get('send_id'), what='pending kept across reload')
         self.assertEqual(self.pending()['client_key'], key)
-        # Mid-turn the recorded owner row may already be in history as well as the provisional
-        # bubble: C1 records the send's links only when it settles (stated limitation).
-        until(lambda: 1 <= self.bubbles('Reload me mid turn') <= 2, what='the owner after reload')
+        # Mid-turn the recorded owner row is already in history, and C1 records the send's
+        # links only when it settles, so the restored intent cannot be matched to it yet: it
+        # is shown as a separate, labelled request status, never a second owner bubble.
+        until(lambda: self.page.query_selector('#chat-log .keyed-request'), what='the request status')
+        self.assertIn('Reload me mid turn', self.page.inner_text('#chat-log .keyed-request'))
+        for _ in range(4):                  # the whole paused interval, not only the settled view
+            self.assertEqual(self.bubbles('Reload me mid turn'), 1)
+            pause(0.25)
         self.assertTrue(self.page.is_disabled('#send-message'), 'one pending intent at a time')
         self.s.release(1)
         self.wait_reply('First part. Second part.')
         self.one_send('Reload me mid turn', 'First part. Second part.')
+        self.assertIsNone(self.page.query_selector('#chat-log .keyed-request'), 'reconciled by source id')
         self.assert_never_legacy()
 
     def test_draft_edited_during_a_turn_survives_completion_and_navigation(self):
