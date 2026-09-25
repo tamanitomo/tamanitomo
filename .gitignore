@@ -85,3 +85,6 @@ tests/analyze_tests.py
 tests/generate_report*.py
 tests/full_report*.md
 tests/test_analysis.txt
+
+# Vault editor build (tools/editor): dependencies are installed with npm ci, never committed
+tools/editor/node_modules/

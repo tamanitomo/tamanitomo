@@ -1,0 +1,26 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.7, pytest-9.1.1, pluggy-1.6.0 -- <home>/projects/tamanitomo/.venv/bin/python
+rootdir: <home>/projects/tamanitomo-vault
+configfile: pytest.ini
+plugins: anyio-4.15.1
+collecting ... collected 16 items
+
+tests/test_vault_editor_browser.py::VaultEditor::test_10_narrow_layout_keeps_the_editing_controls_reachable PASSED [  6%]
+tests/test_vault_editor_browser.py::VaultEditor::test_11_reading_mode_links_are_safe_and_wikilinks_open_tabs PASSED [ 12%]
+tests/test_vault_editor_browser.py::VaultEditor::test_12_a_read_sent_before_a_save_cannot_roll_the_buffer_back PASSED [ 18%]
+tests/test_vault_editor_browser.py::VaultEditor::test_13_storage_follows_the_profile_boot_selects PASSED [ 25%]
+tests/test_vault_editor_browser.py::VaultEditor::test_14_a_draft_recovered_while_the_disk_is_unreadable_stays_unsaved PASSED [ 31%]
+tests/test_vault_editor_browser.py::VaultEditor::test_15_a_late_copy_receipt_keeps_newer_typing_and_the_newer_note PASSED [ 37%]
+tests/test_vault_editor_browser.py::VaultEditor::test_16_a_discarded_note_sends_no_later_save PASSED [ 43%]
+tests/test_vault_editor_browser.py::VaultEditor::test_1_core_journey_edit_navigate_reload_recover_and_resolve_a_conflict PASSED [ 50%]
+tests/test_vault_editor_browser.py::VaultEditor::test_2_replace_disk_with_mine_is_explicit_and_backs_up_theirs PASSED [ 56%]
+tests/test_vault_editor_browser.py::VaultEditor::test_3_saves_are_serialised_and_a_slow_answer_never_overwrites_newer_text PASSED [ 62%]
+tests/test_vault_editor_browser.py::VaultEditor::test_4_offline_and_failed_saves_keep_the_text_and_recover PASSED [ 68%]
+tests/test_vault_editor_browser.py::VaultEditor::test_5_protected_file_is_read_only_and_the_api_refuses_it PASSED [ 75%]
+tests/test_vault_editor_browser.py::VaultEditor::test_6_raw_markdown_crlf_bom_and_unknown_syntax_are_not_rewritten PASSED [ 81%]
+tests/test_vault_editor_browser.py::VaultEditor::test_7_undo_redo_and_composition PASSED [ 87%]
+tests/test_vault_editor_browser.py::VaultEditor::test_8_tabs_modes_and_drafts_are_per_profile PASSED [ 93%]
+tests/test_vault_editor_browser.py::VaultEditor::test_9_draft_storage_is_bounded_and_says_so PASSED [100%]
+
+-- generated xml file: <job>/ev/browser-cb03ccf.xml --
+============================= 16 passed in 58.79s ==============================

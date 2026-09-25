@@ -66,9 +66,19 @@ class Persistent(Browser):
         self.page.wait_for_selector('#vault-tree .vault-node', state='attached')   # the Vault page has drawn
         self.page.evaluate("()=>typeof showVaultView==='function'&&showVaultView('folders')")
         self.page.evaluate(f"()=>readNote({NOTE!r})")
-        self.page.click('[data-vault-mode="edit"]')            # notes open in preview; edit as a person would
-        self.page.wait_for_selector('#note-text')
-        until(lambda: self.page.input_value('#note-text') == NOTE_TEXT, what='note loaded')
+        until(lambda: self.page.evaluate(f"()=>VaultEditor.status({NOTE!r})") in ('saved', 'dirty', 'saving'),
+              what='note open')
+        self.page.click('[data-vault-mode="edit"]')            # the Source mode (CodeMirror)
+        self.page.wait_for_selector('.vault-cm .cm-content')
+        until(lambda: self.note_text() == NOTE_TEXT, what='note loaded')
+
+    def note_text(self):
+        return self.page.evaluate(f"()=>VaultEditor.text({NOTE!r})")
+
+    def set_note(self, text):
+        """Replace the note's text as typing would (an input transaction), not by assignment."""
+        self.page.evaluate("t=>{const v=VaultEditor.view();v.dispatch({changes:{from:0,to:v.state.doc.length,insert:t},"
+                           "userEvent:'input'})}", text)
 
     def launcher(self):
         return self.page.inner_text('#chat-dock-launcher')
@@ -95,9 +105,9 @@ class Persistent(Browser):
         return self.page.evaluate('document.activeElement?.id||document.activeElement?.tagName')
 
     def note_state(self):
-        return self.page.evaluate("()=>{const t=document.getElementById('note-text');"
-                                  "return {value:t.value,start:t.selectionStart,end:t.selectionEnd,"
-                                  "marker:t.dataset.marker||null,focus:document.activeElement===t}}")
+        return self.page.evaluate("()=>{const v=VaultEditor.view(),s=v.state.selection.main;"
+                                  "return {value:v.state.sliceDoc(),start:s.from,end:s.to,"
+                                  "marker:v.dom.dataset.marker||null,focus:v.hasFocus}}")
 
 
 @unittest.skipUnless(LINUX, 'the C1 supervision is established on Linux only')
@@ -117,9 +127,9 @@ class Journeys(Persistent):
 
         # Vault: a note being edited, with a selection and the focus in it.
         self.open_note()
-        self.page.fill('#note-text', NOTE_TEXT + 'Owner edit in progress.\n')
-        self.page.evaluate("()=>{const t=document.getElementById('note-text');t.dataset.marker='same-node';"
-                           "t.focus();t.setSelectionRange(2,8);}")
+        self.set_note(NOTE_TEXT + 'Owner edit in progress.\n')
+        self.page.evaluate("()=>{const v=VaultEditor.view();v.dom.dataset.marker='same-node';"
+                           "v.focus();v.dispatch({selection:{anchor:2,head:8}});}")
         before = self.note_state()
         until(self.dock_visible, what='the dock launcher on Vault')
         self.assertFalse(self.dock_open(), 'the dock is not opened for the owner')
@@ -144,7 +154,7 @@ class Journeys(Persistent):
         self.assertEqual(self.page.input_value('#chat-dock-message'), 'A newer draft in the dock',
                          'completion does not clear the newer draft')
         self.assertEqual(self.storage('chat-draft-existing-nova'), 'A newer draft in the dock')
-        self.assertEqual(self.page.input_value('#note-text'), NOTE_TEXT + 'Owner edit in progress.\n')
+        self.assertEqual(self.note_text(), NOTE_TEXT + 'Owner edit in progress.\n')
 
         # Reply from the dock.
         self.s.scenario(reply='Then we pick them on Saturday.')
@@ -153,14 +163,13 @@ class Journeys(Persistent):
         self.assertEqual(self.page.input_value('#chat-dock-message'), '')
         self.shot('05-replied-from-dock')
 
-        # Maximise: the page's own unsaved-note guard is respected; staying keeps the dock.
+        # Maximise. The Vault editor (test/vault-editor-safe-save) autosaves and keeps each open
+        # note's buffer, so leaving Vault no longer needs a discard prompt: the edit is on disk.
+        until(lambda: self.page.evaluate(f"()=>VaultEditor.status({NOTE!r})") == 'saved', what='note autosaved')
+        vault = self.s.companions['nova'].vault
+        self.assertEqual((vault / NOTE).read_text(encoding='utf-8'), NOTE_TEXT + 'Owner edit in progress.\n')
         self.page.click('#chat-dock-maximise')
-        self.page.wait_for_selector('dialog.editor-leave-dialog[open]')
-        self.page.click('dialog.editor-leave-dialog [data-stay]')
-        until(lambda: self.page.evaluate("current==='vault'") and self.dock_open(), what='stayed, dock kept')
-        self.assertEqual(self.page.input_value('#note-text'), NOTE_TEXT + 'Owner edit in progress.\n')
-        self.page.click('#chat-dock-maximise')
-        self.page.click('dialog.editor-leave-dialog [data-discard]')
+        self.assertEqual(self.page.locator('dialog.editor-leave-dialog[open]').count(), 0, 'nothing to discard')
         self.page.wait_for_selector('#chat-log')
         until(lambda: self.page.evaluate("current==='chat'"), what='maximised into Chat')
         self.assertFalse(self.dock_visible(), 'one view at a time: no dock on the Chat page')
@@ -415,8 +424,8 @@ class Journeys(Persistent):
                 self.shot(f'09-dock-{theme}')
                 self.page.click('#chat-dock-minimise')
                 until(lambda: not self.dock_open(), what='minimised')
-                self.page.click('#note-text')
-                self.assertEqual(self.active(), 'note-text', 'the editor is reachable with the dock collapsed')
+                self.page.click('.vault-cm .cm-content')
+                self.assertEqual(self.active(), 'vault-source-content', 'the editor is reachable with the dock collapsed')
 
     def seed_history(self, n=130):
         """Synthetic recorded history in a workspace session (the chat contract's store)."""
