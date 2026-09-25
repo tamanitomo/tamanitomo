@@ -1,0 +1,10 @@
+{
+  "PATH": "/usr/bin:/bin",
+  "TAMANITOMO_C3_REQUIRE_BROWSER": "1",
+  "TAMANITOMO_REQUIRE_NODE": "1",
+  "TMPDIR": "<job>/tmp",
+  "chromium": "153.0.8010.12",
+  "node": "v26.7.0",
+  "playwright": "1.63.0",
+  "python": "Python 3.14.7"
+}

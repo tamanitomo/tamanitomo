@@ -1,0 +1,16 @@
+{
+  "data_dir_removed_after_sigterm": true,
+  "entry_point": "tools/preview_fixture.py --persistent-chat",
+  "excluded_rows_shown": false,
+  "feed_read": false,
+  "not_sent_shown": false,
+  "post_sessions": [
+    "term"
+  ],
+  "reads": [
+    "/chat/continuation",
+    "/chat/sends/bootstrap",
+    "/chat/snapshot"
+  ],
+  "trusted_rows_shown": true
+}
