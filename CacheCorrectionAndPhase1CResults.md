@@ -47,7 +47,7 @@ database, identity policy, model call or framework. It adds:
 - Evidence-only omissions: `not_public`, and `compression_carryover`. The second covers rows Hermes copies into a
   compression child. I checked the pinned `publish_compression_child`: copies get new ids but keep their original
   timestamps. A row counts as carryover when it is not newer than its child session.
-- An unreadable send ledger **fails closed** (`EvidenceUnavailable`). Limits are stated in `view.limits`.
+- An unreadable send ledger, and (after review edfee06 R1, `62c223b`) a ledger with **known lost provenance** (`incomplete`), **fail closed** (`EvidenceUnavailable`). Limits are stated in `view.limits`.
 
 **Reflection** (`companion_local_reflection.py --trusted-sources`, i.e. `reflect(trusted=True)`). It returns the same
 return shape and uses the same batch bounds, keys, retry budget, plan contract 3 and `<messages.id>:<n>` quote ids.
@@ -61,7 +61,8 @@ continuity fence at priority 6, with its own cap and omission line. The full rul
 - Non-owner sessions get nothing.
 - An unknown session or an unreadable store gets a one-line diagnostic.
 - Selection is deterministic: the last 24 hours, excluding the destination and its compression lineage, at most 6
-  items, 280 characters each, `min(1800, cap/6)` characters in total.
+  items, 280 characters each, and `min(1800, cap/6)` characters **of quoted lines**. The header and omission line
+  are extra (N1 below).
 - Items are labelled with time, channel and speaker, and the header says they are quoted data, not instructions.
 - Fence markers inside quoted text are defused.
 
@@ -100,3 +101,40 @@ continuity fence at priority 6, with its own cap and omission line. The full rul
   review's follow-ups (plain-recency suggestion, timestamp display, deletion lag) were not touched. On the reviewer's
   prose note: restored requests show as request status cards (accepted C3 behaviour). An earlier report called this
   duplicate owner presentation, which it is not.
+
+## R1 correction after review edfee06 (known lost provenance)
+
+**Verified start:** `test/phase1c-continuity` at `edfee06132729460ac08c879c3d0a973e69e96a2`. The worktree was clean and
+the index empty. There were no later owner commits, and `stash@{0}` was preserved. The review packet
+`TAMANITOMO_R1_REVIEW_PACKET_edfee06.zip` (SHA-256 `9f73362b…`) was extracted outside the repository. Its `REVIEW.md`
+and `CLAUDE_NEXT_TASK.md` are byte-identical to the Markdown copies supplied earlier.
+
+| Branch (local, unpushed) | Commit | What |
+|---|---|---|
+| `test/phase1c-provenance-guard` (child of edfee06) | `62c223b` | **Tested SHA**, tree `5c985db1…`. The reviewer's candidate guard, applied unchanged with `git apply` (3 added lines in `owner_evidence`), plus `tests/test_phase1c_provenance_review.py` vendored byte-identical |
+| | (this commit) | Docs only: CHAT_CONTRACT §9.1/§9.2/§9.3, this addendum, `docs/phase1c_r1_evidence/` |
+
+**Patch inspection.** `incomplete` is the existing `ReadModel` state set when a reset recorded `provenance_lost_at`.
+The guard raises the existing `EvidenceUnavailable` before the source is opened, exactly as `unavailable` already did.
+Its callers already handle that exception:
+- `trusted_messages` turns it into a `ValueError` before `reflect()` counts an attempt. No planner call is made and the
+  watermark does not move.
+- `cross_channel_handoff` turns it into its "could not be checked this turn" diagnostic.
+
+`ok` and `none` are untouched. The Chat projection does not call `owner_evidence` and keeps its disclosed degraded
+display.
+
+| Check (my execution, synthetic fixtures, `TMPDIR` on a disposable tmpfs directory) | Result |
+|---|---|
+| The 4 reviewer regressions on edfee06, before the patch | **1 passed / 3 failed**. That reproduces the finding: the readable-provenance equal-text control passes; lost provenance was quotable, reflection proceeded, and the handoff quoted the note as Robin |
+| The handoff's focused selection at `62c223b`: `test_phase1c_provenance_review`, `test_phase1c_continuity`, `test_local_reflection`, `test_local_context` | **85 passed, 5 subtests** |
+| Reviewer `observe_phase1c_edges.py`, unmodified, on a throwaway edfee06 clone | N1 section 1,911 characters at a cap of 1,800 (5 quoted lines). N2: 0 eligible results, `complete: false`, older authorised row present. R1 state reproduced pre-fix |
+| Same observer at `62c223b` | Its third section stops at the new `ValueError` from `trusted_messages`. The guard is refusing the state that section assumes. It was not modified to work around this |
+
+No full suite, browser or pinned run was repeated for this guard, as the handoff allows. The earlier counts in this
+report are unchanged and still belong to `c0c4f5f`.
+
+**Accepted known issues (documentation only, no code change):**
+- **N1.** The 1,800-character handoff cap counts quoted lines only. The header and omission line are added on top.
+- **N2.** When the 400-row recent scan is used up before it reaches an eligible row from another channel, the handoff
+  is left out silently. There is no omission notice, although the scan was incomplete.

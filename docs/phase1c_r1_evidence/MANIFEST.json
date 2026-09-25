@@ -1,0 +1,74 @@
+{
+  "files": {
+    "focused_r1.txt": {
+      "bytes": 38,
+      "format": "text",
+      "repaired": [],
+      "sha256": "1d112faeb4b62d78007c00ecfb55946172466ebfc94ec1ea92501b935c376924",
+      "source": "<job>/ev3/focused_r1.txt",
+      "source_sha256": "1d112faeb4b62d78007c00ecfb55946172466ebfc94ec1ea92501b935c376924",
+      "validated": true
+    },
+    "focused_r1.xml": {
+      "bytes": 12377,
+      "format": "xml",
+      "junit_cases": 85,
+      "junit_status_counts": {
+        "passed": 85
+      },
+      "repaired": [],
+      "sha256": "d43227e223ed5c8fb3ff977c2c6c4cd180520860b77b37d95aefd852f0388b4f",
+      "source": "<job>/ev3/focused_r1.xml",
+      "source_sha256": "749f5939c921f3d4af68bc9c625846660ab0d5da0b63a96cdb12d8bb523fa22b",
+      "validated": true
+    },
+    "head.txt": {
+      "bytes": 41,
+      "format": "text",
+      "repaired": [],
+      "sha256": "51d20f2b75b8036bc730ee0844bf12c4d057af81458f89ce73eec2bfa954150e",
+      "source": "<job>/ev3/head.txt",
+      "source_sha256": "51d20f2b75b8036bc730ee0844bf12c4d057af81458f89ce73eec2bfa954150e",
+      "validated": true
+    },
+    "observe_at_62c223b.txt": {
+      "bytes": 1837,
+      "format": "text",
+      "repaired": [],
+      "sha256": "dd5065e5f13b049fe2768c74dc7ccb778f8901551314cb15d964a2f5ab7e1461",
+      "source": "<job>/ev3/observe_at_62c223b.txt",
+      "source_sha256": "945241ec876e51bfe54efe4878d462f5faca09aa04a9ed6011f2eeac170dfb6d",
+      "validated": true
+    },
+    "observe_phase1c_edges_edfee06.json": {
+      "bytes": 3606,
+      "format": "json",
+      "repaired": [],
+      "sha256": "40a9b96c876be56924a5acecda8516fcd74cbc93b649ffaf7cb06a3a2214a35b",
+      "source": "<job>/ev3/observe_phase1c_edges_edfee06.json",
+      "source_sha256": "3136638e4dfabe04bd668c663e113355cf220dddd12d603d8cfcda9d7bb360e4",
+      "validated": true
+    },
+    "status_after.txt": {
+      "bytes": 0,
+      "format": "text",
+      "repaired": [],
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source": "<job>/ev3/status_after.txt",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "validated": true
+    },
+    "status_before.txt": {
+      "bytes": 0,
+      "format": "text",
+      "repaired": [],
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source": "<job>/ev3/status_before.txt",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "validated": true
+    }
+  },
+  "kind": "executed",
+  "note": "newly executed evidence, sanitised by a format-aware export",
+  "source_note": "Focused R1 selection at 62c223b; reviewer observer unmodified on a throwaway edfee06 clone and at 62c223b; job tmp dir"
+}
