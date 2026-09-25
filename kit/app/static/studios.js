@@ -258,6 +258,17 @@ function openVaultActionsMenu(path,isDir){
   openVaultRenameDialog(path,isDir);
  };
 }
+function vaultLinkUpdateSummary(links){
+ if(!links)return '';
+ const parts=[];
+ const total=(links.updated||[]).reduce((n,row)=>n+row.links,0);
+ if(total)parts.push(`Updated ${total} link${total===1?'':'s'} in ${links.updated.length} note${links.updated.length===1?'':'s'}.`);
+ if(links.own_links_updated)parts.push(`Fixed ${links.own_links_updated} of its own link${links.own_links_updated===1?'':'s'}.`);
+ if(links.ambiguous?.length)parts.push(`${links.ambiguous.length} link${links.ambiguous.length===1?'':'s'} elsewhere share a name with another note — left as-is; check ${links.ambiguous.length===1?'it':'them'}.`);
+ if(links.skipped?.length)parts.push(`${links.skipped.length} note${links.skipped.length===1?'':'s'} changed at the same time and were left alone.`);
+ return parts.length?' '+parts.join(' '):'';
+}
+
 function openVaultRenameDialog(path,isDir){
  dialog(`Rename or move ${path.split('/').pop()}`,
   `<form id="vault-rename-form"><label>New path<input id="vault-rename-dest" required value="${esc(path)}"></label>
@@ -268,14 +279,14 @@ function openVaultRenameDialog(path,isDir){
   if(!dest||dest===path){$('product-dialog').close();return;}
   try{
    const revision=isDir?null:await vaultReadRevision(path);
-   await api('/vault/move',{method:'POST',body:JSON.stringify({path,dest,revision})});
+   const result=await api('/vault/move',{method:'POST',body:JSON.stringify({path,dest,revision})});
    $('product-dialog').close();
    // The editor's own state (open tabs, active note) lives inside vault-editor.js's
    // closure, not as a studios.js global — VaultEditor.close() is its exposed API and
    // is a safe no-op if this path was never open as a tab.
    if(window.VaultEditor)try{await window.VaultEditor.close(path);}catch(e){}
    await listVault('',false);
-   notice(`Moved to ${dest}.`);
+   notice(`Moved to ${dest}.${vaultLinkUpdateSummary(result?.links)}`);
   }catch(e){notice(e.message||'Could not rename or move that.',true);}
  };
 }

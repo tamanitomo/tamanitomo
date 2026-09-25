@@ -1,9 +1,11 @@
 """Vault file actions: new folder, duplicate, rename/move (LINK-05 first slice).
 
 One service (kit/app/vault.py), the same authorization/collision/reserved-name/symlink
-policy regardless of caller. Link-aware rewriting of what pointed at a moved note is
-LINK-06, not this file: a move here is exactly as "dumb" about links as a filesystem
-rename. Synthetic vaults only.
+policy regardless of caller. Link-aware rewriting of what pointed at a moved NOTE
+(LINK-06) is exercised in tests/test_vault_link_aware_move.py, not here -- these tests
+use non-.md files or single files with no other notes in the vault, so LINK-06's rewrite
+pass finds nothing to do and every result here still looks exactly like a "dumb" move.
+Synthetic vaults only.
 """
 import hashlib, os, sys, tempfile, unittest
 from pathlib import Path

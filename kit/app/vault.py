@@ -175,8 +175,14 @@ def write(c,relative,text,revision):
 # One service, one policy, reused by every caller (keyboard, context menu, drag/drop):
 # the same resolve()/protected()/editable() boundary as read/write/trash/restore, and the
 # same collision/reserved-name/symlink checks regardless of how the action was triggered.
-# Link-aware rewriting of what pointed at the old path is LINK-06, a separate task: a
-# rename/move here is exactly as "dumb" about links as the filesystem's own rename is.
+#
+# Link-aware rewriting (LINK-06) is layered on top of that: move() rewrites the links
+# that point at a renamed/moved NOTE (.md to .md) wherever it can do so unambiguously,
+# both directions -- other notes' links to it, and its own relative links to others.
+# Scope, stated plainly: this covers note-to-note renames/moves only. A folder move (many
+# notes relocating as a unit) and renaming a non-.md asset (an image an embed points at)
+# still move exactly as "dumb" about links as the filesystem's own rename is -- extending
+# link-awareness to those is real further work, not done here.
 
 RESERVED_STEMS=cp.WINDOWS_RESERVED
 FORBIDDEN_CHARS=frozenset('<>:"|?*')
@@ -275,6 +281,16 @@ def move(c,relative,dest_relative,revision=None):
     if protected(c,dest_relative):raise ValueError('That destination is protected.')
     _no_symlink_on_path(c,src)
     _no_symlink_on_path(c,dest.parent)
+    is_note_rename=is_file and Path(relative).suffix.lower()=='.md' and Path(dest_relative).suffix.lower()=='.md'
+    link_lookup=None
+    inbound_plan=None
+    if is_note_rename:
+        # Snapshotted BEFORE the physical move: resolving old_rel against the index
+        # requires the index to still contain it.
+        from . import vault_link_index as vli
+        entries,_=vli.build(c)
+        link_lookup=vli.build_lookup(entries)
+        inbound_plan=vli.backlinks(entries,relative)
     case_only=str(src).casefold()==str(dest).casefold() and src!=dest
     with cp.file_lock(c.vault/'.companion-editor.lock'):
         if not case_only and dest.exists():raise FileExistsError('A file or folder already exists at the destination.')
@@ -293,7 +309,44 @@ def move(c,relative,dest_relative,revision=None):
             if old_backups.is_dir() and not old_backups.is_symlink() and not new_backups.exists():
                 os.replace(old_backups,new_backups)
                 cp.atomic_write(new_backups/'source.json',json.dumps({'path':dest_relative}))
-    return {'moved':dest_relative}
+    result={'moved':dest_relative}
+    if is_note_rename:
+        result['links']=_rewrite_links_after_move(c,relative,dest_relative,link_lookup,inbound_plan)
+    return result
+
+def _rewrite_links_after_move(c,old_relative,new_relative,lookup,inbound_plan):
+    """Runs AFTER the physical move above has already committed. Each note gets its own
+    ordinary write() -- the same revision check, backup and atomic write as any other
+    edit, just computed here instead of typed by a person -- so a note that changed
+    concurrently is refused (reported, not silently skipped) rather than clobbered, and
+    every rewrite is recoverable exactly the way a manual edit already is."""
+    from . import vault_link_index as vli
+    updated,skipped=[],[]
+    for row in inbound_plan['linked']:
+        path=row['path']
+        try:
+            current=read(c,path)
+        except ValueError:
+            skipped.append({'path':path,'reason':'unreadable'});continue
+        new_text,count=vli.rewrite_inbound_links(current['text'],old_relative,new_relative,path,lookup)
+        if not count:continue
+        try:
+            write(c,path,new_text,current['revision'])
+            updated.append({'path':path,'links':count})
+        except (FileExistsError,ValueError):
+            skipped.append({'path':path,'reason':'changed since it was indexed'})
+    own_updated=0
+    try:
+        own=read(c,new_relative)
+        own_text,own_count=vli.rewrite_own_relative_links(own['text'],old_relative,new_relative,lookup)
+        if own_count:
+            write(c,new_relative,own_text,own['revision'])
+            own_updated=own_count
+    except (FileExistsError,ValueError):
+        skipped.append({'path':new_relative,'reason':'changed since the move'})
+    return {'updated':updated,'own_links_updated':own_updated,
+            'ambiguous':[{'path':r['path'],'candidates':r['candidates']} for r in inbound_plan['ambiguous']],
+            'skipped':skipped}
 
 def files(c,limit=20000):
     import os

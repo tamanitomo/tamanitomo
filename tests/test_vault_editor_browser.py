@@ -519,6 +519,22 @@ class VaultEditor(Browser):
         self.assertTrue((self.vault / 'notes/Renamed.md').is_file())
         until(lambda: self.page.locator('.vault-tab').count() == 0, what='the stale tab for the old path closed')
 
+    def test_11j_rename_via_the_actions_menu_updates_links_elsewhere_and_reports_it(self):
+        # LONG_TEXT carries 120 real [[Other]] wikilinks -- renaming Other.md through the
+        # real UI should rewrite every one of them (LINK-06), through the same actions
+        # menu test_11i already exercises for the tab-close side of a rename.
+        self.vault_page()
+        self.page.locator(f'[data-vault-actions="{OTHER}"]').click()
+        self.page.click('[data-action="rename"]')
+        self.page.fill('#vault-rename-dest', 'notes/Renamed.md')
+        self.page.click('#vault-rename-form button.act')
+        until(lambda: not (self.vault / OTHER).exists(), what='old path gone from disk')
+        until(lambda: '[[Other]]' not in self.disk(LONG), what="Long note's wikilinks rewritten")
+        self.assertNotIn('[[Other]]', self.disk(LONG))
+        self.assertEqual(self.disk(LONG).count('[[Renamed]]'), 120)
+        until(lambda: self.page.inner_text('#operation').strip() != '', what='rename notice shown')
+        self.assertIn('Updated 120 links in 1 note', self.page.inner_text('#operation'))
+
     def test_12_a_read_sent_before_a_save_cannot_roll_the_buffer_back(self):
         self.vault_page()
         self.open(OTHER)

@@ -188,6 +188,162 @@ def resolve(link, source_rel, lookup):
     return resolve_wiki(link['target'], lookup) if link['kind'] == 'wiki' else resolve_md(link['target'], source_rel, lookup)
 
 
+# --- Link-aware rename/move (LINK-06) --------------------------------------------------
+#
+# Two independent directions, both pure functions of (text, lookup) with no disk I/O --
+# `kit/app/vault.py`'s move() supplies the I/O, revision checks and backups (reusing its
+# existing write() path, so every rewritten note gets the same automatic backup any other
+# edit does -- that IS the "recoverable" half of this task, no new mechanism needed):
+#
+#   rewrite_inbound_links(text, old_rel, new_rel, source_rel, lookup)
+#     for every OTHER note that links to the note being renamed: point those links at the
+#     new name/path instead. `lookup` must come from an index snapshot taken BEFORE the
+#     move (it has to still contain `old_rel` to resolve against).
+#
+#   rewrite_own_relative_links(text, old_rel, new_rel, lookup)
+#     for the note being MOVED itself: its own relative markdown-link hrefs are relative
+#     to ITS location, so a folder change breaks them even though nothing about the link
+#     wording changed. Wiki-links need no equivalent pass: name-only ones resolve by name
+#     regardless of folder, and path-style ones (`[[folder/Note]]`) already resolve from
+#     the vault root, per resolve_wiki -- neither is relative to the linking note.
+#
+# Only an UNAMBIGUOUS resolution is ever rewritten (the same rule backlinks() already
+# applies): a link that could point to more than one note is left exactly as written,
+# never guessed. Fence- and code-span-aware like parse_note, operating on the raw text by
+# absolute match offsets so every byte outside a rewritten link span -- labels, headings,
+# block refs, embed markers, line endings -- survives untouched.
+
+from urllib.parse import quote as _urlquote
+
+
+def _split_newline(raw_line):
+    """(content, newline) so CRLF/LF/no-trailing-newline round-trip exactly."""
+    if raw_line.endswith('\r\n'):
+        return raw_line[:-2], raw_line[-2:]
+    if raw_line.endswith('\n'):
+        return raw_line[:-1], raw_line[-1:]
+    return raw_line, ''
+
+
+def _new_wiki_target(old_target, new_rel):
+    """The text to put inside `[[...]]` so it still names `new_rel`, in whichever style
+    (bare name vs. slash-qualified path, with or without a .md suffix) the original used."""
+    if '/' in old_target:
+        had_ext = old_target.lower().endswith('.md')
+        base = new_rel[:-3] if new_rel.lower().endswith('.md') else new_rel
+        return (base + '.md') if had_ext else base
+    return Path(new_rel).stem
+
+
+def _new_md_href(old_href, from_rel, target_rel):
+    """A markdown-link href from the note at `from_rel` that resolves to `target_rel`,
+    preserving the original's absolute-from-vault-root ('/...') vs. relative style and
+    percent-encoding (only re-applied if the original href already used it)."""
+    path_part, frag = (old_href.split('#', 1) if '#' in old_href else (old_href, None))
+    frag = f'#{frag}' if frag is not None else ''
+    if path_part.startswith('/'):
+        new_path = '/' + target_rel
+    else:
+        src_dir = Path(from_rel).parent.as_posix()
+        new_path = os.path.relpath(target_rel, src_dir if src_dir != '.' else '').replace(os.sep, '/')
+    if '%' in path_part:
+        new_path = _urlquote(new_path)
+    return new_path + frag
+
+
+def _apply_edits(text, make_edits):
+    """Fence-aware line scan shared by both rewrite passes below. `make_edits(line)`
+    receives one non-fenced line and returns a list of (start, end, replacement) spans
+    (absolute offsets into that line); everything else is copied through unchanged.
+    Returns (new_text, edit_count)."""
+    out = []
+    fenced = False
+    total = 0
+    for raw_line in text.splitlines(keepends=True):
+        line, nl = _split_newline(raw_line)
+        if _FENCE.match(line):
+            out.append(raw_line)
+            fenced = not fenced
+            continue
+        if fenced:
+            out.append(raw_line)
+            continue
+        edits = sorted(make_edits(line))
+        if not edits:
+            out.append(raw_line)
+            continue
+        pieces = []
+        last = 0
+        for start, end, repl in edits:
+            if start < last:
+                continue  # overlapping match (shouldn't happen; keep the earlier one)
+            pieces.append(line[last:start])
+            pieces.append(repl)
+            last = end
+            total += 1
+        pieces.append(line[last:])
+        out.append(''.join(pieces) + nl)
+    return ''.join(out), total
+
+
+def rewrite_inbound_links(text, old_rel, new_rel, source_rel, lookup):
+    """`text` is some OTHER note (living at `source_rel`) that may link to the note being
+    renamed from `old_rel` to `new_rel`. Returns (new_text, count) -- count is 0 (and
+    new_text == text) when nothing here resolved to old_rel."""
+    def make_edits(line):
+        spans = [(m.start(), m.end()) for m in _CODE_SPAN.finditer(line)]
+        def in_code(pos):
+            return any(s <= pos < e for s, e in spans)
+        edits = []
+        for m in _WIKILINK.finditer(line):
+            if in_code(m.start()):
+                continue
+            target = m.group(2)
+            if resolve_wiki(target, lookup) != [old_rel]:
+                continue
+            edits.append((m.start(2), m.end(2), _new_wiki_target(target.strip(), new_rel)))
+        for m in _MDLINK.finditer(line):
+            if in_code(m.start()):
+                continue
+            href = m.group(2)
+            if _EXTERNAL.match(href):
+                continue
+            if resolve_md(href, source_rel, lookup) != [old_rel]:
+                continue
+            edits.append((m.start(2), m.end(2), _new_md_href(href, source_rel, new_rel)))
+        return edits
+    return _apply_edits(text, make_edits)
+
+
+def rewrite_own_relative_links(text, old_rel, new_rel, lookup):
+    """`text` is the note being moved itself, from `old_rel` to `new_rel`. Recomputes its
+    own relative markdown-link hrefs so each still resolves to the same target note after
+    the move. Wiki-links need no pass here (see the module note above)."""
+    def make_edits(line):
+        spans = [(m.start(), m.end()) for m in _CODE_SPAN.finditer(line)]
+        def in_code(pos):
+            return any(s <= pos < e for s, e in spans)
+        edits = []
+        for m in _MDLINK.finditer(line):
+            if in_code(m.start()):
+                continue
+            href = m.group(2)
+            if _EXTERNAL.match(href):
+                continue
+            candidates = resolve_md(href, old_rel, lookup)
+            if len(candidates) != 1:
+                continue
+            target = candidates[0]
+            if target == new_rel:
+                continue
+            new_href = _new_md_href(href, new_rel, target)
+            if new_href == href:
+                continue
+            edits.append((m.start(2), m.end(2), new_href))
+        return edits
+    return _apply_edits(text, make_edits)
+
+
 # --- Index build (incremental) --------------------------------------------------------
 
 def _read_cache(path):
