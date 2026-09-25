@@ -110,7 +110,9 @@ function formatInlineMarkdown(text){
   const disp=label||target;
   return `<button class="quiet wiki-link" data-link="${esc(target.trim())}" title="Follow link [[${esc(target.trim())}]]">[[${esc(disp.trim())}]]</button>`;
  });
- res=res.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+ // Only web and mail links become anchors (as richText() allows); javascript:, data: and
+ // relative targets stay text.
+ res=res.replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
  res=res.replace(/`([^`]+)`/g,'<code>$1</code>');
  res=res.replace(/\*\*\*([^*]+)\*\*\*/g,'<strong><em>$1</em></strong>');
  res=res.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
@@ -360,7 +362,9 @@ workspaceHandlers.vault=async()=>{
  $('vault-trash').onclick=showTrash;
 
  await listVault(vaultPath||'',false);
- if(openNote)showNote(openNote);
+ // The editor (vault-editor.js) restores its open tabs, modes and unsaved text.
+ if(window.VaultEditor)await VaultEditor.mount();
+ else if(openNote)showNote(openNote);
 };
 
 listVault=async function(path,remember=true){
