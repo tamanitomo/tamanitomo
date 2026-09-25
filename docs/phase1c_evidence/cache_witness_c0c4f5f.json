@@ -1,0 +1,129 @@
+{
+  "boundary": "Actual uvicorn/HTTP/projection + Node executing actual store/controller/renderer item code; no browser or live Hermes",
+  "cases": [
+    {
+      "calls": [
+        {
+          "error": null,
+          "path": "/api/chat/snapshot",
+          "projection": "proj_6ba26a9cac114495",
+          "status": 200
+        },
+        {
+          "error": null,
+          "path": "/api/chat/snapshot",
+          "projection": "proj_19a3d5f00baa443a",
+          "status": 200
+        }
+      ],
+      "draftPreserved": true,
+      "durable_sends": 0,
+      "expected_marker_retained": false,
+      "history": "ready",
+      "initialMarker": true,
+      "markerRetainedInStore": false,
+      "markerStillInRendererItems": false,
+      "mode": "revocation_success",
+      "passed": true,
+      "pendingPreserved": true,
+      "projection": "proj_19a3d5f00baa443a",
+      "source_bytes_preserved": true,
+      "stale": null
+    },
+    {
+      "calls": [
+        {
+          "error": null,
+          "path": "/api/chat/snapshot",
+          "projection": "proj_42b8b25cce954e67",
+          "status": 200
+        },
+        {
+          "error": "source_unavailable",
+          "path": "/api/chat/snapshot",
+          "projection": "proj_42b8b25cce954e67",
+          "status": 503
+        }
+      ],
+      "draftPreserved": true,
+      "durable_sends": 0,
+      "expected_marker_retained": true,
+      "history": "ready",
+      "initialMarker": true,
+      "markerRetainedInStore": true,
+      "markerStillInRendererItems": true,
+      "mode": "outage_only",
+      "passed": true,
+      "pendingPreserved": true,
+      "projection": "proj_42b8b25cce954e67",
+      "source_bytes_preserved": true,
+      "stale": "The conversation cannot be read right now (its source is unavailable). Nothing was changed; it will be read again when Chat reopens."
+    },
+    {
+      "calls": [
+        {
+          "error": null,
+          "path": "/api/chat/snapshot",
+          "projection": "proj_b9df23e0791f4dd9",
+          "status": 200
+        },
+        {
+          "error": "resync_required",
+          "path": "/api/chat/history",
+          "projection": null,
+          "status": 409
+        },
+        {
+          "error": "source_unavailable",
+          "path": "/api/chat/snapshot",
+          "projection": "proj_ff9b1def555f4bfd",
+          "status": 503
+        }
+      ],
+      "draftPreserved": true,
+      "durable_sends": 0,
+      "expected_marker_retained": false,
+      "history": "error",
+      "initialMarker": true,
+      "markerRetainedInStore": false,
+      "markerStillInRendererItems": false,
+      "mode": "invalidated_outage",
+      "passed": true,
+      "pendingPreserved": true,
+      "projection": null,
+      "source_bytes_preserved": true,
+      "stale": null
+    },
+    {
+      "calls": [
+        {
+          "error": null,
+          "path": "/api/chat/snapshot",
+          "projection": "proj_f1f1e554e5f54401",
+          "status": 200
+        },
+        {
+          "error": "source_unavailable",
+          "path": "/api/chat/snapshot",
+          "projection": "proj_e00a4e670f0048df",
+          "status": 503
+        }
+      ],
+      "draftPreserved": true,
+      "durable_sends": 0,
+      "expected_marker_retained": false,
+      "history": "error",
+      "initialMarker": true,
+      "markerRetainedInStore": false,
+      "markerStillInRendererItems": false,
+      "mode": "revocation_outage",
+      "passed": true,
+      "pendingPreserved": true,
+      "projection": null,
+      "source_bytes_preserved": true,
+      "stale": null
+    }
+  ],
+  "failed": 0,
+  "passed": 4
+}

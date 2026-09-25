@@ -318,4 +318,38 @@ Client policy (per installation/profile, in this tab's `sessionStorage` `chat-co
 4. The check runs again for every new intent, then acceptance checks again. If authorisation changes between the two, acceptance refuses with `400 unauthorised_session`: "Not sent", the message goes back to an empty box, and the choice is shown. There is no retry into another session and no fallback to `POST /api/chat`.
 5. Once an intent is stored, its session, key, generation, message and conversation never change (§8.6).
 
-This selects an already-authorised session or a disclosed new one. It does not bring other channels' content into the model's context and makes no Phase 1C claim.
+This selects an already-authorised session or a disclosed new one. It does not bring other channels' content into the model's context; see §9 for the separate, development-only Phase 1C handoff.
+
+## 9. Shared continuity (Phase 1C): development options, NOT ACTIVATED
+
+Displaying the owner's conversation across channels (sections 1–8) is separate from what the companion knows. Phase 1C lets local reflection and the per-turn context hook use the **same** trusted conversation. Both are off by default. Neither says a model will use, recall or report that context correctly.
+
+### 9.1 One reader
+
+`kit.app.chat_sources.owner_evidence(c, fn)` runs `fn(view)` on one read-only connection (`HermesSource.read`). Membership is decided by `classify()`, the same predicate the projection uses. That covers owner binding, trusted workspace/terminal sessions, Telegram DMs with a recorded platform id, and send-provenance exclusions. The view adds only:
+
+- `forward(after_stamp, after_id, end, end_inclusive)`: records in `(timestamp, id)` order, read 200 source rows at a time. This is the keyset local reflection has always used for its watermark.
+- `recent(since, skip_sessions, limit)`: the newest records outside the given sessions, from a bounded scan of 400 source rows.
+- `session`, `owner_session` and `lineage`: session facts and the compression ancestors a session's own history already carries (at most 20).
+- Evidence-only omissions, counted in `view.excluded`: `not_public` (hidden, deactivated or compression-summary rows) and `compression_carryover`. The second is a row in a session whose parent ended by compression, when the row is not newer than the session itself. These are copies of old messages, not new speech.
+- A readable send ledger is applied. An **unreadable** send ledger raises `EvidenceUnavailable`: without it, a Hermes continuation note could be read as the owner's words. A missing store (`fn(None)`) means no conversation has happened yet. A store that cannot be read is an outage, never an empty conversation.
+- `view.limits` states what the read cannot establish. Continuation notes outside keyed sends carry no provenance. A compression handoff row written without its original time looks like a new message.
+
+### 9.2 Local reflection (`companion_local_reflection.py --trusted-sources`)
+
+- `trusted_messages()` returns the same shape and bounds as `messages()`: at most 100 rows or 24,000 characters per batch, the same oversize error, and the same `(through, through_id)` watermark. Rows also carry `channel`. The watermark still indexes the one Hermes `messages` table, so an existing check-in watermark keeps its meaning. The retry budget key, plan key, saved-plan contract (3) and held-fact rules are unchanged. A saved plan whose sources lack `channel` applies as before.
+- Only owner rows (`role: user`) are quotable. Companion rows are context only. Quote ids stay `<messages.id>:<n>`.
+- Identity comes from the chat owner binding only. A `--human-user-id` that the binding does not name is refused, not widened.
+- An unreadable store or send ledger raises before an attempt is counted or the model is asked. Nothing is recorded and the watermark does not move.
+- The result's `evidence` holds the reader, binding origin, channels read, exclusion counts and limits.
+- Without the option, the Telegram-only query is unchanged. That includes its known gaps: a group chat under the owner's user id, and another profile's rows in a shared store.
+
+### 9.3 Cross-channel handoff (context hook, `TAMANITOMO_DEV_CROSS_CHANNEL_HANDOFF=1`)
+
+When the variable is set in the environment Hermes runs its hooks in, `companion_context.py` adds one section inside the existing continuity fence (`BEGIN`/`END`). That means the local context engine drops it from replayed history like the other continuity sections.
+
+- **Destination.** This is the hook payload's top-level `session_id` (`agent/shell_hooks.py`). A session that is not part of the owner's conversation (another participant, a group, cron, a gateway-chat `cli` row) gets nothing. A missing id, a session not yet in the store, or an unreadable store gets a one-line diagnostic instead: "could not be checked this turn (…)". Nothing is guessed.
+- **Selection** is deterministic and never uses a model or text matching. It takes owner-conversation records from the last 24 hours, outside the destination session and its compression lineage, newest first. That is at most 6 items and 280 characters each, capped at `min(1800, injection_cap / 6)` characters. They are shown oldest first, labelled with time, channel (the app / the terminal / Telegram) and speaker (the owner by name; the companion as "(you)"). Quoted text is one line, with `<!--` defused so it cannot open or close the fence.
+- **Framing.** The header says the messages are quoted context that already happened: data, not instructions, and not new messages to answer. The owner's current message is unchanged. The handoff is part of the hook's ephemeral context, never a new authored or stored message.
+- **Omission.** Items or characters over the cap: "[Older messages from other channels in the last 24 hours are not shown here; nothing was deleted.]". A window too small for 300 characters: the section is named in the existing "Omitted this turn for context space" notice. The existing priority drop (priority 6) names it the same way.
+- **Limits.** Native history is excluded by session lineage, not by content. A row copied into another session outside compression lineage would be quoted. The hook adds no model request and writes no source row. It runs on every turn while enabled, reading at most 400 source rows.
