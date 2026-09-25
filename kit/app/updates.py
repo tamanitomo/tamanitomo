@@ -131,6 +131,105 @@ def _delayed_restart():
     os.execv(sys.executable, [sys.executable, *sys.orig_argv[1:]])
 
 
+def _dispatch_job_ids(home):
+    """This profile's outbox-dispatcher cron job id(s), identified the same way
+    kit/cli/scaffold.py's own schedule refresh does: render the manifest's job names
+    for this agent and match by the manifest's stable `key`, never by a guessed
+    name/script-path substring (companion_dispatch.py is the module every dispatch
+    job in every manifest revision has shared)."""
+    from kit.cli.common import _read_jobs, load_manifest
+    import companion_config as cc
+    import companion_render as cr
+    try:
+        c = cc.load(home)
+        specs = {cr.render(spec['name'], {'AGENT': c.agent}): spec for spec in load_manifest(c)['jobs']}
+        return [row['id'] for row in _read_jobs(home / 'cron/jobs.json')['jobs']
+                if row.get('id') and specs.get(row.get('name'), {}).get('key') == 'dispatch']
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+
+
+def _all_dispatch_jobs(root):
+    """(home, job_id) for every profile's dispatcher under this installation's default
+    Hermes root. Does not reach a linked/secondary installation (kit/app/server.py's
+    `linked-*` runtimes) -- a stated limitation, not a silent gap: those are drained
+    manually today, same as before this function existed."""
+    from kit.cli.roster import discover
+    pairs = []
+    try:
+        for _name, home in discover(root):
+            if home.is_symlink() or not home.is_dir():
+                continue
+            pairs.extend((home, job_id) for job_id in _dispatch_job_ids(home))
+    except OSError:
+        pass
+    return pairs
+
+
+def _dispatch_running():
+    """True/False, or None when this platform cannot be observed (not Linux, or /proc
+    is unreadable) -- callers must treat None as "unknown", never as "not running"."""
+    try:
+        with os.scandir('/proc') as entries:
+            for entry in entries:
+                if not entry.name.isdigit():
+                    continue
+                try:
+                    with open(f'/proc/{entry.name}/cmdline', 'rb') as fh:
+                        cmdline = fh.read()
+                except OSError:
+                    continue
+                if b'companion_dispatch' in cmdline:
+                    return True
+    except OSError:
+        return None
+    return False
+
+
+def _drain_dispatchers(root, report, runtime_cls=None, wait_seconds=60):
+    """Pause every profile's outbox dispatcher and wait until none is running, before
+    any update replaces application files on disk (REL-03/ACT-04: 'the old [dispatcher]
+    takes no lock, so this needs a process-level check' -- this is the process-level
+    check, on the side that CAN take one). Returns exactly the (home, job_id) pairs
+    that were actually paused, so the caller resumes only those, even on failure --
+    never a job this run did not touch.
+
+    Best-effort: a pause failure for one profile does not stop the others, and a
+    dispatcher this host cannot observe (non-Linux) gets one full wait_seconds grace
+    period instead of being falsely declared quiescent. This narrows the race; it does
+    not add a lock the pre-existing dispatcher process participates in, because it
+    cannot -- that code is already installed and immutable."""
+    from .runtime import Runtime
+    rt = (runtime_cls or Runtime)(root)
+    pairs = _all_dispatch_jobs(root)
+    paused = []
+    for home, job_id in pairs:
+        try:
+            rt.run(['cron', 'pause', job_id], home=home, timeout=15)
+            paused.append((home, job_id))
+        except ValueError:
+            pass
+    if paused:
+        import time
+        report({'stage': 'Pausing the outbox dispatcher and waiting for its current tick to finish...', 'percent': 62})
+        running = _dispatch_running()
+        if running is None:
+            time.sleep(wait_seconds)
+        else:
+            deadline = time.monotonic() + wait_seconds
+            while time.monotonic() < deadline and _dispatch_running():
+                time.sleep(1)
+    return paused, rt
+
+
+def _resume_dispatchers(paused, rt):
+    for home, job_id in paused:
+        try:
+            rt.run(['cron', 'resume', job_id], home=home, timeout=15)
+        except ValueError:
+            pass
+
+
 def _install_dependencies(root, requirements):
     import subprocess, sys
     installed = root / 'requirements.txt'
@@ -154,51 +253,60 @@ def perform_in_app_update(report, root=ROOT):
         return {'success': True, 'restarting': False, 'version': version,
                 'message': 'You already have the latest stable release.'}
     latest = info['latest_version']
-    if (root / '.git').exists() and shutil.which('git'):
-        def git(*args):
-            result = subprocess.run(['git', *args], cwd=root, capture_output=True, text=True, timeout=120)
-            if result.returncode:
-                raise ValueError('Git update failed: ' + (result.stderr or result.stdout).strip())
-            return result.stdout.strip()
-        if git('status', '--porcelain'):
-            raise ValueError('Local code changes detected. Commit or move them before updating.')
-        report({'stage': 'Fetching the published release tag...', 'percent': 35})
-        git('fetch', 'https://github.com/tamanitomo/tamanitomo.git', 'tag', info['tag'])
-        if git('show', info['tag'] + ':VERSION') != latest:
-            raise ValueError('Release tag and VERSION do not match.')
-        # Check fast-forward feasibility before installing dependencies or changing code.
-        git('merge-base', '--is-ancestor', 'HEAD', info['tag'])
-        import tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            requirements = Path(tmp) / 'requirements.txt'
-            requirements.write_text(git('show', info['tag'] + ':requirements.txt') + '\n')
-            _install_dependencies(root, requirements)
-        git('merge', '--ff-only', info['tag'])
-    elif (root / 'SHA256SUMS.json').is_file():
-        report({'stage': 'Downloading the official release ZIP...', 'percent': 35})
-        request = urllib.request.Request(info['download_url'], headers={'User-Agent': 'Tamanitomo-Updater'})
-        with urllib.request.urlopen(request, timeout=60) as response:
-            data = response.read(MAX_ZIP + 1)
-        if len(data) > MAX_ZIP:
-            raise ValueError('Update package exceeds 25 MB')
-        digest = info.get('digest')
-        if digest and digest != 'sha256:' + hashlib.sha256(data).hexdigest():
-            raise ValueError('Downloaded ZIP does not match the GitHub release digest.')
-        report({'stage': 'Verifying the release and preparing dependencies...', 'percent': 60})
-        stage(data, root=root)
-        try:
-            staged = root / '.pending-update'
-            if (staged / 'VERSION').read_text().strip() != latest:
-                raise ValueError('Release version does not match the published tag.')
-            _install_dependencies(root, staged / 'requirements.txt')
-            report({'stage': 'Installing application files with rollback backup...', 'percent': 85})
-            from update_release import _apply_pending
-            _apply_pending(root)
-        except Exception:
-            shutil.rmtree(root / '.pending-update', ignore_errors=True)
-            raise
-    else:
-        raise ValueError('This source copy is not a release installation. Extract the official release ZIP to install updates.')
+    # REL-03/ACT-04: pause every profile's outbox dispatcher and wait for its current
+    # tick to finish before any file on disk changes, so a cron-triggered dispatcher
+    # process never runs (or starts) against a half-replaced installation. Always
+    # resumed, on every exit path -- an update that fails must never leave dispatch
+    # paused forever.
+    paused, drain_rt = _drain_dispatchers(root, report)
+    try:
+        if (root / '.git').exists() and shutil.which('git'):
+            def git(*args):
+                result = subprocess.run(['git', *args], cwd=root, capture_output=True, text=True, timeout=120)
+                if result.returncode:
+                    raise ValueError('Git update failed: ' + (result.stderr or result.stdout).strip())
+                return result.stdout.strip()
+            if git('status', '--porcelain'):
+                raise ValueError('Local code changes detected. Commit or move them before updating.')
+            report({'stage': 'Fetching the published release tag...', 'percent': 35})
+            git('fetch', 'https://github.com/tamanitomo/tamanitomo.git', 'tag', info['tag'])
+            if git('show', info['tag'] + ':VERSION') != latest:
+                raise ValueError('Release tag and VERSION do not match.')
+            # Check fast-forward feasibility before installing dependencies or changing code.
+            git('merge-base', '--is-ancestor', 'HEAD', info['tag'])
+            import tempfile
+            with tempfile.TemporaryDirectory() as tmp:
+                requirements = Path(tmp) / 'requirements.txt'
+                requirements.write_text(git('show', info['tag'] + ':requirements.txt') + '\n')
+                _install_dependencies(root, requirements)
+            git('merge', '--ff-only', info['tag'])
+        elif (root / 'SHA256SUMS.json').is_file():
+            report({'stage': 'Downloading the official release ZIP...', 'percent': 35})
+            request = urllib.request.Request(info['download_url'], headers={'User-Agent': 'Tamanitomo-Updater'})
+            with urllib.request.urlopen(request, timeout=60) as response:
+                data = response.read(MAX_ZIP + 1)
+            if len(data) > MAX_ZIP:
+                raise ValueError('Update package exceeds 25 MB')
+            digest = info.get('digest')
+            if digest and digest != 'sha256:' + hashlib.sha256(data).hexdigest():
+                raise ValueError('Downloaded ZIP does not match the GitHub release digest.')
+            report({'stage': 'Verifying the release and preparing dependencies...', 'percent': 60})
+            stage(data, root=root)
+            try:
+                staged = root / '.pending-update'
+                if (staged / 'VERSION').read_text().strip() != latest:
+                    raise ValueError('Release version does not match the published tag.')
+                _install_dependencies(root, staged / 'requirements.txt')
+                report({'stage': 'Installing application files with rollback backup...', 'percent': 85})
+                from update_release import _apply_pending
+                _apply_pending(root)
+            except Exception:
+                shutil.rmtree(root / '.pending-update', ignore_errors=True)
+                raise
+        else:
+            raise ValueError('This source copy is not a release installation. Extract the official release ZIP to install updates.')
+    finally:
+        _resume_dispatchers(paused, drain_rt)
     report({'stage': f'Tamanitomo v{latest} installed. Restarting workspace...', 'percent': 100})
     threading.Thread(target=_delayed_restart, daemon=True).start()
     return {'success': True, 'restarting': True, 'version': latest,
