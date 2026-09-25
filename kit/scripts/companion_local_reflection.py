@@ -84,6 +84,52 @@ def messages(c,start,end,human_id,limit_chars=24000,after_id=0,end_inclusive=Tru
     through=dt.datetime.fromtimestamp(out[-1]['timestamp'],end.tzinfo).isoformat() if more else end.isoformat()
     return out,more,through,int(out[-1]['id']) if more else 0
 
+def chat_sources():
+    """The app's shared owner-conversation reader (kit.app.chat_sources)."""
+    root=str(pathlib.Path(__file__).resolve().parents[2])
+    if root not in sys.path:sys.path.append(root)
+    from kit.app import chat_sources as sources
+    return sources
+
+def trusted_messages(c,start,end,human_id='',limit_chars=24000,after_id=0,end_inclusive=True,report=None):
+    """messages(), read through the same predicate as the private conversation:
+    the owner's workspace, terminal and Telegram direct messages, never another
+    participant, a group, a scheduled run or Hermes's own machinery. Same batch
+    bounds, same (timestamp, id) watermark keyset, same return value; rows also
+    carry their `channel`. `report` (a dict) receives what was excluded and what
+    this read cannot establish. Development option (--trusted-sources); the
+    default reflection still reads Telegram only.
+
+    A store that cannot be read raises: an outage is not an empty conversation,
+    and nothing downstream may record or advance past it."""
+    sources=chat_sources()
+    binding=sources.owner_binding(c)
+    if human_id and str(human_id) not in binding.telegram:
+        raise ValueError('--human-user-id is not a Telegram identity in the chat owner binding; '
+                         'the trusted reader uses that binding only')
+    def read(view):
+        out=[];used=0;more=False
+        if view is None:return out,more,view
+        for record in view.forward(start.timestamp(),after_id,end.timestamp(),end_inclusive):
+            item={'id':record.source_message,'session_id':record.source_session,
+                  'role':'user' if record.speaker=='owner' else 'assistant','content':record.content,
+                  'timestamp':record.occurred_at,'channel':record.source_kind}
+            size=len(item['content'])+150
+            if size>limit_chars:raise ValueError('A conversation message exceeds the local reflection batch budget; pending evidence retained for review')
+            if out and (used+size>limit_chars or len(out)>=100):more=True;break
+            out.append(item);used+=size
+        return out,more,view
+    try:out,more,view=sources.owner_evidence(c,read,binding)
+    except sources.SourceUnavailable as exc:
+        raise ValueError('The owner conversation cannot be read right now; nothing was reflected: '+str(exc)) from exc
+    if report is not None:
+        report.update(reader='trusted',owner_binding=binding.origin,
+                      channels=sorted({r['channel'] for r in out}),
+                      excluded=dict(view.excluded) if view else {},
+                      limits=list(view.limits) if view else [])
+    through=dt.datetime.fromtimestamp(out[-1]['timestamp'],end.tzinfo).isoformat() if more else end.isoformat()
+    return out,more,through,int(out[-1]['id']) if more else 0
+
 def quotation_sources(rows):
     result={}
     for row in rows:
@@ -320,15 +366,20 @@ def apply_plan(c,kind,day,plan,sources,now):
     return results
 
 def reflect(c,kind,base_url,model,human_id='',slot=1,now=None,planner=None,
-            allow_remote=False,api_key_env=''):
+            allow_remote=False,api_key_env='',trusted=False):
     now=now or dt.datetime.now(ZoneInfo(c.timezone));folder=c.life/'local-reflections';folder.mkdir(parents=True,exist_ok=True)
     with file_lock(folder/(kind+'.lock')):
         flag=checkin.read(c) if kind=='checkin' else None
         if kind=='checkin' and not flag.get('pending'):return {'status':'skipped','reason':'no pending conversation'}
         start,end,day=period(kind,now,flag)
         if kind=='checkin' and not (c.home/'state.db').exists():raise ValueError('pending conversation database is missing')
-        rows,more,through,through_id=messages(c,start,end,human_id,after_id=int((flag or {}).get('last_reflected_id',0)),end_inclusive=kind=='checkin')
-        if kind=='checkin' and not human_id:raise ValueError('configure the trusted human user ID before reflecting conversations')
+        evidence={'reader':'telegram'}
+        if trusted:
+            rows,more,through,through_id=trusted_messages(c,start,end,human_id,after_id=int((flag or {}).get('last_reflected_id',0)),
+                                                          end_inclusive=kind=='checkin',report=evidence)
+        else:
+            rows,more,through,through_id=messages(c,start,end,human_id,after_id=int((flag or {}).get('last_reflected_id',0)),end_inclusive=kind=='checkin')
+            if kind=='checkin' and not human_id:raise ValueError('configure the trusted human user ID before reflecting conversations')
         sources=quotation_sources(rows)
         after_id=int((flag or {}).get('last_reflected_id',0))
         key=(kind+'-'+day) if kind!='checkin' else 'checkin-'+hashlib.sha256((start.isoformat()+end.isoformat()+through+str(through_id)).encode()).hexdigest()[:20]
@@ -394,6 +445,7 @@ def reflect(c,kind,base_url,model,human_id='',slot=1,now=None,planner=None,
         saved.update(complete=True,results=results);atomic_write(path,json.dumps(saved,ensure_ascii=False,indent=2))
         held=[r for r in results if r.get('held')]
         return {'status':'recorded','id':key,'attempts':attempts['count'],'results':results,'usage':usage,'more_conversation_messages':more,
+                'evidence':evidence,
                 'clean':not (diagnostics['omitted'] or diagnostics['warnings'] or held),
                 'omitted':diagnostics['omitted'],'warnings':diagnostics['warnings'],'held_facts':len(held)}
 
@@ -425,13 +477,16 @@ def main():
     p.add_argument('--reset-attempts',metavar='BUDGET',help='give a held batch a fresh attempt budget (needs --reason)')
     p.add_argument('--reason',default='')
     p.add_argument('--human-user-id',default='');p.add_argument('--slot',type=int,default=1)
+    p.add_argument('--trusted-sources',action='store_true',
+                   help='development: read the owner conversation (workspace, terminal, Telegram) through the '
+                        'shared chat reader and owner binding instead of Telegram only; off by default')
     companion_endpoint.add_arguments(p)
     a=p.parse_args()
     if a.reset_attempts:
         print(json.dumps(reset_attempts(cc.load(a.home),a.reset_attempts,a.reason),indent=2));return
     if not (a.base_url and a.model):p.error('--base-url and --model are required')
     print(json.dumps(reflect(cc.load(a.home),a.kind,a.base_url,a.model,a.human_user_id,a.slot,
-                             allow_remote=a.allow_remote,api_key_env=a.api_key_env),
+                             allow_remote=a.allow_remote,api_key_env=a.api_key_env,trusted=a.trusted_sources),
                      ensure_ascii=False,indent=2))
 if __name__=='__main__':
     try:main()

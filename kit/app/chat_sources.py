@@ -252,6 +252,165 @@ class _HermesReader:
         return out, excluded, highest
 
 
+# ------------------------------------------------ owner evidence (Phase 1C)
+# The same rows the private conversation shows, read for local reflection and the
+# cross-channel handoff. One predicate (classify) decides membership for all three;
+# this view only adds ordering, bounds, and the evidence-specific omissions below.
+EVIDENCE_PAGE = 200
+# Rows scanned for one recent-handoff read, whatever they turn out to be.
+RECENT_SCAN = 400
+LINEAGE_DEPTH = 20
+
+
+class EvidenceUnavailable(SourceUnavailable):
+    """The owner's conversation cannot be read as evidence right now. Not an empty
+    conversation: callers must not record, advance or summarise past it."""
+
+
+def owner_evidence(c, fn, binding=None, provenance=None):
+    """Run fn(view) with an EvidenceView on one read-only connection, or fn(None)
+    when this profile has no Hermes store yet (no conversation has happened).
+
+    `provenance` defaults to the profile's send ledger read model (read-only). A
+    ledger that exists but cannot be read is EvidenceUnavailable: without it, rows
+    proven to be Hermes's own continuation notes could be taken as the owner's words."""
+    binding = binding or owner_binding(c)
+    if provenance is None:
+        from . import chat_sends
+        provenance = chat_sends.read_model(c.home)
+    if provenance.state == 'unavailable':
+        raise EvidenceUnavailable('The send ledger cannot be read, so Hermes continuation notes cannot be told '
+                                  'from the owner\'s messages; evidence is not read this time.')
+    applied = provenance if provenance.state in ('ok', 'incomplete') else None
+    source = HermesSource(c, binding, provenance=applied)
+    return source.read(lambda reader: fn(EvidenceView(reader, provenance) if reader is not None else None))
+
+
+class EvidenceView:
+    """Classified owner-conversation rows, visible content only. `excluded` counts
+    what was left out and why (classify's reasons plus `not_public` and
+    `compression_carryover`); `limits` states what this read cannot establish."""
+
+    def __init__(self, reader, provenance):
+        self.reader = reader
+        self.excluded = {}
+        self._sessions = {}
+        self.limits = []
+        note = provenance.disclosure() if hasattr(provenance, 'disclosure') else None
+        for key in ('notice', 'limitation'):
+            if note and note.get(key):
+                self.limits.append(note[key])
+        cols = reader.session_cols
+        self._lineage = {'parent_session_id', 'end_reason', 'started_at'} <= cols
+        if not self._lineage:
+            self.limits.append('This Hermes store records no compression lineage; rows a compression copied '
+                               'into a continuation session cannot be told from new messages.')
+        self.limits.append('A compression handoff row written without its original time is indistinguishable '
+                           'from a new message and is read as one.')
+
+    def _count(self, reason):
+        self.excluded[reason] = self.excluded.get(reason, 0) + 1
+
+    def session(self, ident):
+        """{source, user_id, chat_id, chat_type, parent, end_reason, started_at} or None."""
+        ident = str(ident)
+        if ident not in self._sessions:
+            cols = self.reader.session_cols
+            pick = lambda col: col if col in cols else 'NULL'
+            row = self.reader.con.execute(
+                f"SELECT id AS session_id, source, {pick('user_id')} AS user_id, {pick('chat_id')} AS chat_id, "
+                f"{pick('chat_type')} AS chat_type, {pick('parent_session_id')} AS parent, "
+                f"{pick('end_reason')} AS end_reason, {pick('started_at')} AS started_at "
+                f"FROM sessions s WHERE id=? AND {self.reader.scope}", (ident, *self.reader.params)).fetchone()
+            self._sessions[ident] = dict(row) if row else None
+        return self._sessions[ident]
+
+    def owner_session(self, ident):
+        """The source kind of a session in the owner's conversation, or None."""
+        row = self.session(ident)
+        if row is None:
+            return None
+        src = self.reader.source
+        return session_kind(row, src.binding, src.workspace)[0]
+
+    def lineage(self, ident):
+        """The session and the compression ancestors whose content its own history
+        carries (as a summary or copies), nearest first; bounded."""
+        out, current = [], str(ident)
+        while current and current not in out and len(out) < LINEAGE_DEPTH:
+            out.append(current)
+            row = self.session(current)
+            current = str(row['parent']) if row and row.get('parent') else None
+            if current:
+                parent = self.session(current)
+                if not parent or parent.get('end_reason') != 'compression':
+                    break
+        return out
+
+    def _carryover(self, row):
+        """A row a compression copied into its continuation session: the session's
+        parent ended by compression and the row is older than the session."""
+        if not self._lineage:
+            return False
+        session = self.session(row['session_id'])
+        if not session or not session.get('parent') or session.get('started_at') is None:
+            return False
+        parent = self.session(session['parent'])
+        return bool(parent and parent.get('end_reason') == 'compression'
+                    and isinstance(row['timestamp'], (int, float)) and row['timestamp'] <= float(session['started_at']))
+
+    def _keep(self, row):
+        src = self.reader.source
+        record, reason = classify(dict(row), src.binding, src.workspace, src.internal)
+        if record is None:
+            self._count(reason)
+        elif not record.visible:
+            self._count('not_public')
+        elif self._carryover(row):
+            self._count('compression_carryover')
+        else:
+            return record
+        return None
+
+    def forward(self, after_stamp, after_id, end_stamp, end_inclusive=True):
+        """Owner-conversation records after (after_stamp, after_id) up to end_stamp,
+        in (time, id) order: the keyset local reflection has always used for its
+        watermark. A generator; it reads EVIDENCE_PAGE source rows at a time."""
+        op = '<=' if end_inclusive else '<'
+        stamp, ident = float(after_stamp), int(after_id)
+        while True:
+            rows = self.reader.con.execute(
+                self.reader._select() + f' AND (m.timestamp>? OR (m.timestamp=? AND m.id>?)) AND m.timestamp{op}? '
+                'ORDER BY m.timestamp, m.id LIMIT ?',
+                (*self.reader.params, stamp, stamp, ident, float(end_stamp), EVIDENCE_PAGE)).fetchall()
+            for row in rows:
+                record = self._keep(row)
+                if record is not None:
+                    yield record
+            if len(rows) < EVIDENCE_PAGE:
+                return
+            stamp, ident = float(rows[-1]['timestamp']), int(rows[-1]['id'])
+
+    def recent(self, since_stamp, skip_sessions, limit):
+        """Up to `limit` newest owner-conversation records at or after since_stamp,
+        outside `skip_sessions`, newest first. Returns (records, complete): complete
+        is False when the bounded scan ended before the window did."""
+        skip = {str(s) for s in skip_sessions}
+        rows = self.reader.con.execute(
+            self.reader._select() + ' AND m.timestamp>=? ORDER BY m.timestamp DESC, m.id DESC LIMIT ?',
+            (*self.reader.params, float(since_stamp), RECENT_SCAN)).fetchall()
+        out = []
+        for row in rows:
+            if str(row['session_id']) in skip:
+                continue
+            record = self._keep(row)
+            if record is not None:
+                out.append(record)
+                if len(out) >= limit:
+                    return out, True
+        return out, len(rows) < RECENT_SCAN
+
+
 def session_kind(row, binding, workspace):
     """(source_kind, account, channel) for a session in the owner's private
     conversation, or (None, reason, None). Structural fields only."""
