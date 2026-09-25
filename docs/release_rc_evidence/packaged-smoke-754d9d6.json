@@ -1,0 +1,138 @@
+{
+  "package": "<job-tmp>/smoke/pkg/tamanitomo",
+  "checks": [
+    {
+      "check": "packaged entry point kit.app.hosted serves",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "flag-off page carries no keyed signal or persistent-Chat assets",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "flag-off page loads journal.js",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "/static/chat-controller.js absent from package (404)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "/static/chat-sends.js absent from package (404)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "/static/chat-store.js absent from package (404)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "/static/chat-view.js absent from package (404)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "/static/chat.css absent from package (404)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "keyed send routes not registered",
+      "ok": true,
+      "detail": "404"
+    },
+    {
+      "check": "unauthenticated API read refused",
+      "ok": true,
+      "detail": "401"
+    },
+    {
+      "check": "OBSERVATION text typed before feed load is persisted",
+      "ok": true,
+      "detail": "stored draft='typed during load' box='typed during load'"
+    },
+    {
+      "check": "legacy Chat page, no KeyedChat client",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Journal opens latest reflection with date route",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "historical Reflection 2026-09-18",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "historical Day 2026-09-18 (no scenes, honest)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "back returns through Journal history",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Day 2026-09-20 scenes + collapsed snapshot + photo in its scene",
+      "ok": true,
+      "detail": "Sunday, September 20, 2026\n2 scenes \u00b7 1 photo\nFROM THE REFLECTION\n\nA slow market morning, then the library until the light went.\n\nRead the reflection \u2192\n\nNova's own account of the day, recorded by the "
+    },
+    {
+      "check": "refresh keeps date and view",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "shared date link lands directly",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "old #timeline link works and saved pin rendered",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Timeline diary link lands in Journal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Chat draft preserved across Journal, Timeline, back/forward and reloads",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "archive navigation made no write request",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "check": "existing Chat send (POST /api/chat) round-trips via fake Hermes",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "profile switch: Rowan shows none of Nova's archive",
+      "ok": true,
+      "detail": "Day\nReflection\nOlder\n\ud83d\udcc5\nSep 25, 2026 \u00b7 Today\n\u25be\nNewer\nFriday, September 25, 2026\nTODAY\nNothing recorded\nNothing on record for this day\n\nNo scene, plan or reflection was recorded for this date. Opening i"
+    },
+    {
+      "check": "no page errors",
+      "ok": true,
+      "detail": "[]"
+    }
+  ],
+  "server_log_tail": "",
+  "passed": 26,
+  "failed": 0
+}

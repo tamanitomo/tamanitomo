@@ -1,0 +1,5 @@
+sha=754d9d6fcc4d1369f910fbdbef57e28a2638ed9c status=0
+pytest exit=0
+node exit=0
+Built tamanitomo-release.zip: 296 source files + integrity manifest
+b22ca2ebcbe999f48f3d66df5a91f210c984966b857be4626ba5e980d18b1fc8  tamanitomo-release.zip

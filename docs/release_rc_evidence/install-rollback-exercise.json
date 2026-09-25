@@ -1,0 +1,77 @@
+[
+ [
+  "installed base",
+  [
+   "3.0.24",
+   280,
+   []
+  ]
+ ],
+ [
+  "staged via installed 3.0.24 updater",
+  {
+   "staged": true,
+   "version": "3.0.24",
+   "files": 296,
+   "note": "Update verified and staged. Close Tamanitomo, then launch it again to install. Your Hermes profiles and vault are untouched."
+  }
+ ],
+ [
+  "after apply",
+  [
+   "3.0.24",
+   296,
+   []
+  ]
+ ],
+ [
+  "backup dirs",
+  [
+   "a1b26b666abb4486b5c1e68bbccae49f"
+  ]
+ ],
+ [
+  "files added by RC",
+  [
+   "docs/TESTING.md",
+   "kit/app/chat_projection.py",
+   "kit/app/chat_routes.py",
+   "kit/app/chat_sources.py",
+   "kit/app/journal_archive.py",
+   "kit/app/static/journal.js",
+   "tests/canonical_statement_cases.json",
+   "tests/chat_fixtures.py",
+   "tests/mock_provider.py",
+   "tests/test_chat_projection.py",
+   "tests/test_chat_routes.py",
+   "tests/test_journal_archive.py",
+   "tests/test_journal_archive_ui.js",
+   "tests/test_mock_provider.py",
+   "tests/test_preview_fixture.py",
+   "tools/preview_fixture.py"
+  ]
+ ],
+ [
+  "unmanaged leftovers untouched",
+  [
+   true,
+   true
+  ]
+ ],
+ [
+  "after rollback",
+  [
+   "3.0.24",
+   280,
+   []
+  ]
+ ],
+ [
+  "RC-only files remaining after rollback",
+  []
+ ],
+ [
+  "profile untouched through install+rollback",
+  true
+ ]
+]
