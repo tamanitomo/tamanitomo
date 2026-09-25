@@ -222,6 +222,13 @@ class BrowserScriptRegressionTests(unittest.TestCase):
         node = node_or_skip(self, 'Node is needed for browser state regression tests')
         subprocess.run([node, str(Path(__file__).with_name('test_reliability_ui.js'))], check=True)
 
+    def test_journal_archive_helpers(self):
+        """Journal's date route and calendar stepping, under a daylight-saving timezone."""
+        import os,subprocess
+        node = node_or_skip(self, 'Node is needed for the journal archive helpers')
+        subprocess.run([node, str(Path(__file__).with_name('test_journal_archive_ui.js'))], check=True,
+                       env={**os.environ,'TZ':'America/New_York'})
+
     def test_content_and_feed_regressions(self):
         """Photo filters, message formatting, and the guard that keeps a slow
         reply to an abandoned page from repainting the feed."""

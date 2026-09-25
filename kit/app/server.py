@@ -120,6 +120,8 @@ def build(home=None,token='',state_dir=None,chat_sends=None):
         chat_send_routes.register(app,state,select,load,selection.get,app.state.operations,chat_sends)
     from .content import register as register_content
     register_content(app,load)
+    from .journal_archive import register as register_journal_archive
+    register_journal_archive(app,load)
     from .dashboard import register as register_dashboard
     register_dashboard(app,select,token)
     from .profile_editor import register as register_editor

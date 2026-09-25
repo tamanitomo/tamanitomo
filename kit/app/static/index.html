@@ -275,7 +275,10 @@ async function showTab(name){
   name=TAB_ALIASES[name]||name;
   if(typeof confirmEditorLeave==='function'&&!await confirmEditorLeave(current))return;
   if(name!=='chat'&&window.stopBrowserVoice)stopBrowserVoice();
-  current=name;history.replaceState(null,'',location.pathname+location.search+'#'+name);
+  current=name;
+  // A page's own route (#journals/<date>/<view>) survives being shown; any other tab is just its name.
+  const route=String(location.hash||'').slice(1).split('/');
+  history.replaceState(null,'',location.pathname+location.search+(route.length>1&&(TAB_ALIASES[route[0]]||route[0])===name?location.hash:'#'+name));
   for(const [id] of TABS){const el=$(id);if(el)el.hidden=id!==name;}
   for(const b of $('tabs').querySelectorAll('button[data-tab]'))b.setAttribute('aria-current',String(b.dataset.tab===name));
   if(window.productNavigate)window.productNavigate(name);
@@ -805,6 +808,7 @@ setInterval(()=>{if(current==='now'&&!$('product-dialog').open)render('now').cat
 <script src="/static/workspace.js"></script>
 <script src="/static/us.js"></script>
 <script src="/static/product.js"></script>
+<script src="/static/journal.js"></script>
 <script src="/static/onboarding.js"></script>
 <script src="/static/studios.js"></script>
 <script src="/static/voice-chat.js"></script>

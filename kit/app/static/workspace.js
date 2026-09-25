@@ -191,7 +191,7 @@ async function boot(){
   $('who').textContent=selected?.name||'Welcome home';$('sub').textContent=selected?.installed?'A continuing life, together.':'Your companion workspace';
   // Adopt this companion's saved palette and pinned bar before the first page draws.
   if(window.Appearance)await window.Appearance.load();
-  let initial=location.hash.slice(1);initial=TAB_ALIASES[initial]||initial;
+  let initial=location.hash.slice(1).split('/')[0];initial=TAB_ALIASES[initial]||initial;
   if(!TABS.some(([id])=>id===initial))initial=selected?.installed?'now':'roster';
   showTab(initial);
   const pending=sessionStorage.getItem(operationKey());
