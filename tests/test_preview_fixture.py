@@ -27,6 +27,10 @@ class PreviewFixtureTests(unittest.TestCase):
             self.assertEqual(said.count('hi'),3)
             self.assertFalse([s for s in said if 'must not appear' in s])
 
+    # Keyed sends and their harness are not in release-files.json, so a release package
+    # cannot run this preview; the source tree and CI still do.
+    @unittest.skipUnless((ROOT/'kit/app/chat_send_routes.py').is_file() and (ROOT/'tests/phase1b_c1').is_dir(),
+                         'keyed sends are not part of a release package')
     def test_persistent_chat_preview_is_synthetic_and_serves_the_keyed_page(self):
         """--persistent-chat: a second companion and ordinary notes, all in the temporary home;
         the app it builds serves the persistent Chat. No favourable newest session is seeded:
