@@ -90,6 +90,7 @@
   "kit/app/terminal.py",
   "kit/app/updates.py",
   "kit/app/vault.py",
+  "kit/app/vault_link_index.py",
   "kit/app/voice_chat.py",
   "kit/app/wardrobe.py",
   "kit/app/workflows.py",

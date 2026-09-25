@@ -1613,6 +1613,22 @@ def register(app, select, load, operations):
         from . import vault
         return vault.search(load(),q)
 
+    @app.get('/api/vault/links/health')
+    def vault_links_health():
+        from . import vault_link_index as vli
+        return vli.health(load())
+
+    @app.get('/api/vault/links/backlinks')
+    def vault_links_backlinks(path:str):
+        from . import vault, vault_link_index as vli
+        c=load()
+        vault.resolve(c,path)          # same authorization boundary as every other vault route
+        entries,incomplete=vli.build(c)
+        result=vli.backlinks(entries,path)
+        result['unlinked_mentions']=vli.unlinked_mentions(entries,path)
+        result['incomplete']=incomplete
+        return result
+
     @app.post('/api/vault/trash')
     def vault_trash(payload:dict):
         from . import vault
