@@ -1,0 +1,82 @@
+{
+  "zip_sha256": "31bd14329cfc4df56d2697736096acd63c743d6aa8dd00ceb79b5e2705ce8771",
+  "checks": [
+    {
+      "check": "packaged entry point kit.app.hosted serves",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "page loads the local editor bundle and script",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "kit/app/static/vault-editor.bundle.js shipped, served and matches the manifest",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "kit/app/static/vault-editor.LICENSES.txt shipped, served and matches the manifest",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "kit/app/static/vault-editor.js shipped, served and matches the manifest",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no persistent-Chat assets in the page (normal build)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no build tooling shipped",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "the bundle defined the editor API",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Chat implementation on this page is the legacy one",
+      "ok": true,
+      "detail": "legacy (POST /api/chat)"
+    },
+    {
+      "check": "edit autosaved through the revision contract",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "unsaved text recovered after reload, not saved behind the owner",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "recovered draft saved on request",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "after a legacy Chat round-trip the note keeps its selection",
+      "ok": true,
+      "detail": "[20, 30]"
+    },
+    {
+      "check": "no page errors",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "check": "no request left the local server (no CDN)",
+      "ok": true,
+      "detail": "[]"
+    }
+  ],
+  "passed": 15,
+  "failed": 0
+}

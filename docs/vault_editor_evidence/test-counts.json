@@ -1,0 +1,16 @@
+{
+  "full_suite_11ce49a": {
+    "tests": "2553",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "52",
+    "time": "318.325"
+  },
+  "vault_browser_11ce49a": {
+    "tests": "13",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "31.809"
+  }
+}
