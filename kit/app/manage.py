@@ -1736,6 +1736,24 @@ def register(app, select, load, operations):
         try:return vault.write(load(),payload.get('path'),payload.get('text'),payload.get('revision'))
         except FileExistsError as exc: raise HTTPException(409,str(exc))
 
+    @app.post('/api/vault/mkdir')
+    def vault_mkdir(payload:dict):
+        from . import vault
+        try:return vault.mkdir(load(),payload.get('path'))
+        except FileExistsError as exc:raise HTTPException(409,str(exc))
+
+    @app.post('/api/vault/duplicate')
+    def vault_duplicate(payload:dict):
+        from . import vault
+        try:return vault.duplicate(load(),payload.get('path'),payload.get('revision'))
+        except FileExistsError as exc:raise HTTPException(409,str(exc))
+
+    @app.post('/api/vault/move')
+    def vault_move(payload:dict):
+        from . import vault
+        try:return vault.move(load(),payload.get('path'),payload.get('dest'),payload.get('revision'))
+        except FileExistsError as exc:raise HTTPException(409,str(exc))
+
     @app.get('/api/feelings')
     def feelings_read():
         import companion_feelings as feelings

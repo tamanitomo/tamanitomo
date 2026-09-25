@@ -170,6 +170,131 @@ def write(c,relative,text,revision):
         cp.atomic_write(folder/'last-write',hashlib.sha256(text.encode('utf-8')).hexdigest())
     return read(c,relative)
 
+# --- File actions (LINK-05): new folder, duplicate, rename/move ------------------------
+#
+# One service, one policy, reused by every caller (keyboard, context menu, drag/drop):
+# the same resolve()/protected()/editable() boundary as read/write/trash/restore, and the
+# same collision/reserved-name/symlink checks regardless of how the action was triggered.
+# Link-aware rewriting of what pointed at the old path is LINK-06, a separate task: a
+# rename/move here is exactly as "dumb" about links as the filesystem's own rename is.
+
+RESERVED_STEMS=cp.WINDOWS_RESERVED
+FORBIDDEN_CHARS=frozenset('<>:"|?*')
+
+def _validate_name(name):
+    """One name (a path component), for every supported platform, not just the one this
+    process happens to run on -- a note created on Linux must not become unrenameable
+    once synced to a Windows or Termux host."""
+    if not name or name in ('.','..'):raise ValueError('Invalid name')
+    if len(name)>200:raise ValueError('Name is too long')
+    if name[-1] in ('.',' ')or name[0]==' ':raise ValueError('Names cannot start or end with a space, or end with a period (unsafe on Windows)')
+    if any(ord(ch)<32 for ch in name) or FORBIDDEN_CHARS & set(name):raise ValueError(r'Names cannot contain control characters or < > : " | ? *')
+    stem=name.rsplit('.',1)[0] if '.' in name else name
+    if stem.lower() in RESERVED_STEMS:raise ValueError(f'"{stem}" is a reserved name on some platforms')
+
+def _validate_path(relative):
+    rel=Path(relative)
+    if rel.is_absolute() or any(p in ('..','.') for p in rel.parts):raise ValueError('Use a relative vault path')
+    for part in rel.parts:_validate_name(part)
+
+def _no_symlink_on_path(c,path):
+    """Every component from `path` up to the vault root, inclusive: a symlink anywhere
+    on that chain (including `path` itself, if it already exists) is refused. Walks the
+    given path directly -- never `.resolve()` first, which would silently follow a
+    symlink and check the WRONG chain."""
+    root=c.vault.resolve()
+    node=path
+    for _ in range(200):          # the vault cannot be 200 directories deep; a safety bound, not a real limit
+        if node.is_symlink():raise ValueError('That path passes through a symbolic link.')
+        if node==root or node.parent==node:return
+        node=node.parent
+    raise ValueError('Path is too deep to validate safely.')
+
+def _atomic_write_bytes(path,data):
+    """Binary-safe counterpart to companion_platform.atomic_write, which is text-mode
+    only (it would raise on bytes, and forcing text mode risks a newline translation
+    an exact-byte copy must not have). Same durability shape as vault.backup()'s own
+    write: temp file in the destination directory, fsync, then an atomic rename."""
+    path.parent.mkdir(parents=True,exist_ok=True)
+    handle=path.parent/('.'+path.name+'.'+uuid.uuid4().hex+'.tmp')
+    try:
+        with open(handle,'wb') as out:out.write(data);out.flush();os.fsync(out.fileno())
+        os.replace(handle,path)
+    finally:
+        handle.unlink(missing_ok=True)
+
+def mkdir(c,relative):
+    _validate_path(relative)
+    path=resolve(c,relative)
+    if path.exists():raise FileExistsError('A file or folder already exists at that path.')
+    _no_symlink_on_path(c,path.parent)
+    path.mkdir(parents=True)
+    return {'created':relative}
+
+def duplicate(c,relative,revision):
+    src=resolve(c,relative)
+    if not src.is_file():raise ValueError('Only an existing file can be duplicated.')
+    if protected(c,relative):raise ValueError('This file is protected.')
+    _no_symlink_on_path(c,src)
+    data=src.read_bytes()
+    if hashlib.sha256(data).hexdigest()!=revision:raise FileExistsError('This file changed since you opened it. Reload before duplicating.')
+    stem,suffix=src.stem,src.suffix
+    folder_rel=str(Path(relative).parent) if '/' in relative else ''
+    is_text=suffix.lower() in TEXT
+    for n in range(1,10000):
+        candidate=f'{stem} copy {n}{suffix}' if n>1 else f'{stem} copy{suffix}'
+        candidate_rel=(folder_rel+'/'+candidate) if folder_rel and folder_rel!='.' else candidate
+        _validate_name(candidate)
+        dest=resolve(c,candidate_rel)
+        if dest.exists():continue
+        with cp.file_lock(c.vault/'.companion-editor.lock'):
+            if dest.exists():continue   # lost a race with another duplicate/create
+            if is_text:cp.atomic_write(dest,data.decode('utf-8'))
+            else:_atomic_write_bytes(dest,data)
+        return {'duplicated':candidate_rel}
+    raise ValueError('Too many copies already exist with that name.')
+
+def move(c,relative,dest_relative,revision=None):
+    """Rename or move one file or folder. `revision` is REQUIRED and checked for a file
+    (the same optimistic-concurrency contract as write/trash/duplicate); a folder has no
+    revision concept and moves as a unit regardless. Restore-safety: this never
+    overwrites an existing destination, including a case-only rename target on a
+    case-INsensitive filesystem, which is handled as a safe two-step through a private
+    temporary name rather than risking the OS treating "File.md" -> "file.md" as a
+    same-file no-op that could drop the original if anything failed mid-way."""
+    _validate_path(dest_relative)
+    src=resolve(c,relative)
+    if not src.exists():raise ValueError('Source does not exist.')
+    if protected(c,relative):raise ValueError('This file is protected.')
+    is_file=src.is_file()
+    if is_file:
+        if not isinstance(revision,str):raise ValueError('A revision is required to rename or move a file.')
+        if hashlib.sha256(src.read_bytes()).hexdigest()!=revision:
+            raise FileExistsError('This file changed since you opened it. Reload before renaming or moving it.')
+    dest=resolve(c,dest_relative)
+    if protected(c,dest_relative):raise ValueError('That destination is protected.')
+    _no_symlink_on_path(c,src)
+    _no_symlink_on_path(c,dest.parent)
+    case_only=str(src).casefold()==str(dest).casefold() and src!=dest
+    with cp.file_lock(c.vault/'.companion-editor.lock'):
+        if not case_only and dest.exists():raise FileExistsError('A file or folder already exists at the destination.')
+        dest.parent.mkdir(parents=True,exist_ok=True)
+        if case_only:
+            tmp=dest.parent/('.vault-move-'+uuid.uuid4().hex)
+            os.replace(src,tmp);os.replace(tmp,dest)
+        else:
+            os.replace(src,dest)
+        if is_file:
+            # Backup history follows the file (its folder is keyed by path hash, so a
+            # rename orphans the old one unless it physically moves too): carried only
+            # when the destination has no backups of its own yet, never merged/overwritten.
+            old_backups=c.vault/BACKUPS/hashlib.sha256(relative.encode('utf-8')).hexdigest()[:24]
+            new_backups=c.vault/BACKUPS/hashlib.sha256(dest_relative.encode('utf-8')).hexdigest()[:24]
+            if old_backups.is_dir() and not old_backups.is_symlink() and not new_backups.exists():
+                os.replace(old_backups,new_backups)
+                cp.atomic_write(new_backups/'source.json',json.dumps({'path':dest_relative}))
+    return {'moved':dest_relative}
+
 def files(c,limit=20000):
     import os
     count=0

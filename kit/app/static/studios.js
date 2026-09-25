@@ -200,12 +200,15 @@ function renderFolderTreeHTML(folderPath,depth=0){
   if(f.directory){
    const isExp=vaultExpanded.has(f.path);
    return `<div class="vault-folder-group" data-folder-path="${esc(f.path)}">
-    <button class="vault-node" data-toggle-folder="${esc(f.path)}">
-     <div class="vault-node-left">
-      <span class="vault-node-icon">${isExp?'▾':'▸'}</span>
-      <span>📁 ${esc(f.name)}</span>
-     </div>
-    </button>
+    <div class="vault-node-row">
+     <button class="vault-node" data-toggle-folder="${esc(f.path)}">
+      <div class="vault-node-left">
+       <span class="vault-node-icon">${isExp?'▾':'▸'}</span>
+       <span>📁 ${esc(f.name)}</span>
+      </div>
+     </button>
+     <button class="quiet vault-node-actions" data-vault-actions="${esc(f.path)}" data-vault-dir="1" title="Actions for ${esc(f.name)}" aria-label="Actions for ${esc(f.name)}">⋮</button>
+    </div>
     <div class="vault-folder-children" id="vault-folder-${CSS.escape(f.path)}" ${isExp?'':'hidden'}>
      ${isExp?renderFolderTreeHTML(f.path,depth+1):''}
     </div>
@@ -213,14 +216,68 @@ function renderFolderTreeHTML(folderPath,depth=0){
   }
   const isActive=openNote?.path===f.path;
   const isProtected=f.protected;
-  return `<button class="vault-node ${isActive?'active-file':''}" data-vault-file="${esc(f.path)}">
-   <div class="vault-node-left">
-    <span class="vault-node-icon">${isProtected?'🔒':'📄'}</span>
-    <span>${esc(f.name)}</span>
-   </div>
-   ${isProtected?'<span class="vault-node-tag is-protected">Read-only</span>':''}
-  </button>`;
+  return `<div class="vault-node-row">
+   <button class="vault-node ${isActive?'active-file':''}" data-vault-file="${esc(f.path)}">
+    <div class="vault-node-left">
+     <span class="vault-node-icon">${isProtected?'🔒':'📄'}</span>
+     <span>${esc(f.name)}</span>
+    </div>
+    ${isProtected?'<span class="vault-node-tag is-protected">Read-only</span>':''}
+   </button>
+   ${isProtected?'':`<button class="quiet vault-node-actions" data-vault-actions="${esc(f.path)}" title="Actions for ${esc(f.name)}" aria-label="Actions for ${esc(f.name)}">⋮</button>`}
+  </div>`;
  }).join('');
+}
+
+/* ---------- File actions (LINK-05): new folder inline above; duplicate/rename/move
+   here, one dialog-based menu reused for both files and folders, keyboard and touch
+   reachable (no bare right-click requirement). Delete already exists via Trash. */
+async function vaultReadRevision(path){
+ const body=await api('/vault/file?path='+encodeURIComponent(path));
+ return body.revision;
+}
+function openVaultActionsMenu(path,isDir){
+ const name=path.split('/').pop();
+ dialog(`Actions for ${name}`,
+  `<div class="vault-link-choices">
+    ${isDir?'':'<button class="quiet" data-action="duplicate">Duplicate</button>'}
+    <button class="quiet" data-action="rename">Rename or move…</button>
+   </div>`);
+ const box=$('dialog-body');
+ if(box.querySelector('[data-action="duplicate"]'))box.querySelector('[data-action="duplicate"]').onclick=async()=>{
+  try{
+   const revision=await vaultReadRevision(path);
+   const r=await api('/vault/duplicate',{method:'POST',body:JSON.stringify({path,revision})});
+   $('product-dialog').close();
+   await listVault(path.split('/').slice(0,-1).join('/'),false);
+   notice(`Created ${r.duplicated}.`);
+  }catch(e){notice(e.message||'Could not duplicate that file.',true);}
+ };
+ box.querySelector('[data-action="rename"]').onclick=()=>{
+  $('product-dialog').close();
+  openVaultRenameDialog(path,isDir);
+ };
+}
+function openVaultRenameDialog(path,isDir){
+ dialog(`Rename or move ${path.split('/').pop()}`,
+  `<form id="vault-rename-form"><label>New path<input id="vault-rename-dest" required value="${esc(path)}"></label>
+   <button class="act">${isDir?'Move folder':'Rename or move'}</button></form>`);
+ $('vault-rename-form').onsubmit=async e=>{
+  e.preventDefault();
+  const dest=$('vault-rename-dest').value.trim();
+  if(!dest||dest===path){$('product-dialog').close();return;}
+  try{
+   const revision=isDir?null:await vaultReadRevision(path);
+   await api('/vault/move',{method:'POST',body:JSON.stringify({path,dest,revision})});
+   $('product-dialog').close();
+   // The editor's own state (open tabs, active note) lives inside vault-editor.js's
+   // closure, not as a studios.js global — VaultEditor.close() is its exposed API and
+   // is a safe no-op if this path was never open as a tab.
+   if(window.VaultEditor)try{await window.VaultEditor.close(path);}catch(e){}
+   await listVault('',false);
+   notice(`Moved to ${dest}.`);
+  }catch(e){notice(e.message||'Could not rename or move that.',true);}
+ };
 }
 
 function renderVaultTree(){
@@ -243,6 +300,9 @@ function renderVaultTree(){
  }
  for(const b of tree.querySelectorAll('[data-vault-file]')){
   b.onclick=()=>readNote(b.dataset.vaultFile);
+ }
+ for(const b of tree.querySelectorAll('[data-vault-actions]')){
+  b.onclick=e=>{e.stopPropagation();openVaultActionsMenu(b.dataset.vaultActions,b.dataset.vaultDir==='1');};
  }
 }
 
@@ -390,20 +450,18 @@ workspaceHandlers.vault=async()=>{
  };
 
  $('new-folder').onclick=async()=>{
-  if(!await leaveNote())return;
   dialog('New folder',`<form id="new-folder-form"><label>Folder name<input id="new-folder-name" required placeholder="journal or research"></label><button class="act">Create folder</button></form>`);
   $('new-folder-form').onsubmit=async e=>{
    e.preventDefault();
    const raw=$('new-folder-name').value.trim().replace(/^\/+|\/+$/g,'');
-   if(!raw||raw.includes('..'))throw Error('Invalid folder name');
-   const path=raw+'/overview.md';
-   const d=await api('/vault/file',{method:'PUT',body:JSON.stringify({path,text:'# '+raw+' overview\n\n',revision:''})});
+   if(!raw)throw Error('Invalid folder name');
+   // LINK-05: a real, empty folder through the file-actions service -- no placeholder
+   // note is created just to make the folder "exist" the way the old workaround did.
+   await api('/vault/mkdir',{method:'POST',body:JSON.stringify({path:raw})});
    $('product-dialog').close();
-   vaultDirty=false;
    vaultExpanded.add(raw);
-   openNote=d;
-   showNote(d,true);
    await listVault('',false);
+   notice('Folder created.');
   };
  };
 

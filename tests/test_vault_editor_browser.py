@@ -488,6 +488,37 @@ class VaultEditor(Browser):
         self.assertIn('status: draft', saved)                 # untouched
         self.assertTrue(saved.endswith('# Body\ntext here\n'))  # body untouched
 
+    def test_11g_new_folder_creates_a_real_empty_folder(self):
+        self.vault_page()
+        self.page.click('#new-folder')
+        self.page.fill('#new-folder-name', 'archive')
+        self.page.click('#new-folder-form button.act')
+        until(lambda: (self.vault / 'archive').is_dir(), what='folder created on disk')
+        # The old workaround created a placeholder note; a real mkdir must not.
+        self.assertEqual(list((self.vault / 'archive').iterdir()), [])
+
+    def test_11h_duplicate_via_the_actions_menu(self):
+        self.vault_page()
+        node = self.page.locator('[data-vault-actions="notes/Other.md"]')
+        until(lambda: node.count() == 1, what='actions button for Other.md present')
+        node.click()
+        self.page.click('[data-action="duplicate"]')
+        until(lambda: (self.vault / 'notes/Other copy.md').is_file(), what='duplicate created on disk')
+        self.assertEqual((self.vault / 'notes/Other copy.md').read_text(encoding='utf-8'),
+                         (self.vault / OTHER).read_text(encoding='utf-8'))
+
+    def test_11i_rename_via_the_actions_menu_closes_the_stale_tab(self):
+        self.vault_page()
+        self.open(OTHER, mode='preview')
+        until(lambda: self.page.locator('.vault-tab').count() == 1, what='tab open')
+        self.page.locator('[data-vault-actions="notes/Other.md"]').click()
+        self.page.click('[data-action="rename"]')
+        self.page.fill('#vault-rename-dest', 'notes/Renamed.md')
+        self.page.click('#vault-rename-form button.act')
+        until(lambda: not (self.vault / OTHER).exists(), what='old path gone from disk')
+        self.assertTrue((self.vault / 'notes/Renamed.md').is_file())
+        until(lambda: self.page.locator('.vault-tab').count() == 0, what='the stale tab for the old path closed')
+
     def test_12_a_read_sent_before_a_save_cannot_roll_the_buffer_back(self):
         self.vault_page()
         self.open(OTHER)
