@@ -290,6 +290,17 @@ the Vault linked-knowledge layer, the updater) plainly rather than omitting them
 - Evidence root: `~/tamanitomo-3.5.0-protect/evidence/` (smoke script, its result, build hashes,
   the extracted `SHA256SUMS.json`); build artifacts at `~/tamanitomo-3.5.0-protect/build/`.
 
+## 6b. v3.5.0 published (pass 5)
+
+By owner instruction. `main` pushed to `e28197c..3dc79fa` (base 3.5.0 candidate, the Vault
+linked-knowledge-layer first slice, and the REL-03 dispatcher-drain fix), then tag `v3.5.0`
+created at `3dc79fad5c2d2caf3d6b621041f8b88a44b2c753` and pushed.
+
+- **CI on the released SHA**: `Tests` [run 36185642452](https://github.com/tamanitomo/tamanitomo/actions/runs/36185642452) on `main`@`3dc79fa` — completed/success. `Release` [run 36185656436](https://github.com/tamanitomo/tamanitomo/actions/runs/36185656436) on tag `v3.5.0` — completed/success.
+- **Published release**: https://github.com/tamanitomo/tamanitomo/releases/tag/v3.5.0 — not draft, not prerelease, `target_commitish: main`.
+- **Asset verified three ways**, not just trusted: (1) the downloaded `tamanitomo-release.zip` matches its own published `.sha256` file (`83b820044fd89ae3128c971e20d314e93c7d3586baaa875f09d314c5617f9198`); (2) `diff -rq` of its extracted contents against this session's own independently-built, hash-verified ZIP is empty (0 file differences — the outer zip hash differs from a local build only by build-environment metadata, exactly as expected; content is identical); (3) the packaged-launch smoke (`~/tamanitomo-3.5.0-protect/evidence/smoke_3_5_0.py`) run a second time against the **actual downloaded published artifact**: 13/13 passed.
+- **REL-04's own condition is still not fully met** — this publish went ahead on the owner's explicit instruction, with the residual gaps disclosed, not because every mandatory ID above is closed. Open at publish time: ACT-02, ACT-04's C scope, the full Vault linked-knowledge layer beyond LINK-01/02, Journal/Timeline parity (JRN-03/04), events/notifications (EVT-01–06), Windows/macOS/Termux evidence, and REL-03 for the specific 3.0.24→3.5.0 jump (closed only for updates *from* 3.5.0 onward — see the REL-03 row above). **The owner's own upgrade of their live installation should use the §6 manual quiescent-install procedure, not the in-app Apply Update button, for this one jump.**
+
 ## 7. Proposed commands (NOT executed; owner approval required)
 
 A, publish source: **executed in pass 2**:
