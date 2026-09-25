@@ -9,6 +9,7 @@ calls and the daily-slot effect (outreach.sent_today).
 """
 import datetime as dt
 import importlib.util
+import hashlib
 import json
 import os
 import pathlib
@@ -399,10 +400,17 @@ PRE_1B = '3d78c57594df100ff7ae170d7aa501a8ad59a6df'     # the C2 base: these mod
 
 
 def _pre_1b(module, **deps):
-    """The production module as it was before C2, loaded from git. `deps` are modules it
-    should import instead of today's (so an old dispatcher uses the old outbox)."""
-    source = subprocess.run(['git', '-C', str(ROOT), 'show', f'{PRE_1B}:kit/scripts/{module}.py'],
-                            capture_output=True, text=True, check=True).stdout
+    """Exact pre-C2 source from checked-in, hash-verified fixtures, including in shallow
+    checkouts and source archives. `deps` supplies the old outbox to the old dispatcher."""
+    directory = ROOT / 'tests' / 'fixtures' / 'phase1b_pre_c2'
+    manifest = json.loads((directory / 'MANIFEST.json').read_text(encoding='utf-8'))
+    if manifest['source_commit'] != PRE_1B:
+        raise AssertionError('pre-C2 fixture provenance mismatch')
+    name = module + '.py'
+    raw = (directory / name).read_bytes()
+    if hashlib.sha256(raw).hexdigest() != manifest['files'][name]['sha256']:
+        raise AssertionError('pre-C2 fixture checksum mismatch: ' + name)
+    source = raw.decode('utf-8')
     spec = importlib.util.spec_from_loader(f'pre1b_{module}', loader=None)
     mod = importlib.util.module_from_spec(spec)
     mod.__file__ = str(ROOT / 'kit' / 'scripts' / f'{module}.py')

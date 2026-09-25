@@ -11,7 +11,7 @@ Prepared 2026-09-24. Implements `PHASE1B_DESIGN.md` §7 (changeset C2, matrix M-
 | Code + tests | `46060d4` — **tested code SHA** |
 | Results | the commit adding this file (documentation and evidence only) |
 
-**Unlike C1, C2 is not behind an activation flag.** It changes the shipped dispatcher scripts (`kit/scripts/companion_{outbox,outreach,dispatch}.py`, all in `release-files.json`). On this unmerged branch nothing is live; it would take effect only if merged and released, which is not authorised.
+**Unlike C1, C2 is not behind an activation flag.** It changes the shipped dispatcher scripts (`kit/scripts/companion_{outbox,outreach,dispatch}.py`, all in `release-files.json`). On this unmerged branch nothing is live. **Corrected after the combined review of 02f2285:** it is not only merge/release that brings it into effect — running the dispatcher directly from a development checkout of this branch executes the new C2 code. Such execution must stay synthetic (fixture life directories and delivery doubles); running it on a live profile is not authorised, nor is merging or releasing it.
 
 ## 2. What was built (and where it follows or departs from §7)
 
@@ -30,7 +30,7 @@ Other changes: `companion_outbox.mark()` (hand `drop`, older callers) is now gua
 
 ## 3. Tests
 
-`tests/test_dispatch_claim.py` (28 tests, the design's named file) runs the production modules. Doubles: the delivery call `_invoke` only; for crash cases `tests/phase1b_c2/dispatch_proc.py` runs `companion_dispatch.run()` in a subprocess and SIGKILLs it at the named `_hook` (process death: the OS releases the run lock). Pre-1B behaviour is the actual pre-C2 module source loaded from git at the base (`3d78c57`; these three files last changed in `c0cdbf3`, before Phase 1B).
+`tests/test_dispatch_claim.py` (28 tests, the design's named file) runs the production modules. Doubles: the delivery call `_invoke` only; for crash cases `tests/phase1b_c2/dispatch_proc.py` runs `companion_dispatch.run()` in a subprocess and SIGKILLs it at the named `_hook` (process death: the OS releases the run lock). Pre-1B behaviour is the actual pre-C2 module source at the base (`3d78c57`; these three files last changed in `c0cdbf3`, before Phase 1B). As first submitted it was loaded with `git show`, which failed in checkouts or archives without that commit (review finding T1); it is now loaded from the byte-identical, hash-verified fixtures in `tests/fixtures/phase1b_pre_c2/` (manifest records commit, tree, paths, SHA-256).
 
 All runs at **`46060d4`** (clean before and after, `run_context.txt`), Linux 7.2 x86_64, app Python 3.14.7, Node v26.7.0 required, no `hermes` on PATH, synthetic homes on btrfs (`TMPDIR` on the home file system). Evidence: `docs/phase1b_c2_evidence/` (exported with `tools/evidence_export.py`; every XML/JSON re-parsed, manifest validated).
 
@@ -53,7 +53,7 @@ Not run: CI (branch not pushed), Windows, macOS, Python 3.11/3.13 for the app, a
 | 2 | Each crash boundary gives its outcome without a duplicate delivery or charge | **met** | `CrashBoundaries::test_every_boundary` (SIGKILL): `after_claim` (sent,1,1) · `after_reservation_intent` (sent,1,1) · `after_charge` (failed,0,1) · `after_slot_marker` (failed,0,1) · `after_sending_marker` (unknown,0,1) · `after_delivery` (unknown,1,1); a further run changes nothing. `failed` carries `not_dispatched` |
 | 3 | An unreadable charge ledger stays unresolved | **met** | torn outreach line → `reservation_unresolved`, 0 deliveries, not requeued (two runs); a lookup `OSError` → `reservation_unresolved`; `charges_for` raises on a torn line and is 0 only for a missing ledger |
 | 4 | Stale or different-attempt updates cannot overwrite the current attempt; classification per §7.5 | **met** | `AttemptOwnership` (different attempt refused; stale expected phase refused; a late `sent` after recovery refused; `unknown` replaced only by the same attempt with evidence, once; a requeued entry belongs to its new attempt; `mark()` refused on an owned or decided entry); `Classification::test_the_table` (id, no id, skipped, partial media error, other error, error with exit 0, timeout, OS error, non-JSON, non-zero exit without JSON, success with non-zero exit) and the record fields; `OutcomesThroughTheDispatcher` |
-| 5 | Existing entries readable; old/new simultaneous limitation stated, not solved | **met (limitation stated and pinned)** | a pre-1B outbox (no attempt fields) folds unchanged and its queued entry is dispatched; the pre-C2 `fold()`/`waiting()` from git sees no phase or new outcome as `queued` (M-20d); `test_a_running_pre_1b_dispatcher_is_not_excluded` pins the stated limitation: an old dispatcher with a pre-claim snapshot sends again (2 deliveries, 2 slots) |
+| 5 | Existing entries readable; old/new simultaneous limitation stated, not solved | **met (limitation stated and pinned)** | a pre-1B outbox (no attempt fields) folds unchanged and its queued entry is dispatched; the pre-C2 `fold()`/`waiting()` (from the verified base source) sees no phase or new outcome as `queued` (M-20d); `test_a_running_pre_1b_dispatcher_is_not_excluded` pins the stated limitation: an old dispatcher with a pre-claim snapshot sends again (2 deliveries, 2 slots) |
 
 ## 5. Remaining limitations (not solved here)
 

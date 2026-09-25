@@ -1,0 +1,15 @@
+{
+  "source_commit": "3d78c57594df100ff7ae170d7aa501a8ad59a6df",
+  "source_tree": "3b7844f8c86e896c4724a20a6fea3781e6e60bb8",
+  "note": "Exact pre-C2 source bytes from the verified base snapshot; fixtures only, not production modules. No Git history is required to load them.",
+  "files": {
+    "companion_outbox.py": {
+      "source_path": "kit/scripts/companion_outbox.py",
+      "sha256": "abb436adb12a520b25e84a4391616932691da0dc128d8cabed603101624e4b1e"
+    },
+    "companion_dispatch.py": {
+      "source_path": "kit/scripts/companion_dispatch.py",
+      "sha256": "63e116839cc5443e30998cbac631d5f6bfdd4a0e08365df14be07a6cb14b8159"
+    }
+  }
+}
