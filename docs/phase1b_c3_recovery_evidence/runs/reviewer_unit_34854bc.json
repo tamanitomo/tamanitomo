@@ -1,0 +1,130 @@
+{
+  "cases": [
+    {
+      "name": "initial_401_releases_driver_and_check_now_can_retry",
+      "observation": {
+        "firstError": null,
+        "lockAfter401": false,
+        "pending": null,
+        "postCount": 2
+      },
+      "status": "pass"
+    },
+    {
+      "name": "uncertain_acceptance_then_ledger_loss_keeps_pending_not_not_sent",
+      "observation": {
+        "error": null,
+        "lastStatus": "Whether the app accepted your request is not confirmed, and its send record is unavailable right now. Check now to ask again with the same request.",
+        "pending": {
+          "client_key": "01K5VHY8J80000000000000000",
+          "conversation_id": "conv",
+          "created_at": 1790302922160,
+          "generation": "g",
+          "installation": "existing",
+          "message": "Synthetic pending message",
+          "profile": "nova",
+          "session": null,
+          "v": 1
+        },
+        "posts": 2
+      },
+      "status": "pass"
+    },
+    {
+      "name": "confirmed_send_receipt_outage_keeps_pending",
+      "observation": {
+        "activeOperation": "chat-send:01K5VHY8J80000000000000000",
+        "error": null,
+        "lastStatus": "The app accepted your request. Its send record is unavailable right now. Check now to ask again with the same request.",
+        "pending": {
+          "client_key": "01K5VHY8J80000000000000000",
+          "conversation_id": "conv",
+          "created_at": 1790302922161,
+          "generation": "g",
+          "installation": "existing",
+          "message": "Synthetic pending message",
+          "operation_id": "op1",
+          "profile": "nova",
+          "send_id": "send1",
+          "session": null,
+          "v": 1
+        }
+      },
+      "status": "pass"
+    },
+    {
+      "name": "unresolved_operation_with_settled_null_keeps_pending",
+      "observation": {
+        "activeOperation": "chat-send:01K5VHY8J80000000000000000",
+        "error": null,
+        "lastStatus": "The app accepted your request. Its send record is unavailable right now. Check now to ask again with the same request.",
+        "pending": {
+          "client_key": "01K5VHY8J80000000000000000",
+          "conversation_id": "conv",
+          "created_at": 1790302922165,
+          "generation": "g",
+          "installation": "existing",
+          "message": "Synthetic pending message",
+          "operation_id": "op1",
+          "profile": "nova",
+          "send_id": "send1",
+          "session": null,
+          "v": 1
+        }
+      },
+      "status": "pass"
+    },
+    {
+      "name": "late_bootstrap_does_not_clear_a_newer_draft_from_another_view",
+      "observation": {
+        "detachedTextarea": "Synthetic pending message",
+        "draft": "A newer draft typed after navigation",
+        "postCount": 1
+      },
+      "status": "pass"
+    },
+    {
+      "name": "control_operation_phase_401_releases_driver",
+      "observation": {
+        "error": null,
+        "lock": false,
+        "pending": {
+          "client_key": "01K5VHY8J80000000000000000",
+          "conversation_id": "conv",
+          "created_at": 1790302922167,
+          "generation": "g",
+          "installation": "existing",
+          "message": "Synthetic pending message",
+          "operation_id": "op1",
+          "profile": "nova",
+          "send_id": "send1",
+          "session": null,
+          "v": 1
+        }
+      },
+      "status": "pass"
+    },
+    {
+      "name": "control_brand_new_busy_refusal_is_still_not_sent",
+      "observation": {
+        "error": null,
+        "pending": null,
+        "posts": 1,
+        "status": "Not sent"
+      },
+      "status": "pass"
+    },
+    {
+      "name": "control_connected_send_clears_its_own_pending",
+      "observation": {
+        "error": null,
+        "pending": null,
+        "posts": 1
+      },
+      "status": "pass"
+    }
+  ],
+  "failed": 0,
+  "passed": 8,
+  "scope": "source-executed Node unit tests, not browser/Hermes certification"
+}

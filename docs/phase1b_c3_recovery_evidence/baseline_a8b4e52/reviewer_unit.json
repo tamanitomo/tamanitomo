@@ -1,0 +1,111 @@
+{
+  "cases": [
+    {
+      "assertion": "AssertionError [ERR_ASSERTION]: Pausing before acceptance must not throw in finally\n\u001b[32m+ actual\u001b[39m \u001b[31m- expected\u001b[39m\n\n\u001b[32m+\u001b[39m \"TypeError: Cannot read properties of null (reading 'client_key')\"\n\u001b[31m- \u001b[39mnull\n",
+      "name": "initial_401_releases_driver_and_check_now_can_retry",
+      "observation": {
+        "firstError": "TypeError: Cannot read properties of null (reading 'client_key')",
+        "lockAfter401": true,
+        "pending": {
+          "client_key": "01K5VHY8J80000000000000000",
+          "conversation_id": "conv",
+          "created_at": 1790302264908,
+          "generation": "g",
+          "installation": "existing",
+          "message": "Synthetic pending message",
+          "profile": "nova",
+          "session": null,
+          "v": 1
+        },
+        "postCount": 1
+      },
+      "status": "fail"
+    },
+    {
+      "assertion": "AssertionError [ERR_ASSERTION]: A later missing ledger cannot prove that the original request was never accepted",
+      "name": "uncertain_acceptance_then_ledger_loss_keeps_pending_not_not_sent",
+      "observation": {
+        "error": "TypeError: Cannot read properties of null (reading 'client_key')",
+        "lastStatus": "Not sent",
+        "pending": null,
+        "posts": 2
+      },
+      "status": "fail"
+    },
+    {
+      "assertion": "AssertionError [ERR_ASSERTION]: A temporarily unreadable receipt must not settle/forget an accepted send\n\u001b[32m+ actual\u001b[39m \u001b[31m- expected\u001b[39m\n\n\u001b[32m+\u001b[39m undefined\n\u001b[31m- \u001b[39m'01K5VHY8J80000000000000000'\n",
+      "name": "confirmed_send_receipt_outage_keeps_pending",
+      "observation": {
+        "activeOperation": null,
+        "error": null,
+        "lastStatus": "This message’s record is not visible from here.",
+        "pending": null
+      },
+      "status": "fail"
+    },
+    {
+      "assertion": "AssertionError [ERR_ASSERTION]: The real F1 unresolved operation explicitly says settled:null, not true\n\u001b[32m+ actual\u001b[39m \u001b[31m- expected\u001b[39m\n\n\u001b[32m+\u001b[39m undefined\n\u001b[31m- \u001b[39m'01K5VHY8J80000000000000000'\n",
+      "name": "unresolved_operation_with_settled_null_keeps_pending",
+      "observation": {
+        "activeOperation": null,
+        "error": null,
+        "lastStatus": "The app accepted your request. Whether Hermes recorded it or finished a reply is unknown.",
+        "pending": null
+      },
+      "status": "fail"
+    },
+    {
+      "assertion": "AssertionError [ERR_ASSERTION]: Late bootstrap must not clear the newer saved draft through the detached old textarea\n\u001b[32mactual\u001b[39m \u001b[31mexpected\u001b[39m\n\n\u001b[39m'\u001b[39m\u001b[31mA\u001b[39m\u001b[31m \u001b[39m\u001b[31mn\u001b[39m\u001b[31me\u001b[39m\u001b[31mw\u001b[39m\u001b[31me\u001b[39m\u001b[31mr\u001b[39m\u001b[31m \u001b[39m\u001b[31md\u001b[39m\u001b[31mr\u001b[39m\u001b[31ma\u001b[39m\u001b[31mf\u001b[39m\u001b[31mt\u001b[39m\u001b[31m \u001b[39m\u001b[31mt\u001b[39m\u001b[31my\u001b[39m\u001b[31mp\u001b[39m\u001b[31me\u001b[39m\u001b[31md\u001b[39m\u001b[31m \u001b[39m\u001b[31ma\u001b[39m\u001b[31mf\u001b[39m\u001b[31mt\u001b[39m\u001b[31me\u001b[39m\u001b[31mr\u001b[39m\u001b[31m \u001b[39m\u001b[31mn\u001b[39m\u001b[31ma\u001b[39m\u001b[31mv\u001b[39m\u001b[31mi\u001b[39m\u001b[31mg\u001b[39m\u001b[31ma\u001b[39m\u001b[31mt\u001b[39m\u001b[31mi\u001b[39m\u001b[31mo\u001b[39m\u001b[31mn\u001b[39m\u001b[39m'\u001b[39m\n",
+      "name": "late_bootstrap_does_not_clear_a_newer_draft_from_another_view",
+      "observation": {
+        "detachedTextarea": "",
+        "draft": "",
+        "postCount": 1
+      },
+      "status": "fail"
+    },
+    {
+      "name": "control_operation_phase_401_releases_driver",
+      "observation": {
+        "error": null,
+        "lock": false,
+        "pending": {
+          "client_key": "01K5VHY8J80000000000000000",
+          "conversation_id": "conv",
+          "created_at": 1790302264935,
+          "generation": "g",
+          "installation": "existing",
+          "message": "Synthetic pending message",
+          "operation_id": "op1",
+          "profile": "nova",
+          "send_id": "send1",
+          "session": null,
+          "v": 1
+        }
+      },
+      "status": "pass"
+    },
+    {
+      "name": "control_brand_new_busy_refusal_is_still_not_sent",
+      "observation": {
+        "error": "TypeError: Cannot read properties of null (reading 'client_key')",
+        "pending": null,
+        "posts": 1,
+        "status": "Not sent"
+      },
+      "status": "pass"
+    },
+    {
+      "name": "control_connected_send_clears_its_own_pending",
+      "observation": {
+        "error": null,
+        "pending": null,
+        "posts": 1
+      },
+      "status": "pass"
+    }
+  ],
+  "failed": 5,
+  "passed": 3,
+  "scope": "source-executed Node unit tests, not browser/Hermes certification"
+}

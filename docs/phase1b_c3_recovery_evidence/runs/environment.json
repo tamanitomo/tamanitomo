@@ -1,0 +1,11 @@
+{
+  "chromium": "153.0.8010.12",
+  "hermes_on_path": false,
+  "node": "v26.7.0",
+  "platform": "Linux-7.2.0-1-cachyos-x86_64-with-glibc2.44",
+  "playwright": "1.63.0",
+  "pytest": "9.1.1",
+  "python": "3.14.7",
+  "tested_commit": "34854bcb405fba57378afdacfcc828f1fc0835a3",
+  "tree_clean_before_and_after": true
+}

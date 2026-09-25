@@ -1,0 +1,2 @@
+source lost exit 0 pending True status Whether the app accepted your request is not confirmed, and its send record is unavailable right now. Check now to ask again with the same request. launches 1
+source known exit 0 pending True status The app accepted your request. Its send record is unavailable right now. Check now to ask again with the same request. launches 1

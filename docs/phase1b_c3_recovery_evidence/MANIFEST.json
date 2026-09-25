@@ -1,0 +1,274 @@
+{
+  "files": {
+    "baseline_a8b4e52/browser_selection_27.xml": {
+      "bytes": 32039,
+      "format": "xml",
+      "junit_cases": 27,
+      "junit_status_counts": {
+        "failure": 6,
+        "passed": 21
+      },
+      "repaired": [],
+      "sha256": "3c6a5982e36e829611b79717c42d8d47abcd33d6bbf778c9915647a5030d6299",
+      "source": "<job>/c3rc/stage/baseline_a8b4e52/browser_selection_27.xml",
+      "source_sha256": "27082f2800cccbc434a4ca9ed0d85d110691027c1db88a693adcd998837ed768",
+      "validated": true
+    },
+    "baseline_a8b4e52/browser_send_again_adapted.xml": {
+      "bytes": 404,
+      "format": "xml",
+      "junit_cases": 1,
+      "junit_status_counts": {
+        "passed": 1
+      },
+      "repaired": [],
+      "sha256": "5d1d9d413f2f40945430d7fde52d1d990e7842146b0d0934ad3405a938504edb",
+      "source": "<job>/c3rc/stage/baseline_a8b4e52/browser_send_again_adapted.xml",
+      "source_sha256": "0953d21126cfd8ec0da2aaa965aacd9e08f257bf3d9d2494096b7e163e8ad8cc",
+      "validated": true
+    },
+    "baseline_a8b4e52/closure_browser_on_base_client.xml": {
+      "bytes": 19798,
+      "format": "xml",
+      "junit_cases": 5,
+      "junit_status_counts": {
+        "failure": 5
+      },
+      "repaired": [],
+      "sha256": "ab51d7ebaee3ca7dfca8eb9539a065383b87fa860e24c43ec65a241e2a92e521",
+      "source": "<job>/c3rc/stage/baseline_a8b4e52/closure_browser_on_base_client.xml",
+      "source_sha256": "22a58e9aa58503f348239e7519f9167b66323d647afefafd77736c0762bb1ab1",
+      "validated": true
+    },
+    "baseline_a8b4e52/closure_unit.json": {
+      "bytes": 1962,
+      "format": "json",
+      "repaired": [],
+      "sha256": "de5de20add7deaaff3b6089dc0b215b221df88870cede93be8a7d4dcf3e5f38b",
+      "source": "<job>/c3rc/stage/baseline_a8b4e52/closure_unit.json",
+      "source_sha256": "5f57b638710da3da294f28607f933460c26aee5f166366b08633708c5565f550",
+      "validated": true
+    },
+    "baseline_a8b4e52/http/http_witness_source_known.json": {
+      "bytes": 1865,
+      "format": "json",
+      "repaired": [],
+      "sha256": "8fc2c1ec5e6fa7b857c17b26d7b3c0b1b04535e6a3c62efcece6a4da8c896894",
+      "source": "<job>/c3rc/stage/baseline_a8b4e52/http/http_witness_source_known.json",
+      "source_sha256": "056f7dc2b44dd00dec39a97aa6f99f061035de3822ca682a56ba674f349d05df",
+      "validated": true
+    },
+    "baseline_a8b4e52/http/http_witness_source_lost.json": {
+      "bytes": 1924,
+      "format": "json",
+      "repaired": [],
+      "sha256": "48b48b4a05970ad07349172302862097657610e21c16ac15ae4a892b41579d17",
+      "source": "<job>/c3rc/stage/baseline_a8b4e52/http/http_witness_source_lost.json",
+      "source_sha256": "6c8fc374ef88833fb1b7f580799e3a4bafc435bb6f69dd1c1ec958ecd9cdab89",
+      "validated": true
+    },
+    "baseline_a8b4e52/reviewer_unit.json": {
+      "bytes": 4975,
+      "format": "json",
+      "repaired": [],
+      "sha256": "0ee099803f949bae2b8cbd203a4f64dc583cc46e89656ed6f5621cada3cd873a",
+      "source": "<job>/c3rc/stage/baseline_a8b4e52/reviewer_unit.json",
+      "source_sha256": "914dcab1b4d199d1710d5b4c242a50be80d754317e15d8a2c76a37c7bd650e76",
+      "validated": true
+    },
+    "runs/c3_browser_selection_1.txt": {
+      "bytes": 932,
+      "format": "text",
+      "repaired": [],
+      "sha256": "e584748019d9636612711d43c1669d18477977ed7871aad6ae53b8230e822718",
+      "source": "<job>/c3rc/stage/runs/c3_browser_selection_1.txt",
+      "source_sha256": "85eff44239d52a35b925aab6cbe9d263aca58f9cf91ee95440812fdbbeec26d9",
+      "validated": true
+    },
+    "runs/c3_browser_selection_1.xml": {
+      "bytes": 4890,
+      "format": "xml",
+      "junit_cases": 31,
+      "junit_status_counts": {
+        "passed": 31
+      },
+      "repaired": [],
+      "sha256": "553b1db428eae224018984d7bfc6d01448736ad75b34b5860fc682ef6f061077",
+      "source": "<job>/c3rc/stage/runs/c3_browser_selection_1.xml",
+      "source_sha256": "cda264a014b9192db0bb1eb4c7d16a61d45f982524cb0aafda5f3dadc785c4df",
+      "validated": true
+    },
+    "runs/c3_browser_selection_2.txt": {
+      "bytes": 932,
+      "format": "text",
+      "repaired": [],
+      "sha256": "8b738b999cc680240717d5f178782f163045010aa5fd39277c0ecea5e1d577a8",
+      "source": "<job>/c3rc/stage/runs/c3_browser_selection_2.txt",
+      "source_sha256": "e7a1f9bfe7c7135defcd3234601ddff697dc1e4a4e4564cded52fde5b499e70f",
+      "validated": true
+    },
+    "runs/c3_browser_selection_2.xml": {
+      "bytes": 4890,
+      "format": "xml",
+      "junit_cases": 31,
+      "junit_status_counts": {
+        "passed": 31
+      },
+      "repaired": [],
+      "sha256": "c5bd3ab6bbc362198a5b05a914266eefcd2acda10284f8a9dc088565c497d292",
+      "source": "<job>/c3rc/stage/runs/c3_browser_selection_2.xml",
+      "source_sha256": "c7fce28095e37eb046c01403b020b4afbca7d84709173ec376bd91ccd269eef5",
+      "validated": true
+    },
+    "runs/c3_recovery_node.txt": {
+      "bytes": 691,
+      "format": "text",
+      "repaired": [],
+      "sha256": "00164704e5be3339002d3978be53ea49341efbfabef6bc06361052bd85fbefbc",
+      "source": "<job>/c3rc/stage/runs/c3_recovery_node.txt",
+      "source_sha256": "a84cc9518bbfb89a8d0f13548a902ddeee029df0b6fdfbe5343842729202970a",
+      "validated": true
+    },
+    "runs/c3_recovery_node.xml": {
+      "bytes": 595,
+      "format": "xml",
+      "junit_cases": 3,
+      "junit_status_counts": {
+        "passed": 3
+      },
+      "repaired": [],
+      "sha256": "bc9b8f9f67d621d7c941c6a2802a1c688f6a43206936c4cfb39af7556c239709",
+      "source": "<job>/c3rc/stage/runs/c3_recovery_node.xml",
+      "source_sha256": "1d286cc2526f90ce2bb9fad1baf931304c31cf6ba1d99413647c30cbbe5e8120",
+      "validated": true
+    },
+    "runs/closure_unit_34854bc.json": {
+      "bytes": 2905,
+      "format": "json",
+      "repaired": [],
+      "sha256": "60cb409fd1b7488e48c5094ad9768491852620d4be80f63b6eda3c2379c0d37e",
+      "source": "<job>/c3rc/stage/runs/closure_unit_34854bc.json",
+      "source_sha256": "317a1daa66cac2abf8c71d83b01da32da60ea7f1c99ab8593887e972925459b4",
+      "validated": true
+    },
+    "runs/environment.json": {
+      "bytes": 314,
+      "format": "json",
+      "repaired": [],
+      "sha256": "fac38793f74a320a319782fbb5766e1a2ef09183152e4f02a91df1cbc251f4d1",
+      "source": "<job>/c3rc/stage/runs/environment.json",
+      "source_sha256": "1645c80b0cc36b1e633ee4ce38aa477dbb66924c6476d99afbed7b01669c65c0",
+      "validated": true
+    },
+    "runs/head.txt": {
+      "bytes": 41,
+      "format": "text",
+      "repaired": [],
+      "sha256": "e01f46741e3baabfadbdbc017ddd3996a2094fdc147497bbf781ff99d08dd990",
+      "source": "<job>/c3rc/stage/runs/head.txt",
+      "source_sha256": "e01f46741e3baabfadbdbc017ddd3996a2094fdc147497bbf781ff99d08dd990",
+      "validated": true
+    },
+    "runs/http_34854bc.txt": {
+      "bytes": 368,
+      "format": "text",
+      "repaired": [],
+      "sha256": "f66ccf95621baf2a88d97cc019df0460c95a3f6f90f9a367ac9b91da36114bec",
+      "source": "<job>/c3rc/stage/runs/http_34854bc.txt",
+      "source_sha256": "f66ccf95621baf2a88d97cc019df0460c95a3f6f90f9a367ac9b91da36114bec",
+      "validated": true
+    },
+    "runs/http_34854bc/http_witness_source_known.json": {
+      "bytes": 1892,
+      "format": "json",
+      "repaired": [],
+      "sha256": "3f3d1c39fc90bd2f8094b8d9bdca7bb116bf80c15f918035a59b184630c36b5c",
+      "source": "<job>/c3rc/stage/runs/http_34854bc/http_witness_source_known.json",
+      "source_sha256": "e900dc171c5d7282bdf3eb19c346ea81f24fc24b6118a2980d5c5938fe5e8925",
+      "validated": true
+    },
+    "runs/http_34854bc/http_witness_source_lost.json": {
+      "bytes": 2190,
+      "format": "json",
+      "repaired": [],
+      "sha256": "58e07c2c0de9b0840179a018ccd73136138248b1bdaa2bcbd5471f154a9c3784",
+      "source": "<job>/c3rc/stage/runs/http_34854bc/http_witness_source_lost.json",
+      "source_sha256": "17d8b3d74602a2881045c025f4fee2343192a002717f732ffcc8357f2064f82e",
+      "validated": true
+    },
+    "runs/reliability.txt": {
+      "bytes": 970,
+      "format": "text",
+      "repaired": [],
+      "sha256": "4a7742e05239a2386c3520ef0f609d1b211f5e24f27a9ad436fa597a4cb3c0c2",
+      "source": "<job>/c3rc/stage/runs/reliability.txt",
+      "source_sha256": "c5f9adecc32ff75b3a0f922a122c49c39542a70ed04911e3e0ac69bdd609f2c5",
+      "validated": true
+    },
+    "runs/reliability.xml": {
+      "bytes": 5136,
+      "format": "xml",
+      "junit_cases": 34,
+      "junit_status_counts": {
+        "passed": 34
+      },
+      "repaired": [],
+      "sha256": "cdb0d76a2fca045e1be5389089f969d80314c89b05d811f154a8e5b54129f0c9",
+      "source": "<job>/c3rc/stage/runs/reliability.xml",
+      "source_sha256": "b87504c34e02314a3472fae1bca30a9d20ac53632c03cd1cdd7bfabbeb4f1949",
+      "validated": true
+    },
+    "runs/retained_focused.txt": {
+      "bytes": 1653,
+      "format": "text",
+      "repaired": [],
+      "sha256": "9b38701bb61e4d6bd34c22a9503e57636e6c133b6b286c55048a98db7490c43a",
+      "source": "<job>/c3rc/stage/runs/retained_focused.txt",
+      "source_sha256": "533714d9c842e28189aefe7823ceb6aa2364f3de592be6c772c980f731e7aaa2",
+      "validated": true
+    },
+    "runs/retained_focused.xml": {
+      "bytes": 13362,
+      "format": "xml",
+      "junit_cases": 96,
+      "junit_status_counts": {
+        "passed": 96
+      },
+      "repaired": [],
+      "sha256": "e407768a30d9c1d445437bb0c1895adaa1408920ebd313a591faa6ae7f0617d9",
+      "source": "<job>/c3rc/stage/runs/retained_focused.xml",
+      "source_sha256": "2937799b217012b35c2895cadc285221bd96062a63d63aa8ab9536c24dbf9b74",
+      "validated": true
+    },
+    "runs/reviewer_unit_34854bc.json": {
+      "bytes": 3956,
+      "format": "json",
+      "repaired": [],
+      "sha256": "5ad1175be369700863d18d26ceae05c9d6db5269c0c7b9a1065a1b4b76dc59d2",
+      "source": "<job>/c3rc/stage/runs/reviewer_unit_34854bc.json",
+      "source_sha256": "508326a81d48da6809914c67df6b3393746eb7fb7f78560cf6b4b6e8d2a66bb1",
+      "validated": true
+    },
+    "runs/status_after.txt": {
+      "bytes": 0,
+      "format": "text",
+      "repaired": [],
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source": "<job>/c3rc/stage/runs/status_after.txt",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "validated": true
+    },
+    "runs/status_before.txt": {
+      "bytes": 0,
+      "format": "text",
+      "repaired": [],
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source": "<job>/c3rc/stage/runs/status_before.txt",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "validated": true
+    }
+  },
+  "kind": "executed",
+  "note": "newly executed evidence, sanitised by a format-aware export",
+  "source_note": "C3 recovery closure: runs at 34854bc (clean tree) and baseline runs against the reviewed a8b4e52 client, staged under <job>/c3rc/stage"
+}

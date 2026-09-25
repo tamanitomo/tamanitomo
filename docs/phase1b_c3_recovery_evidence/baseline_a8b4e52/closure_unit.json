@@ -1,0 +1,50 @@
+{
+  "cases": [
+    {
+      "assertion": "TypeError: Cannot read properties of null (reading 'client_key')",
+      "name": "fresh_intent_refused_after_a_401_pause_is_still_not_sent",
+      "observation": {},
+      "status": "fail"
+    },
+    {
+      "assertion": "TypeError: Cannot read properties of null (reading 'client_key')",
+      "name": "restored_intent_refused_on_replay_adopts_the_send_found_by_key",
+      "observation": {},
+      "status": "fail"
+    },
+    {
+      "assertion": "TypeError: Cannot read properties of null (reading 'client_key')",
+      "name": "restored_intent_refused_on_replay_without_a_record_stays_unresolved",
+      "observation": {},
+      "status": "fail"
+    },
+    {
+      "assertion": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\u001b[32m+ actual\u001b[39m \u001b[31m- expected\u001b[39m\n\n\u001b[32m+\u001b[39m undefined\n\u001b[31m- \u001b[39m'01K5VHY8J80000000000000000'\n",
+      "name": "receipt_settled_false_then_null_is_unresolved_not_finished",
+      "observation": {
+        "pending": null,
+        "status": "The app accepted your request. Whether Hermes recorded it or finished a reply is unknown."
+      },
+      "status": "fail"
+    },
+    {
+      "assertion": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\u001b[32m+ actual\u001b[39m \u001b[31m- expected\u001b[39m\n\n\u001b[32m+\u001b[39m undefined\n\u001b[31m- \u001b[39m'01K5VHY8J80000000000000000'\n",
+      "name": "receipt_404_keeps_the_intent_with_accurate_wording",
+      "observation": {
+        "pending": null,
+        "status": "This message’s record is not visible from here."
+      },
+      "status": "fail"
+    },
+    {
+      "name": "draft_equal_to_the_submission_with_no_edit_is_cleared",
+      "observation": {
+        "draft": ""
+      },
+      "status": "pass"
+    }
+  ],
+  "failed": 5,
+  "passed": 1,
+  "scope": "source-executed Node checks, not browser/Hermes certification"
+}

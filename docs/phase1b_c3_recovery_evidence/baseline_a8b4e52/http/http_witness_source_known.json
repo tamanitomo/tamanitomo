@@ -1,0 +1,60 @@
+{
+  "accepted_send_id": "snd_7jbri2ywu5zcstnn2hypw5gzuc",
+  "client_error": null,
+  "client_sha256": "9d6d6e21195912f7e9452b81cff0cc6327383b37485f155032f54b73ac5b0ac3",
+  "durable_launch_count": 1,
+  "durable_send_count": 1,
+  "exit_code": 1,
+  "fixture_stderr": "",
+  "hermes_owner_rows": [
+    "Synthetic pending message"
+  ],
+  "keys_sent": [
+    "01M3B59ECW41Z2QNV7M8PJMZQ4"
+  ],
+  "ledger_moved": true,
+  "mode": "known",
+  "new_ledger_created": false,
+  "pending_preserved": false,
+  "receipt_before_loss": {
+    "capability": "full",
+    "client_key": "01M3B59ECW41Z2QNV7M8PJMZQ4",
+    "conversation_id": "conv_ca356376fd7bf8104ef1",
+    "correlation": "linked",
+    "coverage": "complete",
+    "created_at": 1790302271.9071655,
+    "error": null,
+    "links": "linked",
+    "liveness": "quiescent",
+    "operation": {
+      "id": "4acfef269b87c27a553afbf7b83bd58b"
+    },
+    "owner_message_id": "msg_2cf502877657168c63dc1658",
+    "owner_turn": "recorded",
+    "reply": "final",
+    "reply_message_ids": [
+      "msg_9e4355658ed48eb8e24ca3bc"
+    ],
+    "send_id": "snd_7jbri2ywu5zcstnn2hypw5gzuc",
+    "session": "20260924_221111_2f16b5",
+    "settled": true,
+    "state": "complete",
+    "updated_at": 1790302272.0323093
+  },
+  "scope": "actual app HTTP, actual ledger, fake Hermes, Node-executed client with no DOM",
+  "status": "The app accepted your request. Whether Hermes recorded it or finished a reply is unknown.",
+  "trace": [
+    {
+      "error": null,
+      "method": "POST",
+      "status": 202,
+      "url": "/api/chat/sends?installation=existing&profile=nova"
+    },
+    {
+      "error": "The send ledger for this conversation cannot be read, so how this reply went is unknown here.",
+      "method": "GET",
+      "status": 200,
+      "url": "/api/operations/4acfef269b87c27a553afbf7b83bd58b?installation=existing&profile=nova"
+    }
+  ]
+}

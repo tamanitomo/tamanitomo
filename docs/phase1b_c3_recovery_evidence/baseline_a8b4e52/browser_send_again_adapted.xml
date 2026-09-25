@@ -1,0 +1,2 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="1.687" timestamp="2026-09-24T22:12:34.532513-04:00" hostname="&lt;host&gt;"><testcase classname="tests.test_c3_review_browser.PreviouslyDisclosedGates" name="test_send_again_recheck_refuses_live_or_unproven_receipt" time="1.582" /></testsuite></testsuites>
