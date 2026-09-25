@@ -126,7 +126,21 @@ def register(app, state_dir, current_selection, load, attach, provenance=None):
     def chat_snapshot(limit: int | None = None):
         def run():
             c, scope, binding, projection = capture()
-            sync = projection.sync(source(c, binding, projection))
+            try:
+                sync = projection.sync(source(c, binding, projection))
+            except SourceUnavailable as exc:
+                if provenance is None:
+                    raise                 # preserve the ordinary disabled contract
+                # sync commits a changed binding's projection reset BEFORE reading the
+                # source. Expose only that existing, scope-checked generation on failure;
+                # never return cached messages here. A missing identity is not cache trust.
+                identity = None
+                try:
+                    identity = projection.snapshot(1)['projection_id']
+                except Exception:
+                    pass                  # fail closed if even this cache read is unavailable
+                return JSONResponse({'error': 'source_unavailable', 'retryable': True,
+                                     'detail': str(exc), 'projection_id': identity}, status_code=503)
             page = projection.snapshot(limit)
             disclose(page, projection)
             page['messages'] = with_media(c, page['messages'])

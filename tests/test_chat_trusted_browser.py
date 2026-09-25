@@ -224,8 +224,12 @@ class MixedHistory(Trusted):
         until(lambda: self.s.reached(1), what='reply paused')
         key = self.pending()['client_key']
         self.page.fill('#chat-message', 'A newer draft')
+        # This test represents an ordinary outage with unchanged authorisation. Match
+        # the real enabled server's error response, including its cache generation.
+        projection = self.page.evaluate('ChatStore.state(ChatStore.now()).projection')
+        outage = json.dumps({'error': 'source_unavailable', 'retryable': True, 'projection_id': projection})
         self.page.route('**/api/chat/snapshot*', lambda r: r.fulfill(
-            status=503, content_type='application/json', body='{"error":"source_unavailable","retryable":true}'))
+            status=503, content_type='application/json', body=outage))
         self.page.evaluate('PersistentChat.loadNewest(ChatStore.now())')
         until(lambda: 'What is shown was read earlier.' in self.log(), what='the read is stated unavailable')
         self.assertIn('quick question from the terminal', self.log(), 'rows stay; never an empty conversation')

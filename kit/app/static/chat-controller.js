@@ -42,7 +42,7 @@ async function read(scope,path){
   if(r.status===401&&d.pin_required&&typeof showPinModal==='function'){initPinModal();showPinModal();}
   if(!r.ok){
     const e=Error(UNREADABLE[d.error]||d.detail||d.error||('Request failed: '+r.status));
-    e.status=r.status;e.code=d.error;throw e;
+    e.status=r.status;e.code=d.error;e.projection=d.projection_id;throw e;
   }
   return d;
 }
@@ -75,12 +75,17 @@ async function loadNewest(scope,{reset=false}={}){
     const d=adapt(await read(scope,'/chat/snapshot?limit=60'));
     if(gen!==S.state(scope).gen||!S.isCurrent(scope))return;
     S.present.signedIn(scope);
+    if(S.state(scope).projection&&S.state(scope).projection!==d.projection)S.invalidateHistory(scope);
     S.newest(scope,{...d,reset},since);
   }catch(error){
     if(gen!==S.state(scope).gen||!S.isCurrent(scope))return;
     if(error.status===401)S.present.signedOut(scope);
-    // A failed read is "unavailable", never an empty conversation: rows already read stay,
-    // marked as read earlier.
+    // Keep earlier rows on an ordinary source outage only when the server confirms
+    // the same generation. It may have purged a revoked binding before that outage.
+    if(error.status===401||(error.code==='source_unavailable'&&
+       (!error.projection||error.projection!==S.state(scope).projection)))S.invalidateHistory(scope);
+    // A failed read is "unavailable", never an authoritative empty conversation.
+    // Earlier rows stay only when their generation is still valid.
     if(S.state(scope).history!=='ready')S.set(scope,{history:'error',historyError:error.message});
     else S.set(scope,{stale:error.message});
   }
@@ -97,12 +102,12 @@ async function loadOlder(scope){
     now.older='idle';
     S.older(scope,d);
   }catch(error){
-    if(error.status===401)S.present.signedOut(scope);
+    if(error.status===401){S.present.signedOut(scope);S.invalidateHistory(scope);}
     const now=S.state(scope);
     // The cursor is no longer valid (a rebuilt projection or an expired window): one fresh
     // snapshot replaces the rows. Drafts and pending intents are not part of this state.
     if(now.gen===gen&&S.isCurrent(scope)&&(error.code==='resync_required'||error.code==='invalid_cursor')){
-      S.set(scope,{older:'idle'});
+      S.invalidateHistory(scope);       // the old cursor/generation is no longer usable
       loadNewest(scope,{reset:true});
       return;
     }

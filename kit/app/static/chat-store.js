@@ -124,6 +124,18 @@ function older(scope,page){
   linkCorrelated(s,rows);
   changed(scope);
 }
+/* Cached server content is usable only within its read generation. Invalidating it
+   preserves the owner's editable draft and exact pending intent, not fetched replies. */
+function invalidateHistory(scope){
+  const s=state(scope);
+  s.rows=[];s.links.clear();s.cursor=null;s.projection=null;s.start=false;
+  s.history='loading';s.older='idle';s.stale=null;
+  for(const [key,it] of s.intents){
+    if(it.settled)s.intents.delete(key);
+    else{it.stream=null;it.replies=null;it.request=true;}
+  }
+  changed(scope);
+}
 function set(scope,values){Object.assign(state(scope),values);changed(scope);}
 
 /* ------------------------------------------------ what chat-sends.js publishes */
@@ -230,6 +242,6 @@ function chooseSession(scope,which){
 }
 
 window.ChatStore={HINT,state,now,isCurrent,subscribe,changed,draft,newest,older,set,present,linkedRow,sourceKey,sourceOf,
-  selection,chooseSession,
+  selection,chooseSession,invalidateHistory,
   mount(v){view=v;},unmount(v){if(view===v)view=null;},get view(){return view;}};
 })();
