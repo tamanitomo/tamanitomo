@@ -164,5 +164,116 @@ class VaultEditorApi(unittest.TestCase):
         self.assertFalse((self.vault / 'notes/big.md').exists())
 
 
+class VaultFileActionsApi(unittest.TestCase):
+    """mkdir, duplicate and move, through the real app routes (LINK-05). These move bytes
+    only -- they never rewrite another note's links to the old path (that's LINK-06)."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
+        base = Path(tmp.name); self.root = base / 'hermes'; self.vault = base / 'vault'
+        self.root.mkdir(); self.vault.mkdir(); (self.vault / 'notes').mkdir()
+        self.c = cc.Companion(agent='Nova', human='Alex', profile='nova', hermes_root=self.root, vault=self.vault,
+                              soul_in_vault=False, context_mode='fixed')
+        self.c.home.mkdir(parents=True); self.c.save()
+        self.client = TestClient(build(self.root, token=TOKEN, state_dir=base / 'state'))
+        self.h = {'x-tamanitomo-token': TOKEN}
+
+    def mkdir(self, path):
+        return self.client.post('/api/vault/mkdir', params={'profile': 'nova'}, headers=self.h, json={'path': path})
+
+    def duplicate(self, path):
+        return self.client.post('/api/vault/duplicate', params={'profile': 'nova'}, headers=self.h, json={'path': path})
+
+    def move(self, path, target):
+        return self.client.post('/api/vault/move', params={'profile': 'nova'}, headers=self.h, json={'path': path, 'target': target})
+
+    def listing(self, path=''):
+        return self.client.get('/api/vault', params={'profile': 'nova', 'path': path}, headers=self.h).json()['entries']
+
+    # --- mkdir ------------------------------------------------------------------------
+
+    def test_mkdir_creates_an_empty_folder_visible_in_the_listing(self):
+        r = self.mkdir('notes/research')
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertTrue((self.vault / 'notes/research').is_dir())
+        self.assertIn('research', [e['name'] for e in self.listing('notes')])
+
+    def test_mkdir_refuses_a_collision(self):
+        (self.vault / 'notes/taken').mkdir()
+        self.assertEqual(self.mkdir('notes/taken').status_code, 409)
+
+    def test_mkdir_refuses_a_hidden_or_traversal_path(self):
+        self.assertEqual(self.mkdir('.hidden').status_code, 400)
+        self.assertEqual(self.mkdir('../outside').status_code, 400)
+
+    # --- duplicate --------------------------------------------------------------------
+
+    def test_duplicate_copies_bytes_exactly_with_an_auto_named_copy(self):
+        raw = '﻿---\r\ntitle: X\r\n---\r\nBody\r\n'
+        (self.vault / 'notes/a.md').write_bytes(raw.encode('utf-8'))
+        r = self.duplicate('notes/a.md')
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()['duplicated'], 'notes/a copy.md')
+        self.assertEqual((self.vault / 'notes/a copy.md').read_bytes(), raw.encode('utf-8'))
+        self.assertEqual((self.vault / 'notes/a.md').read_bytes(), raw.encode('utf-8'), 'original untouched')
+
+    def test_duplicate_increments_the_name_on_repeat(self):
+        (self.vault / 'notes/a.md').write_text('one')
+        self.assertEqual(self.duplicate('notes/a.md').json()['duplicated'], 'notes/a copy.md')
+        self.assertEqual(self.duplicate('notes/a.md').json()['duplicated'], 'notes/a copy 2.md')
+        self.assertEqual(self.duplicate('notes/a.md').json()['duplicated'], 'notes/a copy 3.md')
+
+    def test_duplicate_refuses_a_protected_file(self):
+        (self.vault / 'soul').mkdir(); (self.vault / 'soul/SOUL.md').write_text('identity')
+        self.assertEqual(self.duplicate('soul/SOUL.md').status_code, 400)
+
+    # --- move -------------------------------------------------------------------------
+
+    def test_move_renames_a_file(self):
+        (self.vault / 'notes/a.md').write_text('content')
+        r = self.move('notes/a.md', 'notes/b.md')
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertFalse((self.vault / 'notes/a.md').exists())
+        self.assertEqual((self.vault / 'notes/b.md').read_text(), 'content')
+
+    def test_move_refuses_a_collision(self):
+        (self.vault / 'notes/a.md').write_text('a'); (self.vault / 'notes/b.md').write_text('b')
+        self.assertEqual(self.move('notes/a.md', 'notes/b.md').status_code, 409)
+        self.assertEqual((self.vault / 'notes/b.md').read_text(), 'b', 'destination untouched')
+
+    def test_move_refuses_a_protected_source_or_destination(self):
+        (self.vault / 'soul').mkdir(); (self.vault / 'soul/SOUL.md').write_text('identity')
+        (self.vault / 'notes/a.md').write_text('a')
+        self.assertEqual(self.move('soul/SOUL.md', 'notes/x.md').status_code, 400)
+        self.assertEqual(self.move('notes/a.md', 'soul/SOUL.md').status_code, 400)
+
+    def test_move_a_folder_relocates_every_file_inside_it(self):
+        (self.vault / 'notes/project').mkdir()
+        (self.vault / 'notes/project/a.md').write_text('a')
+        (self.vault / 'notes/project/sub').mkdir()
+        (self.vault / 'notes/project/sub/b.md').write_text('b')
+        r = self.move('notes/project', 'notes/renamed')
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertFalse((self.vault / 'notes/project').exists())
+        self.assertEqual((self.vault / 'notes/renamed/a.md').read_text(), 'a')
+        self.assertEqual((self.vault / 'notes/renamed/sub/b.md').read_text(), 'b')
+
+    def test_move_a_folder_into_itself_is_refused(self):
+        (self.vault / 'notes/project').mkdir()
+        (self.vault / 'notes/project/a.md').write_text('a')
+        self.assertEqual(self.move('notes/project', 'notes/project/inner').status_code, 400)
+
+    def test_move_migrates_the_notes_backup_history(self):
+        rel = 'notes/a.md'; note = self.vault / rel; note.write_text('v0')
+        rev = self.client.get('/api/vault/file', params={'profile': 'nova', 'path': rel}, headers=self.h).json()['revision']
+        self.client.put('/api/vault/file', params={'profile': 'nova'}, headers=self.h, json={'path': rel, 'text': 'v1', 'revision': rev})
+        old_backups = self.vault / vault.BACKUPS / hashlib.sha256(rel.encode()).hexdigest()[:24]
+        self.assertTrue(list(old_backups.glob('*.bak')), 'a backup exists before the move')
+        self.assertEqual(self.move(rel, 'notes/b.md').status_code, 200)
+        new_backups = self.vault / vault.BACKUPS / hashlib.sha256('notes/b.md'.encode()).hexdigest()[:24]
+        self.assertEqual([p.read_bytes() for p in new_backups.glob('*.bak')], [b'v0'])
+        self.assertFalse(old_backups.exists(), 'old backup folder migrated, not left behind')
+
+
 if __name__ == '__main__':
     unittest.main()

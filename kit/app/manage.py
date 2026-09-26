@@ -1654,6 +1654,24 @@ def register(app, select, load, operations):
         try:return vault.restore(load(),payload.get('id'))
         except FileExistsError as exc:raise HTTPException(409,str(exc))
 
+    @app.post('/api/vault/mkdir')
+    def vault_mkdir(payload:dict):
+        from . import vault
+        try:return vault.mkdir(load(),payload.get('path'))
+        except FileExistsError as exc:raise HTTPException(409,str(exc))
+
+    @app.post('/api/vault/duplicate')
+    def vault_duplicate(payload:dict):
+        from . import vault
+        try:return vault.duplicate(load(),payload.get('path'))
+        except FileExistsError as exc:raise HTTPException(409,str(exc))
+
+    @app.post('/api/vault/move')
+    def vault_move(payload:dict):
+        from . import vault
+        try:return vault.move(load(),payload.get('path'),payload.get('target'))
+        except FileExistsError as exc:raise HTTPException(409,str(exc))
+
     @app.get('/api/vault/download')
     def vault_download(path:str):
         from . import vault

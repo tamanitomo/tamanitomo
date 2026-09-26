@@ -188,12 +188,15 @@ function renderFolderTreeHTML(folderPath,depth=0){
   if(f.directory){
    const isExp=vaultExpanded.has(f.path);
    return `<div class="vault-folder-group" data-folder-path="${esc(f.path)}">
-    <button class="vault-node" data-toggle-folder="${esc(f.path)}">
-     <div class="vault-node-left">
-      <span class="vault-node-icon">${isExp?'▾':'▸'}</span>
-      <span>📁 ${esc(f.name)}</span>
-     </div>
-    </button>
+    <div class="vault-node-row">
+     <button class="vault-node" data-toggle-folder="${esc(f.path)}">
+      <div class="vault-node-left">
+       <span class="vault-node-icon">${isExp?'▾':'▸'}</span>
+       <span>📁 ${esc(f.name)}</span>
+      </div>
+     </button>
+     <button class="vault-node-actions" data-vault-actions="${esc(f.path)}" data-is-dir="true" title="Folder actions" aria-label="Actions for ${esc(f.name)}">⋮</button>
+    </div>
     <div class="vault-folder-children" id="vault-folder-${CSS.escape(f.path)}" ${isExp?'':'hidden'}>
      ${isExp?renderFolderTreeHTML(f.path,depth+1):''}
     </div>
@@ -201,13 +204,16 @@ function renderFolderTreeHTML(folderPath,depth=0){
   }
   const isActive=openNote?.path===f.path;
   const isProtected=f.protected;
-  return `<button class="vault-node ${isActive?'active-file':''}" data-vault-file="${esc(f.path)}">
-   <div class="vault-node-left">
-    <span class="vault-node-icon">${isProtected?'🔒':'📄'}</span>
-    <span>${esc(f.name)}</span>
-   </div>
-   ${isProtected?'<span class="vault-node-tag is-protected">Read-only</span>':''}
-  </button>`;
+  return `<div class="vault-node-row">
+   <button class="vault-node ${isActive?'active-file':''}" data-vault-file="${esc(f.path)}">
+    <div class="vault-node-left">
+     <span class="vault-node-icon">${isProtected?'🔒':'📄'}</span>
+     <span>${esc(f.name)}</span>
+    </div>
+    ${isProtected?'<span class="vault-node-tag is-protected">Read-only</span>':''}
+   </button>
+   <button class="vault-node-actions" data-vault-actions="${esc(f.path)}" data-is-dir="false" title="File actions" aria-label="Actions for ${esc(f.name)}">⋮</button>
+  </div>`;
  }).join('');
 }
 
@@ -231,6 +237,100 @@ function renderVaultTree(){
  }
  for(const b of tree.querySelectorAll('[data-vault-file]')){
   b.onclick=()=>readNote(b.dataset.vaultFile);
+ }
+ for(const b of tree.querySelectorAll('[data-vault-actions]')){
+  b.onclick=e=>{e.stopPropagation();openVaultActions(b.dataset.vaultActions,b.dataset.isDir==='true');};
+ }
+}
+
+/* File-actions menu (LINK-05): mkdir, duplicate, move -- bytes only, never rewriting
+   another note's links to the old path (that's LINK-06). */
+function openVaultActions(path,isDir){
+ const name=path.split('/').filter(Boolean).pop()||path;
+ const rows=isDir?[['new-here','New note here'],['new-folder-here','New folder here'],['move','Rename or move…']]
+                 :[['move','Rename or move…'],['duplicate','Duplicate'],['delete','Delete']];
+ dialog(`${isDir?'Folder':'File'}: ${name}`,
+   `<div class="vault-actions-menu">${rows.map(([action,label])=>`<button class="quiet" data-vault-do="${action}">${esc(label)}</button>`).join('')}</div>`);
+ for(const b of document.querySelectorAll('[data-vault-do]'))b.onclick=()=>runVaultAction(b.dataset.vaultDo,path,isDir);
+}
+async function confirmTrash(name){
+ return new Promise(resolve=>{
+  const d=document.createElement('dialog');d.className='editor-leave-dialog';d.setAttribute('aria-label','Delete file');
+  d.innerHTML=`<h2>Move "${esc(name)}" to trash?</h2><p>It can be recovered from Trash until it is emptied.</p><div class="actions"><button class="quiet" data-no autofocus>Cancel</button><button class="act" data-yes>Move to trash</button></div>`;
+  const done=v=>{d.close();d.remove();resolve(v);};
+  d.querySelector('[data-no]').onclick=()=>done(false);d.querySelector('[data-yes]').onclick=()=>done(true);
+  d.addEventListener('cancel',e=>{e.preventDefault();done(false);});document.body.append(d);d.showModal();
+ });
+}
+async function runVaultAction(action,path,isDir){
+ $('product-dialog').close();
+ const parent=path.split('/').slice(0,-1).join('/');
+ if(action==='new-here'||action==='new-folder-here'){
+  const isFolder=action==='new-folder-here';
+  dialog(isFolder?'New folder':'New note',
+    `<form id="vault-quick-form"><label>${isFolder?'Folder name':'Note name'}<input id="vault-quick-name" required placeholder="${isFolder?'research':'My note.md'}"></label><button class="act">${isFolder?'Create folder':'Create note'}</button></form>`);
+  $('vault-quick-form').onsubmit=async e=>{
+   e.preventDefault();
+   const raw=$('vault-quick-name').value.trim().replace(/^\/+|\/+$/g,'');
+   if(!raw||raw.includes('..'))return notice('Invalid name',true);
+   try{
+    if(isFolder){
+     await post('/vault/mkdir',{path:path+'/'+raw});
+     vaultExpanded.add(path+'/'+raw);
+    }else{
+     const filename=raw.replace(/\.md$/,'')+'.md';
+     const target=path+'/'+filename;
+     const d=await api('/vault/file',{method:'PUT',body:JSON.stringify({path:target,text:'# '+filename.replace(/\.md$/,'')+'\n\n',revision:''})});
+     openNote=d;showNote(d,true);
+    }
+    $('product-dialog').close();
+    await listVault(path,false);
+   }catch(err){notice(err.message,true);}
+  };
+  return;
+ }
+ // A file this action targets may be open; close it first (VaultEditor.close() flushes a
+ // pending edit or asks before discarding one it cannot cleanly save) so a move or delete
+ // never happens out from under an editor buffer still pointed at the old path.
+ // (Folder moves do not walk open tabs for descendants; out of scope for LINK-05.)
+ const closeIfOpen=async()=>{
+  if(isDir||!window.VaultEditor||VaultEditor.active()!==path)return true;
+  await VaultEditor.close(path);
+  return VaultEditor.active()!==path;
+ };
+ if(action==='move'){
+  dialog('Rename or move',`<form id="vault-move-form"><label>New path<input id="vault-move-target" required value="${esc(path)}"></label><button class="act">Move</button></form>`);
+  $('vault-move-form').onsubmit=async e=>{
+   e.preventDefault();
+   const target=$('vault-move-target').value.trim();
+   if(!await closeIfOpen())return;
+   try{
+    await post('/vault/move',{path,target});
+    $('product-dialog').close();
+    if(openNote?.path===path)openNote=null;
+    await listVault(parent,false);await listVault(target.split('/').slice(0,-1).join('/'),false);
+    notice('Moved to '+target+'.');
+   }catch(err){notice(err.message,true);}
+  };
+  return;
+ }
+ if(action==='duplicate'){
+  try{
+   const d=await post('/vault/duplicate',{path});
+   await listVault(parent,false);
+   notice('Duplicated as '+d.duplicated.split('/').pop()+'.');
+  }catch(err){notice(err.message,true);}
+  return;
+ }
+ if(action==='delete'){
+  if(!await confirmTrash(path.split('/').pop()))return;
+  if(!await closeIfOpen())return;
+  try{
+   await post('/vault/trash',{path});
+   if(openNote?.path===path)openNote=null;
+   await listVault(parent,false);
+   notice('Moved to trash.');
+  }catch(err){notice(err.message,true);}
  }
 }
 

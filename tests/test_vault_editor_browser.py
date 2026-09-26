@@ -639,6 +639,63 @@ class VaultEditor(Browser):
         until(lambda: not self.page.is_hidden('#vault-toc'), what='info panel open for Diary')
         self.assertTrue(self.page.is_hidden('#vault-properties-section'))
 
+    def test_19_file_actions_menu_duplicates_moves_mkdirs_and_deletes(self):
+        (self.vault / 'notes/Target.md').write_text('# Target\nContent.\n', encoding='utf-8')
+        self.vault_page()
+        self.page.wait_for_selector('[data-vault-file="notes/Target.md"]')
+
+        # Duplicate.
+        self.page.click('[data-vault-actions="notes/Target.md"]')
+        self.page.click('[data-vault-do="duplicate"]')
+        until(lambda: (self.vault / 'notes/Target copy.md').exists(), what='duplicate written to disk')
+        self.assertEqual((self.vault / 'notes/Target copy.md').read_text(), '# Target\nContent.\n')
+        self.assertTrue((self.vault / 'notes/Target.md').exists(), 'original untouched')
+
+        # Rename/move the duplicate.
+        until(lambda: self.page.locator('[data-vault-actions="notes/Target copy.md"]').count() == 1, what='copy in tree')
+        self.page.click('[data-vault-actions="notes/Target copy.md"]')
+        self.page.click('[data-vault-do="move"]')
+        self.page.fill('#vault-move-target', 'notes/Renamed.md')
+        self.page.click('#vault-move-form button.act')
+        until(lambda: (self.vault / 'notes/Renamed.md').exists(), what='moved on disk')
+        self.assertFalse((self.vault / 'notes/Target copy.md').exists())
+
+        # New folder, from a folder's own actions menu.
+        self.page.click('[data-vault-actions="notes"]')
+        self.page.click('[data-vault-do="new-folder-here"]')
+        self.page.fill('#vault-quick-name', 'archive')
+        self.page.click('#vault-quick-form button.act')
+        until(lambda: (self.vault / 'notes/archive').is_dir(), what='folder created on disk')
+
+        # Delete, with confirmation required.
+        self.page.click('[data-vault-actions="notes/Renamed.md"]')
+        self.page.click('[data-vault-do="delete"]')
+        self.page.click('dialog[aria-label="Delete file"] [data-no]')
+        pause(0.2)
+        self.assertTrue((self.vault / 'notes/Renamed.md').exists(), 'cancel keeps the file')
+        self.page.click('[data-vault-actions="notes/Renamed.md"]')
+        self.page.click('[data-vault-do="delete"]')
+        self.page.click('dialog[aria-label="Delete file"] [data-yes]')
+        until(lambda: not (self.vault / 'notes/Renamed.md').exists(), what='trashed from disk')
+        self.shot('10-file-actions')
+
+    def test_20_moving_an_open_dirty_note_saves_it_first(self):
+        (self.vault / 'notes/A.md').write_text('mine', encoding='utf-8')
+        self.vault_page()
+        self.open('notes/A.md')
+        self.select(0, 0)
+        self.page.keyboard.type('edited ')
+        self.wait_status('dirty')
+        self.page.click('[data-vault-actions="notes/A.md"]')
+        self.page.click('[data-vault-do="move"]')
+        self.page.fill('#vault-move-target', 'notes/A-renamed.md')
+        self.page.click('#vault-move-form button.act')
+        until(lambda: (self.vault / 'notes/A-renamed.md').exists(), what='moved on disk')
+        # The pending edit was flushed to disk before the move, not discarded.
+        self.assertEqual((self.vault / 'notes/A-renamed.md').read_text(), 'edited mine')
+        self.assertFalse((self.vault / 'notes/A.md').exists())
+        self.assertIsNone(self.status('notes/A.md'), 'the old tab is closed')
+
 
 if __name__ == '__main__':
     unittest.main()

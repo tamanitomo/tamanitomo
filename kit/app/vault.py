@@ -1,4 +1,5 @@
-"""Constrained vault browsing and optimistic writes to user-owned notes."""
+"""Constrained vault browsing, optimistic writes, and structural file actions (mkdir,
+duplicate, move) for user-owned notes."""
 from __future__ import annotations
 import hashlib
 import json
@@ -169,6 +170,73 @@ def write(c,relative,text,revision):
         # What this editor wrote, so the next save can tell its own bytes from an external edit.
         cp.atomic_write(folder/'last-write',hashlib.sha256(text.encode('utf-8')).hexdigest())
     return read(c,relative)
+
+# --- Structural operations (LINK-05: mkdir, duplicate, move) ---------------------------
+# These move bytes only. They do not rewrite any other note's links to the old path --
+# that is LINK-06 (link-aware rename/move), later work.
+
+def mkdir(c,relative):
+    if not isinstance(relative,str) or not relative.strip():raise ValueError('Enter a folder name')
+    path=resolve(c,relative)
+    with cp.file_lock(c.vault/'.companion-editor.lock'):
+        if path.exists():raise FileExistsError('A file or folder already exists at that path.')
+        path.mkdir(parents=True)
+    return {'created':relative}
+
+def _migrate_backup(c,old_relative,new_relative):
+    """Keep a note's editor-backup history reachable after it moves. Best-effort: a
+    destination that already has its own backup history is left alone rather than
+    clobbered, and any failure here must never fail the move itself.
+
+    Looks up the old backup folder by hash without creating it (backup_folder() itself
+    always creates one) -- a file that was never edited must not leave an empty backup
+    folder behind on every move."""
+    old_folder=c.vault/BACKUPS/hashlib.sha256(old_relative.encode('utf-8')).hexdigest()[:24]
+    if old_folder.is_symlink() or not old_folder.is_dir() or not any(old_folder.iterdir()):return
+    new_folder=backup_folder(c,new_relative)
+    if any(new_folder.iterdir()):return
+    new_folder.rmdir()
+    os.replace(old_folder,new_folder)
+
+def duplicate(c,relative):
+    path=resolve(c,relative)
+    if not path.is_file() or path.is_symlink() or protected(c,relative):raise ValueError('This file is protected or is not a regular file')
+    parent=Path(relative).parent
+    stem,suffix=path.stem,path.suffix
+    with cp.file_lock(c.vault/'.companion-editor.lock'):
+        n=1
+        while True:
+            name=f'{stem} copy{"" if n==1 else " "+str(n)}{suffix}'
+            candidate=name if str(parent)=='.' else (parent/name).as_posix()
+            dest=resolve(c,candidate)
+            if not dest.exists():break
+            n+=1
+            if n>1000:raise ValueError('Too many copies of this file already exist')
+        data=path.read_bytes()
+        handle=dest.parent/('.tmp-'+uuid.uuid4().hex)
+        with open(handle,'wb') as out:out.write(data);out.flush();os.fsync(out.fileno())
+        os.replace(handle,dest)
+    return {'duplicated':candidate}
+
+def move(c,relative,target):
+    if not isinstance(target,str) or not target.strip():raise ValueError('Enter a destination path')
+    source=resolve(c,relative)
+    if not source.exists():raise ValueError('Nothing exists at that path')
+    if source.is_symlink() or protected(c,relative):raise ValueError('This file or folder is protected and cannot be moved')
+    dest=resolve(c,target)
+    if protected(c,target):raise ValueError('That destination is protected')
+    if source.is_dir() and dest.is_relative_to(source):raise ValueError('Cannot move a folder into itself')
+    with cp.file_lock(c.vault/'.companion-editor.lock'):
+        if dest.exists():raise FileExistsError('A file or folder already exists at the destination.')
+        pairs=[(relative,target)] if source.is_file() else [
+            (rel,(Path(target)/full.relative_to(source)).as_posix())
+            for full,rel in files(c) if full.is_relative_to(source)]
+        dest.parent.mkdir(parents=True,exist_ok=True)
+        os.replace(source,dest)
+        for old_rel,new_rel in pairs:
+            try:_migrate_backup(c,old_rel,new_rel)
+            except OSError:pass
+    return {'moved':target}
 
 def files(c,limit=20000):
     import os
