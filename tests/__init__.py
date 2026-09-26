@@ -1,0 +1,1 @@
+"""Tamanitomo domain contract tests."""

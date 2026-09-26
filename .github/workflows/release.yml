@@ -33,8 +33,6 @@ jobs:
           print(f"::error title=pytest failed on the runner::{esc}")
           PY
           exit 1
-      - name: Check browser scripts
-        run: node tests/test_updates_ui.js
       - name: Build official asset
         run: |
           python tools/build_release.py --output build/tamanitomo-release.zip

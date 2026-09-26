@@ -1,39 +1,38 @@
-# Testing
+# Tests
 
-```bash
-python -m pytest -q -rs          # everything; -rs lists every skip and why
+Install the application dependencies, then run the complete domain suite:
+
+```sh
+python -m pip install -r requirements.txt
+python -m pytest -q
 ```
 
-Run it with `hermes` off your `PATH` at least once before a release: a test that
-passes only because a real Hermes is installed will fail on a clean runner.
+The seven collected suites cover presence/settings/platform behavior, evidence
+memory, outbox limits, vault files, journals/photos, floating chat, and model
+routing/probes. Fixtures use temporary homes and vaults; tests never operate on a
+live companion. `tests/support.py` contains fixture helpers, not additional tests.
+No legacy suites are hidden behind collection exclusions.
 
-## Browser-script regressions
+Run the source formatting checks with the development dependencies:
 
-`tests/*.js` drive the shipped static files inside a Node VM. They are not a
-browser. The authoritative runner is pytest:
-
-```bash
-python -m pytest -q tests/test_reliability.py::BrowserScriptRegressionTests
+```sh
+python -m pip install -r requirements-dev.txt
+python -m black --check kit/scripts kit/cli kit/app launch.py update_release.py
+python -m ruff check kit/scripts kit/cli kit/app
 ```
 
-Without Node these tests skip visibly. With `TAMANITOMO_REQUIRE_NODE=1` (as in
-CI) a missing Node fails them. A new `tests/test_*.js` must be added to that class;
-a test there fails if one is not.
+CI runs the full pytest suite on Linux, Windows and macOS. The Linux job also
+checks installer syntax. Node is required for browser-script contract tests.
 
-## CI
+For a manual browser preview, use the synthetic fixture:
 
-`.github/workflows/test.yml` runs on every push and pull request: the full suite
-on Linux under Python 3.11, 3.13 and 3.14, and a smaller smoke run (ledgers,
-locks, files, browser scripts) on Windows and macOS. It does not gate a release.
-`release.yml` runs its own Linux gate.
-
-## Looking at a change in a browser
-
-```bash
+```sh
 python tools/preview_fixture.py --port 38500
 ```
 
-This serves the workspace against an invented companion in a temporary
-directory, with a random token printed once and a fake Hermes. The data is
-removed on exit. Use it for screenshots. Never use a live profile, a real vault or
-a live access token in fixtures or screenshots.
+The command prints its local URL and temporary token. Its generated profiles,
+notes and conversations contain invented data. They are removed when the preview
+stops. Check at 390px and 1440px: all five destinations, auxiliary links, vault
+editing, dock open/minimize/close, chat streaming, navigation during a reply,
+reconnection and profile isolation. A real browser check is separate from pytest;
+no browser download or live provider is needed for the fast suite.

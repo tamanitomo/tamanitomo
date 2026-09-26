@@ -66,3 +66,16 @@ release integrity check and final responsive browser results here.
 - Follow-up review repaired three inference edge cases before consolidation:
   endpoint credential isolation, native Anthropic routing, and transient failure
   during schema correction. These behavior changes have separate regressions.
+
+## Phase 5 — seven focused suites
+
+- Consolidated coverage into the seven requested domain files, retaining 291
+  tests and 29 subtests for boundaries, persistence, concurrency, streaming,
+  platform behavior and inference recovery. Shared fixtures contain no tests.
+- Removed obsolete review snapshots, historical evidence bundles and tests for
+  the retired chat architecture. Release manifests and CI use the current suites.
+- Default test homes are isolated from real Hermes and user directories. The six
+  maintenance wrappers have a regression check that rejects model invocation.
+- Verification: the full suite passes in 4.21s; collection takes 0.19s. Python
+  compilation, diff checks and the release archive build succeed. No tracked
+  references to the deleted chat modules remain.
