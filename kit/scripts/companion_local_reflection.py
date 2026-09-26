@@ -180,6 +180,7 @@ def schema(kind,sources,question_ids):
     return obj(fields)
 
 def request_plan(c,kind,data,sources,base_url,model,slot,allow_remote=False,api_key_env=''):
+    import companion_worker_model as worker
     companion_endpoint.verify(base_url,allow_remote,'Reflection')
     qs=[q['id'] for q in data['existing_questions'] if q['status'] in ('asked','open')]
     instructions=(c.soul.read_text(encoding='utf-8')+'\n\nWrite one concise structured reflection. '
@@ -217,15 +218,14 @@ def request_plan(c,kind,data,sources,base_url,model,slot,allow_remote=False,api_
              'max_tokens':4096,'temperature':.6,'id_slot':slot,'cache_prompt':True,
              'reasoning_effort':'low','reasoning_budget_tokens':1024,'chat_template_kwargs':{'enable_thinking':True},
              'response_format':{'type':'json_schema','json_schema':{'name':'reflection','strict':True,'schema':schema(kind,sources,qs)}}}
-    req=urllib.request.Request(base_url.rstrip('/')+'/chat/completions',
-        data=json.dumps(companion_endpoint.shape(payload,base_url)).encode(),
-        headers=companion_endpoint.headers(api_key_env))
-    with urllib.request.urlopen(req,timeout=300) as r:reply=json.load(r)
-    if not companion_endpoint.confirm_thinking(reply,base_url):
-        print('warning: model returned no reasoning',file=sys.stderr)
-    choice=reply['choices'][0]
-    if choice.get('finish_reason')!='stop':raise ValueError('reflection was truncated; nothing recorded')
-    return json.loads(choice['message']['content']),reply.get('usage')
+    route = {'provider': '', 'model': model, 'base_url': base_url, 'direct': True}
+    reply = worker.complete(c, payload, route, api_key_env, allow_remote, timeout=300, what='Reflection')
+    if reply.get('reasoned') is False:
+        print('warning: model returned no reasoning', file=sys.stderr)
+    if reply.get('finish_reason') != 'stop':
+        raise ValueError('reflection was truncated; nothing recorded')
+    return json.loads(reply['content']), reply.get('usage')
+
 
 def _transcript_wrapper(statement,human):
     """The exact shape this contract replaced: "<human> said: ...". Narrow on

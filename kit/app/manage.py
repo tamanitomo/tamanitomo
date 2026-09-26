@@ -1203,17 +1203,52 @@ def register(app, select, load, operations):
 
     @app.post('/api/models/probe')
     def probe(payload:dict):
-        model=text(payload.get('model',''),'model',300,empty=True)
-        provider=text(payload.get('provider',''),'provider',100,empty=True)
+        """Probe exactly one selected route without tools, history, or failover."""
+        if set(payload) - {'model', 'provider', 'base_url'}:
+            raise ValueError('Unknown model probe setting')
+        rt, profile, home = context()
+        saved = config(home).get('model') or {}
+        if not isinstance(saved, dict):
+            saved = {'default': saved}
+        model = text(payload.get('model') or saved.get('default') or '', 'model', 300)
+        provider = text(payload.get('provider') or saved.get('provider') or '', 'provider', 100, empty=True)
+        saved_url = saved.get('base_url', '') if provider == saved.get('provider', '') else ''
+        base_url = text(payload.get('base_url', saved_url), 'base_url', 500, empty=True)
+        if base_url:
+            from urllib.parse import urlsplit
+
+            url = urlsplit(base_url)
+            if url.scheme not in ('http', 'https') or not url.hostname or url.username or url.password:
+                raise ValueError('Use an HTTP(S) provider URL without embedded credentials')
+        if not provider and not base_url:
+            raise ValueError('Choose a provider or an explicit model endpoint to test')
+        route = {'model': model, 'provider': provider, 'base_url': base_url,
+                 'reasoning_effort': '', 'direct': bool(base_url)}
+        if provider == saved.get('provider', '') and base_url.rstrip('/') == str(saved.get('base_url') or '').rstrip('/'):
+            for key in ('api_key', 'api_key_env', 'key_env', 'api_mode'):
+                if saved.get(key):
+                    route[key] = saved[key]
+
         def action(rt,p,h,report):
-            report('Making one small inference request using Hermes')
-            args=['chat','--quiet','--oneshot','--ignore-rules','--max-turns','1',
-                  '-q','Reply with exactly: CONNECTION_OK. Do not use any tools.']
-            if model: args+=['--model',model]
-            if provider: args+=['--provider',provider]
-            r=rt.run(args,home=h,timeout=180)
-            return {'response':hr.redact(r.stdout)[-2000:],'tested_at':dt.datetime.now(dt.timezone.utc).isoformat(),
-                    'model_requested':model or 'profile default','note':'A response proves this request worked; the configured fallback chain may have answered.'}
+            from companion_worker_model import complete
+
+            report('Making one small request to the selected model; fallback is disabled')
+            reply = complete(
+                cc.load(h),
+                {'messages': [{'role': 'user', 'content': 'Reply with exactly: CONNECTION_OK.'}],
+                 'max_tokens': 64, 'temperature': 0},
+                route,
+                allow_remote=True,
+                timeout=60,
+                what='Model probe',
+                allow_fallback=False,
+                require_thinking=False,
+            )
+            return {'response': hr.redact(reply.get('content', ''))[-2000:],
+                    'tested_at': dt.datetime.now(dt.timezone.utc).isoformat(),
+                    'model_requested': model, 'provider_requested': provider,
+                    'base_url': base_url,
+                    'note': 'Only the selected model was tested. No fallback or companion context was used.'}
         return op('Test model response',action)
 
     @app.post('/api/jobs/apply-models')

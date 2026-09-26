@@ -35,3 +35,19 @@ release integrity check and final responsive browser results here.
   POSIX launcher `--help` succeeds in 0.354s with a temporary home.
 - Native Windows/macOS execution remains a CI responsibility; local tests exercise
   their branches with controlled adapters.
+
+## Phase 3 — inference recovery
+
+- Added a shared ordered provider cascade for pulse/reflection workers, with
+  transient HTTP and timeout handling, per-route credentials, and local fallbacks.
+- Wired the same configured backups into Hermes's native chat recovery loop;
+  local Ollama/LM Studio aliases use its custom endpoint adapter. No whole-turn
+  retries or duplicated tool actions are introduced.
+- Made the model probe test one route only, preserving saved files and credentials.
+- Focused worker/configuration/reflection/model checks pass (114 cases in 2.58s);
+  dedicated probe/fallback tests cover transient statuses, timeouts, permanent
+  errors, empty chains, local-only consent and credential isolation.
+- Also exercised the installed Hermes runtime against a synthetic local HTTP
+  provider: a primary HTTP 500 switched to the fallback, returned exit code 0,
+  streamed six deltas and produced the clean final reply. This used temporary
+  homes and fixture tokens, with no live provider requests or user-data changes.

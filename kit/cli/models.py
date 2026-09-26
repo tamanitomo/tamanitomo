@@ -11,7 +11,7 @@ have access to.
 
 **A fallback chain.** Hermes has one natively (`fallback_providers` in
 config.yaml, edited with `hermes fallback`), and its cron scheduler consults it.
-The kit writes up to two entries there from this screen. No preset is
+The kit writes up to eight entries there from this screen. No preset is
 recommended: a chain that suits one person's accounts is wrong for the next.
 """
 from __future__ import annotations
@@ -64,8 +64,9 @@ def write_fallbacks(c,entries):
     from companion_platform import atomic_write
     path=c.home/'config.yaml'
     config=read_config(c)
-    rows=[{k:v for k,v in e.items() if k in ('provider','model') and v} for e in entries]
-    rows=[r for r in rows if r.get('model')][:2]
+    rows=[{k:v for k,v in e.items() if k in ('provider','model','base_url','api_key_env','key_env') and v} for e in entries]
+    cc.dataclasses.replace(c,models={**c.models,'fallbacks':rows})
+    rows=[r for r in rows if r.get('model')]
     if rows:config['fallback_providers']=rows
     else:config.pop('fallback_providers',None)
     atomic_write(path,yaml.safe_dump(config,sort_keys=False,allow_unicode=True))
@@ -114,16 +115,17 @@ def screen(c):
         elif action=='fallbacks':
             print();print(wiz.C.dim(
                 '  Hermes tries these in order when the first provider rate-limits, overloads, refuses\n'
-                '  or cannot be reached. Up to two. There is no recommended chain: it depends entirely\n'
+                '  or cannot be reached. Up to eight. There is no recommended chain: it depends entirely\n'
                 '  on which accounts and local models you actually have.'));print()
             entries=[]
-            for i in (1,2):
+            for i in range(1,9):
                 existing=(config.get('fallback_providers') or [])
                 was=existing[i-1] if len(existing)>=i else {}
                 model=ask(f'Fallback {i} model (blank to stop here)',was.get('model',''))
                 if not model.strip():break
                 provider=ask(f'Fallback {i} provider',was.get('provider',''))
-                entries.append({'model':model.strip(),'provider':provider.strip()})
+                endpoint=ask('Endpoint URL (blank for the provider default)',was.get('base_url',''))
+                entries.append({'model':model.strip(),'provider':provider.strip(),'base_url':endpoint.strip()})
             rows=write_fallbacks(c,entries)
             print(wiz.C.dim(f'  fallback_providers: {json.dumps(rows)}'))
         else:

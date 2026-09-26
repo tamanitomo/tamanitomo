@@ -79,6 +79,33 @@ def sync_bundled_plugins(root):
         pass
 
 
+def _chat_fallbacks(companion):
+    """Translate configured routes to Hermes's native provider adapter."""
+    from companion_inference import LOCAL_ENDPOINTS, configured_routes, credential, read_config
+
+    # Chat's primary is initialized by Hermes from its own model configuration.
+    config = read_config(companion)
+    model = config.get('model') if isinstance(config.get('model'), dict) else {}
+    primary = {**model, 'model': model.get('default') or model.get('model') or ''}
+    chain = []
+    for route in configured_routes(companion, primary=primary, tier='chat')[1:]:
+        entry = {key: value for key, value in route.items()
+                 if key in ('provider', 'model', 'base_url', 'api_key_env', 'api_key', 'api_mode')}
+        local_adapter = route['provider'].lower() in LOCAL_ENDPOINTS
+        if local_adapter or (not entry.get('provider') and entry.get('base_url')):
+            # Hermes routes OpenAI-compatible local servers through `custom`.
+            entry['provider'] = 'custom'
+            entry.setdefault('api_mode', 'chat_completions')
+        key = credential(companion, route)
+        if key:
+            entry['api_key'] = key
+        elif local_adapter:
+            # Never let the custom adapter borrow a primary cloud credential.
+            entry['api_key'] = 'no-key-required'
+        chain.append(entry)
+    return chain
+
+
 class Runtime:
     def __init__(self, root, managed=False):
         self.root = Path(root).expanduser().absolute()
@@ -135,9 +162,13 @@ class Runtime:
         if len(self.command())!=1 or not python.is_file():return self.run(args,home=home,timeout=600)
         import queue
         events=queue.Queue(maxsize=1024)
+        env = self.env(home)
+        # Recover inside Hermes's current conversation, without rewriting config
+        # or restarting a CLI turn that may already have performed tool actions.
+        env['TAMANITOMO_CHAT_FALLBACKS'] = json.dumps(_chat_fallbacks(cc.load(home)))
         # Stderr is kept out of the browser stream; only explicit JSON events cross it.
         with tempfile.TemporaryFile(mode='w+',encoding='utf-8') as errors:
-            proc=subprocess.Popen([str(python),str(KIT/'kit/app/hermes_stream.py'),*args],env=self.env(home),
+            proc=subprocess.Popen([str(python),str(KIT/'kit/app/hermes_stream.py'),*args],env=env,
                 cwd=str(KIT),stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=errors,text=True,encoding='utf-8',errors='replace')
             def read():
                 for line in proc.stdout:events.put(line)
@@ -156,6 +187,7 @@ class Runtime:
                     if event.get('event')=='delta':report.stream(event.get('text',''))
                     elif event.get('event')=='final':final=event.get('text','')
                     elif event.get('event')=='session':session=event.get('id')
+                    elif event.get('event')=='fallback':report('Continuing with the next configured provider')
                 code=proc.wait(timeout=5)
                 errors.seek(0);error=errors.read()[-6000:]
                 if code:raise ValueError(redact(error or final or 'Hermes chat failed'))

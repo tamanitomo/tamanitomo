@@ -275,24 +275,37 @@ class Companion:
         if not isinstance(self.sensors,list) or any(not isinstance(s,str) for s in self.sensors):
             raise ValueError('sensors must be a list of sensor names')
         if not isinstance(self.models,dict):raise ValueError('models must be an object')
-        for key,value in self.models.items():
-            if key=='fallbacks':
-                if not isinstance(value,list) or len(value)>8:
-                    raise ValueError('models.fallbacks must be a list of at most eight providers')
-                continue
-            if key not in JOB_TIERS:raise ValueError(f'unknown model tier {key!r}; expected {sorted(JOB_TIERS)}')
-            if not isinstance(value,dict):raise ValueError(f'models.{key} must be an object')
-            if set(value)-{'model','provider','reasoning_effort','base_url'}:raise ValueError('Unknown model tier field')
+        def validate_model(value, fallback=False):
+            if not isinstance(value,dict):
+                raise ValueError('Model entries must be objects')
+            if set(value)-{'model','provider','reasoning_effort','base_url','api_key_env','key_env'}:
+                raise ValueError('Unknown model tier field')
             if any(not isinstance(v,str) or len(v)>500 or any(ord(ch)<32 for ch in v) for v in value.values()):
                 raise ValueError('Model tier values must be plain text')
+            if fallback and not value.get('model','').strip():
+                raise ValueError('Every fallback needs a model')
             if value.get('base_url'):
                 from urllib.parse import urlsplit
                 endpoint=urlsplit(value['base_url'])
                 if endpoint.scheme not in ('http','https') or not endpoint.hostname or endpoint.username or endpoint.password:
                     raise ValueError('Use an HTTP(S) model tier URL without credentials')
+            for field in ('api_key_env','key_env'):
+                if value.get(field) and not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*',value[field]):
+                    raise ValueError('Model credentials must name an environment variable')
             effort=value.get('reasoning_effort')
             if effort not in (None,'') and effort not in REASONING_EFFORTS:
                 raise ValueError(f'reasoning_effort must be one of {REASONING_EFFORTS}')
+
+        for key,value in self.models.items():
+            if key=='fallbacks':
+                if not isinstance(value,list) or len(value)>8:
+                    raise ValueError('models.fallbacks must be a list of at most eight providers')
+                for fallback in value:
+                    validate_model(fallback, fallback=True)
+                continue
+            if key not in JOB_TIERS:
+                raise ValueError(f'unknown model tier {key!r}; expected {sorted(JOB_TIERS)}')
+            validate_model(value)
         self.hermes_root=pathlib.Path(self.hermes_root).expanduser().absolute()
         self.vault=pathlib.Path(self.vault).expanduser().absolute()
         if self.profile:
@@ -366,7 +379,7 @@ class Companion:
 
     def fallbacks(self)->list:
         rows=self.models.get('fallbacks') or []
-        return [r for r in rows if isinstance(r,dict) and r.get('model')][:2]
+        return [dict(r) for r in rows if isinstance(r,dict) and r.get('model')][:8]
 
     # ---- locations -------------------------------------------------------
     @property

@@ -63,7 +63,10 @@ def chat(payload):
     if not provider or not model:raise ValueError('A worker model needs both a provider and a model')
     if provider.lower() in ('auto','moa'):
         raise ValueError('Choose a specific provider for background work, not a routing alias')
-    client,resolved=resolve_provider_client(provider=provider,model=model)
+    options = {argument: payload[field] for field, argument in
+               (('base_url', 'explicit_base_url'), ('api_key', 'explicit_api_key'), ('api_mode', 'api_mode'))
+               if payload.get(field)}
+    client,resolved=resolve_provider_client(provider=provider,model=model,**options)
     if client is None:raise ValueError(f'Provider {provider} is unavailable')
     # A reasoning model spends max_tokens on its thinking before it writes a
     # single character of the answer. At the flat default, a job that thought
@@ -116,7 +119,10 @@ def chat(payload):
     if schema:request=restate(request)
     try:
         reply=client.chat.completions.create(**request)
-    except Exception:
+    except Exception as exc:
+        from companion_inference import is_transient, status_code
+        if is_transient(exc) or status_code(exc) in (401, 403):
+            raise
         if not (effort or wanted):raise
         # Only here, where the provider actually objected, is it right to drop
         # the fields it may have objected to.
@@ -162,4 +168,7 @@ if __name__=='__main__':
     try:
         print('COMPANION_TEXT='+json.dumps(chat(json.load(sys.stdin))))
     except Exception as exc:
-        print('COMPANION_TEXT='+json.dumps({'error':f'{type(exc).__name__}: {exc}'}));sys.exit(1)
+        from companion_inference import is_transient, redact, status_code
+        print('COMPANION_TEXT='+json.dumps({'error':redact(f'{type(exc).__name__}: {exc}'),
+                                          'status_code':status_code(exc),'transient':is_transient(exc)}))
+        sys.exit(1)
