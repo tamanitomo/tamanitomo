@@ -17,9 +17,6 @@ migration.
 - Browser smoke: Chromium at 1440px and 390px, no page errors; successful chat
   sends; desktop card and 65vh phone sheet.
 
-The final phase will record the consolidated suite timing, startup measurement,
-release integrity check and final responsive browser results here.
-
 ## Phase 2 — portable hosts
 
 - Shared standard-library network, memory and process probes across entry points.
@@ -79,3 +76,50 @@ release integrity check and final responsive browser results here.
 - Verification: the full suite passes in 4.21s; collection takes 0.19s. Python
   compilation, diff checks and the release archive build succeed. No tracked
   references to the deleted chat modules remain.
+
+## Phase 6 — five destinations and responsive polish
+
+- Home, Journal, Vault, Photos and Settings are the only primary destinations on
+  desktop and mobile. Relationship, timeline and calendar views belong to Home;
+  companions, identity and studios belong to Settings. Auxiliary routes retain
+  direct links, parent navigation, back controls and keyboard focus.
+- Unified dialog, photo viewer and dock surfaces with the theme tokens. The open
+  mobile dock sits above navigation, and its header explicitly keeps a horizontal
+  layout. Unknown hardware memory stays unknown in onboarding.
+- Fixed expanded vault folders appearing empty before their contents were loaded.
+  Only the visible expanded subtree is loaded, with a fixed bound and retry UI for
+  failed reads. Browser checks covered note editing, saving, wikilinks and outline.
+- Final review corrected IPv6 browser-launch URLs and included `pytest.ini` in the
+  release archive, so shipped tests run with the same import configuration.
+- Updated current onboarding, desktop, model and testing documentation to match
+  the dock, five destinations and single-provider dry-run probe.
+
+## Final acceptance evidence
+
+- **296 tests and 29 subtests pass in 4.24s**, across exactly seven domain suites.
+  The same tests pass from an extracted release archive in 4.38s. Both runs emit
+  one upstream Starlette/httpx deprecation warning and have zero failures.
+- Fresh-process imports plus workspace construction: **0.282s**. Starting the
+  hosted process and receiving the first authenticated feed response: **0.339s**.
+  These are local measurements with synthetic homes, not a hardware-independent
+  performance guarantee.
+- Chromium at **1440 × 900** and **390 × 900**: five navigation destinations,
+  eight auxiliary routes, legacy chat deep link, vault editing, draft persistence
+  and profile isolation pass without page errors or primary-page overflow.
+  Desktop dock measures 390 × 580; phone sheet measures 390 × 585 (65vh).
+- Real preview chat requests survive navigation and a deliberately dropped SSE
+  connection. Recovery, including a browser reload, uses the existing operation
+  with exactly one POST per turn. Light/dark dock and dialog screenshots were
+  visually inspected after theme transitions settled.
+- Black checks all 111 production/launcher Python files; focused Ruff rules,
+  Python compilation, browser-script parsing, shell syntax and diff checks pass.
+  Release build contains 238 source files plus its integrity manifest. No tracked
+  references to the removed chat modules or retired ledger remain.
+- Native Windows/macOS runners were not available locally. Their platform
+  branches have controlled tests, and CI is configured to run all seven suites on
+  Linux, Windows and macOS. Actual provider failover was exercised only against
+  synthetic local endpoints; no live provider calls or user-data migrations were
+  needed.
+
+Each phase is committed separately. All preview homes and vaults were temporary;
+existing user Hermes profiles and vaults were left untouched.

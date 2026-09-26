@@ -53,7 +53,7 @@ Follow-up verification: 685 automated tests passed, including the added scoring 
 
 ## Daily interface pass
 
-Conversation is first in the everyday navigation; Hermes settings and Jobs & health remain direct destinations. Secondary pages move into More, and provider terminology now finds Hermes settings in the page finder. Chat uses the remaining viewport height, formats saved messages, separates dates, preserves manual scroll position while replies stream, and rejects outdated history responses after switching conversations.
+The current workspace has five primary destinations: Home, Journal, Vault, Photos and Settings. Home and Settings open auxiliary views, including Companions and Us. The floating chat dock stays available across pages, preserving the current session and draft while replies stream. The browser evidence below records earlier interface work and does not describe the current navigation layout.
 
 Photos groups the collection by date with compact thumbnails and sequential lightbox navigation. Capture diagnostics are collapsed initially. Photo and journal filters survive navigation within the app; Journal retains its selected entry and uses a sticky list on wider screens. These are incremental improvements, not completion of the requested product redesign.
 

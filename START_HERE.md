@@ -15,16 +15,16 @@ Any machine with internet access, a modern browser and room for Hermes plus opti
 1. Put the kit somewhere permanent and writable — `git clone` it, or extract the release ZIP into a folder such as `C:\Tamanitomo`. Do not run it from inside the ZIP, and do not put your vault inside the application code folder.
 2. Run **`./tamanitomo`** (or **`./companion`**) (Linux, macOS, WSL) or double-click **tamanitomo.cmd** (Windows). The launcher provisions Python when needed, installs dependencies into its own `.venv` and opens your browser. Keep the terminal window open — first launch needs internet, and errors stay visible there.
 3. Select **Kit-managed Hermes** for a new Hermes installation, or **Existing Hermes** if you already use Hermes. Complete installation and provider sign-in under **Settings → System → Installation & gateway**.
-4. Open **Companions → Create a companion**. A short story-based interview suggests a personality, then asks directly about relationship type, pace, and contact, then shows you every value it chose before anything is written — you can edit any of them, or skip the questions and fill the fields in directly. Already running Hermes? Use **Adopt** instead; your existing `SOUL.md` is left byte-for-byte alone.
-5. Configure a primary model and only the fallback providers you want to pay for/use. Test the saved model chain. Open **Conversation**, send a short message and verify it appears in history.
+4. Open **Home → Companions → Create a companion**. A short story-based interview suggests a personality, then asks directly about relationship type, pace, and contact, then shows you every value it chose before anything is written — you can edit any of them, or skip the questions and fill the fields in directly. Already running Hermes? Use **Adopt** instead; your existing `SOUL.md` is left byte-for-byte alone.
+5. Configure a primary model and only the fallback providers you want to pay for/use. Use **Test saved model** to check the selected provider with fallback disabled. Open the floating **Chat** dock, send a short message and verify it appears in history.
 6. Review the proposed hooks and scheduled jobs before enabling them. Telegram is optional. Configure its credentials with Hermes if wanted; test gateway startup and Windows reboot recovery before relying on unattended schedules.
 7. Add optional image and voice providers using the guide below. Keep scheduled photos off until manual previews and the image reviewer work.
 
 ## What is included
 
-- **Home, Timeline, Journal:** a view of recorded companion life and authored reflections. Empty sections are normal before jobs have run.
-- **Conversation:** same profile identity and memory, with session history and push-to-talk voice.
-- **Identity, Preferences:** appearance, reference portrait, boundaries, routines, timezone and media settings.
+- **Home, Journal, Vault, Photos, Settings:** the five primary destinations. Home shows the companion’s present; Journal contains recorded days and reflections; Vault provides notes, backlinks and an outline; Photos holds the visual library. Empty sections are normal before jobs have run.
+- **Floating Chat dock:** the same profile identity and memory, with streaming replies, earlier messages and push-to-talk voice on every page.
+- **Home subviews and Settings:** companions, relationship history, identity, appearance, boundaries, routines, timezone and media settings.
 - **Photos & Creations:** view/download, keep album copies, see recorded generation source, label safe/NSFW and delete generated files. Opening NSFW details does not reveal the image; use Reveal there if wanted.
 - **Image Studio:** named cloud/OAuth/Comfy presets, category routing, structured six-part prompts, guided weight/LoRA slots, Civitai downloads and compatible image-to-image conversion.
 - **Image review:** checks actual pixels against intent. A held or unavailable review requires attention; it does not silently approve delivery. Choose a vision-capable review model. Intentional adult content is an explicit per-image option.
@@ -35,7 +35,7 @@ Any machine with internet access, a modern browser and room for Hermes plus opti
 
 ## Voice conversation
 
-Configure speech recognition (STT) and speech output (TTS) in Hermes/Voice Studio first. Use **Conversation → Talk**, speak, then **Send recording**. The microphone stops, the transcript is sent to the currently selected conversation, and the reply is read with the configured voice. Cancel discards a recording. Stop playback stops listening/playback but does not undo a chat turn already submitted. Recordings are limited to 90 seconds / 12 MB; speech reads the first 1,000 reply characters while the full reply remains visible. This is turn-based voice, not a simultaneous full-duplex phone call.
+Configure speech recognition (STT) and speech output (TTS) in Hermes/Voice Studio first. Open the floating **Chat** dock, choose **Talk**, speak, then **Send recording**. The microphone stops, the transcript is sent to the currently selected conversation, and the reply is read with the configured voice. Cancel discards a recording. Stop playback stops listening/playback but does not undo a chat turn already submitted. Recordings are limited to 90 seconds / 12 MB; speech reads the first 1,000 reply characters while the full reply remains visible. This is turn-based voice, not a simultaneous full-duplex phone call.
 
 Microphone capture works on localhost or HTTPS, with browser permission. A plain `http://192.168…` LAN URL is not sufficient for remote microphone access. If autoplay is blocked, press Play. If speech recognition fails, use the text box and check Hermes STT settings. Local STT/TTS may need first-use model downloads. Your provider selections determine which requests leave your computer.
 

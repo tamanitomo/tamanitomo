@@ -821,8 +821,8 @@ window.onboarding=async function(adopt){
     const loc=envInfo?.local_models||{};
     const isMobile=Boolean(loc.is_mobile);
     const hostMem=loc.host_memory||{};
-    const availRam=hostMem.available_mb ? (hostMem.available_mb/1024).toFixed(1) : (isMobile?'5.0':'8.0');
-    const totalRam=hostMem.total_mb ? (hostMem.total_mb/1024).toFixed(1) : (isMobile?'12.0':'16.0');
+    const availRam=hostMem.available_known!==false&&Number(hostMem.available_mb)>0 ? (hostMem.available_mb/1024).toFixed(1)+' GB available' : 'Available memory unknown';
+    const totalRam=hostMem.total_known!==false&&Number(hostMem.total_mb)>0 ? (hostMem.total_mb/1024).toFixed(1)+' GB RAM' : 'Total memory unknown';
 
     const recGguf=loc.recommended_gguf||[
       {id:'qwen2.5-1.5b-instruct-q4_k_m',name:'Qwen 2.5 1.5B Instruct',family:'Qwen',gb:1.1,mobile_recommended:true,description:'Balanced conversational intelligence and speed (~17 tokens/s on Tensor G3).'},
@@ -849,17 +849,17 @@ window.onboarding=async function(adopt){
           <li><strong>Best Model for Phones:</strong> <strong>Qwen 2.5 1.5B</strong> (~1.1 GB) or <strong>SmolLM2 1.7B</strong> (~1.0 GB) are specifically recommended for phone thermal limits and battery efficiency.</li>
         </ul>
         <div class="small" style="display:inline-block;padding:4px 10px;background:color-mix(in srgb,var(--ink) 6%,transparent);border-radius:6px">
-          Device Memory: <strong>${availRam} GB available</strong> of <strong>${totalRam} GB RAM</strong> · Guardrail Active: <strong>max 2.8 GB</strong>
+          Device Memory: <strong>${availRam}</strong> · <strong>${totalRam}</strong> · Guardrail Active: <strong>max 2.8 GB</strong>
         </div>
       </div>` : `
       <div class="card" style="border-left:4px solid var(--good,#10b981);background:color-mix(in srgb,var(--good,#10b981) 6%,var(--surface));margin:14px 0;padding:14px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
           <span style="font-size:18px">💻</span>
-          <strong style="color:var(--good,#10b981)">Desktop / Host Hardware Detected</strong>
+          <strong style="color:var(--good,#10b981)">Host hardware</strong>
         </div>
         <p class="small dim" style="margin:0">
-          Device Memory: <strong>${availRam} GB available</strong> of <strong>${totalRam} GB RAM</strong>.
-          Vulkan GPU offload supported. You can run 4B to 14B models comfortably.
+          Device Memory: <strong>${availRam}</strong> · <strong>${totalRam}</strong>.
+          Choose a model that fits measured free memory; GPU support depends on the installed runtime.
         </p>
       </div>`;
 

@@ -115,6 +115,7 @@
 </dialog>
 <div id="operation" role="status" aria-live="polite" hidden></div>
 <main>
+  <nav id="subview-navigation" class="subview-navigation" aria-label="Page location" hidden></nav>
   <section id="roster" hidden></section>
   <section id="relationship" hidden></section>
   <section id="vault" hidden></section>
@@ -126,12 +127,23 @@
   <section id="loops" hidden></section>
   <section id="settings" hidden></section>
   <section id="identity" hidden></section>
-  <section id="more" hidden></section>
 </main>
 <nav id="tabbar" class="tabbar" aria-label="Primary"></nav>
 
 <script>
-const TABS=[['now','Home'],['timeline','Timeline'],['photos','Photos & albums'],['journals','Journal'],['relationship','Us'],['loops','Plans & calendar'],['vault','Vault'],['identity','Identity'],['settings','Settings'],['roster','Companions'],['more','More']];
+const TABS=[['now','Home'],['journals','Journal'],['vault','Vault'],['photos','Photos'],['settings','Settings']];
+// Routes include auxiliary views; the five primary destinations never change.
+const PAGES=[...TABS,['relationship','Us'],['timeline','Day timeline'],['loops','Plans & calendar'],['identity','Identity'],['roster','Companions']];
+const PAGE_PARENTS={relationship:'now',timeline:'now',loops:'now',identity:'settings',roster:'settings'};
+const primaryPage=name=>PAGE_PARENTS[name]||name;
+function registerPage(id,label,parent='settings'){
+  if(!PAGES.some(([page])=>page===id))PAGES.push([id,label]);
+  PAGE_PARENTS[id]=parent;
+  if(!document.getElementById(id)){
+    const section=document.createElement('section');section.id=id;section.hidden=true;
+    document.querySelector('main').append(section);
+  }
+}
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const params=new URLSearchParams(location.search);
@@ -269,22 +281,23 @@ function initPinModal(){
 document.addEventListener('DOMContentLoaded',()=>initPinModal());
 let current='now';
 /* Retired destinations and where they live now. Resolved before anything is
-   committed, so an old link or a saved pin lands on the page, never on a blank. */
-const TAB_ALIASES={knows:'relationship'};
+   committed, so an old link lands on the page, never on a blank. */
+const TAB_ALIASES={knows:'relationship',more:'settings',creations:'vault'};
 async function showTab(name){
   if(name==='chat'){window.ChatDock?.open();return;}
   name=TAB_ALIASES[name]||name;
+  if(!PAGES.some(([id])=>id===name))name='now';
   if(typeof confirmEditorLeave==='function'&&!await confirmEditorLeave(current))return;
   current=name;
   // A page's own route (#journals/<date>/<view>) survives being shown; any other tab is just its name.
   const route=String(location.hash||'').slice(1).split('/');
   history.replaceState(null,'',location.pathname+location.search+(route.length>1&&(TAB_ALIASES[route[0]]||route[0])===name?location.hash:'#'+name));
-  for(const [id] of TABS){const el=$(id);if(el)el.hidden=id!==name;}
-  for(const b of $('tabs').querySelectorAll('button[data-tab]'))b.setAttribute('aria-current',String(b.dataset.tab===name));
+  for(const section of document.querySelectorAll('main > section'))section.hidden=section.id!==name;
+  for(const b of $('tabs').querySelectorAll('button[data-tab]'))b.setAttribute('aria-current',String(b.dataset.tab===primaryPage(name)));
   if(window.productNavigate)window.productNavigate(name);
   const cur=$(name);
   if(cur&&!cur.textContent.trim())cur.innerHTML='<div class="card dim" role="status">Loading your companion’s world…</div>';
-  render(name);
+  return render(name);
 }
 $('tabs').innerHTML=TABS.map(([id,label])=>`<button data-tab="${id}">${label}</button>`).join('');
 for(const b of $('tabs').querySelectorAll('button[data-tab]'))b.onclick=()=>showTab(b.dataset.tab);

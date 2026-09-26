@@ -402,5 +402,5 @@ window.addEventListener('popstate',()=>{
   if(route&&current==='journals'&&journalApply){journalApply(route);return;}
   const tab=location.hash.slice(1).split('/')[0];
   const name=TAB_ALIASES[tab]||tab;
-  if(name&&name!==current&&TABS.some(([id])=>id===name))showTab(name);
+  if(name&&name!==current&&PAGES.some(([id])=>id===name))showTab(name);
 });

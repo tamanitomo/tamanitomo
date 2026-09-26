@@ -93,7 +93,7 @@ written as an intent, then its effect, then the decision, under one lock per
 person, so an interrupted decision is finished by making it again and the
 opposite decision afterwards is refused. Accepting is the owner's override,
 recorded on the fact as `held_decision`; it is not a verification. The screen
-has known misses, listed in `tests/test_local_reflection.py`.
+has known misses, listed in `tests/test_memory.py`.
 
 A badly worded new question (one calling the person "the human") is left out
 and reported; a fact worded as a transcript ("Robin said: ...") is held with

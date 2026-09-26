@@ -111,6 +111,7 @@
     state.open = true;
     state.unseen = false;
     root.classList.remove('is-closed');
+    root.classList.add('is-open');
     $('chat-dock-panel').hidden = false;
     $('chat-dock-launcher').hidden = true;
     $('chat-dock-launcher').setAttribute('aria-expanded', 'true');
@@ -125,6 +126,7 @@
   function collapse(closed) {
     state.open = false;
     root.classList.toggle('is-closed', closed);
+    root.classList.remove('is-open');
     $('chat-dock-panel').hidden = true;
     $('chat-dock-launcher').hidden = false;
     $('chat-dock-launcher').setAttribute('aria-expanded', 'false');

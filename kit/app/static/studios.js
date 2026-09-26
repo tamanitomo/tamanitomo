@@ -1,5 +1,5 @@
 /* Complete management editors, using the active Hermes profile at every boundary. */
-function addPage(id,label){TABS.push([id,label]);const section=document.createElement('section');section.id=id;section.hidden=true;document.querySelector('main').append(section);}
+const addPage=(id,label)=>registerPage(id,label,'settings');
 addPage('local-models','Local models');addPage('companion-edit','Edit companion');addPage('image-studio','Image studio');
 // getRandomValues also works on plain HTTP LAN origins; randomUUID requires HTTPS.
 const presetSuffix=()=>Array.from(crypto.getRandomValues(new Uint8Array(8)),v=>v.toString(16).padStart(2,'0')).join('');
@@ -45,7 +45,7 @@ workspaceHandlers['companion-edit']=async()=>{
 };
 
 // Obsidian-like Knowledge Vault: hierarchical tree, live markdown preview/split, TOC outline, wikilinks.
-let vaultTreeData=new Map(),vaultExpanded=new Set(['notes','journal','soul']),vaultFilter='all',vaultQuery='',vaultViewMode='preview';
+let vaultTreeData=new Map(),vaultTreeErrors=new Map(),vaultExpanded=new Set(['notes','journal','soul']),vaultFilter='all',vaultQuery='',vaultViewMode='preview';
 // Which way into the vault is showing. Arriving by the old Creations route
 // opens Recent; otherwise the tree, which is what a vault is.
 let vaultView='folders';
@@ -143,14 +143,44 @@ function filterVaultEntry(f){
  return true;
 }
 
+async function loadVaultFolder(path,request=vaultRequest){
+ try{
+  const data=await api('/vault?path='+encodeURIComponent(path));
+  if(request!==vaultRequest||current!=='vault')return false;
+  vaultTreeData.set(path,data.entries);
+  vaultTreeErrors.delete(path);
+  return true;
+ }catch(error){
+  if(request===vaultRequest&&current==='vault')vaultTreeErrors.set(path,error.message);
+  return false;
+ }
+}
+
+// Fetch only the expanded, visible subtree. A large remembered tree stays bounded;
+// an unloaded branch offers a load button rather than claiming the folder is empty.
+async function hydrateExpandedVault(folderPath='',request=vaultRequest){
+ const queue=[folderPath],seen=new Set();
+ for(let index=0;index<queue.length&&index<48;index++){
+  if(request!==vaultRequest||current!=='vault')return;
+  const path=queue[index];
+  if(seen.has(path))continue;
+  seen.add(path);
+  if(!vaultTreeData.has(path)&&!await loadVaultFolder(path,request))continue;
+  for(const entry of vaultTreeData.get(path)||[]){
+   if(entry.directory&&vaultExpanded.has(entry.path)&&filterVaultEntry(entry))queue.push(entry.path);
+  }
+ }
+}
+
 function renderFolderTreeHTML(folderPath,depth=0){
- const entries=vaultTreeData.get(folderPath)||[];
+ const entries=vaultTreeData.get(folderPath);
+ if(!entries)return `<div class="dim small vault-folder-status">${esc(vaultTreeErrors.get(folderPath)||'Folder not loaded.')} <button class="link-button small" data-load-folder="${esc(folderPath)}">${vaultTreeErrors.has(folderPath)?'Retry':'Load folder'}</button></div>`;
  if(!entries.length)return depth>0?'<p class="dim small" style="padding-left:14px">Empty folder</p>':'';
  return entries.filter(filterVaultEntry).map(f=>{
   if(f.directory){
    const isExp=vaultExpanded.has(f.path);
    return `<div class="vault-folder-group" data-folder-path="${esc(f.path)}">
-    <button class="vault-node" data-toggle-folder="${esc(f.path)}">
+    <button class="vault-node" data-toggle-folder="${esc(f.path)}" aria-expanded="${String(isExp)}">
      <div class="vault-node-left">
       <span class="vault-node-icon">${isExp?'▾':'▸'}</span>
       <span>📁 ${esc(f.name)}</span>
@@ -183,11 +213,15 @@ function renderVaultTree(){
     vaultExpanded.delete(folder);
    }else{
     vaultExpanded.add(folder);
-    if(!vaultTreeData.has(folder)){
-     const d=await api('/vault?path='+encodeURIComponent(folder));
-     vaultTreeData.set(folder,d.entries);
-    }
+    await hydrateExpandedVault(folder);
    }
+   renderVaultTree();
+  };
+ }
+ for(const button of tree.querySelectorAll('[data-load-folder]')){
+  button.onclick=async()=>{
+   button.disabled=true;
+   await hydrateExpandedVault(button.dataset.loadFolder);
    renderVaultTree();
   };
  }
@@ -369,11 +403,14 @@ listVault=async function(path,remember=true){
  catch(e){notice(e.message,true);if(path)return listVault('',false);throw e;}
  if(id!==vaultRequest||current!=='vault')return;
  vaultTreeData.set(path||'',d.entries);
+ vaultTreeErrors.delete(path||'');
  if(path){
   const parts=path.split('/');
   for(let i=1;i<=parts.length;i++)vaultExpanded.add(parts.slice(0,i).join('/'));
  }
  vaultPath=path||'';
+ await hydrateExpandedVault('',id);
+ if(id!==vaultRequest||current!=='vault')return;
  renderVaultTree();
 };
 
@@ -384,12 +421,11 @@ readNote=async function(path){
  try{
   openNote=await api('/vault/file?path='+encodeURIComponent(path));
   const parent=path.split('/').slice(0,-1).join('/');
-  if(parent&&!vaultExpanded.has(parent)){
-   vaultExpanded.add(parent);
-   if(!vaultTreeData.has(parent)){
-    const pd=await api('/vault?path='+encodeURIComponent(parent));
-    vaultTreeData.set(parent,pd.entries);
-   }
+  if(parent){
+   const parts=parent.split('/');
+   for(let index=1;index<=parts.length;index++)vaultExpanded.add(parts.slice(0,index).join('/'));
+   if(!vaultTreeData.has(parent))await loadVaultFolder(parent);
+   await hydrateExpandedVault();
   }
   showNote(openNote);
   renderVaultTree();

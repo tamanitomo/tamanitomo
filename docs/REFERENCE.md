@@ -93,7 +93,7 @@ and monthly jobs, which run a handful of times a week and decide what the compan
 Each takes a model, a provider and a reasoning effort. The kit writes the pin; it never picks a
 model name, because only the person paying knows what they have access to.
 
-**A fallback chain.** Written into Hermes's own `fallback_providers` in `config.yaml`, up to two
+**A fallback chain.** Written into Hermes's own `fallback_providers` in `config.yaml`, up to eight
 entries. `hermes fallback` remains the native way to edit the same key. No chain is recommended:
 which one is right depends entirely on which accounts and local models you have.
 
@@ -318,7 +318,7 @@ one message off the queue and decides whether it leaves, from the clock and a co
 
 One message per run, deliberately.
 
-**One dispatcher at a time, and crashes (Phase 1B C2).** A run holds `<life>/.dispatch.run.lock`; a
+**One dispatcher at a time, and crashes.** A run holds `<life>/.dispatch.run.lock`; a
 second run that finds it busy does nothing. Each send is an attempt that writes its progress to the
 outbox before each step (`dispatching`, `reserving_slot`, `slot_reserved`, `sending`), and the daily
 charge row carries the attempt id. The next run resolves an attempt a crashed run left behind:

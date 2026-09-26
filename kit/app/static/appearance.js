@@ -1,5 +1,4 @@
-/* Workspace appearance: theme, accent, and the destinations pinned to the
-   mobile bar. State lives with the companion's profile on the server, so a
+/* Workspace appearance: theme and accent. State lives with the companion's profile on the server, so a
    companion looks the same on the phone and the desktop, with a localStorage
    mirror so the first paint never flashes the wrong palette. */
 (function(){
@@ -11,7 +10,7 @@ const THEME_NAMES={
 const DARK=['midnight','nord','ocean','emerald','amethyst','synthwave','ember','sakura','carbon'];
 const LIGHT=['daylight','parchment','mist'];
 const DEFAULTS={theme:'midnight',accent:'',follow_system:false,
-  dark_theme:'midnight',light_theme:'daylight',nav_pins:['now','chat','photos','journals']};
+  dark_theme:'midnight',light_theme:'daylight'};
 const KEY='companion-appearance';
 const dark=matchMedia('(prefers-color-scheme: dark)');
 
@@ -20,9 +19,6 @@ try{
   const raw=localStorage.getItem(KEY);
   if(raw){
     state=Object.assign(state,JSON.parse(raw));
-    if(Array.isArray(state.nav_pins)&&state.nav_pins.includes('now')&&state.nav_pins[0]!=='now'){
-      state.nav_pins=['now',...state.nav_pins.filter(x=>x!=='now')];
-    }
   }
 }catch(e){}
 

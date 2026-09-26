@@ -948,3 +948,31 @@ def test_bootstrap_forwards_unicode_and_spaced_arguments(tmp_path):
     install.assert_not_called()
     command = run.call_args.args[0] if os.name == "nt" else run.call_args.args[1]
     assert command == [str(python), str(tmp_path / "bin/tamanitomo"), *arguments]
+
+
+def test_ipv6_launcher_reuses_and_opens_the_ipv6_loopback_url(tmp_path):
+    import io
+    from kit.cli import app as launcher
+
+    state = tmp_path / "state"
+    state.mkdir()
+    companion = SimpleNamespace(hermes_root=tmp_path / "hermes", profile="")
+    (state / "workspace-server.json").write_text(
+        json.dumps({"host": "::", "port": 54321, "root": str(companion.hermes_root)})
+    )
+    reply = io.BytesIO(
+        json.dumps({"app": "tamanitomo", "root": str(companion.hermes_root)}).encode()
+    )
+    args = SimpleNamespace(host="::", port=8770, no_open=False, token="synthetic")
+    with (
+        patch.object(launcher, "resolve", return_value=companion),
+        patch("kit.app.runtime.app_directory", return_value=state),
+        patch.object(launcher.urllib.request, "urlopen", return_value=reply) as request,
+        patch.object(launcher.webbrowser, "open") as open_browser,
+        patch.object(launcher, "print"),
+        patch("kit.app.server.build") as build,
+    ):
+        assert launcher.cmd_app(args) == 0
+    assert request.call_args.args[0].full_url == "http://[::1]:54321/api/instance"
+    assert open_browser.call_args.args[0].startswith("http://[::1]:54321/?")
+    build.assert_not_called()

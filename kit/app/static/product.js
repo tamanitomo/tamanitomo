@@ -1,41 +1,14 @@
 function mediaPrivacy(item){return item.blur?'class="concealed-media" title="Sensitive or unreviewed image · open details to reveal"':'';}
 const paths={now:'M3 11 12 3l9 8v10h-6v-7H9v7H3Z',chat:'M4 4h16v12H9l-5 4Z',timeline:'M6 3v18M10 5h10M10 12h7M10 19h10',photos:'M3 4h18v16H3ZM3 16l5-5 5 5 3-3 5 5M16 8h.01',journals:'M5 3h14v18H5ZM8 7h8M8 11h8M8 15h5',creations:'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z',relationship:'M12 20S2 14 2 8a5 5 0 0 1 10-1 5 5 0 0 1 10 1c0 6-10 12-10 12Z',loops:'M4 5h16v16H4ZM8 2v6M16 2v6M4 11h16',knows:'M12 3v18M12 6C7 1 2 5 3 10c-3 5 2 10 9 8M12 6c5-5 10-1 9 4 3 5-2 10-9 8',vault:'M3 6h7l2 3h9v12H3Z',identity:'M8 7a4 4 0 1 0 8 0 4 4 0 1 0-8 0M4 21v-3c0-6 16-6 16 0v3',settings:'M4 7h16M4 17h16M8 4v6M16 14v6','local-models':'M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Zm5 3h6v6H9V9Zm-5 2h2m-2 4h2m14-4h2m-2 4h2m-9-11v2m4-2v2m-4 14v2m4-2v2',environment:'M12 2v4M12 18v4M2 12h4M18 12h4M5 5l3 3M16 16l3 3M19 5l-3 3M8 16l-3 3M7 12a5 5 0 1 0 10 0 5 5 0 1 0-10 0',health:'M2 12h5l3-8 4 16 3-8h5',roster:'M8 8a3 3 0 1 0 6 0 3 3 0 1 0-6 0M3 21v-3c0-5 14-5 14 0v3M17 5c5 0 5 6 0 6M20 15c2 1 2 3 2 6',search:'M10 3a7 7 0 1 0 0 14 7 7 0 1 0 0-14M16 16l5 5',download:'M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',album:'M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16l-8-4-8 4V5Z',shield_alert:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Zm0-14v4m0 4h.01',shield_check:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Zm-2-10 2 2 4-4',info:'M12 16v-4m0-4h.01M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z',trash:'M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',close:'M18 6 6 18M6 6l12 12',chevron_left:'M15 18l-6-6 6-6',chevron_right:'M9 18l6-6-6-6',arrow_left:'M19 12H5m7 7-7-7 7-7',arrow_right:'M5 12h14m-7-7 7 7-7 7',voice:'M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Zm5 9a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z','image-studio':'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z',more:'M5 12h.01M12 12h.01M19 12h.01',pin:'M12 17v5M9 3h6l-1 7 3 3v2H7v-2l3-3-1-7Z',select:'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',profile:'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8M16 3l2 2 4-4',sync:'M4 4v5h.582m15.356 2A8.001 8.001 0 0 0 4.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 0 1-15.357-2m15.357 2H15'};
 const icon=name=>`<svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="${paths[name]||paths.creations}"/></svg>`;
-const tabLabel=id=>({chat:'Chat',photos:'Photos',journals:'Journal',now:'Home'}[id])||(TABS.find(t=>t[0]===id)?.[1])||({'image-studio':'Image studio','voice':'Voice studio','local-models':'Local models','companion-edit':'Edit companion'}[id])||id;
-/* ---------------------------------------------------------------- navigation
-   One destination map drives three surfaces: the desktop rail, the mobile
-   bottom bar (whichever destinations the person pinned), and the More
-   directory. Anything added here appears in all three. */
-const primaryDestinations=['now','photos','journals'];
-const navGroups=[
-  ['Life & memories', ['identity','timeline','relationship','loops','vault']],
-  ['Studios',         ['image-studio','voice','local-models']],
-  ['Setup & system',  ['settings','roster']]
-];
-/* One line each, so the More page explains itself without being read twice. */
-const navBlurb={
-  now:'Today at a glance',chat:'Talk with your companion',timeline:'Their day, hour by hour',
-  photos:'Every picture and album',journals:'The reflections they write',
-  creations:'Files and things they have made',relationship:'Your shared history, memories and connection',
-  loops:'Tasks, plans and open threads',
-  vault:'Shared notes and documents',identity:'Who they are — persona and soul',
-  settings:'Companion, app and Hermes — all in one place',roster:'All of your companions',
-  'image-studio':'Compose and generate images',voice:'Voice, speech and cloning',
-  'local-models':'Run models on your own hardware'
-};
-/* The bottom bar has room for one word. */
-const navShort={now:'Home',chat:'Chat',timeline:'Timeline',photos:'Photos',journals:'Journal',
-  creations:'Files',relationship:'Us',loops:'Tasks',vault:'Vault',
-  identity:'Identity',settings:'Settings',roster:'Companions',
-  'image-studio':'Images',voice:'Voice','local-models':'Models',more:'More'};
-const shortLabel=id=>navShort[id]||tabLabel(id);
-const navDestinations=[...primaryDestinations,...navGroups.flatMap(([,ids])=>ids)];
+const tabLabel=id=>({chat:'Chat',photos:'Photos',journals:'Journal',now:'Home'}[id])||(PAGES.find(t=>t[0]===id)?.[1])||({'image-studio':'Image studio','voice':'Voice studio','local-models':'Local models','companion-edit':'Edit companion'}[id])||id;
+/* One ordered map drives desktop and mobile navigation. Auxiliary pages belong
+   to Home or Settings and remain directly addressable through the route registry. */
+const primaryDestinations=TABS.map(([id])=>id);
 const navigationButtons=ids=>ids.map(id=>`<button data-tab="${id}">${icon(id)}<span>${esc(tabLabel(id))}</span></button>`).join('');
-
-/* Desktop rail: Core primary section is always visible and prominent; secondary groups are collapsible. */
-$('tabs').innerHTML=`<div class="nav-primary-section">${navigationButtons(primaryDestinations)}</div>`+
-  navGroups.map(([label,ids],i)=>`<details class="nav-group-collapsible" ${i<1?'open':''}><summary>${esc(label)}</summary><div class="nav-group-items">${navigationButtons(ids)}</div></details>`).join('');
+$('tabs').innerHTML=`<div class="nav-primary-section">${navigationButtons(primaryDestinations)}</div>`;
 for(const button of $('tabs').querySelectorAll('button'))button.onclick=()=>showTab(button.dataset.tab);
+const subviewLinks=(ids,label)=>`<nav class="workspace-shortcuts" aria-label="${esc(label)}">${ids.map(id=>`<button class="quiet" data-route="${id}">${icon(id)}<span>${esc(tabLabel(id))}</span>${icon('chevron_right')}</button>`).join('')}</nav>`;
 
 /* The review count and the update notice. Both belong to the workspace rather
    than to any one page, so they are drawn wherever the layout has room and are
@@ -276,36 +249,31 @@ async function openFinishCustomizingDialog(){
 }
 window.openFinishCustomizingDialog=openFinishCustomizingDialog;
 
-/* Mobile bottom bar. Home holds the left corner and More the right; between
-   them are up to four slots the person chooses, so nothing they rely on is ever
-   more than one tap away and the two fixed ends never move. */
-const NAV_FREE_SLOTS=4;
-const navPins=()=>{
-  const saved=(window.Appearance&&window.Appearance.state.nav_pins)||[];
-  // Memories folded into Us: a saved Memories pin becomes Us rather than vanishing.
-  const chosen=[...new Set(saved.map(id=>TAB_ALIASES[id]||id))].filter(id=>id!=='now'&&id!=='more'&&navDestinations.includes(id));
-  // An older setting counted Home as one of the four. Dropping it here just
-  // frees the slot it used to occupy.
-  return chosen.slice(0,NAV_FREE_SLOTS);
-};
+/* Saved appearance preferences remain intact; navigation has five fixed places. */
 function renderTabbar(){
   const bar=$('tabbar');if(!bar)return;
-  const slots=[['now',true],...navPins().map(id=>[id,false]),['more',true]];
-  bar.innerHTML=slots.map(([id,fixed])=>`<button data-tab="${id}"${fixed?' class="is-fixed"':''} aria-current="${String(current===id)}">${icon(id)}<span>${esc(shortLabel(id))}</span></button>`).join('');
-  for(const b of bar.querySelectorAll('button'))b.onclick=()=>showTab(b.dataset.tab);
+  const selected=primaryPage(current);
+  bar.innerHTML=primaryDestinations.map(id=>`<button data-tab="${id}" aria-current="${String(selected===id)}">${icon(id)}<span>${esc(tabLabel(id))}</span></button>`).join('');
+  for(const button of bar.querySelectorAll('button'))button.onclick=()=>showTab(button.dataset.tab);
 }
 window.addEventListener('appearance-change',renderTabbar);
 
 window.productNavigate=name=>{
   document.body.dataset.page=name;
   for(const el of document.querySelectorAll('[data-creating]'))delete el.dataset.creating;
-  const tabs=$('tabs');
-  if(tabs){const parent=tabs.querySelector(`details:has([data-tab="${name}"])`);if(parent)parent.open=true;}
+  const parent=PAGE_PARENTS[name];
+  const trail=$('subview-navigation');
+  trail.hidden=!parent;
+  trail.innerHTML=parent?`<button class="link-button" id="subview-back">${icon('arrow_left')} ${esc(tabLabel(parent))}</button><span aria-hidden="true">/</span><h1 tabindex="-1" id="subview-title">${esc(tabLabel(name))}</h1>`:'';
+  if(parent){
+    $('subview-back').onclick=()=>showTab(parent);
+    $('subview-title').focus({preventScroll:true});
+  }
   if($('crumb-page'))$('crumb-page').textContent=tabLabel(name);
   refreshReviewBanner();
   if($('crumb-agent'))$('crumb-agent').textContent=$('who')?.textContent||'Companion';
   document.body.classList.remove('menu-open');
-  for(const b of $('tabs').querySelectorAll('button[data-tab]'))b.setAttribute('aria-current',String(b.dataset.tab===name));
+  for(const b of $('tabs').querySelectorAll('button[data-tab]'))b.setAttribute('aria-current',String(b.dataset.tab===primaryPage(name)));
   renderTabbar();syncNavigation();window.scrollTo({top:0});
 };
 const compactLayout=matchMedia('(max-width:900px)');
@@ -320,51 +288,6 @@ if($('navigation-backdrop'))$('navigation-backdrop').onclick=()=>{document.body.
 compactLayout.addEventListener('change',()=>{syncNavigation();renderTabbar();});
 syncNavigation();renderTabbar();
 
-/* The More directory: every destination, with pin controls for the bar. */
-workspaceHandlers.more=async()=>{
-  const pins=navPins();
-  const row=id=>{
-    if(id==='now')return '';
-    const pinned=pins.includes(id),full=pins.length>=NAV_FREE_SLOTS;
-    return `<div class="more-row${pinned?' is-pinned':''}">
-      <button class="more-go" data-tab="${id}">${icon(id)}<span><strong>${esc(tabLabel(id))}</strong><small>${esc(navBlurb[id]||'')}</small></span></button>
-      <button class="pin-toggle" data-pin="${id}" aria-pressed="${String(pinned)}" ${!pinned&&full?'disabled':''}
-        title="${pinned?'Remove from the bottom bar':(full?'Unstar something first \u2014 the bar holds four':'Add to the bottom bar')}"
-        aria-label="${pinned?'Unpin '+tabLabel(id):'Pin '+tabLabel(id)+' to the bottom bar'}">${pinned?'★':'☆'}</button>
-    </div>`;
-  };
-  const allNavGroups=[
-    ['Core pages', primaryDestinations],
-    ...navGroups
-  ];
-  const HINT_KEY='bottom-bar-hint-dismissed';
-  let hintSeen=false;
-  try{hintSeen=localStorage.getItem(HINT_KEY)==='1';}catch(error){hintSeen=false;}
-  const hint=hintSeen?'':`<div class="more-hint" id="more-hint">
-      <div>
-        <strong>The bottom bar is yours</strong>
-        <p class="dim small">Star anything below and it appears on the bar; unstar it and it goes.
-        Home and More keep the two ends, leaving four slots in between.</p>
-      </div>
-      <button class="icon-button" id="more-hint-close" aria-label="Got it, hide this">\u2715</button>
-    </div>`;
-  $('more').innerHTML=heading('More','Every part of the workspace.')+hint+
-    allNavGroups.map(([label,ids])=>{
-      const rows=ids.map(row).join('');
-      return rows.trim()?`<section class="more-group"><h2>${esc(label)}</h2><div class="more-list">${rows}</div></section>`:'';
-    }).join('');
-  if($('more-hint-close'))$('more-hint-close').onclick=()=>{
-    try{localStorage.setItem(HINT_KEY,'1');}catch(error){}
-    $('more-hint').remove();
-  };
-  for(const b of $('more').querySelectorAll('[data-tab]'))b.onclick=()=>showTab(b.dataset.tab);
-  for(const b of $('more').querySelectorAll('[data-pin]'))b.onclick=async()=>{
-    const id=b.dataset.pin,next=pins.includes(id)?pins.filter(x=>x!==id):[...pins,id];
-    if(next.length>NAV_FREE_SLOTS){notice('The bar holds four. Unstar one first.');return;}
-    await window.Appearance.set({nav_pins:next});
-    render('more');
-  };
-};
 if($('refresh-page'))$('refresh-page').onclick=async()=>{if(await confirmEditorLeave(current))render(current);};
 function openCompanionSwitchDialog(){
   const list=roster||[];
@@ -389,7 +312,9 @@ function openCompanionSwitchDialog(){
         `;
       }).join('')}
     </div>
+    <button class="quiet" id="manage-companions">Manage companions</button>
   `);
+  $('manage-companions').onclick=()=>{$('product-dialog').close();showTab('roster');};
   for(const item of $('dialog-body').querySelectorAll('[data-profile-id]')){
     item.onclick=async()=>{
       const pid=item.dataset.profileId;
@@ -404,7 +329,7 @@ if($('companion-switch-trigger'))$('companion-switch-trigger').onclick=openCompa
 $('close-dialog').onclick=async()=>{if(await confirmEditorLeave('dialog'))$('product-dialog').close();};
 $('product-dialog').addEventListener('cancel',async e=>{e.preventDefault();if(await confirmEditorLeave('dialog'))$('product-dialog').close();});
 function dialog(title,html){$('dialog-title').textContent=title;$('dialog-body').innerHTML=html;if(!$('product-dialog').open)$('product-dialog').showModal();}
-$('open-search').onclick=async()=>{if(!await confirmEditorLeave('dialog'))return;dialog('Go to page',`<input id="command-search" aria-label="Find a page" placeholder="Photos, providers, memories…"><div id="command-results" class="search-results"></div>`);const update=()=>{$('command-results').innerHTML=TABS.filter(t=>t[0]!=='more').filter(t=>(t[1]+' '+t[0]+' '+({relationship:'us together memory memories remembered facts relationship feelings milestones moments story',vault:'files notes',settings:'preferences contact quiet hours relationship awareness sensors network pin appearance updates diagnostics hermes providers models gateway credentials cron jobs schedules comfyui voice','image-studio':'images workflows','voice':'audio cloning speech','local-models':'local models llama gguf hardware vulkan server'}[t[0]]||'')).toLowerCase().includes($('command-search').value.toLowerCase())).map(([id,label])=>`<button class="quiet" data-go="${id}">${icon(id)}${label}</button>`).join('');for(const b of $('command-results').querySelectorAll('button'))b.onclick=()=>{$('product-dialog').close();showTab(b.dataset.go);};};$('command-search').oninput=update;update();$('command-search').focus();};
+$('open-search').onclick=async()=>{if(!await confirmEditorLeave('dialog'))return;dialog('Go to page',`<input id="command-search" aria-label="Find a page" placeholder="Photos, providers, memories…"><div id="command-results" class="search-results"></div>`);const update=()=>{$('command-results').innerHTML=PAGES.filter(t=>(t[1]+' '+t[0]+' '+({relationship:'us together memory memories remembered facts relationship feelings milestones moments story',vault:'files notes',settings:'preferences contact quiet hours relationship awareness sensors network pin appearance updates diagnostics hermes providers models gateway credentials cron jobs schedules comfyui voice','image-studio':'images workflows','voice':'audio cloning speech','local-models':'local models llama gguf hardware vulkan server'}[t[0]]||'')).toLowerCase().includes($('command-search').value.toLowerCase())).map(([id,label])=>`<button class="quiet" data-go="${id}">${icon(id)}${label}</button>`).join('');for(const b of $('command-results').querySelectorAll('button'))b.onclick=()=>{$('product-dialog').close();showTab(b.dataset.go);};};$('command-search').oninput=update;update();$('command-search').focus();};
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();$('open-search').click();}});
 let profileTimezone;
 const stamp=(value,opts={})=>{if(!value)return 'Not recorded';const d=new Date(value);return Number.isNaN(d.getTime())?value:new Intl.DateTimeFormat(undefined,{timeZone:profileTimezone,month:'short',day:'numeric',...opts}).format(d);};
@@ -966,6 +891,8 @@ workspaceHandlers.now=async()=>{
       </div>
     </div>
   </div>
+
+  ${subviewLinks(['relationship','timeline','loops'],'Explore life together')}
 
   <div class="home-columns" style="margin-top:28px">
     <div>
@@ -2478,5 +2405,5 @@ workspaceHandlers.identity=async()=>{
 
 /* The Voice studio's page and its known voices. The studio itself is drawn by
    studios.js; the Settings page reuses this same list for the engine picker. */
-TABS.push(['voice','Voice studio']);const voiceSection=document.createElement('section');voiceSection.id='voice';voiceSection.hidden=true;document.querySelector('main').append(voiceSection);if(!$('tabs').querySelector('[data-tab="voice"]')){const voiceNav=document.createElement('button');voiceNav.dataset.tab='voice';voiceNav.innerHTML=icon('voice')+'<span>Voice studio</span>';voiceNav.onclick=()=>showTab('voice');($('tabs').querySelector('.nav-more')||$('tabs').lastElementChild||$('tabs')).append(voiceNav);}
+registerPage('voice','Voice studio','settings');
 const voiceChoices={edge:['en-US-AriaNeural','en-US-GuyNeural','en-GB-SoniaNeural'],piper:['en_US-lessac-medium'],kittentts:['Jasper','Bella','Luna','Bruno','Rosie','Hugo','Kiki','Leo'],openai:['alloy','echo','fable','onyx','nova','shimmer'],xai:['eve','ara','rex','sal','leo'],gemini:['Kore','Puck','Charon','Aoede'],neutts:[],elevenlabs:[],minimax:['English_expressive_narrator'],mistral:['c69964a6-ab8b-4f8a-9465-ec0925096ec8','1024d823-a11e-43ee-bf3d-d440dccc0577','98559b22-62b5-4a64-a7cd-fc78ca41faa8','5940190b-f58a-4c3e-8264-a40d63fd6883','01d985cd-5e0c-4457-bfd8-80ba31a5bc03']};

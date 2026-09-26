@@ -44,7 +44,7 @@ def cmd_app(args):
         )
     host = getattr(args, "host", "0.0.0.0")
     port = getattr(args, "port", 8770)
-    browser_host = "127.0.0.1" if host in ("0.0.0.0", "::") else host
+    browser_host = {"0.0.0.0": "127.0.0.1", "::": "::1"}.get(host, host)
     if ":" in browser_host:
         browser_host = "[" + browser_host + "]"
     registry = state / "workspace-server.json"

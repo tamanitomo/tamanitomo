@@ -6,6 +6,7 @@
   z-index: 29;
   color: var(--ink);
 }
+.chat-dock.is-open { z-index: 60; }
 .chat-dock[hidden], .chat-dock [hidden] { display: none !important; }
 .chat-dock-launcher {
   display: flex;
@@ -48,6 +49,7 @@
   min-height: 72px;
   flex: none;
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 10px;
   padding: 14px 12px 14px 16px;
@@ -79,6 +81,9 @@
 .chat-dock-history { align-self: center; margin: 8px 0 0; padding: 6px 12px; background: transparent; color: var(--accent); border: 0; font-size: 12px; }
 .chat-dock-log { flex: 1; min-height: 0; height: auto; padding: 16px 14px; gap: 7px; overscroll-behavior: contain; scroll-behavior: auto; }
 .chat-dock-log .bubble { max-width: 88%; font-size: 14px; }
+.chat-dock .chat-dock-log .bubble { background: var(--surface-2); color: var(--ink); }
+.chat-dock .chat-dock-log .bubble.user { background: var(--accent-soft-2); color: var(--ink); }
+.chat-dock .chat-dock-log .bubble small { color: var(--dim); }
 .chat-dock-log .bubble:not(.user) { margin-left: 0; }
 .chat-dock-log .bubble-face { display: none; }
 .chat-dock-log .chat-media-card { max-width: 100%; }

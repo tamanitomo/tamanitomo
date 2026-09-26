@@ -1,4 +1,4 @@
-# Tamanitomo workspace (2.2 beta)
+# Tamanitomo workspace
 
 The app runs alongside Hermes. Its Python environment, UI, and release files are
 separate from Hermes's runtime. Hermes continues to own profiles, model calls,
@@ -6,9 +6,9 @@ conversation storage, messaging, and scheduling. The vault remains plain files.
 
 For a first-time recipient, start with [the handoff checklist](FIRST_RUN.md).
 
-## Start on Linux or Windows
+## Start on Linux, macOS or Windows
 
-Extract the release into a permanent, writable folder. On Linux:
+Extract the release into a permanent, writable folder. On Linux or macOS:
 
 ```sh
 chmod +x tamanitomo
@@ -56,11 +56,12 @@ and [uv installer options](https://docs.astral.sh/uv/configuration/installer/).
 
 1. Create a companion or adopt an existing profile. Choose its relationship frame,
    identity, contact limits, and vault. The kit installs the appropriate job set.
-2. In **Hermes & providers**, configure the primary model and ordered fallbacks.
+2. In **Settings**, configure the primary model and ordered fallbacks.
    Paste an API key, or use **Provider sign-in** for Hermes's own OAuth flow.
-3. Use **Test saved model chain**. This makes a small real inference request and
-   can incur provider charges. It proves that request worked; a fallback may have
-   answered. It is not a promise that the chain will always be available.
+3. Use **Test saved model**. This makes a small real inference request to the
+   selected provider with fallback disabled and can incur provider charges. It
+   leaves the saved configuration and vault unchanged. See [inference routing](INFERENCE.md)
+   for the separate fallback behavior used by ordinary chat and background work.
 4. Review the exact hooks and approve them with an explicit first message. This
    is separate from granting general tool permissions.
 5. Configure messaging if wanted, choose gateway ownership, and install/start the
@@ -77,14 +78,15 @@ Hermes settings**. Secret fields are masked; credential input is write-only.
 
 App chats execute Hermes in the selected profile. They use that profile's SOUL,
 continuity hooks, memories, and vault, just as its Telegram conversations do.
-**Conversation** lists the profile's native sessions, including Telegram history.
-Selecting an existing session resumes that exact session through Hermes; a new app
-conversation creates a separate native session with the same underlying companion.
-This does not mirror each app reply into Telegram or merge all channel transcripts.
+Open the floating **Chat** dock from any page. It shows the owner’s eligible
+conversation history, offers **Earlier messages**, and resumes the selected local
+session. A first app conversation creates a native session with the same underlying
+companion. App replies are not mirrored into Telegram.
 
-Responses appear after the native CLI completes; token-by-token streaming is not
-implemented in this beta. Approval-heavy interactive conversations can be handled
-in Hermes's native client. The app never automatically grants unseen tool approvals.
+Compatible Hermes runtimes stream reply text through the dock. The dock preserves
+its draft and session while navigating between pages; see [the chat contract](CHAT_CONTRACT.md).
+Approval-heavy interactive conversations can be handled in Hermes's native client.
+The app never automatically grants unseen tool approvals.
 
 ## Background operation and updates
 
@@ -133,9 +135,10 @@ The catalog scans at most 10,000 files and returns up to 1,500 items; the Vault 
 available for other files. Configuration, hidden files, backups, and likely secrets
 are excluded. Reload the view to discover new output.
 
-The layout adapts to narrow windows: use the menu button to reveal navigation.
-**Find anything** (Ctrl/Cmd K) jumps to a page. **Jobs & health** filters by job name
-and state and exposes schedule editing and native run history.
+The five primary destinations are **Home**, **Journal**, **Vault**, **Photos**,
+and **Settings**, with a compact navigation bar on phones. Home and Settings link
+to auxiliary views such as Companions and Us. **Go to page** (Ctrl/Cmd K) finds a
+page. Settings includes schedule editing, job status and native run history.
 
 ## Vault and relationships
 
@@ -193,9 +196,9 @@ Native Windows launch, real-provider app chat,
 and complete scheduled-day behavior still require their own acceptance runs. The
 source archive is a beta for these private tests, not a claim those runs have passed.
 
-## Conversation and workspace names
+## Chat dock and workspace names
 
-Conversation remembers the selected thread and unsent draft within the browser tab.
+The floating dock remembers its session and unsent draft within the browser tab.
 Enter sends; Shift+Enter adds a line. Reply status remains visible while Hermes works.
 Compatible Hermes runtimes now stream reply text; see [hosting and streaming notes](HOSTING.md) for verification and limits.
 

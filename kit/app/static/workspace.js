@@ -179,11 +179,11 @@ async function boot(){
   $('companion-select').onchange=e=>navigateProfile(e.target.value,'now');
   const selected=roster.find(p=>p.id===PROFILE);
   $('who').textContent=selected?.name||'Welcome home';$('sub').textContent=selected?.installed?'A continuing life, together.':'Your companion workspace';
-  // Adopt this companion's saved palette and pinned bar before the first page draws.
+  // Adopt this companion's saved appearance before the first page draws.
   if(window.Appearance)await window.Appearance.load();
   const openChat=location.hash==='#chat';
   let initial=location.hash.slice(1).split('/')[0];initial=TAB_ALIASES[initial]||initial;
-  if(!TABS.some(([id])=>id===initial))initial=selected?.installed?'now':'roster';
+  if(!PAGES.some(([id])=>id===initial))initial=selected?.installed?'now':'roster';
   showTab(initial);
   if(openChat)window.ChatDock?.open();
   const pending=sessionStorage.getItem(operationKey());
@@ -324,7 +324,7 @@ async function renderHermesInto(host){
   <details><summary>Fallback providers</summary><p class="dim small">Hermes tries this chain when the primary is unavailable. No provider chain can cover a complete network outage.</p><div id="fallbacks"></div><button class="quiet" id="add-fallback" type="button">Add a fallback</button></details>
   <h3>Background jobs</h3>${['loops','reflection'].map(t=>`<details class="model-tier" ${d.tiers[t]?.model?'':'open'}><summary><strong>${t==='loops'?'Loops':'Reflection'}</strong><span class="dim" data-tier-summary="${t}">${esc(d.tiers[t]?.model||'Primary model')}</span></summary><div class="form-grid"><label>Provider<input id="tier-${t}-provider" value="${esc(d.tiers[t]?.provider||'')}"></label><label>Model<input id="tier-${t}-model" value="${esc(d.tiers[t]?.model||'')}"></label><label>Base URL<input id="tier-${t}-url" value="${esc(d.tiers[t]?.base_url||'')}"></label><label>Reasoning<select id="tier-${t}-effort">${options([['','Hermes default'],['none','None'],['low','Low'],['medium','Medium'],['high','High']],d.tiers[t]?.reasoning_effort||'')}</select></label></div></details>`).join('')}
 
-  <div class="actions"><button class="act">Save models</button><button class="quiet" id="test-model" type="button">Test saved model chain</button><button class="quiet" id="apply-models" type="button">Apply job models</button></div></form><p class="dim small">${esc(d.restart_note)}</p></div>
+  <div class="actions"><button class="act">Save models</button><button class="quiet" id="test-model" type="button">Test saved model</button><button class="quiet" id="apply-models" type="button">Apply job models</button></div></form><p class="dim small">${esc(d.restart_note)}</p></div>
   <div class="card" data-hermes-card="accounts"><h2>Accounts and credentials</h2><p class="dim">Sign in through Hermes or add an API key. Saved keys stay hidden.</p>
   <form id="credentials-form"><div class="form-grid"><label>Credential<select id="credential-name"><option>Loading provider catalog…</option></select></label><label>Value (blank removes it)<input id="credential-value" type="password" autocomplete="new-password"></label></div><div class="actions"><button class="act">Save credential</button></div></form><div id="credential-status" class="dim small"></div>
   <div class="actions"><button class="quiet native-console" data-console="models">Account sign-in / OAuth</button><button class="quiet native-console" data-console="messaging">Telegram & messaging</button><button class="quiet native-console" data-console="tools">Tools, voice, images & MCP</button><button class="quiet native-console" data-console="setup">Full Hermes setup</button><button class="quiet" id="advanced-config">All Hermes settings</button></div><div id="native-console"></div></div>

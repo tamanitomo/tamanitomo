@@ -1341,6 +1341,7 @@ workspaceHandlers.settings=async()=>{
   const keepPool=hermesPool;
   $('settings').innerHTML=`
     <div class="home-title settings-title"><h2 class="page-title">Settings</h2></div>
+    ${subviewLinks(['roster','identity','image-studio','voice','local-models'],'Companion and creative tools')}
     <div class="settings-shell">
       <nav class="settings-sidebar" aria-label="Settings groups">
         <label class="settings-search-label"><span class="sr-only">Find a setting</span><input id="settings-search" type="search" placeholder="Find a setting"></label>
@@ -1352,6 +1353,7 @@ workspaceHandlers.settings=async()=>{
         <div id="settings-group-content"></div>
       </div>
     </div>`;
+  wireRoutes($('settings'));
   if(keepPool)$('settings').append(keepPool);
   let request=0;
   const show=async(index,focusPanel='',enter=true)=>{

@@ -6,6 +6,8 @@ import importlib
 import io
 import json
 import os
+import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -28,6 +30,85 @@ from kit.app.server import build
 from tests.support import WorkspaceFixture
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def run_browser_contract(script):
+    node = shutil.which("node")
+    if not node:
+        if os.environ.get("TAMANITOMO_REQUIRE_NODE"):
+            pytest.fail("Node is required for browser contracts")
+        pytest.skip("Node is unavailable")
+    subprocess.run(
+        [node, "-"],
+        input=script,
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=10,
+    )
+
+
+def test_browser_scripts_parse_together_without_missing_assets():
+    """Catch missing bundles and global lexical collisions before browser boot."""
+    static = ROOT / "kit/app/static"
+    html = (static / "index.html").read_text(encoding="utf-8")
+    scripts = []
+    for attributes, body in re.findall(r"<script\b([^>]*)>(.*?)</script>", html, re.S):
+        src = re.search(r'src="/static/([^"?]+)', attributes)
+        scripts.append((static / src[1]).read_text(encoding="utf-8") if src else body)
+    run_browser_contract(
+        "const vm = require('node:vm'); new vm.Script("
+        + json.dumps("\n;\n".join(scripts))
+        + ");"
+    )
+
+
+STREAM_HARNESS = r"""
+const assert = require('node:assert/strict');
+global.window = {addEventListener() {}};
+require('./kit/app/static/chat-dock.js');
+const parse = window.ChatDock.readStream;
+"""
+
+
+def test_browser_stream_preserves_unicode_across_single_byte_crlf_frames():
+    run_browser_contract(STREAM_HARNESS + r"""
+(async () => {
+  const bytes = new TextEncoder().encode(
+    ': heartbeat\r\n\r\nevent: delta\r\ndata: {"text":"茶🌿"}\r\n\r\n' +
+    'event: final\r\ndata: {"response":\r\ndata: "café"}\r\n\r\n');
+  const received = [];
+  await parse(new Response(new ReadableStream({start(controller) {
+    for (const byte of bytes) controller.enqueue(new Uint8Array([byte]));
+    controller.close();
+  }})), (kind, data) => received.push([kind, data]));
+  assert.deepEqual(received, [
+    ['delta', {text: '茶🌿'}], ['final', {response: 'café'}]
+  ]);
+})().catch(error => {console.error(error); process.exitCode = 1;});
+""")
+
+
+def test_browser_stream_cancels_and_releases_reader_after_terminal_error():
+    run_browser_contract(STREAM_HARNESS + r"""
+(async () => {
+  let cancelled = false, released = false;
+  const response = {body: {getReader() {return {
+    async read() {return {done: false, value: new TextEncoder().encode(
+      'event: error\ndata: {"error":"provider stopped"}\n\n')};},
+    async cancel() {cancelled = true;},
+    releaseLock() {released = true;}
+  };}}};
+  await assert.rejects(parse(response, (kind, data) => {
+    assert.equal(kind, 'error');
+    throw Error(data.error);
+  }), /provider stopped/);
+  assert.equal(cancelled, true);
+  assert.equal(released, true);
+})().catch(error => {console.error(error); process.exitCode = 1;});
+""")
 
 
 @pytest.fixture
@@ -450,3 +531,54 @@ class ChatDockApiTests(WorkspaceFixture):
         with self.assertRaises(ValueError):
             messages(self.c, "r")
         self.assertEqual(self.get("/api/sessions/r").status_code, 400)
+
+
+def test_vault_expanded_folders_load_before_render_and_failed_reads_stay_visible():
+    run_browser_contract(r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync('kit/app/static/studios.js', 'utf8');
+const tree = source.slice(source.indexOf('async function loadVaultFolder'), source.indexOf('function renderVaultTree'));
+const navigation = source.slice(source.indexOf('listVault=async function'), source.indexOf('showNote=function'));
+vm.runInThisContext(`
+let vaultTreeData=new Map(), vaultTreeErrors=new Map(), vaultExpanded=new Set(['notes','notes/deep','blocked']);
+let vaultRequest=0, vaultPath='', vaultDirty=false, openNote=null, current='vault', listVault, readNote;
+let shown=null, rendered='', requests=[];
+const esc=value=>String(value), CSS={escape:value=>value}, filterVaultEntry=()=>true;
+const leaveNote=async()=>true, clearEditorDirty=()=>{}, notice=()=>{};
+const showNote=note=>{shown=note;};
+const renderVaultTree=()=>{rendered=renderFolderTreeHTML('');};
+const folder=(path,name=path)=>({path,name,directory:true});
+const file=(path)=>({path,name:path.split('/').at(-1),directory:false});
+const listings={
+ '':[folder('notes'),folder('closed'),folder('blocked')],
+ notes:[file('notes/garden.md'),folder('notes/deep','deep')],
+ 'notes/deep':[file('notes/deep/todo.md')]
+};
+const api=async path=>{
+ const url=new URL(path,'http://localhost'), folderPath=url.searchParams.get('path');
+ requests.push(url.pathname+':'+folderPath);
+ if(url.pathname==='/vault/file')return {path:folderPath,text:'A garden note'};
+ if(folderPath==='blocked')throw Error('Folder unavailable');
+ return {entries:listings[folderPath]||[]};
+};
+${tree}
+${navigation}
+(async()=>{
+ await listVault('');
+ assert.ok(rendered.includes('garden.md'));
+ assert.ok(rendered.includes('todo.md'));
+ assert.ok(rendered.includes('Folder unavailable'));
+ assert.ok(rendered.includes('data-load-folder="blocked"'));
+ assert.ok(!rendered.includes('Empty folder'));
+ assert.ok(!requests.some(path=>path==='/vault:closed'));
+ vaultTreeData.delete('notes');
+ requests=[];
+ await readNote('notes/garden.md');
+ assert.equal(shown.path,'notes/garden.md');
+ assert.ok(requests.includes('/vault:notes'), 'An already expanded parent must still hydrate when uncached');
+ assert.ok(rendered.includes('garden.md'));
+})().catch(error=>{console.error(error);process.exitCode=1;});
+`);
+""")
