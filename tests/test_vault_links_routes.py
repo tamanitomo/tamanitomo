@@ -54,6 +54,16 @@ class VaultLinksRoutes(unittest.TestCase):
         self.assertIn('unlinked_mentions', body)
         self.assertIn('ambiguous', body)
 
+    def test_backlinks_includes_the_notes_own_properties(self):
+        self.write('robin.md', '---\ntitle: Robin\naliases: [Bob]\n---\n# Robin')
+        body = self.backlinks('robin.md').json()
+        self.assertEqual(body['properties'], {'title': 'Robin', 'aliases': ['Bob']})
+
+    def test_backlinks_properties_empty_for_a_note_without_frontmatter(self):
+        self.write('plain.md', '# Plain')
+        body = self.backlinks('plain.md').json()
+        self.assertEqual(body['properties'], {})
+
     def test_a_path_outside_the_vault_is_refused_not_500(self):
         r = self.backlinks('../outside.md')
         self.assertEqual(r.status_code, 400, r.text)

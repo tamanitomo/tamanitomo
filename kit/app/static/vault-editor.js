@@ -79,7 +79,7 @@ let active=null, view=null, generation=0;
 function model(path){
   let m=notes.get(path);
   if(!m){m={path,meta:null,disk:null,base:null,state:null,status:'loading',error:'',inflight:false,again:false,
-    timer:null,draftTimer:null,retry:0,conflict:null,reads:0,writes:0,draftKept:true};notes.set(path,m);}
+    timer:null,draftTimer:null,retry:0,conflict:null,reads:0,writes:0,draftKept:true,linksSeq:0};notes.set(path,m);}
   return m;
 }
 const text=m=>m.state?m.state.sliceDoc():'';
@@ -218,7 +218,7 @@ async function save(m){
   if(text(m)===d.text){m.status='saved';drafts.drop(m.path);}
   else{m.status='dirty';schedule(m,SAVE_DELAY);}
   if(m.again){m.again=false;schedule(m,0);}
-  paintStatus(m);if(m.path===active)listTreeQuietly(m.path);
+  paintStatus(m);if(m.path===active){listTreeQuietly(m.path);paintBacklinksPanel(m);}
 }
 function conflict(m,disk){
   clearTimeout(m.timer);m.conflict=disk;m.status='conflict';keep(m);paint(m);
@@ -375,6 +375,7 @@ function build(m,doc){
       <button class="vault-mode-btn ${mode==='edit'?'active':''}" data-vault-mode="edit" aria-pressed="${mode==='edit'}">Source</button>
       <button class="vault-mode-btn ${mode==='split'?'active':''}" data-vault-mode="split" aria-pressed="${mode==='split'}">Split</button></div>
      <button class="act" id="save-note">Save</button>`:''}
+    <button class="quiet" id="vault-toggle-toc" aria-pressed="false" title="Outline, properties &amp; backlinks">Info</button>
     ${m.meta.deletable?'<button class="quiet" id="trash-open-note">Trash</button>':''}
     <a class="quiet" href="${mediaUrl('/api/vault/download?path='+encodeURIComponent(m.path))}" download>Download</a>
    </div>
@@ -382,20 +383,23 @@ function build(m,doc){
   ${m.meta.protected?`<div class="vault-protected-bar"><span>🔒 <strong>Protected companion record</strong> · ${esc(m.meta.protection_reason||'Read-only in Vault.')}</span><button class="quiet" id="vault-edit-companion-btn">Edit in companion settings →</button></div>`:''}
   <div id="vault-conflict"></div>
   ${ed?`<div class="vault-toolbar-editor" id="vault-toolbar" ${mode==='preview'?'hidden':''}>
-   ${[['bold','<b>B</b>','Bold (**)'],['italic','<i>I</i>','Italic (*)'],['h2','H2','Heading 2'],['h3','H3','Heading 3'],['link','[[ ]]','Wikilink'],['list','• List','Bullet list'],['task','☑ Task','Task list'],['code','&lt;/&gt;','Code block'],['quote','&ldquo; Quote','Quote']].map(([t,l,h])=>`<button class="vault-tool-btn" data-tool="${t}" title="${h}">${l}</button>`).join('')}
-   <div style="flex:1"></div><button class="vault-tool-btn" id="vault-toggle-toc" title="Document outline">TOC</button></div>`:''}
+   ${[['bold','<b>B</b>','Bold (**)'],['italic','<i>I</i>','Italic (*)'],['h2','H2','Heading 2'],['h3','H3','Heading 3'],['link','[[ ]]','Wikilink'],['list','• List','Bullet list'],['task','☑ Task','Task list'],['code','&lt;/&gt;','Code block'],['quote','&ldquo; Quote','Quote']].map(([t,l,h])=>`<button class="vault-tool-btn" data-tool="${t}" title="${h}">${l}</button>`).join('')}</div>`:''}
   <div class="vault-editor-content">
    <div class="vault-split-view" id="vault-views" data-mode="${mode}">
     <div class="vault-source" id="vault-source" ${mode==='preview'?'hidden':''}></div>
     <div class="vault-preview-container document" id="vault-preview" ${mode==='edit'?'hidden':''}></div>
    </div>
-   <div class="vault-toc-panel" id="vault-toc" hidden><div class="vault-toc-header">Document outline</div><div id="vault-toc-list"></div></div>
+   <div class="vault-toc-panel" id="vault-toc" hidden>
+    <div class="vault-toc-section" id="vault-properties-section" hidden><div class="vault-toc-header">Properties</div><div id="vault-properties-list"></div></div>
+    <div class="vault-toc-section"><div class="vault-toc-header">Outline</div><div id="vault-toc-list"></div></div>
+    <div class="vault-toc-section"><div class="vault-toc-header">Backlinks</div><div id="vault-backlinks-list"><p class="dim small">Loading…</p></div></div>
+   </div>
   </div>
   ${ed?`<p class="vault-draft-note dim small" id="vault-draft-note">Unsaved edits are kept in this browser tab until they are saved; they are cleared when the tab closes. <button class="link-button" id="vault-clear-drafts">Clear kept drafts</button></p>`:''}`;
   const v=ensureView();
   if(mode!=='preview'){$('vault-source').append(v.dom);if(v.state!==m.state)v.setState(m.state);}
   else if(v.state!==m.state)v.setState(m.state);
-  wire(m);paintReading(m);
+  wire(m);paintReading(m);paintBacklinksPanel(m);
   requestAnimationFrame(()=>{
     if(mode!=='preview'&&place.top!=null&&v.state===m.state)
       v.dispatch({effects:CM.EditorView.scrollIntoView(Math.min(place.top,v.state.doc.length),{y:'start'})});
@@ -416,7 +420,11 @@ function wire(m){
     await listVault(folder||'',false);notice('Moved to trash.');
   };
   if($('vault-edit-companion-btn'))$('vault-edit-companion-btn').onclick=()=>showTab('companion-edit');
-  if($('vault-toggle-toc'))$('vault-toggle-toc').onclick=()=>{$('vault-toc').hidden=!$('vault-toc').hidden;paintReading(m);};
+  if($('vault-toggle-toc'))$('vault-toggle-toc').onclick=()=>{
+    const panel=$('vault-toc'),shown=panel.hidden;panel.hidden=!shown;
+    $('vault-toggle-toc').setAttribute('aria-pressed',String(shown));
+    paintReading(m);if(shown)paintBacklinksPanel(m);
+  };
   if($('vault-clear-drafts'))$('vault-clear-drafts').onclick=()=>{drafts.clear();for(const x of notes.values())x.draftKept=false;paintStatus(m);notice('Drafts kept in this tab were cleared. Open notes still hold their text until you close them.');};
   if($('vault-files-toggle'))$('vault-files-toggle').onclick=()=>document.body.classList.toggle('vault-files-open');
   for(const b of document.querySelectorAll('#vault-document [data-tool]'))b.onclick=()=>tool(m,b.dataset.tool);
@@ -485,6 +493,28 @@ function paintReading(m){
 }
 let treeTimer=null;
 function listTreeQuietly(path){clearTimeout(treeTimer);treeTimer=setTimeout(()=>{if(current==='vault')listVault(path.split('/').slice(0,-1).join('/'),false).catch(()=>{});},800);}
+
+/* ---------- properties & backlinks panel (LINK-04) ---------- */
+async function paintBacklinksPanel(m){
+  const path=m.path,seq=++m.linksSeq,propSection=$('vault-properties-section'),propList=$('vault-properties-list'),backList=$('vault-backlinks-list');
+  if(!backList)return;
+  let d;
+  try{d=await api('/vault/links/backlinks?path='+encodeURIComponent(path));}
+  catch(e){if(seq!==m.linksSeq||active!==path)return;backList.innerHTML='<p class="dim small">Could not load backlinks.</p>';return;}
+  if(seq!==m.linksSeq||active!==path)return;
+  const props=Object.entries(d.properties||{});
+  if(propSection){
+    propSection.hidden=!props.length;
+    if(propList)propList.innerHTML=props.map(([k,v])=>
+      `<div class="vault-property-row"><span class="vault-property-key">${esc(k)}</span><span class="vault-property-value">${esc(Array.isArray(v)?v.join(', '):String(v))}</span></div>`).join('');
+  }
+  const rows=[...(d.linked||[]).map(r=>({...r,kind:'linked'})),...(d.ambiguous||[]).map(r=>({...r,kind:'ambiguous'})),
+              ...(d.unlinked_mentions||[]).map(r=>({...r,kind:'mention'}))];
+  backList.innerHTML=rows.length?rows.map(r=>
+    `<button class="vault-toc-item" data-backlink="${esc(r.path)}">${r.kind==='mention'?'~ ':r.embed?'⇲ ':''}${esc(r.path)}${r.kind==='ambiguous'?' (ambiguous)':r.kind==='mention'?' (unlinked mention)':''}</button>`).join('')
+    :'<p class="dim small">No backlinks yet.</p>';
+  for(const b of backList.querySelectorAll('[data-backlink]'))b.onclick=()=>open(b.dataset.backlink);
+}
 
 /* ---------- integration with the Vault page ---------- */
 async function mount(){

@@ -465,6 +465,10 @@ dialog.photo-viewer::backdrop{background:rgba(0,0,0,0.94)}
 .vault-toc-item:hover{background:var(--surface-2);color:#fff}
 .vault-toc-item.h2{padding-left:14px}
 .vault-toc-item.h3{padding-left:22px}
+.vault-toc-section+.vault-toc-section{margin-top:18px}
+.vault-property-row{display:flex;gap:8px;padding:3px 6px;justify-content:space-between}
+.vault-property-key{color:var(--faint);flex:none}
+.vault-property-value{color:var(--dim);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* ComfyUI Lite Studio */
 .comfy-lite-container{display:flex;flex-direction:column;gap:20px}

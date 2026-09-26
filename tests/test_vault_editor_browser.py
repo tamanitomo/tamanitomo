@@ -608,6 +608,37 @@ class VaultEditor(Browser):
         self.assertIn('Nowhere', self.page.inner_text('#vault-preview .vault-embed-missing'))
         self.shot('08-embeds')
 
+    def test_18_info_panel_shows_properties_and_backlinks(self):
+        (self.vault / 'notes/Robin.md').write_text(
+            '---\ntitle: Robin\naliases: [Bob]\n---\n# Robin\nDetails.\n', encoding='utf-8')
+        (self.vault / 'notes/Journal.md').write_text('Saw [[Robin]] today.\n', encoding='utf-8')
+        (self.vault / 'notes/Diary.md').write_text('Had lunch with Robin, no link.\n', encoding='utf-8')
+        self.vault_page()
+        self.open('notes/Robin.md', mode='preview')
+        self.page.click('#vault-toggle-toc')
+        until(lambda: not self.page.is_hidden('#vault-toc'), what='info panel open')
+
+        until(lambda: self.page.locator('#vault-properties-list .vault-property-row').count() == 2, what='properties loaded')
+        props = self.page.inner_text('#vault-properties-list')
+        self.assertIn('title', props); self.assertIn('Robin', props)
+        self.assertIn('aliases', props); self.assertIn('Bob', props)
+
+        until(lambda: self.page.locator('#vault-backlinks-list [data-backlink]').count() == 2, what='backlinks loaded')
+        backlinks_text = self.page.inner_text('#vault-backlinks-list')
+        self.assertIn('notes/Journal.md', backlinks_text)
+        self.assertIn('notes/Diary.md', backlinks_text)
+        self.assertIn('unlinked mention', backlinks_text)
+        self.shot('09-info-panel')
+
+        self.page.click('#vault-backlinks-list [data-backlink="notes/Journal.md"]')
+        until(lambda: self.page.evaluate('VaultEditor.active()') == 'notes/Journal.md', what='backlink opened')
+
+        # A note without frontmatter shows no properties section, but the panel stays useful.
+        self.open('notes/Diary.md', mode='preview')
+        self.page.click('#vault-toggle-toc')
+        until(lambda: not self.page.is_hidden('#vault-toc'), what='info panel open for Diary')
+        self.assertTrue(self.page.is_hidden('#vault-properties-section'))
+
 
 if __name__ == '__main__':
     unittest.main()

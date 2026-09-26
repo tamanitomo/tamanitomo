@@ -1,10 +1,11 @@
 """Derived Vault link index: parsed links, headings, block ids, properties, search text
-and safe embeds, incrementally maintained (LINK-01 through LINK-03).
+and safe embeds, incrementally maintained (LINK-01 through LINK-04).
 
-`/api/vault/links/*` registers the health, backlinks (LINK-04's backlinks half) and embed
-(LINK-03) routes. Outline/properties panel UI, safe file operations, link-aware rename,
-the command palette and a local graph (the rest of LINK-04 through LINK-09) are later
-work.
+`/api/vault/links/*` registers the health, backlinks+properties (LINK-04) and embed
+(LINK-03) routes; the Vault editor's Info panel (vault-editor.js) reads backlinks and
+properties from the same route, alongside its own client-side outline. Safe file
+operations, link-aware rename, the command palette and a local graph (LINK-05 through
+LINK-09) are later work.
 
 Reuses `kit/app/vault.py`'s authorization boundary: `vault.files()` for the walk
 (hidden/symlink/secret exclusion already applied per file via `vault.resolve()`), so
@@ -342,6 +343,16 @@ def build(c, force=False):
 
 
 # --- Queries ---------------------------------------------------------------------------
+
+def properties(entries, target_rel):
+    """A note's own YAML frontmatter, for the properties panel (LINK-04) -- empty for a
+    note not in the index (non-.md, or one this build could not read). `_malformed` is an
+    internal marker (see parse_frontmatter), never shown to the panel."""
+    note = entries.get(target_rel)
+    if not note:
+        return {}
+    return {k: v for k, v in note.get('properties', {}).items() if k != '_malformed'}
+
 
 def backlinks(entries, target_rel):
     """Linked references to `target_rel`: only where resolution is UNAMBIGUOUS (LINK-02).

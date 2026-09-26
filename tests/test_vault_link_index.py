@@ -117,6 +117,23 @@ class ResolveTests(unittest.TestCase):
         self.assertEqual(vli.resolve_md('my%20note.md', 'a.md', lookup), ['my note.md'])
 
 
+class PropertiesTests(unittest.TestCase):
+    def test_returns_the_notes_own_frontmatter(self):
+        entries = {'robin.md': vli.parse_note('---\ntitle: Robin\naliases: [Bob]\n---\n# Robin')}
+        self.assertEqual(vli.properties(entries, 'robin.md'), {'title': 'Robin', 'aliases': ['Bob']})
+
+    def test_a_note_without_frontmatter_has_no_properties(self):
+        entries = {'robin.md': vli.parse_note('# Robin')}
+        self.assertEqual(vli.properties(entries, 'robin.md'), {})
+
+    def test_malformed_frontmatter_marker_is_never_shown(self):
+        entries = {'a.md': vli.parse_note('---\ntitle: [unterminated\n---\n# A')}
+        self.assertNotIn('_malformed', vli.properties(entries, 'a.md'))
+
+    def test_a_note_not_in_the_index_has_no_properties(self):
+        self.assertEqual(vli.properties({}, 'missing.md'), {})
+
+
 class BacklinksTests(unittest.TestCase):
     def test_linked_backlink_is_found_and_ambiguous_is_kept_separate(self):
         entries = {

@@ -1626,6 +1626,7 @@ def register(app, select, load, operations):
         entries,incomplete=vli.build(c)
         result=vli.backlinks(entries,path)
         result['unlinked_mentions']=vli.unlinked_mentions(entries,path)
+        result['properties']=vli.properties(entries,path)
         result['incomplete']=incomplete
         return result
 
