@@ -61,6 +61,12 @@ jobs:
                   print(f"::error file={path},title=Test {tag}::{cls}::{safe(case.get('name'), 120)} "
                         f"({category}); details in the job log")
           PY
+      - name: Vault editor bundle matches its pinned build
+        # Build-time only (end users never need Node): npm ci from the lockfile, then a
+        # byte-for-byte comparison with the committed bundle and licence file.
+        if: matrix.python == '3.14'
+        run: |
+          cd tools/editor && npm ci --no-audit --no-fund && node build.mjs --check
       - name: Validate installer syntax
         run: bash -n setup-linux.sh setup-termux.sh update.sh uninstall-termux.sh
 

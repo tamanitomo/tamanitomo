@@ -860,7 +860,12 @@ def install_hook(c, m, report):
         "active=pathlib.Path(os.environ.get('HERMES_HOME',str(home))).expanduser().resolve()\n"
         "if active != home:\n    print(json.dumps({}));sys.exit(0)\n"
         f"sys.path.insert(0,{str(KIT/'kit/scripts')!r})\n"
-        "sys.argv=['companion_checkin.py','--home',str(home),'flag']\n"
+        # Internal cron/subagent turns must never rearm owner check-ins.
+        "try:\n    payload=json.load(sys.stdin)\n"
+        "except (ValueError,TypeError):\n    payload={}\n"
+        "extra=payload.get('extra') if isinstance(payload,dict) else None\n"
+        "platform=extra.get('platform') if isinstance(extra,dict) else ''\n"
+        "sys.argv=['companion_checkin.py','--home',str(home),'flag','--platform',str(platform or '')]\n"
         "runpy.run_module('companion_checkin',run_name='__main__')\n"
     )
     if not end_hook.exists() or end_hook.read_text(encoding="utf-8") != end_source:

@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import pathlib
 import sqlite3
 import subprocess
@@ -137,11 +138,17 @@ def hermes_python():
     import re
 
     m = re.search(r'exec\s+"?([^"\s]+/bin/)hermes"?', text)
-    for candidate in ([pathlib.Path(m.group(1)) / "python"] if m else []) + [
-        exe.resolve().parent / "python"
-    ]:
-        if candidate.is_file():
-            return str(candidate)
+    directories = ([pathlib.Path(m.group(1))] if m else []) + [exe.resolve().parent]
+    names = (
+        ("python.exe", "python")
+        if sys.platform == "win32"
+        else ("python", "python.exe")
+    )
+    for directory in directories:
+        for name in names:
+            candidate = directory / name
+            if candidate.is_file():
+                return str(candidate)
     return None
 
 
@@ -166,7 +173,7 @@ def end_sessions(c, ids, python=None):
         capture_output=True,
         text=True,
         timeout=60,
-        env={"HERMES_HOME": str(c.home), "PATH": "/usr/bin:/bin"},
+        env={**os.environ, "HERMES_HOME": str(c.home)},
     )
     if r.returncode:
         raise ValueError(
@@ -203,7 +210,9 @@ def run(c, now=None, apply=True, ender=None):
     try:
         import companion_checkin
 
-        companion_checkin.flag(c, now, "nightly-rollover")
+        # The rollover reader has already established the human conversation;
+        # this direct DB close has no live on_session_end hook to carry a platform.
+        companion_checkin.flag(c, now, "nightly-rollover", trusted=True)
     except (OSError, ValueError):
         pass
     (ender or end_sessions)(c, ids)

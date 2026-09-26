@@ -94,7 +94,7 @@ migration.
 - Updated current onboarding, desktop, model and testing documentation to match
   the dock, five destinations and single-provider dry-run probe.
 
-## Final acceptance evidence
+## Six-phase acceptance evidence
 
 - **296 tests and 29 subtests pass in 4.24s**, across exactly seven domain suites.
   The same tests pass from an extracted release archive in 4.38s. Both runs emit
@@ -123,3 +123,24 @@ migration.
 
 Each phase is committed separately. All preview homes and vaults were temporary;
 existing user Hermes profiles and vaults were left untouched.
+
+## Version 3.6.0 release integration
+
+The release also incorporates the published main branch and its subsequent Vault
+work. It preserves CodeMirror note tabs, autosave, recovered drafts and exact-byte
+backups, and includes the link index, backlinks, safe embeds, properties and
+link-aware file actions. Root-folder refresh invalidates child caches so a rename
+appears immediately. File-action checks reject symlinks and case collisions.
+
+Updater integration uses the actual Hermes root, pauses only enabled dispatch
+jobs, and aborts on a failed pause, an unreadable process list or a running-process
+timeout while restoring already-paused jobs. Windows rollover preserves its host
+environment and locates `python.exe`. CLI and application versions share `VERSION`.
+
+Release validation: **313 tests and 29 subtests pass in 4.81s**, with the same seven
+domain files and one upstream deprecation warning. Black checks 112 Python files;
+Ruff and the reproducible editor-bundle build pass. The release manifest includes
+242 source files plus its generated integrity manifest. A fresh synthetic browser
+check at 1440px and 390px verifies the merged editor, autosave/reload, backlinks,
+rename and inbound-link rewrites, navigation and one-POST chat during navigation,
+with zero JavaScript errors. No existing profiles or vaults were used for testing.

@@ -1,0 +1,21 @@
+{
+  "name": "tamanitomo-vault-editor-bundle",
+  "private": true,
+  "description": "Build-time only. Produces kit/app/static/vault-editor.bundle.js; end users never need Node.",
+  "license": "MIT",
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node build.mjs --check"
+  },
+  "dependencies": {
+    "@codemirror/commands": "6.11.1",
+    "@codemirror/language": "6.12.4",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.13",
+    "@lezer/highlight": "1.2.4",
+    "@lezer/markdown": "1.7.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

@@ -275,7 +275,9 @@ def fingerprint(c, now=None):
         f"bucket {bucket}",
         f'day {_digest(json.dumps(state.get("next"),sort_keys=True),json.dumps(state.get("commitments",[]),sort_keys=True),deadlines)}',
         f"missions {len(open_missions)} {_digest(*open_missions)}",
-        f"scene {_digest(state.get('activity'),state.get('location'),state.get('mood'),state.get('confirmed',True))}",
+        # Only a real transition or confirmation change opens the awake gate;
+        # rewording an activity or mood does not create a new event.
+        f"scene {_digest(state.get('started_at') or 'static',state.get('confirmed',True))}",
         f'loops {len(open_loops)} {_digest(*[l["id"] for l in open_loops])}',
         f"ambient {_digest(*ambient)}",
         f"queued {queued}",

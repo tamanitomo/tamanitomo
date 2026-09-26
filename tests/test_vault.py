@@ -1,13 +1,16 @@
 """Safe vault history, profile boundaries, note conflicts, and navigable indexes."""
 
 import dataclasses
+import hashlib
 import os
 import pathlib
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import companion_config as cc
 import companion_local_context as local
@@ -15,6 +18,8 @@ import companion_vault as vault
 import companion_vault_index as vi
 
 from tests.support import WorkspaceFixture
+from kit.app import vault as editor
+from kit.app import vault_link_index as links
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -249,20 +254,10 @@ class VaultIndexTests(unittest.TestCase):
     def test_scaffold_recognises_its_hook_under_any_interpreter(self):
         from kit.cli.scaffold import _runs_hook
 
-        hook = pathlib.Path("/home/x/.hermes/hooks/companion-context.py")
-        self.assertTrue(
-            _runs_hook(
-                "/usr/bin/python3 /home/x/.hermes/hooks/companion-context.py", hook
-            )
-        )
-        self.assertTrue(
-            _runs_hook(
-                '/venv/bin/python "/home/x/.hermes/hooks/companion-context.py"', hook
-            )
-        )
-        self.assertFalse(
-            _runs_hook("/usr/bin/python3 /home/x/.hermes/hooks/other.py", hook)
-        )
+        hook = self.c.home / "hooks/companion-context.py"
+        self.assertTrue(_runs_hook(f'"{sys.executable}" "{hook}"', hook))
+        self.assertTrue(_runs_hook(f'python "{hook}"', hook))
+        self.assertFalse(_runs_hook(f'python "{hook.with_name("other.py")}"', hook))
         self.assertFalse(_runs_hook("", hook))
 
 
@@ -322,3 +317,339 @@ class VaultApiTests(WorkspaceFixture):
             "/api/vault/file?profile=nova&path=escape.md", headers=self.headers
         )
         self.assertEqual(r.status_code, 400)
+
+
+class VaultEditorTests(WorkspaceFixture):
+    """Exact saves, portable file actions, and links through a synthetic Vault."""
+
+    def setUp(self):
+        super().setUp()
+        (self.vault / "notes").mkdir()
+
+    def read_note(self, relative):
+        return self.client.get(
+            "/api/vault/file",
+            params={"profile": "nova", "path": relative},
+            headers=self.headers,
+        )
+
+    def save_note(self, relative, text, revision):
+        return self.client.put(
+            "/api/vault/file",
+            params={"profile": "nova"},
+            headers=self.headers,
+            json={"path": relative, "text": text, "revision": revision},
+        )
+
+    def backups(self, relative):
+        folder = (
+            self.vault
+            / editor.BACKUPS
+            / hashlib.sha256(relative.encode()).hexdigest()[:24]
+        )
+        return sorted(folder.glob("*.bak"))
+
+    def revision(self, relative):
+        return hashlib.sha256((self.vault / relative).read_bytes()).hexdigest()
+
+    def test_saves_preserve_bytes_coalesce_autosaves_and_keep_external_versions(self):
+        relative = "notes/raw.md"
+        raw = "\ufeff---\r\ntitle: Ünïcødé ✨\r\n---\r\n:::custom\r\n\ttab\u00a0space  \r\nlast"
+        path = self.vault / relative
+        path.write_bytes(raw.encode())
+        body = self.read_note(relative).json()
+        self.assertEqual(body["text"], raw)
+        self.assertEqual(body["revision"], hashlib.sha256(raw.encode()).hexdigest())
+        revision = body["revision"]
+        for i in range(4):
+            edited = raw + str(i)
+            saved = self.save_note(relative, edited, revision)
+            self.assertEqual(saved.status_code, 200, saved.text)
+            revision = saved.json()["revision"]
+            self.assertEqual(path.read_bytes(), edited.encode())
+        self.assertEqual(
+            [p.read_bytes() for p in self.backups(relative)], [raw.encode()]
+        )
+        replacement = self.vault / "notes/replacement.tmp"
+        replacement.write_bytes(b"external\r\n")
+        os.replace(replacement, path)
+        self.assertEqual(self.save_note(relative, "mine", revision).status_code, 409)
+        self.assertEqual(path.read_bytes(), b"external\r\n")
+        revision = self.read_note(relative).json()["revision"]
+        self.assertEqual(self.save_note(relative, "mine", revision).status_code, 200)
+        self.assertIn(b"external\r\n", [p.read_bytes() for p in self.backups(relative)])
+        self.assertEqual(self.save_note("notes/copy.md", "mine", "").status_code, 200)
+        self.assertEqual(
+            self.save_note("notes/copy.md", "overwrite", "").status_code, 409
+        )
+
+    def test_backups_are_bounded_per_note_and_hidden_from_browsing(self):
+        relative = "notes/history.md"
+        for i in range(editor.BACKUP_KEEP + 3):
+            editor.backup(self.c, relative, str(i).encode(), now=1700000000 + i * 601)
+        kept = self.backups(relative)
+        self.assertEqual(len(kept), editor.BACKUP_KEEP)
+        self.assertEqual(kept[0].read_bytes(), b"3")
+        self.assertEqual(kept[-1].read_bytes(), str(editor.BACKUP_KEEP + 2).encode())
+        names = [row["name"] for row in self.get("/api/vault").json()["entries"]]
+        self.assertNotIn(editor.BACKUPS, names)
+        self.assertEqual(
+            self.read_note(editor.BACKUPS + "/hidden.bak").status_code, 400
+        )
+
+    def test_saves_and_file_actions_refuse_symlink_paths(self):
+        real = self.vault / "real"
+        real.mkdir()
+        note(real, "a.md", "original")
+        outside = Path(self.tmp.name) / "outside"
+        outside.mkdir()
+        try:
+            (self.vault / "linked").symlink_to(real, target_is_directory=True)
+            (self.vault / editor.BACKUPS).symlink_to(outside, target_is_directory=True)
+        except OSError:
+            self.skipTest("Symlinks unavailable")
+        with self.assertRaises(ValueError):
+            editor.mkdir(self.c, "linked/new")
+        with self.assertRaises(ValueError):
+            editor.duplicate(self.c, "linked/a.md", self.revision("real/a.md"))
+        with self.assertRaises(ValueError):
+            editor.move(self.c, "real/a.md", "linked/b.md", self.revision("real/a.md"))
+        self.assertEqual(
+            self.save_note(
+                "real/a.md", "overwrite", self.revision("real/a.md")
+            ).status_code,
+            400,
+        )
+        self.assertEqual(self.save_note("notes/new.md", "fresh", "").status_code, 400)
+        self.assertEqual((real / "a.md").read_text(), "original")
+        self.assertEqual(list(outside.iterdir()), [])
+
+    def test_file_actions_require_current_revisions_and_safe_destinations(self):
+        note(self.vault, "notes/a.md", "original")
+        revision = self.revision("notes/a.md")
+        with self.assertRaises(ValueError):
+            editor.move(self.c, "notes/a.md", "notes/b.md")
+        with self.assertRaises(FileExistsError):
+            editor.move(self.c, "notes/a.md", "notes/b.md", "stale")
+        for destination in (
+            "SOUL.md",
+            "notes/CON.md",
+            "notes/trailing.",
+            "../escape.md",
+        ):
+            with self.assertRaises(ValueError, msg=destination):
+                editor.move(self.c, "notes/a.md", destination, revision)
+        upper = self.vault / "notes/A.md"
+        if not upper.exists():
+            upper.write_text("another file", encoding="utf-8")
+            with self.assertRaises(FileExistsError):
+                editor.move(self.c, "notes/a.md", "notes/A.md", revision)
+            self.assertEqual(upper.read_text(), "another file")
+            upper.unlink()
+        editor.move(self.c, "notes/a.md", "notes/A.md", revision)
+        self.assertIn("A.md", {p.name for p in upper.parent.iterdir()})
+        self.assertEqual(upper.read_text(), "original")
+        replace = os.replace
+        calls = 0
+
+        def fail_second_move(source, destination):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("synthetic rename failure")
+            return replace(source, destination)
+
+        with patch.object(editor.os, "replace", side_effect=fail_second_move):
+            with self.assertRaises(OSError):
+                editor.move(self.c, "notes/A.md", "notes/a.md", revision)
+        self.assertEqual(upper.read_text(), "original")
+        self.assertFalse(list(upper.parent.glob(".vault-move-*")))
+
+    def test_duplicate_preserves_text_and_binary_bytes_without_collisions(self):
+        for relative, raw in (
+            ("notes/raw.md", b"\xef\xbb\xbf# A\r\nbody\r\n"),
+            ("notes/image.png", bytes(range(256))),
+        ):
+            (self.vault / relative).write_bytes(raw)
+            revision = self.revision(relative)
+            with self.assertRaises(FileExistsError):
+                editor.duplicate(self.c, relative, "stale")
+            first = editor.duplicate(self.c, relative, revision)["duplicated"]
+            second = editor.duplicate(self.c, relative, revision)["duplicated"]
+            self.assertNotEqual(first, second)
+            self.assertEqual((self.vault / first).read_bytes(), raw)
+            self.assertEqual((self.vault / second).read_bytes(), raw)
+            self.assertEqual((self.vault / relative).read_bytes(), raw)
+        note(self.vault, "SOUL.md", "identity")
+        with self.assertRaises(ValueError):
+            editor.duplicate(self.c, "SOUL.md", self.revision("SOUL.md"))
+
+    def test_note_move_rewrites_both_directions_and_preserves_recovery_bytes(self):
+        (self.vault / "notes/Target.md").write_bytes(b"[other](Other.md)\r\n")
+        note(self.vault, "notes/Other.md", "# Other")
+        citing = "[[Target#Heading|label]] [relative](Target.md)\r\n`[[Target]]`\r\n```\r\n[[Target]]\r\n```\r\n"
+        (self.vault / "notes/Citing.md").write_bytes(citing.encode())
+        result = editor.move(
+            self.c,
+            "notes/Target.md",
+            "archive/Renamed.md",
+            self.revision("notes/Target.md"),
+        )
+        self.assertEqual(
+            result["links"]["updated"], [{"path": "notes/Citing.md", "links": 2}]
+        )
+        self.assertEqual(result["links"]["own_links_updated"], 1)
+        self.assertEqual(
+            (self.vault / "archive/Renamed.md").read_bytes(),
+            b"[other](../notes/Other.md)\r\n",
+        )
+        expected = citing.replace("[[Target#Heading", "[[Renamed#Heading").replace(
+            "(Target.md)", "(../archive/Renamed.md)"
+        )
+        self.assertEqual(
+            (self.vault / "notes/Citing.md").read_bytes(), expected.encode()
+        )
+        self.assertIn(
+            citing.encode(), [p.read_bytes() for p in self.backups("notes/Citing.md")]
+        )
+
+    def test_ambiguous_links_are_reported_without_guessing_or_rewriting(self):
+        note(
+            self.vault,
+            "a/Note.md",
+            "---\naliases: [Alias]\ntags: [project]\n---\n# First\ntext ^block",
+        )
+        note(self.vault, "b/Note.md", "# Second")
+        note(self.vault, "Citing.md", "[[Note]] and `[[Fake]]`\n```\n[[Fenced]]\n```")
+        entries, incomplete = links.build(self.c)
+        self.assertFalse(incomplete)
+        parsed = entries["a/Note.md"]
+        self.assertEqual(parsed["aliases"], ["Alias"])
+        self.assertEqual(parsed["tags"], ["project"])
+        self.assertEqual(parsed["block_ids"], ["block"])
+        self.assertEqual(
+            [row["target"] for row in entries["Citing.md"]["outbound"]], ["Note"]
+        )
+        lookup = links.build_lookup(entries)
+        self.assertEqual(links.resolve_wiki("Alias", lookup), ["a/Note.md"])
+        self.assertEqual(
+            set(links.resolve_wiki("Note", lookup)), {"a/Note.md", "b/Note.md"}
+        )
+        malformed = links.parse_note("---\ntitle: [broken\n---\n# Fallback")
+        self.assertTrue(malformed["properties"]["_malformed"])
+        self.assertEqual(malformed["title"], "Fallback")
+        result = editor.move(
+            self.c, "a/Note.md", "a/Renamed.md", self.revision("a/Note.md")
+        )
+        self.assertEqual(result["links"]["updated"], [])
+        self.assertEqual(result["links"]["ambiguous"][0]["path"], "Citing.md")
+        self.assertTrue((self.vault / "Citing.md").read_text().startswith("[[Note]]"))
+
+    def test_link_index_reuses_unchanged_notes_and_tracks_changes_and_removal(self):
+        note(self.vault, "notes/a.md", "# A")
+        note(self.vault, ".private/hidden.md", "secret")
+        note(self.vault, "api_key.md", "secret")
+        entries, _ = links.build(self.c)
+        self.assertIn("notes/a.md", entries)
+        self.assertNotIn(".private/hidden.md", entries)
+        self.assertNotIn("api_key.md", entries)
+        with patch.object(links, "parse_note", wraps=links.parse_note) as parse:
+            links.build(self.c)
+            parse.assert_not_called()
+            (self.vault / "notes/a.md").write_text("# A changed", encoding="utf-8")
+            changed, _ = links.build(self.c)
+            self.assertEqual(parse.call_count, 1)
+        self.assertEqual(changed["notes/a.md"]["title"], "A changed")
+        (self.vault / "notes/a.md").unlink()
+        self.assertNotIn("notes/a.md", links.build(self.c)[0])
+
+    def test_file_action_routes_enforce_auth_conflicts_and_profile_isolation(self):
+        unauthenticated = self.client.post(
+            "/api/vault/mkdir?profile=nova", json={"path": "forbidden"}
+        )
+        self.assertEqual(unauthenticated.status_code, 401)
+        self.assertFalse((self.vault / "forbidden").exists())
+        self.assertEqual(
+            self.post("/api/vault/mkdir", {"path": "notes/new"}).status_code, 200
+        )
+        self.assertEqual(
+            self.post("/api/vault/mkdir", {"path": "notes/new"}).status_code, 409
+        )
+        self.assertEqual(
+            self.post("/api/vault/mkdir", {"path": "CON"}).status_code, 400
+        )
+        self.assertEqual(self.post("/api/vault/mkdir", {}).status_code, 400)
+        note(self.vault, "notes/a.md", "# A")
+        self.assertEqual(
+            self.post(
+                "/api/vault/duplicate", {"path": "notes/a.md", "revision": "stale"}
+            ).status_code,
+            409,
+        )
+        duplicate = self.post(
+            "/api/vault/duplicate",
+            {"path": "notes/a.md", "revision": self.revision("notes/a.md")},
+        )
+        self.assertEqual(duplicate.status_code, 200, duplicate.text)
+        moved = self.post(
+            "/api/vault/move",
+            {
+                "path": "notes/a.md",
+                "dest": "notes/b.md",
+                "revision": self.revision("notes/a.md"),
+            },
+        )
+        self.assertEqual(moved.status_code, 200, moved.text)
+        self.assertEqual(self.read_note("notes/b.md").json()["text"], "# A")
+        other_vault = Path(self.tmp.name) / "rowan-vault"
+        other_vault.mkdir()
+        dataclasses.replace(self.other, vault=other_vault).save()
+        created = self.post("/api/vault/mkdir", {"path": "rowan-only"}, profile="rowan")
+        self.assertEqual(created.status_code, 200, created.text)
+        self.assertTrue((other_vault / "rowan-only").is_dir())
+        self.assertFalse((self.vault / "rowan-only").exists())
+
+    def test_link_routes_share_resolution_boundaries_and_bounded_embeds(self):
+        note(self.vault, "Target.md", "# Target\n## Keep\nkept\n## Drop\ndropped")
+        note(self.vault, "notes/Citing.md", "[[Target]]")
+        note(self.vault, "duplicate/Target.md", "# Other target")
+
+        def query(route, **params):
+            return self.client.get(
+                "/api/vault/links/" + route,
+                params={"profile": "nova", **params},
+                headers=self.headers,
+            )
+
+        resolved = query("resolve", source="notes/Citing.md", target="Target").json()
+        self.assertEqual(
+            set(resolved["candidates"]), {"Target.md", "duplicate/Target.md"}
+        )
+        backlinks = query("backlinks", path="Target.md").json()
+        self.assertEqual(backlinks["linked"], [])
+        self.assertEqual(backlinks["ambiguous"][0]["path"], "notes/Citing.md")
+        ambiguous = query(
+            "embed-note", source="notes/Citing.md", target="Target"
+        ).json()
+        self.assertFalse(ambiguous["resolved"])
+        (self.vault / "duplicate/Target.md").unlink()
+        embedded = query(
+            "embed-note", source="notes/Citing.md", target="Target", heading="Keep"
+        ).json()
+        self.assertIn("kept", embedded["text"])
+        self.assertNotIn("dropped", embedded["text"])
+        note(self.vault, "Large.md", "x" * (links.EMBED_NOTE_CHAR_LIMIT + 10))
+        bounded = query("embed-note", source="notes/Citing.md", target="Large").json()
+        self.assertTrue(bounded["truncated"])
+        self.assertEqual(len(bounded["text"]), links.EMBED_NOTE_CHAR_LIMIT)
+        self.assertEqual(query("backlinks", path="../outside.md").status_code, 400)
+        self.assertEqual(
+            query("embed-image", source="notes/Citing.md", target="Large").status_code,
+            400,
+        )
+        raw = b"\x89PNG\r\n\x1a\nFAKE"
+        (self.vault / "photo.png").write_bytes(raw)
+        image = query("embed-image", source="notes/Citing.md", target="photo.png")
+        self.assertEqual(image.status_code, 200)
+        self.assertEqual(image.headers["content-type"], "image/png")
+        self.assertEqual(image.content, raw)

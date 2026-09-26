@@ -415,3 +415,161 @@ def test_maintenance_wrappers_dispatch_six_helpers_without_model_calls(tmp_path)
             )
         complete.assert_not_called()
     assert len(calls) == 6
+
+
+def test_updater_drains_the_hermes_root_and_resumes_after_install_failure(tmp_path):
+    from types import SimpleNamespace
+
+    import pytest
+    from kit.app import updates
+
+    app_root = tmp_path / "application"
+    app_root.mkdir()
+    (app_root / "VERSION").write_text("3.5.0")
+    hermes_root = tmp_path / "separate Hermes home"
+    paused = [(hermes_root, "dispatch-job")]
+    runtime = object()
+    with (
+        patch.object(
+            updates,
+            "check_github_update",
+            return_value={
+                "checked": True,
+                "has_update": True,
+                "latest_version": "3.6.0",
+            },
+        ),
+        patch.object(cc, "load", return_value=SimpleNamespace(hermes_root=hermes_root)),
+        patch.object(
+            updates, "_drain_dispatchers", return_value=(paused, runtime)
+        ) as drain,
+        patch.object(updates, "_resume_dispatchers") as resume,
+    ):
+        report = lambda progress: None
+        with pytest.raises(ValueError, match="not a release installation"):
+            updates.perform_in_app_update(report, root=app_root)
+        drain.assert_called_once_with(hermes_root, report)
+        resume.assert_called_once_with(paused, runtime)
+
+
+def test_updater_only_pauses_and_resumes_enabled_dispatch_jobs(tmp_path):
+    import companion_render as render
+    from kit.app import updates
+    from kit.cli.common import load_manifest
+
+    companion = cc.Companion(
+        agent="Nova",
+        profile="nova",
+        hermes_root=tmp_path / "hermes",
+        vault=tmp_path / "vault",
+        soul_in_vault=False,
+    )
+    companion.save()
+    spec = next(
+        row for row in load_manifest(companion)["jobs"] if row["key"] == "dispatch"
+    )
+    name = render.render(spec["name"], {"AGENT": companion.agent})
+    cron = companion.home / "cron"
+    cron.mkdir()
+    (cron / "jobs.json").write_text(
+        json.dumps(
+            {
+                "jobs": [
+                    {"id": "active", "name": name, "enabled": True},
+                    {"id": "disabled", "name": name, "enabled": False},
+                    {"id": "unrelated", "name": "Other scheduled job", "enabled": True},
+                ]
+            }
+        )
+    )
+    calls = []
+
+    class Runtime:
+        def __init__(self, root):
+            assert root == companion.hermes_root
+
+        def run(self, args, *, home, timeout):
+            calls.append((args, home, timeout))
+
+    with patch.object(updates, "_dispatch_running", return_value=False):
+        paused, runtime = updates._drain_dispatchers(
+            companion.hermes_root, lambda progress: None, runtime_cls=Runtime
+        )
+        updates._resume_dispatchers(paused, runtime)
+    assert paused == [(companion.home, "active")]
+    assert calls == [
+        (["cron", "pause", "active"], companion.home, 15),
+        (["cron", "resume", "active"], companion.home, 15),
+    ]
+
+
+def test_updater_process_observation_and_failed_drain_restore_paused_jobs(tmp_path):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    import pytest
+    from kit.app import updates
+
+    for platform, os_name, executable in (
+        ("darwin", "posix", "ps"),
+        ("win32", "nt", "powershell.exe"),
+    ):
+        with (
+            patch.object(sys, "platform", platform),
+            patch.object(updates.os, "name", os_name),
+            patch("os.scandir", side_effect=AssertionError("Portable path read /proc")),
+            patch("subprocess.run") as run,
+        ):
+            run.return_value = SimpleNamespace(returncode=0, stdout="python app.py")
+            assert updates._dispatch_running() is False
+            assert run.call_args.args[0][0] == executable
+            run.return_value.stdout = "python companion_dispatch.py"
+            assert updates._dispatch_running() is True
+            run.return_value.stdout = "TAMANITOMO_UNREADABLE_PROCESS"
+            assert updates._dispatch_running() is None
+            run.side_effect = PermissionError("Process inspection unavailable")
+            assert updates._dispatch_running() is None
+
+    for running, error in ((None, "Cannot verify"), (True, "still running")):
+        runtime = Mock()
+        with (
+            patch.object(
+                updates, "_all_dispatch_jobs", return_value=[(tmp_path, "dispatch")]
+            ),
+            patch.object(updates, "_dispatch_running", return_value=running),
+            patch("time.sleep") as sleep,
+            pytest.raises(ValueError, match=error),
+        ):
+            updates._drain_dispatchers(
+                tmp_path,
+                lambda progress: None,
+                runtime_cls=lambda root: runtime,
+                wait_seconds=0,
+            )
+        assert [call.args[0] for call in runtime.run.call_args_list] == [
+            ["cron", "pause", "dispatch"],
+            ["cron", "resume", "dispatch"],
+        ]
+        sleep.assert_not_called()
+
+    runtime = Mock()
+    runtime.run.side_effect = [None, ValueError("Pause failed"), None]
+    with (
+        patch.object(
+            updates,
+            "_all_dispatch_jobs",
+            return_value=[(tmp_path, "first"), (tmp_path, "second")],
+        ),
+        pytest.raises(ValueError, match="Pause failed"),
+    ):
+        updates._drain_dispatchers(
+            tmp_path,
+            lambda progress: None,
+            runtime_cls=lambda root: runtime,
+            wait_seconds=0,
+        )
+    assert [call.args[0] for call in runtime.run.call_args_list] == [
+        ["cron", "pause", "first"],
+        ["cron", "pause", "second"],
+        ["cron", "resume", "first"],
+    ]

@@ -1,10 +1,15 @@
-Tamanitomo 3.0.24: cleaner memories, and your companion's own pronouns.
+Tamanitomo 3.6.0: one chat dock, five destinations, and resilient model routing.
 
-- **Her own, his own.** The Us page uses your companion's pronouns instead of a generic "their".
-- **Questions asked to you.** New questions your companion wants to ask are written the way they would ask them: "Why did you stop playing guitar?", not "Why did he…".
-- **Memories that read like memories.** New facts are short statements about you rather than a raw quote, with your exact words kept as the reason they are remembered.
-- **Fewer repeats.** Your companion sees what it already knows before writing something new, and an identical memory is not written twice. Existing memories are left exactly as they are.
+- **One conversation, wherever you are.** The floating chat dock is the sole chat surface: a desktop card and a phone bubble that opens into a 65vh sheet. Replies stream through Hermes and recover after a dropped connection without resending the turn.
+- **Five clear destinations.** Home, Journal, Vault, Photos and Settings lead the workspace. Relationship, calendar, identity and companion tools remain available as subviews.
+- **Provider recovery.** Configured workers and chat can move from a primary provider to a secondary and then a local model on transient errors. The model probe tests one saved route without changing configuration.
+- **A complete Vault.** The existing CodeMirror editor, tabs, autosave, exact-byte backups and conflict recovery are preserved. Notes gain a derived link index, backlinks, outline, properties, safe embeds and link-aware file actions.
+- **More portable hosts.** Memory, process, locks, launchers and IPv6 browser URLs handle platform differences explicitly. Unknown hardware readings remain unknown.
+- **A smaller, clearer core.** Python is formatted consistently, deterministic limits and evidence-backed memory are documented, and seven focused test suites cover the application.
+- **Safer updates.** The updater pauses active dispatcher schedules and waits for dispatcher work to finish before changing application files, then restores the schedules it paused.
 
-### Install
+### Install or update
 
-Download **tamanitomo-release.zip** below, extract it into its own application folder, and run the Tamanitomo launcher. Keep your Hermes home and vault outside that folder. The automatically generated GitHub source archives are for development; use the attached release ZIP for in-app updates.
+Download **tamanitomo-release.zip** and its SHA-256 checksum below. Extract the ZIP into its own application folder and run the Tamanitomo launcher, or use the in-app updater. Keep your Hermes home and vault outside the application folder. Use the attached release ZIP for updates; GitHub's generated source archives are for development.
+
+Existing Hermes profiles, transcripts, memories and vault files need no migration. Android/Termux's precompiled wheel download remains available on the `wheelhouse-aarch64` branch.

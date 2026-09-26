@@ -1,3 +1,61 @@
+## 3.6.0 — Core cohesion, one chat dock and a linked Vault (2026-09-25)
+
+- Replace the previous conversation stack with one floating desktop/mobile dock using the
+  Hermes streaming bridge. Interrupted connections recover through the existing operation,
+  without replaying a chat turn. Owner/profile transcript boundaries remain enforced.
+- Reduce primary navigation to Home, Journal, Vault, Photos and Settings; retain auxiliary
+  routes as accessible subviews. Align dialogs and the dock with light/dark theme tokens.
+- Cascade configured worker/chat providers on transient HTTP errors and timeouts, with
+  explicit credential isolation and local endpoints. Preserve the single-route dry-run probe.
+- Guard OS-specific memory, process, locking and network behavior; fix IPv6 browser URLs
+  and report unavailable hardware measurements honestly.
+- Format all production Python, document deterministic boundaries and quote-backed memory,
+  and consolidate regression coverage into seven fast domain suites.
+- Preserve the existing Vault editor and backups while adding the derived note index,
+  backlinks, properties, safe embeds and link-aware rename/move. Expanded folders load
+  before being shown as empty; failed reads offer retry controls.
+- Preserve check-in ownership/fingerprint fixes and dispatcher draining during updates,
+  with the correct Hermes root and previously paused schedules left paused.
+- Keep existing profiles and vault data unchanged; preserve the Android wheelhouse branch.
+
+## 3.5.0 — Persistent Chat, the Vault editor, and three reported fixes (2026-09-25)
+
+- Activate the earlier persistent conversation interface for the normal installed app,
+  including its page, dock and mobile sheet. Version 3.6.0 supersedes that implementation
+  with the single streaming dock. The original process supervision limitations are recorded
+  below as historical context for 3.5.0.
+- Add the Vault editor: a locally bundled CodeMirror 6, Source/Reading/Split modes, note tabs,
+  byte-exact per-note backups, autosave with offline/conflict/recovered-draft states, and "save
+  a copy" that never overwrites newer typing. No Node or CDN is needed to run it.
+- Fix check-ins re-arming themselves (#3). The reflection job's own turn ending was
+  indistinguishable from a real conversation ending, so it kept waking itself up after nothing
+  had happened. It now only re-arms on an owner-facing session (terminal, Telegram, the app).
+- Fix the pulse/autonomy scheduler opening on generated wording alone (#4). Its "has anything
+  changed" check hashed free-text scene descriptions, which are reworded every tick even when
+  nothing did; it now uses the same code-owned scene-start marker the overnight version already
+  used correctly.
+- Verified (#2, duplicate memory): the exact-duplicate write-time check and the review queue for
+  possible restatements were already shipped and are unchanged; no new duplicate-memory work
+  landed this release. A dry-run repair tool for facts duplicated before that protection existed
+  is not built.
+
+### Known limits, stated plainly
+
+- **Tool-process containment.** A tool a model turn starts (or a background job it leaves
+  running) is supervised by process group, not by a boundary that also catches a process that
+  detaches its own session. A prototype using a per-attempt Linux cgroup/systemd scope was built
+  and verified to catch that case; it is not shipped in 3.5.0.
+- **Compression-lineage reads.** After Hermes compresses a session in place, the read paths
+  (history, snapshot, search) do not yet carry original-message identity through the rewrite.
+- **Journal/Timeline.** Journal's Day/Reflection archive is complete; Timeline is not yet
+  retired (no multi-day stream, scene/place search, or live "now" marker in Journal) and remains
+  available alongside it.
+- **Vault.** The editor and safe-save are new; backlinks, the note index, wikilink/embed
+  resolution, properties, link-aware rename, the command palette and a local graph are not in
+  this release.
+- **Update path.** The in-app updater does not yet pause a running dispatcher before applying an
+  update; see the owner-facing upgrade guide for the manual quiescent-install procedure.
+
 ## 3.0.24 — Pronouns, questions asked to you, facts as statements (2026-09-24)
 
 - Use the companion's configured pronouns on Us. `/api/relationship` returns `pronoun_set`; "preferences of her/his/their own" follows it, and singular they is used only for a they/them companion or an unknown set. The test that required neutral copy is replaced by one per pronoun set.

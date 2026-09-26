@@ -965,10 +965,10 @@ class ReflectionTests(unittest.TestCase):
         )
         db.commit()
         db.close()
-        checkin.flag(self.c, self.now)
+        checkin.flag(self.c, self.now, platform="cli")
 
         def planner(*args):
-            checkin.flag(self.c, self.now + dt.timedelta(seconds=10))
+            checkin.flag(self.c, self.now + dt.timedelta(seconds=10), platform="cli")
             plan = empty("")
             plan["facts"] = [
                 {
@@ -1060,3 +1060,35 @@ class ReflectionTests(unittest.TestCase):
         self.assertEqual([r["id"] for r in rows], ["1"])
         rows, *_ = reflection.messages(self.c, start, end, "human", end_inclusive=True)
         self.assertEqual([r["id"] for r in rows], ["1", "2"])
+
+
+def test_rollover_finds_windows_python_and_preserves_the_host_environment(tmp_path):
+    import sys
+    from types import SimpleNamespace
+
+    import companion_rollover as rollover
+
+    scripts = tmp_path / "Hermes venv" / "Scripts"
+    scripts.mkdir(parents=True)
+    launcher = scripts / "hermes.exe"
+    launcher.write_bytes(b"MZ")
+    interpreter = scripts / "python.exe"
+    interpreter.touch()
+    companion = SimpleNamespace(home=tmp_path / "profile")
+    with (
+        patch.object(sys, "platform", "win32"),
+        patch("shutil.which", return_value=str(launcher)),
+        patch.dict(
+            rollover.os.environ,
+            {"PATH": "native search path", "SystemRoot": "C:\\Windows"},
+        ),
+        patch.object(rollover.subprocess, "run") as run,
+    ):
+        assert rollover.hermes_python() == str(interpreter)
+        run.return_value = SimpleNamespace(returncode=0)
+        rollover.end_sessions(companion, ["session-id"])
+    assert run.call_args.args[0][0] == str(interpreter)
+    environment = run.call_args.kwargs["env"]
+    assert environment["PATH"] == "native search path"
+    assert environment["SystemRoot"] == "C:\\Windows"
+    assert environment["HERMES_HOME"] == str(companion.home)

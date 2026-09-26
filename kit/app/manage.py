@@ -2896,6 +2896,99 @@ def register(app, select, load, operations):
 
         return vault.search(load(), q)
 
+    @app.get("/api/vault/links/health")
+    def vault_links_health():
+        from . import vault_link_index as vli
+
+        return vli.health(load())
+
+    @app.get("/api/vault/links/backlinks")
+    def vault_links_backlinks(path: str):
+        from . import vault, vault_link_index as vli
+
+        c = load()
+        vault.resolve(c, path)  # same authorization boundary as every other vault route
+        entries, incomplete = vli.build(c)
+        result = vli.backlinks(entries, path)
+        result["unlinked_mentions"] = vli.unlinked_mentions(entries, path)
+        result["incomplete"] = incomplete
+        return result
+
+    @app.get("/api/vault/links/resolve")
+    def vault_links_resolve(source: str, target: str, kind: str = "wiki"):
+        """What [[target]] (or a relative Markdown link) from `source` actually points
+        to: 0 (unresolved), 1 (resolved) or 2+ (ambiguous -- the caller must offer a
+        chooser, never guess the first). The same rules LINK-02 uses for backlinks,
+        so a click here and a backlink there can never disagree."""
+        from . import vault, vault_link_index as vli
+
+        c = load()
+        vault.resolve(c, source)
+        if kind not in ("wiki", "md"):
+            raise HTTPException(400, "kind must be wiki or md")
+        entries, incomplete = vli.build(c)
+        lookup = vli.build_lookup(entries)
+        link = {"kind": kind, "target": target}
+        candidates = vli.resolve(link, source, lookup)
+        return {"candidates": candidates, "incomplete": incomplete}
+
+    @app.get("/api/vault/links/embed-note")
+    def vault_links_embed_note(source: str, target: str, heading: str = ""):
+        """A note embed's bounded, depth-1 content (LINK-03): this resolves like any
+        other wikilink, then returns the target's own text once -- never that note's
+        own embeds expanded again, which is what makes a cycle structurally
+        impossible rather than merely caught."""
+        from . import vault, vault_link_index as vli
+
+        c = load()
+        vault.resolve(c, source)
+        entries, _incomplete = vli.build(c)
+        lookup = vli.build_lookup(entries)
+        candidates = vli.resolve_wiki(target, lookup)
+        if len(candidates) != 1:
+            return {"resolved": False, "candidates": candidates}
+        resolved = candidates[0]
+        if not resolved.lower().endswith(".md"):
+            return {"resolved": False, "candidates": [], "reason": "not_a_note"}
+
+        def get_text(rel):
+            try:
+                return vault.read(c, rel)["text"]
+            except ValueError:
+                return None
+
+        result = vli.embed_note_text(resolved, get_text, heading=heading or None)
+        if result is None:
+            return {"resolved": False, "candidates": [], "reason": "unreadable"}
+        return {"resolved": True, "path": resolved, **result}
+
+    @app.get("/api/vault/links/embed-image")
+    def vault_links_embed_image(source: str, target: str):
+        from . import vault, vault_link_index as vli
+        from fastapi.responses import FileResponse
+
+        c = load()
+        vault.resolve(c, source)
+        lookup = vli.asset_lookup(
+            c
+        )  # images are not in the note index; a plain file walk
+        candidates = vli.resolve_wiki(target, lookup)
+        if len(candidates) != 1:
+            raise HTTPException(404, "Image not found or ambiguous")
+        resolved = candidates[0]
+        if not vli.is_image_target(resolved):
+            raise HTTPException(400, "Not a supported embeddable image type")
+        path = vault.resolve(c, resolved)
+        if not path.is_file():
+            raise HTTPException(404, "Image not found")
+        media_type = vli.IMAGE_MEDIA_TYPES[Path(resolved).suffix.lower()]
+        return FileResponse(
+            path,
+            media_type=media_type,
+            filename=path.name,
+            content_disposition_type="inline",
+        )
+
     @app.post("/api/vault/trash")
     def vault_trash(payload: dict):
         from . import vault
@@ -2973,6 +3066,38 @@ def register(app, select, load, operations):
                 load(),
                 payload.get("path"),
                 payload.get("text"),
+                payload.get("revision"),
+            )
+        except FileExistsError as exc:
+            raise HTTPException(409, str(exc))
+
+    @app.post("/api/vault/mkdir")
+    def vault_mkdir(payload: dict):
+        from . import vault
+
+        try:
+            return vault.mkdir(load(), payload.get("path"))
+        except FileExistsError as exc:
+            raise HTTPException(409, str(exc))
+
+    @app.post("/api/vault/duplicate")
+    def vault_duplicate(payload: dict):
+        from . import vault
+
+        try:
+            return vault.duplicate(load(), payload.get("path"), payload.get("revision"))
+        except FileExistsError as exc:
+            raise HTTPException(409, str(exc))
+
+    @app.post("/api/vault/move")
+    def vault_move(payload: dict):
+        from . import vault
+
+        try:
+            return vault.move(
+                load(),
+                payload.get("path"),
+                payload.get("dest"),
                 payload.get("revision"),
             )
         except FileExistsError as exc:

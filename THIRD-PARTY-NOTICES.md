@@ -61,6 +61,16 @@ MIT and ISC both permit relicensing the combined work, so the kit's own PolyForm
 terms are unaffected. The only obligation is that these notices travel with the code, which is
 what this file is for.
 
+### Vault editor — CodeMirror 6 and Lezer (MIT)
+
+`kit/app/static/vault-editor.bundle.js` is a minified bundle of CodeMirror 6 (`@codemirror/state`,
+`view`, `commands`, `language`), Lezer (`@lezer/common`, `lr`, `highlight`, `markdown`) and their
+small dependencies (`style-mod`, `w3c-keyname`, `crelt`, `@marijn/find-cluster-break`), all MIT,
+copyright Marijn Haverbeke and contributors. Exact versions are in the bundle's header and in
+`tools/editor/package-lock.json`. The full licence text of every bundled package is in
+`kit/app/static/vault-editor.LICENSES.txt`, which ships beside the bundle. It is built at development
+time (`tools/editor/build.mjs`). Nothing is fetched at runtime, and end users do not need Node.
+
 No fonts are bundled. The interface uses whatever sans-serif the operating system provides.
 
 ---

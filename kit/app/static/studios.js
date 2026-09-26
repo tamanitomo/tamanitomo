@@ -52,7 +52,7 @@ let vaultView='folders';
 let vaultStack=[],vaultRequest=0,vaultDirty=false;
 async function leaveNote(){return confirmEditorLeave('vault');}
 
-function renderObsidianMarkdown(source){
+function renderObsidianMarkdown(source,sourcePath,noEmbeds){
  if(!source)return '<p class="dim">Empty document.</p>';
  const lines=source.split('\n');let html=[],inCode=false,codeLang='',codeLines=[],inList=false,listType='',hIdx=0;
  for(let i=0;i<lines.length;i++){
@@ -68,49 +68,71 @@ function renderObsidianMarkdown(source){
   if(hMatch){
    if(inList){html.push(listType==='ol'?'</ol>':'</ul>');inList=false;}
    const lvl=hMatch[1].length,text=hMatch[2];
-   html.push(`<h${lvl} id="vault-heading-${hIdx++}">${formatInlineMarkdown(text)}</h${lvl}>`);
+   html.push(`<h${lvl} id="vault-heading-${hIdx++}">${formatInlineMarkdown(text,sourcePath,noEmbeds)}</h${lvl}>`);
    continue;
   }
   if(line.startsWith('>')){
    if(inList){html.push(listType==='ol'?'</ol>':'</ul>');inList=false;}
-   html.push(`<blockquote>${formatInlineMarkdown(line.slice(1).trim())}</blockquote>`);
+   html.push(`<blockquote>${formatInlineMarkdown(line.slice(1).trim(),sourcePath,noEmbeds)}</blockquote>`);
    continue;
   }
   const taskMatch=line.match(/^[-*]\s+\[([ xX])\]\s+(.+)$/);
   if(taskMatch){
    if(!inList||listType!=='ul'){if(inList)html.push(listType==='ol'?'</ol>':'</ul>');html.push('<ul class="task-list">');inList=true;listType='ul';}
    const checked=taskMatch[1].toLowerCase()==='x';
-   html.push(`<li class="task-list-item"><input type="checkbox" disabled ${checked?'checked':''}> ${formatInlineMarkdown(taskMatch[2])}</li>`);
+   html.push(`<li class="task-list-item"><input type="checkbox" disabled ${checked?'checked':''}> ${formatInlineMarkdown(taskMatch[2],sourcePath,noEmbeds)}</li>`);
    continue;
   }
   const ulMatch=line.match(/^[-*]\s+(.+)$/);
   if(ulMatch){
    if(!inList||listType!=='ul'){if(inList)html.push(listType==='ol'?'</ol>':'</ul>');html.push('<ul>');inList=true;listType='ul';}
-   html.push(`<li>${formatInlineMarkdown(ulMatch[1])}</li>`);
+   html.push(`<li>${formatInlineMarkdown(ulMatch[1],sourcePath,noEmbeds)}</li>`);
    continue;
   }
   const olMatch=line.match(/^(\d+)\.\s+(.+)$/);
   if(olMatch){
    if(!inList||listType!=='ol'){if(inList)html.push(listType==='ol'?'</ol>':'</ul>');html.push('<ol>');inList=true;listType='ol';}
-   html.push(`<li>${formatInlineMarkdown(olMatch[2])}</li>`);
+   html.push(`<li>${formatInlineMarkdown(olMatch[2],sourcePath,noEmbeds)}</li>`);
    continue;
   }
   if(!line.trim()){if(inList){html.push(listType==='ol'?'</ol>':'</ul>');inList=false;}continue;}
   if(inList){html.push(listType==='ol'?'</ol>':'</ul>');inList=false;}
-  html.push(`<p>${formatInlineMarkdown(line)}</p>`);
+  html.push(`<p>${formatInlineMarkdown(line,sourcePath,noEmbeds)}</p>`);
  }
  if(inCode)html.push(`<pre><code>${esc(codeLines.join('\n'))}</code></pre>`);
  if(inList)html.push(listType==='ol'?'</ol>':'</ul>');
  return html.join('\n');
 }
 
-function formatInlineMarkdown(text){
+const VAULT_IMAGE_EXT=/\.(png|jpe?g|gif|webp|svg|bmp)$/i;
+
+function formatInlineMarkdown(text,sourcePath,noEmbeds){
  let res=esc(text);
+ // Embeds first (LINK-03): ![[target]], with an optional #Heading, ^block or |Label,
+ // consumed whole so the plain wikilink pattern below never re-matches what is left.
+ // `noEmbeds` (set only when rendering content THAT WAS ITSELF FETCHED AS AN EMBED)
+ // leaves a nested embed marker as plain text instead of a fetchable placeholder --
+ // the frontend's half of the depth-1 bound vault_link_index.embed_note_text already
+ // enforces server-side: the fetched text already contains the literal marker
+ // un-expanded, and re-interpreting it here would silently undo that bound.
+ res=res.replace(/!\[\[([^\]|#^]+?)(?:#([^\]|^]+))?(?:\^([^\]|]+))?(?:\|([^\]]+))?\]\]/g,
+  (m,target,heading,block,label)=>{
+   target=target.trim();
+   if(noEmbeds)return `<span class="dim">[[${esc(target)}${heading?'#'+esc(heading):''}]]</span>`;
+   if(!sourcePath)return `<span class="dim" title="Open this note (not a preview) to resolve embeds">[[${esc(target)}]] (embed)</span>`;
+   if(VAULT_IMAGE_EXT.test(target)){
+    const src=mediaUrl('/api/vault/links/embed-image?source='+encodeURIComponent(sourcePath)+'&target='+encodeURIComponent(target));
+    return `<img class="vault-embed-img" src="${src}" alt="${esc(label||target)}" loading="lazy">`;
+   }
+   return `<div class="vault-embed-note" data-embed-source="${esc(sourcePath)}" data-embed-target="${esc(target)}" data-embed-heading="${esc((heading||'').trim())}">Loading ${esc(target)}${heading?' § '+esc(heading.trim()):''}…</div>`;
+  });
  res=res.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g,(m,target,label)=>{
   const disp=label||target;
   return `<button class="quiet wiki-link" data-link="${esc(target.trim())}" title="Follow link [[${esc(target.trim())}]]">[[${esc(disp.trim())}]]</button>`;
  });
- res=res.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+ // Only web and mail links become anchors (as richText() allows); javascript:, data: and
+ // relative targets stay text.
+ res=res.replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
  res=res.replace(/`([^`]+)`/g,'<code>$1</code>');
  res=res.replace(/\*\*\*([^*]+)\*\*\*/g,'<strong><em>$1</em></strong>');
  res=res.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
@@ -118,6 +140,34 @@ function formatInlineMarkdown(text){
  res=res.replace(/~~([^~]+)~~/g,'<del>$1</del>');
  res=res.replace(/==([^=]+)==/g,'<mark>$1</mark>');
  return res;
+}
+
+let vaultEmbedSeq=0;
+function fillVaultEmbeds(root){
+ const nodes=root.querySelectorAll('.vault-embed-note');
+ for(const node of nodes){
+  const seq=++vaultEmbedSeq;node.dataset.embedSeq=seq;
+  const source=node.dataset.embedSource,target=node.dataset.embedTarget,heading=node.dataset.embedHeading;
+  const params=new URLSearchParams({source,target});if(heading)params.set('heading',heading);
+  api('/vault/links/embed-note?'+params.toString()).then(body=>{
+   if(node.dataset.embedSeq!=seq||!node.isConnected)return;   // stale: the pane redrew or scrolled away
+   if(!body.resolved){
+    node.className='dim small';
+    node.textContent=body.candidates&&body.candidates.length>1
+     ?`[[${target}]] is ambiguous (${body.candidates.length} notes share that name)`
+     :`[[${target}]] could not be embedded (${body.reason||'not found'})`;
+    return;
+   }
+   node.className='vault-embed-note-body';
+   // noEmbeds=true: depth-1 by design. The target's OWN embed markers render as
+   // plain text (matching what the server already left un-expanded), never as a
+   // second round of fetchable placeholders -- see formatInlineMarkdown's comment.
+   node.innerHTML=(body.truncated?'<p class="dim small">Truncated for space.</p>':'')
+    +renderObsidianMarkdown(body.text,body.path,true);
+  }).catch(()=>{
+   if(node.dataset.embedSeq==seq&&node.isConnected){node.className='dim small';node.textContent=`[[${target}]] could not be loaded.`;}
+  });
+ }
 }
 
 function extractVaultTOC(text){
@@ -180,12 +230,15 @@ function renderFolderTreeHTML(folderPath,depth=0){
   if(f.directory){
    const isExp=vaultExpanded.has(f.path);
    return `<div class="vault-folder-group" data-folder-path="${esc(f.path)}">
-    <button class="vault-node" data-toggle-folder="${esc(f.path)}" aria-expanded="${String(isExp)}">
-     <div class="vault-node-left">
-      <span class="vault-node-icon">${isExp?'▾':'▸'}</span>
-      <span>📁 ${esc(f.name)}</span>
-     </div>
-    </button>
+    <div class="vault-node-row">
+     <button class="vault-node" data-toggle-folder="${esc(f.path)}" aria-expanded="${String(isExp)}">
+      <div class="vault-node-left">
+       <span class="vault-node-icon">${isExp?'▾':'▸'}</span>
+       <span>📁 ${esc(f.name)}</span>
+      </div>
+     </button>
+     <button class="quiet vault-node-actions" data-vault-actions="${esc(f.path)}" data-vault-dir="1" title="Actions for ${esc(f.name)}" aria-label="Actions for ${esc(f.name)}">⋮</button>
+    </div>
     <div class="vault-folder-children" id="vault-folder-${CSS.escape(f.path)}" ${isExp?'':'hidden'}>
      ${isExp?renderFolderTreeHTML(f.path,depth+1):''}
     </div>
@@ -193,14 +246,79 @@ function renderFolderTreeHTML(folderPath,depth=0){
   }
   const isActive=openNote?.path===f.path;
   const isProtected=f.protected;
-  return `<button class="vault-node ${isActive?'active-file':''}" data-vault-file="${esc(f.path)}">
-   <div class="vault-node-left">
-    <span class="vault-node-icon">${isProtected?'🔒':'📄'}</span>
-    <span>${esc(f.name)}</span>
-   </div>
-   ${isProtected?'<span class="vault-node-tag is-protected">Read-only</span>':''}
-  </button>`;
+  return `<div class="vault-node-row">
+   <button class="vault-node ${isActive?'active-file':''}" data-vault-file="${esc(f.path)}">
+    <div class="vault-node-left">
+     <span class="vault-node-icon">${isProtected?'🔒':'📄'}</span>
+     <span>${esc(f.name)}</span>
+    </div>
+    ${isProtected?'<span class="vault-node-tag is-protected">Read-only</span>':''}
+   </button>
+   ${isProtected?'':`<button class="quiet vault-node-actions" data-vault-actions="${esc(f.path)}" title="Actions for ${esc(f.name)}" aria-label="Actions for ${esc(f.name)}">⋮</button>`}
+  </div>`;
  }).join('');
+}
+
+/* ---------- File actions (LINK-05): new folder inline above; duplicate/rename/move
+   here, one dialog-based menu reused for both files and folders, keyboard and touch
+   reachable (no bare right-click requirement). Delete already exists via Trash. */
+async function vaultReadRevision(path){
+ const body=await api('/vault/file?path='+encodeURIComponent(path));
+ return body.revision;
+}
+function openVaultActionsMenu(path,isDir){
+ const name=path.split('/').pop();
+ dialog(`Actions for ${name}`,
+  `<div class="vault-link-choices">
+    ${isDir?'':'<button class="quiet" data-action="duplicate">Duplicate</button>'}
+    <button class="quiet" data-action="rename">Rename or move…</button>
+   </div>`);
+ const box=$('dialog-body');
+ if(box.querySelector('[data-action="duplicate"]'))box.querySelector('[data-action="duplicate"]').onclick=async()=>{
+  try{
+   const revision=await vaultReadRevision(path);
+   const r=await api('/vault/duplicate',{method:'POST',body:JSON.stringify({path,revision})});
+   $('product-dialog').close();
+   await listVault(path.split('/').slice(0,-1).join('/'),false);
+   notice(`Created ${r.duplicated}.`);
+  }catch(e){notice(e.message||'Could not duplicate that file.',true);}
+ };
+ box.querySelector('[data-action="rename"]').onclick=()=>{
+  $('product-dialog').close();
+  openVaultRenameDialog(path,isDir);
+ };
+}
+function vaultLinkUpdateSummary(links){
+ if(!links)return '';
+ const parts=[];
+ const total=(links.updated||[]).reduce((n,row)=>n+row.links,0);
+ if(total)parts.push(`Updated ${total} link${total===1?'':'s'} in ${links.updated.length} note${links.updated.length===1?'':'s'}.`);
+ if(links.own_links_updated)parts.push(`Fixed ${links.own_links_updated} of its own link${links.own_links_updated===1?'':'s'}.`);
+ if(links.ambiguous?.length)parts.push(`${links.ambiguous.length} link${links.ambiguous.length===1?'':'s'} elsewhere share a name with another note — left as-is; check ${links.ambiguous.length===1?'it':'them'}.`);
+ if(links.skipped?.length)parts.push(`${links.skipped.length} note${links.skipped.length===1?'':'s'} changed at the same time and were left alone.`);
+ return parts.length?' '+parts.join(' '):'';
+}
+
+function openVaultRenameDialog(path,isDir){
+ dialog(`Rename or move ${path.split('/').pop()}`,
+  `<form id="vault-rename-form"><label>New path<input id="vault-rename-dest" required value="${esc(path)}"></label>
+   <button class="act">${isDir?'Move folder':'Rename or move'}</button></form>`);
+ $('vault-rename-form').onsubmit=async e=>{
+  e.preventDefault();
+  const dest=$('vault-rename-dest').value.trim();
+  if(!dest||dest===path){$('product-dialog').close();return;}
+  try{
+   const revision=isDir?null:await vaultReadRevision(path);
+   const result=await api('/vault/move',{method:'POST',body:JSON.stringify({path,dest,revision})});
+   $('product-dialog').close();
+   // The editor's own state (open tabs, active note) lives inside vault-editor.js's
+   // closure, not as a studios.js global — VaultEditor.close() is its exposed API and
+   // is a safe no-op if this path was never open as a tab.
+   if(window.VaultEditor)try{await window.VaultEditor.close(path);}catch(e){}
+   await listVault('',false);
+   notice(`Moved to ${dest}.${vaultLinkUpdateSummary(result?.links)}`);
+  }catch(e){notice(e.message||'Could not rename or move that.',true);}
+ };
 }
 
 function renderVaultTree(){
@@ -227,6 +345,9 @@ function renderVaultTree(){
  }
  for(const b of tree.querySelectorAll('[data-vault-file]')){
   b.onclick=()=>readNote(b.dataset.vaultFile);
+ }
+ for(const b of tree.querySelectorAll('[data-vault-actions]')){
+  b.onclick=e=>{e.stopPropagation();openVaultActionsMenu(b.dataset.vaultActions,b.dataset.vaultDir==='1');};
  }
 }
 
@@ -374,27 +495,27 @@ workspaceHandlers.vault=async()=>{
  };
 
  $('new-folder').onclick=async()=>{
-  if(!await leaveNote())return;
   dialog('New folder',`<form id="new-folder-form"><label>Folder name<input id="new-folder-name" required placeholder="journal or research"></label><button class="act">Create folder</button></form>`);
   $('new-folder-form').onsubmit=async e=>{
    e.preventDefault();
    const raw=$('new-folder-name').value.trim().replace(/^\/+|\/+$/g,'');
-   if(!raw||raw.includes('..'))throw Error('Invalid folder name');
-   const path=raw+'/overview.md';
-   const d=await api('/vault/file',{method:'PUT',body:JSON.stringify({path,text:'# '+raw+' overview\n\n',revision:''})});
+   if(!raw)throw Error('Invalid folder name');
+   // LINK-05: a real, empty folder through the file-actions service -- no placeholder
+   // note is created just to make the folder "exist" the way the old workaround did.
+   await api('/vault/mkdir',{method:'POST',body:JSON.stringify({path:raw})});
    $('product-dialog').close();
-   vaultDirty=false;
    vaultExpanded.add(raw);
-   openNote=d;
-   showNote(d,true);
    await listVault('',false);
+   notice('Folder created.');
   };
  };
 
  $('vault-trash').onclick=showTrash;
 
  await listVault(vaultPath||'',false);
- if(openNote)showNote(openNote);
+ // The editor (vault-editor.js) restores its open tabs, modes and unsaved text.
+ if(window.VaultEditor)await VaultEditor.mount();
+ else if(openNote)showNote(openNote);
 };
 
 listVault=async function(path,remember=true){
@@ -402,8 +523,11 @@ listVault=async function(path,remember=true){
  try{d=await api('/vault?path='+encodeURIComponent(path));}
  catch(e){notice(e.message,true);if(path)return listVault('',false);throw e;}
  if(id!==vaultRequest||current!=='vault')return;
+ // A refresh follows file actions too; rebuild visible children after a move,
+ // rename, or folder creation so cached listings cannot keep obsolete paths.
+ vaultTreeData.clear();
+ vaultTreeErrors.clear();
  vaultTreeData.set(path||'',d.entries);
- vaultTreeErrors.delete(path||'');
  if(path){
   const parts=path.split('/');
   for(let i=1;i<=parts.length;i++)vaultExpanded.add(parts.slice(0,i).join('/'));

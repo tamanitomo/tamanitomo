@@ -50,6 +50,7 @@ def stage(raw, root=ROOT):
                 raise ValueError("Ambiguous release path")
             if name.startswith(".") and name not in (
                 ".gitignore",
+                ".gitattributes",
                 ".github/workflows/test.yml",
             ):
                 raise ValueError("Private state cannot be included in an update")
@@ -252,6 +253,156 @@ def _delayed_restart():
     os.execv(sys.executable, [sys.executable, *sys.orig_argv[1:]])
 
 
+def _dispatch_job_ids(home):
+    """This profile's outbox-dispatcher cron job id(s), identified the same way
+    kit/cli/scaffold.py's own schedule refresh does: render the manifest's job names
+    for this agent and match by the manifest's stable `key`, never by a guessed
+    name/script-path substring (companion_dispatch.py is the module every dispatch
+    job in every manifest revision has shared)."""
+    from kit.cli.common import _read_jobs, load_manifest
+    import companion_config as cc
+    import companion_render as cr
+
+    try:
+        c = cc.load(home)
+        specs = {
+            cr.render(spec["name"], {"AGENT": c.agent}): spec
+            for spec in load_manifest(c)["jobs"]
+        }
+        return [
+            row["id"]
+            for row in _read_jobs(home / "cron/jobs.json")["jobs"]
+            if row.get("id")
+            and row.get("enabled", True)
+            and specs.get(row.get("name"), {}).get("key") == "dispatch"
+        ]
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+
+
+def _all_dispatch_jobs(root):
+    """(home, job_id) for every profile's dispatcher under this installation's default
+    Hermes root. Does not reach a linked/secondary installation (kit/app/server.py's
+    `linked-*` runtimes) -- a stated limitation, not a silent gap: those are drained
+    manually today, same as before this function existed."""
+    from kit.cli.roster import discover
+
+    pairs = []
+    try:
+        for _name, home in discover(root):
+            if home.is_symlink() or not home.is_dir():
+                continue
+            pairs.extend((home, job_id) for job_id in _dispatch_job_ids(home))
+    except OSError:
+        pass
+    return pairs
+
+
+def _dispatch_running():
+    """Observe dispatcher processes, or return None when observation is unavailable."""
+    import subprocess
+    import sys
+
+    if not sys.platform.startswith("linux"):
+        command = (
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "$ErrorActionPreference = 'Stop'; "
+                "Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID } | "
+                "ForEach-Object { "
+                "if ($_.CommandLine) { $_.CommandLine } "
+                "elseif ($_.Name -match '^(python|pypy|hermes)') { "
+                "'TAMANITOMO_UNREADABLE_PROCESS' } }",
+            ]
+            if os.name == "nt"
+            else ["ps", "-eo", "args="]
+        )
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=5)
+            if result.returncode or "TAMANITOMO_UNREADABLE_PROCESS" in result.stdout:
+                return None
+            return "companion_dispatch" in result.stdout
+        except (OSError, subprocess.SubprocessError):
+            return None
+    unreadable = False
+    try:
+        with os.scandir("/proc") as entries:
+            for entry in entries:
+                if not entry.name.isdigit():
+                    continue
+                try:
+                    cmdline = (Path("/proc") / entry.name / "cmdline").read_bytes()
+                except (FileNotFoundError, ProcessLookupError):
+                    continue
+                except OSError:
+                    unreadable = True
+                    continue
+                if b"companion_dispatch" in cmdline:
+                    return True
+    except OSError:
+        return None
+    return None if unreadable else False
+
+
+def _drain_dispatchers(root, report, runtime_cls=None, wait_seconds=60):
+    """Pause enabled dispatch jobs and verify running ticks finish before updating.
+
+    Older installed dispatchers do not share the current process lock, so observe
+    their command lines as well. A failed pause, unreadable process list, or timeout
+    aborts the update and restores the jobs already paused. The caller resumes the
+    returned jobs after installation, including when installation itself fails.
+    """
+    from .runtime import Runtime
+    import time
+
+    rt = (runtime_cls or Runtime)(root)
+    pairs = _all_dispatch_jobs(root)
+    paused = []
+    try:
+        for home, job_id in pairs:
+            rt.run(["cron", "pause", job_id], home=home, timeout=15)
+            paused.append((home, job_id))
+        if paused:
+            report(
+                {
+                    "stage": "Pausing the outbox dispatcher and waiting for its current tick to finish...",
+                    "percent": 62,
+                }
+            )
+            deadline = time.monotonic() + wait_seconds
+            while True:
+                running = _dispatch_running()
+                if running is None:
+                    raise ValueError(
+                        "Cannot verify that the outbox dispatcher has stopped. "
+                        "The update was cancelled; scheduled jobs have been restored."
+                    )
+                if not running:
+                    break
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ValueError(
+                        "The outbox dispatcher is still running. "
+                        "The update was cancelled; try again after its current tick finishes."
+                    )
+                time.sleep(min(1, remaining))
+    except Exception:
+        _resume_dispatchers(paused, rt)
+        raise
+    return paused, rt
+
+
+def _resume_dispatchers(paused, rt):
+    for home, job_id in paused:
+        try:
+            rt.run(["cron", "resume", job_id], home=home, timeout=15)
+        except ValueError:
+            pass
+
+
 def _install_dependencies(root, requirements):
     import subprocess
     import sys
@@ -273,8 +424,8 @@ def _install_dependencies(root, requirements):
         )
 
 
-def perform_in_app_update(report, root=ROOT):
-    """Install the latest published release; never read or upload companion data."""
+def perform_in_app_update(report, root=ROOT, hermes_root=None):
+    """Install the published release while preserving profile jobs and private data."""
     import subprocess
     import shutil
     import threading
@@ -293,77 +444,98 @@ def perform_in_app_update(report, root=ROOT):
             "message": "You already have the latest stable release.",
         }
     latest = info["latest_version"]
-    if (root / ".git").exists() and shutil.which("git"):
+    if hermes_root is None:
+        import companion_config as cc
 
-        def git(*args):
-            result = subprocess.run(
-                ["git", *args], cwd=root, capture_output=True, text=True, timeout=120
-            )
-            if result.returncode:
-                raise ValueError(
-                    "Git update failed: " + (result.stderr or result.stdout).strip()
+        hermes_root = cc.load().hermes_root
+    paused, drain_rt = _drain_dispatchers(Path(hermes_root), report)
+    try:
+        if (root / ".git").exists() and shutil.which("git"):
+
+            def git(*args):
+                result = subprocess.run(
+                    ["git", *args],
+                    cwd=root,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
                 )
-            return result.stdout.strip()
+                if result.returncode:
+                    raise ValueError(
+                        "Git update failed: " + (result.stderr or result.stdout).strip()
+                    )
+                return result.stdout.strip()
 
-        if git("status", "--porcelain"):
-            raise ValueError(
-                "Local code changes detected. Commit or move them before updating."
+            if git("status", "--porcelain"):
+                raise ValueError(
+                    "Local code changes detected. Commit or move them before updating."
+                )
+            report({"stage": "Fetching the published release tag...", "percent": 35})
+            git(
+                "fetch",
+                "https://github.com/tamanitomo/tamanitomo.git",
+                "tag",
+                info["tag"],
             )
-        report({"stage": "Fetching the published release tag...", "percent": 35})
-        git("fetch", "https://github.com/tamanitomo/tamanitomo.git", "tag", info["tag"])
-        if git("show", info["tag"] + ":VERSION") != latest:
-            raise ValueError("Release tag and VERSION do not match.")
-        # Check fast-forward feasibility before installing dependencies or changing code.
-        git("merge-base", "--is-ancestor", "HEAD", info["tag"])
-        import tempfile
+            if git("show", info["tag"] + ":VERSION") != latest:
+                raise ValueError("Release tag and VERSION do not match.")
+            # Check fast-forward feasibility before installing dependencies or changing code.
+            git("merge-base", "--is-ancestor", "HEAD", info["tag"])
+            import tempfile
 
-        with tempfile.TemporaryDirectory() as tmp:
-            requirements = Path(tmp) / "requirements.txt"
-            requirements.write_text(
-                git("show", info["tag"] + ":requirements.txt") + "\n"
+            with tempfile.TemporaryDirectory() as tmp:
+                requirements = Path(tmp) / "requirements.txt"
+                requirements.write_text(
+                    git("show", info["tag"] + ":requirements.txt") + "\n"
+                )
+                _install_dependencies(root, requirements)
+            git("merge", "--ff-only", info["tag"])
+        elif (root / "SHA256SUMS.json").is_file():
+            report({"stage": "Downloading the official release ZIP...", "percent": 35})
+            request = urllib.request.Request(
+                info["download_url"], headers={"User-Agent": "Tamanitomo-Updater"}
             )
-            _install_dependencies(root, requirements)
-        git("merge", "--ff-only", info["tag"])
-    elif (root / "SHA256SUMS.json").is_file():
-        report({"stage": "Downloading the official release ZIP...", "percent": 35})
-        request = urllib.request.Request(
-            info["download_url"], headers={"User-Agent": "Tamanitomo-Updater"}
-        )
-        with urllib.request.urlopen(request, timeout=60) as response:
-            data = response.read(MAX_ZIP + 1)
-        if len(data) > MAX_ZIP:
-            raise ValueError("Update package exceeds 25 MB")
-        digest = info.get("digest")
-        if digest and digest != "sha256:" + hashlib.sha256(data).hexdigest():
-            raise ValueError("Downloaded ZIP does not match the GitHub release digest.")
-        report(
-            {
-                "stage": "Verifying the release and preparing dependencies...",
-                "percent": 60,
-            }
-        )
-        stage(data, root=root)
-        try:
-            staged = root / ".pending-update"
-            if (staged / "VERSION").read_text().strip() != latest:
-                raise ValueError("Release version does not match the published tag.")
-            _install_dependencies(root, staged / "requirements.txt")
+            with urllib.request.urlopen(request, timeout=60) as response:
+                data = response.read(MAX_ZIP + 1)
+            if len(data) > MAX_ZIP:
+                raise ValueError("Update package exceeds 25 MB")
+            digest = info.get("digest")
+            if digest and digest != "sha256:" + hashlib.sha256(data).hexdigest():
+                raise ValueError(
+                    "Downloaded ZIP does not match the GitHub release digest."
+                )
             report(
                 {
-                    "stage": "Installing application files with rollback backup...",
-                    "percent": 85,
+                    "stage": "Verifying the release and preparing dependencies...",
+                    "percent": 60,
                 }
             )
-            from update_release import _apply_pending
+            stage(data, root=root)
+            try:
+                staged = root / ".pending-update"
+                if (staged / "VERSION").read_text().strip() != latest:
+                    raise ValueError(
+                        "Release version does not match the published tag."
+                    )
+                _install_dependencies(root, staged / "requirements.txt")
+                report(
+                    {
+                        "stage": "Installing application files with rollback backup...",
+                        "percent": 85,
+                    }
+                )
+                from update_release import _apply_pending
 
-            _apply_pending(root)
-        except Exception:
-            shutil.rmtree(root / ".pending-update", ignore_errors=True)
-            raise
-    else:
-        raise ValueError(
-            "This source copy is not a release installation. Extract the official release ZIP to install updates."
-        )
+                _apply_pending(root)
+            except Exception:
+                shutil.rmtree(root / ".pending-update", ignore_errors=True)
+                raise
+        else:
+            raise ValueError(
+                "This source copy is not a release installation. Extract the official release ZIP to install updates."
+            )
+    finally:
+        _resume_dispatchers(paused, drain_rt)
     report(
         {
             "stage": f"Tamanitomo v{latest} installed. Restarting workspace...",
@@ -414,7 +586,10 @@ def register(app):
         prof = request.query_params.get("profile") or "default"
 
         def run(report):
-            return perform_in_app_update(report, root=ROOT)
+            runtime = app.state.runtimes.get("existing")
+            return perform_in_app_update(
+                report, root=ROOT, hermes_root=runtime.root if runtime else None
+            )
 
         return app.state.operations.submit(
             str(ROOT), "Update Tamanitomo", run, profile=prof, kind="application"

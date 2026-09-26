@@ -20,7 +20,11 @@ from __future__ import annotations
 import pathlib
 import sys
 
-__version__ = "2.2.0"
+__version__ = (
+    (pathlib.Path(__file__).resolve().parents[2] / "VERSION")
+    .read_text(encoding="utf-8")
+    .strip()
+)
 
 # The runtime helpers are flat modules meant to be runnable on their own
 # (`python companion_self.py ...` appears in every cron prompt), so they are
