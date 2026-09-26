@@ -18,10 +18,8 @@ COMMANDS={'setup':['setup'],'models':['model'],'tools':['tools'],
           'chat':['chat'],'update':['update'],'doctor':['doctor']}
 
 class Console:
-    def __init__(self, runtime, home, action, hold=None):
+    def __init__(self, runtime, home, action):
         if action not in COMMANDS: raise ValueError('Unknown Hermes setup console')
-        # An installation guard hold (Phase 1B keyed sends), released when the console ends.
-        self.hold=hold
         import pyte
         self.id=uuid.uuid4().hex
         self.scope=(str(runtime.root),str(home))
@@ -67,7 +65,6 @@ class Console:
                 try:os.close(self.master)
                 except OSError:pass
                 self.process.wait()
-            if self.hold is not None:self.hold.release()
 
     def read(self):
         self.last_access=time.monotonic()
@@ -93,22 +90,19 @@ class Console:
 
 class Consoles:
     def __init__(self):self.rows={};self.lock=threading.Lock()
-    def open(self,rt,home,action,hold=None):
-        try:
-            home.mkdir(parents=True,exist_ok=True)
-            with self.lock:
-                for row in self.rows.values():
-                    if row.scope[0]==str(rt.root) and not row.finished:
-                        if row.scope==(str(rt.root),str(home)):
-                            if hold is not None:hold.release()
-                            return row
-                        raise ValueError('Close the other setup console for this installation first')
-                # Completed consoles contain private output; do not retain them.
-                self.rows={k:v for k,v in self.rows.items() if not v.finished}
-                row=Console(rt,home,action,hold);self.rows[row.id]=row;return row
-        except BaseException:
-            if hold is not None:hold.release()
-            raise
+    def open(self,rt,home,action):
+        home.mkdir(parents=True,exist_ok=True)
+        with self.lock:
+            for row in self.rows.values():
+                if row.scope[0]==str(rt.root) and not row.finished:
+                    if row.scope==(str(rt.root),str(home)):
+                        return row
+                    raise ValueError('Close the other setup console for this installation first')
+            # Completed consoles contain private output; do not retain them.
+            self.rows={k:v for k,v in self.rows.items() if not v.finished}
+            row=Console(rt,home,action)
+            self.rows[row.id]=row
+            return row
     def get(self,ident,rt,home):
         with self.lock:row=self.rows.get(ident)
         if not row or row.scope!=(str(rt.root),str(home)):raise ValueError('Console not found for this profile')

@@ -59,16 +59,9 @@ async function followOperation(row,onDone){
   activeOperation=row.id;sessionStorage.setItem(operationKey(),row.id);
   try{
     while(true){
-      if(row.stream_text&&row.label.startsWith('Chat with ')&&current==='chat'&&$('chat-log')){
-        const log=$('chat-log'),follow=log.scrollHeight-log.scrollTop-log.clientHeight<100;
-        let live=$('chat-stream');
-        if(!live){$('chat-log').insertAdjacentHTML('beforeend','<div class="bubble" id="chat-stream" aria-label="Incoming reply"></div>');live=$('chat-stream');}
-        live.textContent=row.stream_text.replace(/<(think|reasoning)>[\s\S]*?(<\/\1>|$)/gi,'');
-        $('chat-status').textContent='Replying…';if(follow)log.scrollTop=log.scrollHeight;
-      }
       const op=$('operation');
       if(op){
-        op.hidden=current==='chat'&&row.label.startsWith('Chat with ')&&['running','complete'].includes(row.status);
+        op.hidden=false;
         op.classList?.remove?.('toast-exit');
         op.innerHTML=`<button class="quiet" id="dismiss-notice" style="display:none">✕</button>${progressWheel(row.percent)}<div class="toast-body"><strong>${esc(row.label)}</strong><div class="dim">${esc(row.progress)}</div></div>`;
       }
@@ -98,15 +91,12 @@ async function followOperation(row,onDone){
         if(row.status==='complete'){
           if(onDone)await onDone(result);
           else{
-            if(row.label.startsWith('Chat with ')){
-              chatSession=result.session||chatSession;sessionStorage.setItem(chatKey('session'),chatSession||'');sessionStorage.removeItem(chatKey('draft'));
-            }
             if(!hasEditorChanges())await render(current);
           }
         }
         return row;
       }
-      await new Promise(resolve=>setTimeout(resolve,row.label.startsWith('Chat with ')?350:1300));
+      await new Promise(resolve=>setTimeout(resolve,1300));
       row=await api('/operations/'+row.id);
     }
   }finally{
@@ -191,9 +181,11 @@ async function boot(){
   $('who').textContent=selected?.name||'Welcome home';$('sub').textContent=selected?.installed?'A continuing life, together.':'Your companion workspace';
   // Adopt this companion's saved palette and pinned bar before the first page draws.
   if(window.Appearance)await window.Appearance.load();
+  const openChat=location.hash==='#chat';
   let initial=location.hash.slice(1).split('/')[0];initial=TAB_ALIASES[initial]||initial;
   if(!TABS.some(([id])=>id===initial))initial=selected?.installed?'now':'roster';
   showTab(initial);
+  if(openChat)window.ChatDock?.open();
   const pending=sessionStorage.getItem(operationKey());
   if(pending){try{await followOperation(await api('/operations/'+pending));}catch(e){if(e.status===404||e.status===400)sessionStorage.removeItem(operationKey());operationError(e);}}
 }
@@ -213,18 +205,7 @@ workspaceHandlers.roster=async()=>{
   if(!d.profiles.some(p=>p.installed))setTimeout(()=>onboarding(false),50);
 };
 /* The create/adopt flow lives in onboarding.js, which defines window.onboarding(). */
-/* ---------------------------------------------------------------------- chat
-
-   One conversation. Hermes keeps a session per channel, so a companion talked
-   to on Telegram in the morning and here at night had its history split across
-   rows that each told only part of it. /api/feed reads across all of them at
-   once, so this is the whole thing, in order, however it was said — scheduled
-   runs and sub-agents excluded, because those are the companion working rather
-   than the companion talking.
-
-   There is no new-conversation control, because the conversation does not end.
-   Scrolling up loads what came before until there is nothing before it. */
-
+/* Shared transcript and media rendering for the floating chat dock. */
 const CHANNELS={
   telegram:{label:'Telegram',mark:'✈'},
   discord:{label:'Discord',mark:'◉'},
@@ -244,214 +225,8 @@ const channelOf=source=>{
   return {key,...(CHANNELS[key]||{label:source||'Elsewhere',mark:'○'})};
 };
 
-let chatPageGeneration=0,chatFeedCursor=null,chatFeedLoading=false,chatLastDay='',chatFeedReady=false;
-let chatTopWatcher=null;
+let chatLastDay='';
 
-workspaceHandlers.chat=async()=>{
-  const pageGeneration=++chatPageGeneration;
-  const alive=()=>current==='chat'&&pageGeneration===chatPageGeneration;
-  const emotions=await api('/feelings').catch(()=>null);
-  if(!alive())return;
-  const moodLabel=emotions?.intimacy?.romantic_progression===false?(emotions.intimacy.connection_label||'Familiarity'):emotions?.intimacy?`${emotions.intimacy.stage_badge} · ${emotions.intimacy.score}%`
-    :(emotions?.state?.mood||'');
-  $('chat').innerHTML=`
-    <div class="chat-room">
-      <div class="chat-peek" id="chat-peek">
-        ${faceHtml(chatName(),"chat-peek-avatar")}
-        <div class="chat-peek-copy">
-          <strong>${esc(chatName())}</strong>
-          <span class="dim small" id="chat-presence">${moodLabel?esc(moodLabel):' '}</span>
-        </div>
-      </div>
-      <div id="chat-log" class="chat-log" role="log" aria-live="polite">
-        <p class="dim small chat-loading" role="status">Reading the conversation…</p>
-      </div>
-      <form id="chat-form" class="chat-composer">
-        <label class="sr-only" for="chat-message">Your message</label>
-        <textarea rows="1" id="chat-message" placeholder="Message ${esc(chatName())}" required maxlength="30000"></textarea>
-        <button class="chat-send" id="send-message" aria-label="Send">${icon('arrow_right')}</button>
-      </form>
-      <span class="dim small chat-hint" id="chat-status" role="status">Enter to send · Shift+Enter for a new line</span>
-    </div>`;
-  if(moodLabel&&$('chat-presence'))$('chat-presence').onclick=()=>showTab('relationship');
-
-  const log=$('chat-log');
-  chatFeedCursor=null;chatLastDay='';chatFeedReady=false;
-
-  await loadFeed(pageGeneration);
-  mountBrowserVoice();
-  voiceControlsBusy(Boolean(activeOperation));
-
-  const box=$('chat-message');
-  box.value=sessionStorage.getItem(chatKey('draft'))||'';
-  const grow=()=>{box.style.height='auto';box.style.height=Math.min(box.scrollHeight,200)+'px';};
-  grow();
-  box.oninput=()=>{sessionStorage.setItem(chatKey('draft'),box.value);grow();};
-  box.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();if(!$('send-message').disabled)$('chat-form').requestSubmit();}};
-
-  $('chat-form').onsubmit=async e=>{
-    e.preventDefault();
-    // Keyed sends (Phase 1B C3) exist only on a page the server explicitly enabled them for.
-    if(window.KeyedChat)return window.KeyedChat.submit(box,grow);
-    const message=box.value;
-    if(!message.trim())return;
-    if(activeOperation)throw Error('Wait for the current action to finish.');
-    sessionStorage.setItem(chatKey('draft'),message);
-    $('send-message').disabled=true;box.readOnly=true;
-    log.querySelector('.chat-welcome')?.remove();
-    const tempId='turn-'+Date.now();
-    log.insertAdjacentHTML('beforeend',
-      `<div class="bubble user sending" id="${tempId}" data-channel="desktop">
-        <div class="message-body">${richText(message)}</div>
-        <small><span class="bubble-status">sending…</span></small></div>`);
-    showTyping(true);
-    log.scrollTo({top:log.scrollHeight,behavior:'smooth'});
-    box.value='';grow();
-    try{
-      const result=await action('/chat',{message,session:chatSession},async r=>{
-        showTyping(false);
-        $('chat-stream')?.remove();
-        const pending=$(tempId);
-        if(pending){
-          pending.classList.remove('sending');
-          const status=pending.querySelector('.bubble-status');
-          if(status)status.textContent=new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
-        }
-        chatSession=r.session||chatSession;
-        sessionStorage.setItem(chatKey('session'),chatSession||'');
-        sessionStorage.removeItem(chatKey('draft'));
-        if(current!=='chat'){notice('Reply received from '+chatName()+'. Open Chat to read it.');return;}
-        const replyObj=(r.messages||[]).filter(m=>m.role==='assistant').at(-1);
-        const {text:replyText,extractedMedia}=extractMediaFromContent(replyObj?.content||r.response||'');
-        const attachments=[...(replyObj?.attachments||[]),...extractedMedia];
-        if(replyText||attachments.length){
-          log.insertAdjacentHTML('beforeend',
-            `<div class="bubble animate-in" data-channel="desktop">
-              <div class="message-body">${richText(replyText)}</div>
-              ${attachments.map(inlineMedia).join('')}
-              <small>${esc(new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}))}</small></div>`);
-        }
-        log.scrollTo({top:log.scrollHeight,behavior:'smooth'});
-        $('send-message').disabled=false;box.readOnly=false;
-        if($('chat-status'))$('chat-status').textContent='Enter to send · Shift+Enter for a new line';
-        box.focus();
-        await speakBrowserReply(r);
-      });
-      if(result.status!=='complete')throw Error(result.error||'Message could not be completed. Your draft is saved.');
-    }catch(error){
-      showTyping(false);
-      $('chat-stream')?.remove();
-      voiceReplyRequested=false;
-      const pending=$(tempId);
-      if(pending){
-        pending.classList.remove('sending');pending.classList.add('send-error');
-        const status=pending.querySelector('.bubble-status');
-        if(status)status.innerHTML='<span class="bad">Failed to send</span>';
-      }
-      box.value=message;grow();
-      if($('chat-status'))$('chat-status').textContent='Could not finish. Your draft is saved; you can retry.';
-      $('send-message').disabled=false;box.readOnly=false;
-      throw error;
-    }
-  };
-  if(window.KeyedChat)await window.KeyedChat.attach();
-};
-
-/* A marker pinned to the head of the log. When it scrolls into view there is
-   history to fetch. An observer fires on layout, so this also covers a log too
-   short to scroll and a flick that outruns its own scroll events. */
-function watchTopOfLog(log,generation){
-  chatTopWatcher?.disconnect();chatTopWatcher=null;
-  const sentinel=document.createElement('div');
-  sentinel.className='chat-top-sentinel';
-  log.insertBefore(sentinel,log.firstChild);
-  if(typeof IntersectionObserver!=='function'){
-    log.onscroll=()=>{if(chatFeedReady&&log.scrollTop<140)loadOlder(generation);};
-    return;
-  }
-  chatTopWatcher=new IntersectionObserver(entries=>{
-    if(chatFeedReady&&entries.some(entry=>entry.isIntersecting))loadOlder(generation);
-  },{root:log,rootMargin:'200px 0px 0px 0px'});
-  chatTopWatcher.observe(sentinel);
-}
-
-/* Land on the newest message without animating down the whole history, and only
-   start watching for the top of the log once we are there. Pictures resolve
-   their height late, so the foot is held for a couple of frames. */
-function jumpToNewest(log){
-  chatFeedReady=false;
-  const settle=()=>{log.style.scrollBehavior='auto';log.scrollTop=log.scrollHeight;log.style.scrollBehavior='';};
-  settle();
-  requestAnimationFrame(settle);
-  setTimeout(settle,60);
-  setTimeout(()=>{settle();chatFeedReady=true;},300);
-  for(const img of log.querySelectorAll('img'))
-    img.addEventListener('load',()=>{if(!chatFeedReady)settle();},{once:true});
-}
-
-/* The three dots, while they are composing a reply. */
-function showTyping(on){
-  const log=$('chat-log');if(!log)return;
-  $('chat-typing-indicator')?.remove();
-  if($('chat-presence'))$('chat-presence').classList.toggle('is-typing',!!on);
-  if(!on)return;
-  log.insertAdjacentHTML('beforeend',
-    `<div class="bubble typing" id="chat-typing-indicator" aria-label="${esc(chatName())} is typing">
-      <span class="typing-dots"><i></i><i></i><i></i></span></div>`);
-  log.scrollTo({top:log.scrollHeight,behavior:'smooth'});
-}
-
-async function loadFeed(generation){
-  const log=$('chat-log');
-  try{
-    const d=await api('/feed?limit=60');
-    if(current!=='chat'||generation!==chatPageGeneration||!$('chat-log'))return;
-    chatFeedCursor=d.next_cursor;
-    chatSession=d.session||chatSession;
-    if(chatSession)sessionStorage.setItem(chatKey('session'),chatSession);
-    log.innerHTML=chatMessagesHtml(d.messages)||`
-      <div class="chat-welcome">
-        ${faceHtml(chatName())}
-        <h2>The beginning</h2>
-        <p>Whatever you say here, and on any channel ${esc(chatName())} is reachable on, collects in this one place.</p>
-      </div>`;
-    watchTopOfLog(log,generation);
-    jumpToNewest(log);
-  }catch(error){
-    if(current==='chat'&&generation===chatPageGeneration&&$('chat-log'))
-      log.innerHTML=`<p class="bad">${esc(error.message)}</p>`;
-    chatFeedReady=true;
-  }
-}
-
-async function loadOlder(generation){
-  if(chatFeedLoading||!chatFeedCursor)return;
-  chatFeedLoading=true;
-  const log=$('chat-log');
-  // Everything lands just after the sentinel, so the sentinel stays the head of
-  // the log and one observer keeps working across every page.
-  const sentinel=log.querySelector('.chat-top-sentinel');
-  const place=html=>sentinel?sentinel.insertAdjacentHTML('afterend',html):log.insertAdjacentHTML('afterbegin',html);
-  place('<p class="dim small chat-older" id="chat-older" role="status">Reading earlier…</p>');
-  try{
-    const page=await api('/feed?limit=60&before='+encodeURIComponent(chatFeedCursor));
-    if(current!=='chat'||generation!==chatPageGeneration||!$('chat-log'))return;
-    const height=log.scrollHeight,top=log.scrollTop;
-    $('chat-older')?.remove();
-    // The oldest message on screen is no longer the first of its day.
-    chatLastDay='';
-    place(chatMessagesHtml(page.messages));
-    // Hold the reader's place: the content above them just grew.
-    log.scrollTop=top+log.scrollHeight-height;
-    chatFeedCursor=page.next_cursor;
-    if(!chatFeedCursor){
-      chatTopWatcher?.disconnect();chatTopWatcher=null;
-      place('<p class="dim small chat-older">The beginning of the conversation.</p>');
-    }
-  }catch(error){
-    if($('chat-older'))$('chat-older').innerHTML=`<span class="bad">${esc(error.message)}</span>`;
-  }finally{chatFeedLoading=false;}
-}
 function extractMediaFromContent(content){
   let text=String(content||'');
   const mediaMatches=[];
@@ -498,7 +273,6 @@ function chatMessagesHtml(messages){
       ?`<small>${badge}<span>${esc(at.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}))}</span></small>`:'';
     const shape=[startsRun?'starts-run':'',endsRun?'ends-run':''].filter(Boolean).join(' ');
     const face=m.role!=='user'&&endsRun?faceHtml(chatName(),'bubble-face'):'';
-    // Row identity, present only for the keyed client (Phase 1B C3): matched by id, never by text.
     const source=m.source_message!=null?` data-source-session="${esc(m.session)}" data-source-message="${esc(m.source_message)}"`:'';
     return divider+`<div class="bubble ${m.role==='user'?'user':''} ${shape}" data-channel="${esc(channel.key)}"${source}>
       ${face}

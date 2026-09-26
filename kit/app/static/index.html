@@ -4,6 +4,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Tamanitomo · Soul of a Friend</title>
 <link rel="stylesheet" href="/static/product.css">
+<link rel="stylesheet" href="/static/chat-dock.css">
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="manifest" href="/static/site.webmanifest">
 <script>
@@ -115,7 +116,6 @@
 <div id="operation" role="status" aria-live="polite" hidden></div>
 <main>
   <section id="roster" hidden></section>
-  <section id="chat" hidden></section>
   <section id="relationship" hidden></section>
   <section id="vault" hidden></section>
   <section id="now"><div class="card dim" role="status">Loading overview…</div></section>
@@ -131,7 +131,7 @@
 <nav id="tabbar" class="tabbar" aria-label="Primary"></nav>
 
 <script>
-const TABS=[['now','Home'],['chat','Conversation'],['timeline','Timeline'],['photos','Photos & albums'],['journals','Journal'],['relationship','Us'],['loops','Plans & calendar'],['vault','Vault'],['identity','Identity'],['settings','Settings'],['roster','Companions'],['more','More']];
+const TABS=[['now','Home'],['timeline','Timeline'],['photos','Photos & albums'],['journals','Journal'],['relationship','Us'],['loops','Plans & calendar'],['vault','Vault'],['identity','Identity'],['settings','Settings'],['roster','Companions'],['more','More']];
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const params=new URLSearchParams(location.search);
@@ -272,9 +272,9 @@ let current='now';
    committed, so an old link or a saved pin lands on the page, never on a blank. */
 const TAB_ALIASES={knows:'relationship'};
 async function showTab(name){
+  if(name==='chat'){window.ChatDock?.open();return;}
   name=TAB_ALIASES[name]||name;
   if(typeof confirmEditorLeave==='function'&&!await confirmEditorLeave(current))return;
-  if(name!=='chat'&&window.stopBrowserVoice)stopBrowserVoice();
   current=name;
   // A page's own route (#journals/<date>/<view>) survives being shown; any other tab is just its name.
   const route=String(location.hash||'').slice(1).split('/');
@@ -300,7 +300,6 @@ function ago(iso){
 
 async function render(name){
   try{
-    if(name==='chat'&&typeof stopBrowserVoice==='function')stopBrowserVoice();
     if(workspaceHandlers[name])return await workspaceHandlers[name]();
     if(name==='now')return await renderNow();
     if(name==='timeline')return await renderTimeline();
@@ -813,4 +812,5 @@ setInterval(()=>{if(current==='now'&&!$('product-dialog').open)render('now').cat
 <script src="/static/studios.js"></script>
 <script src="/static/voice-chat.js"></script>
 <script src="/static/settings.js"></script>
+<script src="/static/chat-dock.js"></script>
 </html>

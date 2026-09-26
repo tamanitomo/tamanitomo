@@ -39,4 +39,7 @@ elif args[:2] in (['cron','pause'],['cron','resume']):
     path.write_text(json.dumps(data),encoding='utf-8')
 elif args[:2]==['cron','list']:
     print((home/'cron/jobs.json').read_text(encoding='utf-8'))
+elif args and args[0]=='chat':
+    # Preview-only reply. The real app uses the Hermes streaming bridge.
+    print('Welcome back. I was thinking about our garden plan. Shall we start with tea?')
 else:sys.exit(2)

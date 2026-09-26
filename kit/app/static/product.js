@@ -6,7 +6,7 @@ const tabLabel=id=>({chat:'Chat',photos:'Photos',journals:'Journal',now:'Home'}[
    One destination map drives three surfaces: the desktop rail, the mobile
    bottom bar (whichever destinations the person pinned), and the More
    directory. Anything added here appears in all three. */
-const primaryDestinations=['now','chat','photos','journals'];
+const primaryDestinations=['now','photos','journals'];
 const navGroups=[
   ['Life & memories', ['identity','timeline','relationship','loops','vault']],
   ['Studios',         ['image-studio','voice','local-models']],

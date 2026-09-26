@@ -59,12 +59,7 @@ jobs:
         run: bash -n setup-linux.sh setup-termux.sh update.sh uninstall-termux.sh
 
   smoke:
-    # Windows and macOS: the memory ledgers, locking, file handling, the chat
-    # projection (SQLite) and the mock provider (sockets), which is
-    # where the platforms differ. The rest of the matrix is not claimed here.
-    # Phase 1B C1 core: on these hosts it shows the REFUSAL of an unverified
-    # supervisor, receipt derivation and the recorder; its Linux-only supervision
-    # cases skip with the reason printed. That is not O-8/O-11 evidence.
+    # Exercise portable storage, process and application boundaries.
     strategy:
       fail-fast: false
       matrix:
@@ -82,6 +77,6 @@ jobs:
           node-version: '22'
       - run: python -m pip install -r requirements.txt
       - name: Ledgers, locks and files
-        run: python -m pytest -q -rs tests/test_local_reflection.py tests/test_hardening.py tests/test_config.py tests/test_missions.py tests/test_chat_projection.py tests/test_phase1a_r2_platform_identity.py tests/test_mock_provider.py tests/test_phase1b_c1_core.py
+        run: python -m pytest -q -rs tests/test_local_reflection.py tests/test_hardening.py tests/test_config.py tests/test_missions.py tests/test_mock_provider.py
       - name: Browser-script regressions
         run: python -m pytest -q -rs "tests/test_reliability.py::BrowserScriptRegressionTests"

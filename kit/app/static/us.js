@@ -406,20 +406,14 @@ async function openChatWithDraft(text){
   try{existing=sessionStorage.getItem(key)||'';}catch(error){}
   const draft=existing.trim()?existing.replace(/\s+$/,'')+'\n\n'+text:text;
   try{sessionStorage.setItem(key,draft);}catch(error){}
-  const stale=$('chat-message');
-  await showTab('chat');
-  let tries=0;
-  const settle=()=>{
-    const box=$('chat-message');
-    if(current==='chat'&&box&&box!==stale){
-      if(!box.value)box.value=draft;
-      box.dispatchEvent(new Event('input'));box.focus();
-      try{box.setSelectionRange(box.value.length,box.value.length);}catch(error){}
-      return;
-    }
-    if(current==='chat'&&++tries<120)requestAnimationFrame(settle);
-  };
-  requestAnimationFrame(settle);
+  window.ChatDock?.open();
+  const box=$('chat-message');
+  if(box&&!box.readOnly){
+    box.value=draft;
+    box.dispatchEvent(new Event('input'));
+    box.focus();
+    box.setSelectionRange(box.value.length,box.value.length);
+  }
 }
 
 /* ------------------------------------------------------ the details, kept */

@@ -165,19 +165,6 @@ class Runtime:
                 if proc.poll() is None:proc.kill();proc.wait()
                 proc.stdout.close()
 
-    def executor_spec(self, home):
-        """(Phase 1B, R6) How the keyed-send executor would start for this installation: the
-        same interpreter, environment and working directory as chat() above, or None when
-        that interpreter cannot be found (sends are then refused, never run another way)."""
-        from .chat_sends import ExecutorSpec
-        try:command=self.command()
-        except ValueError:return None
-        binary=Path(command[0])
-        python=binary.parent/('python.exe' if os.name=='nt' else 'python')
-        if not python.is_file():python=binary.resolve().parent/'python'
-        if len(command)!=1 or not python.is_file():return None
-        return ExecutorSpec(python=str(python),env=self.env(home),cwd=str(KIT))
-
     def home(self, profile):
         if profile in ('', 'default', None): return self.root
         path = cp.profile_path(self.root,profile)
@@ -271,53 +258,22 @@ class Runtime:
 
 
 class Operations:
-    """Bounded, durable status records; one mutation per installation at a time.
-
-    Phase 1B (R6), used only when keyed sends are enabled:
-      * `claim(scope)`/`release(scope)` take the in-process installation slot ahead of a
-        send's acceptance; `submit(..., claimed=True)` then uses it.
-      * `submit(..., ident=)` uses an operation id reserved in the send ledger.
-      * `submit(..., persist=)` writes only what persist(row) returns (the chat allowlist);
-        everything else, e.g. streamed text and the in-memory result, stays in memory.
-      * `guard(scope)`, when set, is the cross-process installation guard: every non-chat
-        action takes it before it starts and keeps it until it finishes, or is refused.
-      * `submit(..., send_id=)` marks the operation as a keyed send's; `keyed(ident)` reads
-        that mark back from memory or from the metadata-only file, so a keyed operation is
-        recognised even when its ledger cannot resolve it (never served as a legacy row)."""
+    """Durable action status, streamed output, and one mutation per installation."""
     def __init__(self, directory):
         self.directory=Path(directory)
         self.pool=ThreadPoolExecutor(max_workers=4,thread_name_prefix='companion')
         self.lock=threading.Lock()
         self.rows={}
         self.busy=set()
-        self.persist={}
-        self.guard=None
-
-    def claim(self, scope):
+    def submit(self, scope, label, action, *, profile="default", kind="runtime"):
         with self.lock:
-            if scope in self.busy:return False
-            self.busy.add(scope);return True
-
-    def release(self, scope):
-        with self.lock:self.busy.discard(scope)
-
-    def submit(self, scope, label, action, *, profile="default", kind="runtime", ident=None, claimed=False, persist=None, send_id=None):
-        with self.lock:
-            if not claimed:
-                if scope in self.busy: raise ValueError('Another action is still running for this installation.')
-                self.busy.add(scope)
-        hold=None
-        if kind!='chat' and self.guard is not None:
-            try:hold=self.guard(scope)
-            except BaseException:
-                self.release(scope);raise
-        with self.lock:
-            ident=ident or uuid.uuid4().hex
+            if scope in self.busy:
+                raise ValueError('Another action is still running for this installation.')
+            self.busy.add(scope)
+            ident = uuid.uuid4().hex
             row={'id':ident,'scope':scope,'profile':profile or 'default','kind':kind,
                  'label':label,'status':'running','progress':'Starting',
                  'started_at':dt.datetime.now(dt.timezone.utc).isoformat()}
-            if send_id is not None:row['send_id']=send_id
-            if persist is not None:self.persist[ident]=persist
             self.rows[ident]=row
             self._save(row)
         def report(message):
@@ -350,56 +306,12 @@ class Operations:
                 with self.lock:
                     row['finished_at']=dt.datetime.now(dt.timezone.utc).isoformat()
                     self.busy.discard(scope); self._save(row)
-                if hold is not None:hold.release()
-                if persist is not None:
-                    try:self.prune_chat_records()
-                    except OSError:pass
         self.pool.submit(work)
         return dict(row)
 
     def _save(self,row):
         self.directory.mkdir(parents=True,exist_ok=True)
-        persist=self.persist.get(row['id'])
-        data=persist(dict(row)) if persist is not None else row
-        cp.atomic_write(self.directory/(row['id']+'.json'),json.dumps(data,ensure_ascii=False))
-
-    def prune_chat_records(self, now=None, keep_days=7, keep=500, batch=500):
-        """Retention for allowlisted (`format: 2`) terminal records only (PHASE1B_DESIGN 5.7):
-        remove one iff finished more than `keep_days` ago OR not among the newest `keep`.
-        `running` records and every record without `format: 2` (pre-1B chat records, all
-        other operations) are never touched here. Returns the number removed (<= batch)."""
-        now=time.time() if now is None else now
-        rows=[]
-        for path in self.directory.glob('*.json'):
-            try:data=json.loads(path.read_text(encoding='utf-8'))
-            except (OSError,ValueError):continue
-            if not isinstance(data,dict) or data.get('format')!=2 or data.get('status')=='running':continue
-            try:finished=dt.datetime.fromisoformat(str(data.get('finished_at'))).timestamp()
-            except ValueError:continue
-            rows.append((finished,path))
-        rows.sort(reverse=True)
-        doomed=[(t,p) for i,(t,p) in enumerate(rows) if i>=keep or t<now-keep_days*86400]
-        doomed=[p for t,p in sorted(doomed)[:batch]]                  # oldest first
-        with self.lock:
-            live={ident+'.json' for ident in self.rows if self.rows[ident].get('status')=='running'}
-        removed=0
-        for path in doomed:
-            if path.name in live:continue
-            try:path.unlink();removed+=1
-            except OSError:pass
-        return removed
-
-    def keyed(self, ident):
-        """{send_id, scope, profile, label, started_at} for a keyed send's operation, from
-        memory or its `format: 2` file (metadata only), else None. Never returns content."""
-        if not re.fullmatch('[a-f0-9]{32}',ident or ''):return None
-        with self.lock:
-            row=dict(self.rows.get(ident) or {})
-        if not row.get('send_id'):
-            try:row=read_json(self.directory/(ident+'.json'),None)
-            except (OSError,ValueError):return None
-            if not isinstance(row,dict) or row.get('format')!=2 or not row.get('send_id'):return None
-        return {k:row.get(k) for k in ('send_id','scope','profile','label','started_at')}
+        cp.atomic_write(self.directory/(row['id']+'.json'),json.dumps(row,ensure_ascii=False))
 
     def get(self, ident):
         if not re.fullmatch('[a-f0-9]{32}',ident): raise ValueError('Unknown operation')
@@ -532,6 +444,7 @@ def messages_page(c, session, limit=200, before=None):
         if not {'role','content','timestamp','session_id'}<=cols:raise ValueError('Unsupported Hermes messages schema')
         conditions="session_id=? AND role IN ('user','assistant')";values=(session,)
         if '_compressed_summary' in cols:conditions+=' AND coalesce(_compressed_summary,0)=0'
+        if 'display_kind' in cols:conditions+=" AND coalesce(display_kind,'')=''"
         if {'active','compacted'}<=cols:conditions+=' AND (active=1 OR compacted=1)'
         if cursor:
             if type(cursor[1])!=int:raise ValueError('Invalid message cursor')
@@ -552,54 +465,30 @@ def messages(c, session, limit=200):
 FEED_EXCLUDED_SOURCES=('cron','subagent','tool','config-audit','local-default-audit','local-tool-proof')
 
 
-def feed_page(c, limit=60, before=None, source_ids=False):
-    """Every message the person and the companion have exchanged, on any channel.
+def feed_page(c, limit=60, before=None):
+    """Visible owner conversations across trusted channels, read without a cache."""
+    import companion_transcript as transcript
 
-    Hermes keeps one session per conversation and one row per channel, so the
-    history of a companion who is talked to on Telegram in the morning and in
-    this workspace at night is split across rows that each tell only part of it.
-    This reads across all of them at once, newest first, and hands back the
-    channel each message arrived on so the feed can show where it happened.
-    `source_ids` adds each row's Hermes id as `source_message` (the keyed client only).
-    """
-    if type(limit)!=int or not 1<=limit<=200:raise ValueError('History page size must be 1-200')
-    cursor=_page_cursor(before)
-    with session_db(c) as state:
-        if state is None:return {'messages':[],'next_cursor':None}
-        con,columns,scope,params=state
-        cols={r[1] for r in con.execute('PRAGMA table_info(messages)')}
-        if not {'role','content','timestamp','session_id'}<=cols:
-            raise ValueError('Unsupported Hermes messages schema')
-        source='s.source' if 'source' in columns else "''"
-        conditions=[scope.replace('profile_name',"s.profile_name"),
-                    "m.role IN ('user','assistant')"]
-        values=list(params)
-        if 'source' in columns:
-            conditions.append(f"lower(coalesce(s.source,'')) NOT IN ({','.join('?'*len(FEED_EXCLUDED_SOURCES))})")
-            values.extend(FEED_EXCLUDED_SOURCES)
-        if '_compressed_summary' in cols:conditions.append('coalesce(m._compressed_summary,0)=0')
-        if {'active','compacted'}<=cols:conditions.append('(m.active=1 OR m.compacted=1)')
-        conditions.append("trim(coalesce(m.content,''))<>''")
-        if 'display_kind' in cols:
-            conditions.append("coalesce(m.display_kind,'')<>'internal_notification'")
-        if cursor:
-            if type(cursor[1])!=int:raise ValueError('Invalid message cursor')
-            conditions.append('(coalesce(m.timestamp,0),m.rowid)<(?,?)');values.extend(cursor)
-        ident='m.id AS source_message,' if source_ids and 'id' in cols else ''
-        sql=(f'SELECT m.rowid AS _cursor_id,{ident}m.role,m.content,m.timestamp,'
-             f'm.session_id AS session,{source} AS source '
-             f'FROM messages m JOIN sessions s ON s.id=m.session_id '
-             f"WHERE {' AND '.join(conditions)} "
-             f'ORDER BY coalesce(m.timestamp,0) DESC,m.rowid DESC LIMIT ?')
-        rows=[dict(r) for r in con.execute(sql,(*values,limit+1))]
-        more=len(rows)>limit;rows=rows[:limit]
-        next_cursor=_encode_cursor(rows[-1]['timestamp'] or 0,rows[-1]['_cursor_id']) if more else None
-        mine=read_workspace_sessions(c)
-        for row in rows:
-            del row['_cursor_id']
-            if 'source_message' in row:row['source_message']=str(row['source_message'])
-            if row.get('session') in mine:row['source']='tamanitomo'
-        return {'messages':list(reversed(rows)),'next_cursor':next_cursor}
+    if type(limit) != int or not 1 <= limit <= 200:
+        raise ValueError('History page size must be 1-200')
+    cursor = _page_cursor(before)
+    if cursor and type(cursor[1]) != int:
+        raise ValueError('Invalid message cursor')
+
+    def read(view):
+        if view is None:
+            return {'messages': [], 'next_cursor': None}
+        records, more = view.page(limit, cursor)
+        rows = [{'role': 'user' if record.speaker == 'owner' else 'assistant',
+                 'content': record.content, 'timestamp': record.occurred_at,
+                 'session': record.source_session,
+                 'source': 'tamanitomo' if record.source_kind == 'workspace'
+                           else view.session(record.source_session)['source']}
+                for record in records]
+        next_cursor = _encode_cursor(records[-1].occurred_at, int(records[-1].source_message)) if more else None
+        return {'messages': list(reversed(rows)), 'next_cursor': next_cursor}
+
+    return transcript.owner_evidence(c, read)
 
 
 RESUMABLE_SOURCES=('cli','desktop','tui')
@@ -636,12 +525,30 @@ def note_workspace_session(c,session):
     except OSError:pass
 
 
-def latest_session(c):
-    """The conversation a new message should continue, or None to start one.
+def resumable_session(c, ident):
+    """Require a trusted owner session created by a local Hermes interface."""
+    import companion_transcript as transcript
 
-    Only sessions this workspace could have opened are resumable; the feed reads
-    every channel, but a Telegram thread cannot be picked up from here.
-    """
-    for row in sessions_page(c,40)['sessions']:
-        if str(row.get('source') or '').lower() in RESUMABLE_SOURCES:return row['id']
-    return None
+    def read(view):
+        return bool(view and view.owner_session(ident) in ('workspace', 'terminal'))
+
+    if not transcript.owner_evidence(c, read):
+        raise ValueError('This session is not a local conversation with the owner.')
+    return ident
+
+
+def latest_session(c):
+    """Newest owner conversation that this workspace can safely continue."""
+    import companion_transcript as transcript
+
+    def read(view):
+        if view is None:
+            return None
+        rows = view.con.execute('SELECT id FROM sessions s WHERE ' + view.scope
+                                + ' ORDER BY coalesce(started_at,0) DESC LIMIT 200', view.params)
+        for row in rows:
+            if view.owner_session(row['id']) in ('workspace', 'terminal'):
+                return row['id']
+        return None
+
+    return transcript.owner_evidence(c, read)

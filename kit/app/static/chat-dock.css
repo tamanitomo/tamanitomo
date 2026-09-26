@@ -1,0 +1,120 @@
+/* The dock stays mounted across navigation; only its presentation collapses. */
+.chat-dock {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 29;
+  color: var(--ink);
+}
+.chat-dock[hidden], .chat-dock [hidden] { display: none !important; }
+.chat-dock-launcher {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 12px 20px;
+  border: 1px solid var(--edge);
+  border-radius: 30px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-2);
+}
+.chat-dock-launcher .icon { width: 23px; height: 23px; color: var(--accent); }
+.chat-dock-unread {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.chat-dock.is-closed .chat-dock-launcher-label { display: none; }
+.chat-dock.is-closed .chat-dock-launcher { padding: 12px; }
+.chat-dock-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(390px, calc(100vw - 32px));
+  height: min(580px, calc(100dvh - 48px));
+  overflow: hidden;
+  border: 1px solid var(--edge);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: var(--shadow-3);
+}
+.chat-dock .chat-dock-header {
+  position: static;
+  width: auto;
+  height: auto;
+  min-height: 72px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 12px 14px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--edge);
+  background: var(--surface);
+  box-shadow: none;
+  transform: none;
+}
+.chat-dock-avatar { width: 38px; height: 38px; border-radius: 50%; font-size: 16px; }
+.chat-dock-heading { display: flex; flex: 1; flex-direction: column; min-width: 0; gap: 3px; }
+.chat-dock-heading strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+.chat-dock-presence { color: var(--dim); font-size: 11px; }
+.chat-dock-control {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 22px;
+}
+.chat-dock-control:hover { background: var(--surface-3); }
+.chat-dock-control .icon { width: 18px; height: 18px; }
+.chat-dock-history { align-self: center; margin: 8px 0 0; padding: 6px 12px; background: transparent; color: var(--accent); border: 0; font-size: 12px; }
+.chat-dock-log { flex: 1; min-height: 0; height: auto; padding: 16px 14px; gap: 7px; overscroll-behavior: contain; scroll-behavior: auto; }
+.chat-dock-log .bubble { max-width: 88%; font-size: 14px; }
+.chat-dock-log .bubble:not(.user) { margin-left: 0; }
+.chat-dock-log .bubble-face { display: none; }
+.chat-dock-log .chat-media-card { max-width: 100%; }
+.chat-dock-empty { margin: auto; padding: 28px 16px; text-align: center; color: var(--dim); font-size: 14px; line-height: 1.7; }
+.chat-dock-composer { flex: none; margin: 0 12px; padding: 8px; gap: 6px; border: 1px solid var(--edge); background: var(--surface); }
+.chat-dock #chat-message { min-height: 38px; max-height: 128px; padding: 8px 4px; font-size: 14px; }
+.chat-dock-status { flex: none; min-height: 28px; margin: 0; padding: 8px 14px 12px; color: var(--dim); font-size: 11px; line-height: 1.5; }
+.chat-dock-status.is-error { color: var(--bad); }
+.chat-dock .voice-chat-panel #voice-status { max-width: 100%; }
+.chat-dock button:focus-visible, .chat-dock textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 900px) {
+  .chat-dock { bottom: calc(var(--bar) + env(safe-area-inset-bottom) + 16px); right: 16px; }
+  .menu-open .chat-dock { visibility: hidden; }
+}
+@media (max-width: 767px) {
+  .chat-dock { right: 16px; }
+  .chat-dock-launcher { width: 56px; height: 56px; padding: 12px; border-radius: 50%; }
+  .chat-dock-launcher-label { display: none; }
+  .chat-dock-unread { position: absolute; right: 5px; top: 3px; border: 2px solid var(--surface); width: 12px; height: 12px; }
+  .chat-dock-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 65vh;
+    height: 65dvh;
+    max-height: calc(100dvh - env(safe-area-inset-top) - 12px);
+    border-radius: 22px 22px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .chat-dock .chat-dock-header { min-height: 64px; padding: 12px; }
+  .chat-dock-control { width: 40px; height: 40px; }
+  .chat-dock #chat-message { font-size: 16px; }
+  .chat-dock-status { padding-bottom: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-dock *, .chat-dock *::before, .chat-dock *::after { animation: none !important; scroll-behavior: auto !important; }
+}

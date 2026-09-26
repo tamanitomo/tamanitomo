@@ -252,10 +252,7 @@ def register(app, select, load, operations):
     def open_terminal(payload:dict):
         rt,p,h=context()
         if str(rt.root) in operations.busy:raise ValueError('Wait for the running action to finish first')
-        # Keyed sends enabled (Phase 1B): the native console is an installation mutation and
-        # holds the cross-process guard for as long as it runs. Otherwise guard is None.
-        hold=operations.guard(str(rt.root)) if operations.guard else None
-        return consoles.open(rt,h,payload.get('action'),hold=hold).read()
+        return consoles.open(rt,h,payload.get('action')).read()
 
     @app.get('/api/terminal/{ident}')
     def read_terminal(ident:str):
@@ -301,13 +298,6 @@ def register(app, select, load, operations):
 
     @app.get('/api/operations/{ident}')
     def operation(ident:str):
-        sends=getattr(app.state,'chat_sends',None)
-        if sends is not None:
-            # A keyed send's reserved operation id: the ledger is authoritative (Phase 1B 5.6).
-            # A keyed operation is never served by the legacy branch below: a view, or 404.
-            try:view=sends.operation_view(ident,select,load,app.state.chat_selection)
-            except LookupError:raise HTTPException(404,'Unknown operation') from None
-            if view is not None:return view
         row=operations.get(ident)
         rt,profile=select()
         application_root=str(Path(__file__).resolve().parents[2])
@@ -1529,10 +1519,7 @@ def register(app, select, load, operations):
     def conversation_feed(before:str|None=None,limit:int=60):
         """One conversation, across every channel it happened on."""
         c=load()
-        # Source row ids only for the explicitly enabled keyed client (Phase 1B C3), which
-        # matches its own send's rows by id; the ordinary page gets exactly what it did.
-        keyed=getattr(app.state,'keyed_client',None)
-        page=hr.feed_page(c,limit,before,source_ids=bool(keyed and keyed()))
+        page=hr.feed_page(c,limit,before)
         return {**page,'messages':_attach_media(c,page['messages']),
                 'session':hr.latest_session(c),'agent':c.agent}
 
@@ -1554,12 +1541,12 @@ def register(app, select, load, operations):
 
 
     @app.post('/api/chat')
-    def chat(payload:dict):
+    def chat(payload:dict,request:Request):
         message=payload.get('message')
         if not isinstance(message,str) or not message.strip() or len(message)>30000: raise ValueError('Write a message (up to 30,000 characters)')
         session=payload.get('session')
         c=load()
-        if session: hr.messages(c,text(session,'session',200))
+        if session: hr.resumable_session(c,text(session,'session',200))
         def run(rt,p,h,report):
             report('Waiting for '+c.agent)
             args=['chat','--quiet','--oneshot','-q',message]
@@ -1576,7 +1563,43 @@ def register(app, select, load, operations):
             return {'response':ANSI_TEXT(r.stdout),'session':new,
                     'messages':hr.messages(c,new) if new else [],
                     'note':'Hermes owns this conversation. All channels share this profile’s identity, memory, and lived state.'}
-        return op('Chat with '+c.agent,run)
+        operation = op('Chat with '+c.agent,run)
+        if 'text/event-stream' not in request.headers.get('accept', ''):
+            return operation
+
+        from fastapi.responses import StreamingResponse
+
+        async def events():
+            import asyncio
+
+            def event(kind, payload):
+                return f"event: {kind}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+            # The operation survives a disconnected browser. Reconnection reads history
+            # or operation status; it must never silently submit the user's turn twice.
+            yield event('operation', {'id': operation['id']})
+            offset = 0
+            while True:
+                row = operations.get(operation['id'])
+                streamed = row.get('stream_text', '')
+                if len(streamed) > offset:
+                    yield event('delta', {'text': streamed[offset:]})
+                    offset = len(streamed)
+                if row['status'] == 'complete':
+                    result = row.get('result', {})
+                    if result.get('session'):
+                        yield event('session', {'id': result['session']})
+                    yield event('final', result)
+                    return
+                if row['status'] != 'running':
+                    yield event('error', {'error': row.get('error', 'Chat could not complete.')})
+                    return
+                if await request.is_disconnected():
+                    return
+                await asyncio.sleep(.05)
+
+        return StreamingResponse(events(), media_type='text/event-stream',
+                                 headers={'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no'})
 
     @app.get('/api/hooks')
     def hooks():

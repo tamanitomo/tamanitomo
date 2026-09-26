@@ -53,12 +53,8 @@ def get_network_ips():
         pass
     return sorted(ips)
 
-def build(home=None,token='',state_dir=None,chat_sends=None):
-    """Create a workspace; profile selection is local to each request.
-
-    `chat_sends`: a chat_send_routes.Options enables the Phase 1B keyed-send routes. NOT
-    ACTIVATED: no shipped entry point passes it, so ordinary and live profiles never get
-    them (review R5: integration disabled pending review)."""
+def build(home=None,token='',state_dir=None):
+    """Create a workspace; profile selection is local to each request."""
     from fastapi import Body, FastAPI, HTTPException, Request
     from fastapi.responses import FileResponse, JSONResponse, HTMLResponse, Response
     from fastapi.staticfiles import StaticFiles
@@ -103,21 +99,6 @@ def build(home=None,token='',state_dir=None,chat_sends=None):
     app.state.write_locks={key:threading.Lock() for key in runtimes}
     from .manage import register
     register(app,select,load,Operations(state/'operations'))
-    from . import chat_routes
-    provenance=None
-    if chat_sends is not None:
-        # Keyed sends (Phase 1B) are imported only here: shipped builds never load them.
-        from .chat_sends import read_model as provenance
-    chat_routes.register(app,state,selection.get,load,lambda c,rows:app.state.attach_media(c,rows),provenance)
-    app.state.chat_selection=selection.get
-
-    def keyed_client():
-        sends=getattr(app.state,'chat_sends',None)
-        return bool(sends is not None and getattr(sends.options,'client',False))
-    app.state.keyed_client=keyed_client
-    if chat_sends is not None:
-        from . import chat_send_routes
-        chat_send_routes.register(app,state,select,load,selection.get,app.state.operations,chat_sends)
     from .content import register as register_content
     register_content(app,load)
     from .journal_archive import register as register_journal_archive
@@ -196,12 +177,9 @@ def build(home=None,token='',state_dir=None,chat_sends=None):
                 from starlette.concurrency import run_in_threadpool
                 await run_in_threadpool(write_lock.acquire)
                 runtime=runtimes[installation]
-                # Keyed sends (registered only when enabled) do their own admission: an
-                # identical retry must replay and a stop must reach a running turn.
-                keyed=request.url.path.startswith('/api/chat/sends') and hasattr(app.state,'chat_sends')
-                if str(runtime.root) in app.state.operations.busy and not keyed:
+                if str(runtime.root) in app.state.operations.busy:
                     return JSONResponse({'detail':'An action is running for this installation. Wait for it to finish.'},status_code=409)
-                if request.url.path!='/api/terminal' and not keyed and any(row.scope[0]==str(runtime.root) and not row.finished for row in list(app.state.consoles.rows.values())):
+                if request.url.path!='/api/terminal' and any(row.scope[0]==str(runtime.root) and not row.finished for row in list(app.state.consoles.rows.values())):
                     return JSONResponse({'detail':'Close the native Hermes setup console before changing settings.'},status_code=409)
             response=await call_next(request)
         finally:
@@ -980,16 +958,6 @@ def build(home=None,token='',state_dir=None,chat_sends=None):
             digest=hashlib.sha256(path.read_bytes()).hexdigest()[:16]
             return f'{match[1]}="{match[2]}?v={digest}"'
         html=(STATIC/'index.html').read_text(encoding='utf-8')
-        if keyed_client():
-            # Phase 1B C3, only when explicitly enabled: the signal and the keyed client,
-            # loaded after every script it builds on, and with it the persistent Chat
-            # (store, view, controller: one conversation for the Chat page and the dock).
-            # Absent, the page is unchanged.
-            html=html.replace('<meta charset="utf-8">','<meta charset="utf-8">\n<meta name="tamanitomo-chat-sends" content="keyed">',1)
-            html=html.replace('<link rel="stylesheet" href="/static/product.css">',
-                              '<link rel="stylesheet" href="/static/product.css">\n<link rel="stylesheet" href="/static/chat.css">',1)
-            html=html.replace('</html>',''.join(f'<script src="/static/{name}"></script>\n' for name in
-                                                ('chat-store.js','chat-sends.js','chat-view.js','chat-controller.js'))+'</html>',1)
         html=re.sub(r'(src|href)="(/static/[^"?]+)"',versioned,html)
         return HTMLResponse(html,headers={'Cache-Control':'no-cache'})
 

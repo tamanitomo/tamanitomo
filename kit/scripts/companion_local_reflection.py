@@ -84,13 +84,6 @@ def messages(c,start,end,human_id,limit_chars=24000,after_id=0,end_inclusive=Tru
     through=dt.datetime.fromtimestamp(out[-1]['timestamp'],end.tzinfo).isoformat() if more else end.isoformat()
     return out,more,through,int(out[-1]['id']) if more else 0
 
-def chat_sources():
-    """The app's shared owner-conversation reader (kit.app.chat_sources)."""
-    root=str(pathlib.Path(__file__).resolve().parents[2])
-    if root not in sys.path:sys.path.append(root)
-    from kit.app import chat_sources as sources
-    return sources
-
 def trusted_messages(c,start,end,human_id='',limit_chars=24000,after_id=0,end_inclusive=True,report=None):
     """messages(), read through the same predicate as the private conversation:
     the owner's workspace, terminal and Telegram direct messages, never another
@@ -102,7 +95,7 @@ def trusted_messages(c,start,end,human_id='',limit_chars=24000,after_id=0,end_in
 
     A store that cannot be read raises: an outage is not an empty conversation,
     and nothing downstream may record or advance past it."""
-    sources=chat_sources()
+    import companion_transcript as sources
     binding=sources.owner_binding(c)
     if human_id and str(human_id) not in binding.telegram:
         raise ValueError('--human-user-id is not a Telegram identity in the chat owner binding; '

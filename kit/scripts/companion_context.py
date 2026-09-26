@@ -127,7 +127,7 @@ def cross_channel_handoff(c,payload,now,cap):
     """The handoff section for this turn, or None when there is nothing to say.
 
     Selection is deterministic and uses no model: the newest owner-conversation
-    records (shared chat predicate, kit.app.chat_sources) from the last
+    records (the shared read-only companion_transcript reader) from the last
     HANDOFF_WINDOW, outside this session and the compression ancestors its own
     history already carries, at most HANDOFF_ITEMS and `cap` characters. Nothing is
     matched by text. A session that is not part of the owner's private
@@ -141,8 +141,7 @@ def cross_channel_handoff(c,payload,now,cap):
     session=payload.get('session_id') if isinstance(payload,dict) else None
     if not isinstance(session,str) or not session:return unknown.format('this session is not identified')
     try:
-        import companion_local_reflection
-        sources=companion_local_reflection.chat_sources()
+        import companion_transcript as sources
         def read(view):
             if view is None:return 'no-store',None
             if view.session(session) is None:return 'unknown-session',None
