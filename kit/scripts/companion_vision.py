@@ -27,19 +27,27 @@ The call runs with `--ignore-rules`, so the companion's own SOUL and memory are
 not injected: this asks a model to look at a picture, not to be somebody
 looking at a picture of herself.
 """
+
 from __future__ import annotations
-import argparse, json, os, pathlib, subprocess, sys, tempfile
-sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
+import argparse
+import json
+import os
+import pathlib
+import subprocess
+import sys
+import tempfile
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import companion_config as cc
 import companion_portrait as portrait
 from companion_platform import hermes_command
 
 # The interview's own keys, minus age. Order is portrait.IDENTITY_ORDER's order,
 # because that is the order a stable likeness is described in.
-FIELDS=tuple(f for f in portrait.IDENTITY_ORDER if f!='age')
-TIMEOUT=180
+FIELDS = tuple(f for f in portrait.IDENTITY_ORDER if f != "age")
+TIMEOUT = 180
 
-PROMPT="""Look at the attached photograph and describe only the person's fixed physical appearance.
+PROMPT = """Look at the attached photograph and describe only the person's fixed physical appearance.
 
 Answer with a single JSON object and nothing else. No prose before or after, no code fence.
 
@@ -64,7 +72,17 @@ Rules:
 # A negation is not a description, and in an image prompt it is worse than
 # nothing: "no visible facial hair" is a phrase a generator will happily draw
 # around. The prompt says not to, and this is what happens when it does anyway.
-NEGATIONS=('no ','none','not ','without ','absent','n/a','unknown','cannot','unclear')
+NEGATIONS = (
+    "no ",
+    "none",
+    "not ",
+    "without ",
+    "absent",
+    "n/a",
+    "unknown",
+    "cannot",
+    "unclear",
+)
 
 
 def _extract(text):
@@ -74,113 +92,183 @@ def _extract(text):
     in a fence or a sentence of preamble has still done the work, and throwing
     that away to be strict about punctuation helps nobody.
     """
-    start=text.find('{')
-    while start!=-1:
-        depth=0;quoted=False;escaped=False
-        for i in range(start,len(text)):
-            ch=text[i]
-            if escaped:escaped=False;continue
-            if ch=='\\' and quoted:escaped=True;continue
-            if ch=='"':quoted=not quoted;continue
-            if quoted:continue
-            if ch=='{':depth+=1
-            elif ch=='}':
-                depth-=1
-                if depth==0:
-                    try:return json.loads(text[start:i+1])
-                    except ValueError:break
-        start=text.find('{',start+1)
-    raise ValueError('the model did not return JSON; nothing was written')
+    start = text.find("{")
+    while start != -1:
+        depth = 0
+        quoted = False
+        escaped = False
+        for i in range(start, len(text)):
+            ch = text[i]
+            if escaped:
+                escaped = False
+                continue
+            if ch == "\\" and quoted:
+                escaped = True
+                continue
+            if ch == '"':
+                quoted = not quoted
+                continue
+            if quoted:
+                continue
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(text[start : i + 1])
+                    except ValueError:
+                        break
+        start = text.find("{", start + 1)
+    raise ValueError("the model did not return JSON; nothing was written")
 
 
-def ask(c,image,model='',provider='',timeout=TIMEOUT):
+def ask(c, image, model="", provider="", timeout=TIMEOUT):
     """Run the vision call and return the raw reply."""
-    image=pathlib.Path(image)
-    if not image.is_file():raise ValueError(f'no image at {image}')
-    argv=list(hermes_command('chat','--image',str(image),'--oneshot','-Q',
-                             '--ignore-rules','--max-turns','1'))
-    if model:argv+=['--model',model]
-    if provider:argv+=['--provider',provider]
-    handle=tempfile.NamedTemporaryFile('w',suffix='.txt',encoding='utf-8',delete=False)
+    image = pathlib.Path(image)
+    if not image.is_file():
+        raise ValueError(f"no image at {image}")
+    argv = list(
+        hermes_command(
+            "chat",
+            "--image",
+            str(image),
+            "--oneshot",
+            "-Q",
+            "--ignore-rules",
+            "--max-turns",
+            "1",
+        )
+    )
+    if model:
+        argv += ["--model", model]
+    if provider:
+        argv += ["--provider", provider]
+    handle = tempfile.NamedTemporaryFile(
+        "w", suffix=".txt", encoding="utf-8", delete=False
+    )
     try:
-        handle.write(PROMPT.format(fields='\n'.join('- '+f for f in FIELDS),
-                                   Poss=c.poss().capitalize()));handle.close()
-        argv+=['--query-file',handle.name]
+        handle.write(
+            PROMPT.format(
+                fields="\n".join("- " + f for f in FIELDS), Poss=c.poss().capitalize()
+            )
+        )
+        handle.close()
+        argv += ["--query-file", handle.name]
         try:
-            result=subprocess.run(argv,capture_output=True,text=True,encoding='utf-8',
-                                  timeout=timeout,
-                                  env={**os.environ,'HERMES_HOME':str(c.home),
-                                       'HERMES_TIMEZONE':c.timezone})
+            result = subprocess.run(
+                argv,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=timeout,
+                env={
+                    **os.environ,
+                    "HERMES_HOME": str(c.home),
+                    "HERMES_TIMEZONE": c.timezone,
+                },
+            )
         except FileNotFoundError:
-            raise ValueError('Hermes is not on PATH, so no model can be reached from here')
+            raise ValueError(
+                "Hermes is not on PATH, so no model can be reached from here"
+            )
         except subprocess.TimeoutExpired:
-            raise ValueError(f'the model did not answer within {timeout}s; nothing was written')
+            raise ValueError(
+                f"the model did not answer within {timeout}s; nothing was written"
+            )
     finally:
-        try:os.unlink(handle.name)
-        except OSError:pass
+        try:
+            os.unlink(handle.name)
+        except OSError:
+            pass
     if result.returncode:
         # Hermes wraps its reasons over several lines and puts the useful half
         # first, so the last line alone reads as a non-sequitur.
-        lines=[l.strip() for l in (result.stderr or result.stdout or '').splitlines() if l.strip()]
-        detail=' '.join(lines[-3:])[:300] if lines else 'no output'
-        raise ValueError('Hermes refused the vision call: '+detail)
+        lines = [
+            l.strip()
+            for l in (result.stderr or result.stdout or "").splitlines()
+            if l.strip()
+        ]
+        detail = " ".join(lines[-3:])[:300] if lines else "no output"
+        raise ValueError("Hermes refused the vision call: " + detail)
     return result.stdout
 
 
 def fields_from(reply):
     """The described fields, filtered to the ones the interview knows."""
-    data=_extract(reply)
-    if data.get('error'):raise ValueError(str(data['error']))
-    out={}
+    data = _extract(reply)
+    if data.get("error"):
+        raise ValueError(str(data["error"]))
+    out = {}
     for key in FIELDS:
-        value=data.get(key)
-        if not isinstance(value,str):continue
-        value=' '.join(value.split())
-        if value.lower().startswith(NEGATIONS):continue
+        value = data.get(key)
+        if not isinstance(value, str):
+            continue
+        value = " ".join(value.split())
+        if value.lower().startswith(NEGATIONS):
+            continue
         # A model that writes an essay into one field produces an appearance
         # block nobody will read and a prompt that describes a document.
-        if value and len(value)<=200:out[key]=value
-    if not out:raise ValueError('the model described nothing usable; nothing was written')
+        if value and len(value) <= 200:
+            out[key] = value
+    if not out:
+        raise ValueError("the model described nothing usable; nothing was written")
     return out
 
 
-def proposal(c,fields):
+def proposal(c, fields):
     """What the appearance section would say, rendered the way setup renders it."""
     import companion_wizard as wiz
     import companion_identity as identity
-    iv=dict(fields)
-    iv['physical']=wiz.physical_paragraph(iv,c.agent,c.pronouns,age=c.current_age())
-    return identity.render_section(c,'appearance',interview=iv)
+
+    iv = dict(fields)
+    iv["physical"] = wiz.physical_paragraph(
+        iv, c.agent, c.pronouns, age=c.current_age()
+    )
+    return identity.render_section(c, "appearance", interview=iv)
 
 
-def describe(c,image=None,model='',provider='',timeout=TIMEOUT):
+def describe(c, image=None, model="", provider="", timeout=TIMEOUT):
     """Photo in, proposed section out. Nothing is written."""
-    image=pathlib.Path(image) if image else portrait.portrait_path(c)
-    reply=ask(c,image,model=model,provider=provider,timeout=timeout)
-    fields=fields_from(reply)
-    return {'image':str(image),'fields':fields,'body':proposal(c,fields),
-            'written':False,
-            'note':'Read it before you keep it. appearance is a locked section: '
-                   'nothing here reaches SOUL.md until a person accepts it.'}
+    image = pathlib.Path(image) if image else portrait.portrait_path(c)
+    reply = ask(c, image, model=model, provider=provider, timeout=timeout)
+    fields = fields_from(reply)
+    return {
+        "image": str(image),
+        "fields": fields,
+        "body": proposal(c, fields),
+        "written": False,
+        "note": "Read it before you keep it. appearance is a locked section: "
+        "nothing here reaches SOUL.md until a person accepts it.",
+    }
 
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__,formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument('--home',type=pathlib.Path)
-    s=p.add_subparsers(dest='cmd',required=True)
-    d=s.add_parser('describe',help='propose the appearance section from a photo')
-    d.add_argument('--image',help='defaults to the stored reference portrait')
-    d.add_argument('--model',default='');d.add_argument('--provider',default='')
-    d.add_argument('--apply',action='store_true',help='write it without reading it first')
-    a=p.parse_args();c=cc.load(a.home)
-    out=describe(c,a.image,model=a.model,provider=a.provider)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    p.add_argument("--home", type=pathlib.Path)
+    s = p.add_subparsers(dest="cmd", required=True)
+    d = s.add_parser("describe", help="propose the appearance section from a photo")
+    d.add_argument("--image", help="defaults to the stored reference portrait")
+    d.add_argument("--model", default="")
+    d.add_argument("--provider", default="")
+    d.add_argument(
+        "--apply", action="store_true", help="write it without reading it first"
+    )
+    a = p.parse_args()
+    c = cc.load(a.home)
+    out = describe(c, a.image, model=a.model, provider=a.provider)
     if a.apply:
         import companion_identity as identity
-        out.update(identity.replace(c,'appearance',out['body']))
-    print(json.dumps(out,ensure_ascii=False,indent=2))
+
+        out.update(identity.replace(c, "appearance", out["body"]))
+    print(json.dumps(out, ensure_ascii=False, indent=2))
 
 
-if __name__=='__main__':
-    try:main()
-    except (ValueError,OSError,json.JSONDecodeError) as e:
-        print(json.dumps({'error':str(e)}),file=sys.stderr);sys.exit(1)
+if __name__ == "__main__":
+    try:
+        main()
+    except (ValueError, OSError, json.JSONDecodeError) as e:
+        print(json.dumps({"error": str(e)}), file=sys.stderr)
+        sys.exit(1)

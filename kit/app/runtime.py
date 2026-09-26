@@ -3,6 +3,7 @@
 No Hermes package is imported into the app's interpreter. Optional catalog discovery
 runs in Hermes's interpreter and fails independently when its API changes.
 """
+
 from __future__ import annotations
 import base64
 import math
@@ -28,52 +29,67 @@ import companion_config as cc
 import companion_platform as cp
 
 KIT = Path(__file__).resolve().parents[2]
-ANSI = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
+ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
 
 def app_directory():
-    if os.environ.get('TAMANITOMO_APP_STATE'):
-        return Path(os.environ['TAMANITOMO_APP_STATE']).expanduser().absolute()
-    if os.environ.get('COMPANION_APP_STATE'):
-        return Path(os.environ['COMPANION_APP_STATE']).expanduser().absolute()
-    base = Path(os.environ.get('LOCALAPPDATA', str(Path.home()/'AppData/Local'))) if os.name == 'nt' else Path(os.environ.get('XDG_DATA_HOME', str(Path.home()/'.local/share')))
-    new_path = base/'tamanitomo'
-    old_path = base/'companion-kit'
+    if os.environ.get("TAMANITOMO_APP_STATE"):
+        return Path(os.environ["TAMANITOMO_APP_STATE"]).expanduser().absolute()
+    if os.environ.get("COMPANION_APP_STATE"):
+        return Path(os.environ["COMPANION_APP_STATE"]).expanduser().absolute()
+    base = (
+        Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData/Local")))
+        if os.name == "nt"
+        else Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share")))
+    )
+    new_path = base / "tamanitomo"
+    old_path = base / "companion-kit"
     if not new_path.exists() and old_path.exists():
         return old_path
     return new_path
 
 
 def read_json(path, default):
-    if not Path(path).exists(): return default
-    return json.loads(Path(path).read_text(encoding='utf-8'))
+    if not Path(path).exists():
+        return default
+    return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 def redact(text):
-    text = ANSI.sub('', str(text))
-    text = re.sub(r'(?i)((?:api[_ -]?key|token|secret|password|authorization)\s*[=:]\s*)[^\s,;]+', r'\1[redacted]', text)
-    return re.sub(r'\b(?:sk-|sk-or-|ghp_|gho_)[A-Za-z0-9_-]{12,}', '[redacted]', text)
+    text = ANSI.sub("", str(text))
+    text = re.sub(
+        r"(?i)((?:api[_ -]?key|token|secret|password|authorization)\s*[=:]\s*)[^\s,;]+",
+        r"\1[redacted]",
+        text,
+    )
+    return re.sub(r"\b(?:sk-|sk-or-|ghp_|gho_)[A-Za-z0-9_-]{12,}", "[redacted]", text)
 
 
 def sync_bundled_plugins(root):
     """Sync bundled kit plugins (e.g. Mistral model provider & image gen) into hermes-agent/plugins."""
     try:
-        bundled = Path(__file__).resolve().parents[1]/'plugins'
-        if not bundled.is_dir(): return
-        target = Path(root)/'hermes-agent'/'plugins'
-        if not target.is_dir(): return
-        for category in ('model-providers', 'image_gen'):
-            src_cat = bundled/category
-            dst_cat = target/category
+        bundled = Path(__file__).resolve().parents[1] / "plugins"
+        if not bundled.is_dir():
+            return
+        target = Path(root) / "hermes-agent" / "plugins"
+        if not target.is_dir():
+            return
+        for category in ("model-providers", "image_gen"):
+            src_cat = bundled / category
+            dst_cat = target / category
             if src_cat.is_dir():
                 dst_cat.mkdir(parents=True, exist_ok=True)
                 for plugin_dir in src_cat.iterdir():
-                    if plugin_dir.is_dir() and not plugin_dir.name.startswith('.'):
-                        dest = dst_cat/plugin_dir.name
+                    if plugin_dir.is_dir() and not plugin_dir.name.startswith("."):
+                        dest = dst_cat / plugin_dir.name
                         dest.mkdir(parents=True, exist_ok=True)
                         for f in plugin_dir.iterdir():
-                            if f.is_file() and not f.name.startswith('.'):
-                                target_file = dest/f.name
-                                if not target_file.exists() or target_file.read_bytes() != f.read_bytes():
+                            if f.is_file() and not f.name.startswith("."):
+                                target_file = dest / f.name
+                                if (
+                                    not target_file.exists()
+                                    or target_file.read_bytes() != f.read_bytes()
+                                ):
                                     shutil.copy2(f, target_file)
     except Exception:
         pass
@@ -81,27 +97,44 @@ def sync_bundled_plugins(root):
 
 def _chat_fallbacks(companion):
     """Translate configured routes to Hermes's native provider adapter."""
-    from companion_inference import LOCAL_ENDPOINTS, configured_routes, credential, read_config
+    from companion_inference import (
+        LOCAL_ENDPOINTS,
+        configured_routes,
+        credential,
+        is_local,
+        read_config,
+    )
 
     # Chat's primary is initialized by Hermes from its own model configuration.
     config = read_config(companion)
-    model = config.get('model') if isinstance(config.get('model'), dict) else {}
-    primary = {**model, 'model': model.get('default') or model.get('model') or ''}
+    model = config.get("model") if isinstance(config.get("model"), dict) else {}
+    primary = {**model, "model": model.get("default") or model.get("model") or ""}
     chain = []
-    for route in configured_routes(companion, primary=primary, tier='chat')[1:]:
-        entry = {key: value for key, value in route.items()
-                 if key in ('provider', 'model', 'base_url', 'api_key_env', 'api_key', 'api_mode')}
-        local_adapter = route['provider'].lower() in LOCAL_ENDPOINTS
-        if local_adapter or (not entry.get('provider') and entry.get('base_url')):
+    for route in configured_routes(companion, primary=primary, tier="chat")[1:]:
+        entry = {
+            key: value
+            for key, value in route.items()
+            if key
+            in ("provider", "model", "base_url", "api_key_env", "api_key", "api_mode")
+        }
+        local_adapter = is_local(route) or route["provider"].lower() in LOCAL_ENDPOINTS
+        if local_adapter or (not entry.get("provider") and entry.get("base_url")):
             # Hermes routes OpenAI-compatible local servers through `custom`.
-            entry['provider'] = 'custom'
-            entry.setdefault('api_mode', 'chat_completions')
+            entry["provider"] = "custom"
+            entry.setdefault(
+                "api_mode",
+                (
+                    "anthropic_messages"
+                    if route["provider"].lower() in ("anthropic", "anthropic-oauth")
+                    else "chat_completions"
+                ),
+            )
         key = credential(companion, route)
         if key:
-            entry['api_key'] = key
-        elif local_adapter:
-            # Never let the custom adapter borrow a primary cloud credential.
-            entry['api_key'] = 'no-key-required'
+            entry["api_key"] = key
+        elif entry.get("base_url") or entry.get("api_key_env"):
+            # Prevent native adapter defaults from borrowing another endpoint's key.
+            entry["api_key"] = "no-key-required"
         chain.append(entry)
     return chain
 
@@ -113,123 +146,227 @@ class Runtime:
         sync_bundled_plugins(self.root)
 
     def command(self):
-        override = os.environ.get('COMPANION_HERMES_COMMAND')
+        override = os.environ.get("COMPANION_HERMES_COMMAND")
         if override and not self.managed:
             prefix = json.loads(override)
         else:
-            binary = cp.venv_executable(self.root/'hermes-agent','hermes')
-            if binary.is_file(): return [str(binary)]
-            if self.managed: raise ValueError('Install the kit-managed Hermes runtime first.')
-            binary = shutil.which('hermes')
+            binary = cp.venv_executable(self.root / "hermes-agent", "hermes")
+            if binary.is_file():
+                return [str(binary)]
+            if self.managed:
+                raise ValueError("Install the kit-managed Hermes runtime first.")
+            binary = shutil.which("hermes")
             if not binary:
-                candidate = Path.home()/'.local/bin/hermes'
-                if candidate.is_file(): binary = str(candidate)
-            if not binary: raise ValueError('Hermes is not installed or cannot be found. Choose Install Hermes.')
+                candidate = Path.home() / ".local/bin/hermes"
+                if candidate.is_file():
+                    binary = str(candidate)
+            if not binary:
+                raise ValueError(
+                    "Hermes is not installed or cannot be found. Choose Install Hermes."
+                )
             prefix = [binary]
-        if not isinstance(prefix,list) or not prefix or not all(isinstance(s,str) and s for s in prefix):
-            raise ValueError('Invalid Hermes command configuration')
+        if (
+            not isinstance(prefix, list)
+            or not prefix
+            or not all(isinstance(s, str) and s for s in prefix)
+        ):
+            raise ValueError("Invalid Hermes command configuration")
         return prefix
 
     def env(self, home=None):
         env = dict(os.environ)
-        for key in ('HERMES_PROFILE','COMPANION_HOME','HERMES_INFERENCE_MODEL','HERMES_INFERENCE_PROVIDER'):
+        for key in (
+            "HERMES_PROFILE",
+            "COMPANION_HOME",
+            "HERMES_INFERENCE_MODEL",
+            "HERMES_INFERENCE_PROVIDER",
+        ):
             env.pop(key, None)
-        env.update(HERMES_HOME=str(home or self.root), PYTHONUTF8='1', PYTHONIOENCODING='utf-8',
-                   COMPANION_HERMES_COMMAND=json.dumps(self.command()), COMPANION_APP_CLIENT='1')
+        env.update(
+            HERMES_HOME=str(home or self.root),
+            PYTHONUTF8="1",
+            PYTHONIOENCODING="utf-8",
+            COMPANION_HERMES_COMMAND=json.dumps(self.command()),
+            COMPANION_APP_CLIENT="1",
+        )
         # The managed runtime's tools must resolve beside its executable after updates.
-        bindirs = [self.root/'bin', self.root/'node'/('' if os.name=='nt' else 'bin'),
-                   cp.venv_executable(self.root/'hermes-agent').parent]
-        if os.name == 'nt': bindirs += [self.root/'git/bin', self.root/'git/cmd']
-        env['PATH'] = os.pathsep.join(str(p) for p in bindirs if p.is_dir()) + os.pathsep + env.get('PATH','')
+        bindirs = [
+            self.root / "bin",
+            self.root / "node" / ("" if os.name == "nt" else "bin"),
+            cp.venv_executable(self.root / "hermes-agent").parent,
+        ]
+        if os.name == "nt":
+            bindirs += [self.root / "git/bin", self.root / "git/cmd"]
+        env["PATH"] = (
+            os.pathsep.join(str(p) for p in bindirs if p.is_dir())
+            + os.pathsep
+            + env.get("PATH", "")
+        )
         return env
 
     def run(self, args, home=None, timeout=120, kit=False, check=True, input=None):
-        argv = ([sys.executable,str(KIT/'bin/companion')] if kit else self.command()) + list(args)
+        argv = (
+            [sys.executable, str(KIT / "bin/companion")] if kit else self.command()
+        ) + list(args)
         try:
-            result = subprocess.run(argv, env=self.env(home), cwd=str(KIT), input=input,
+            result = subprocess.run(
+                argv,
+                env=self.env(home),
+                cwd=str(KIT),
+                input=input,
                 stdin=subprocess.DEVNULL if input is None else None,
-                capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout)
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout,
+            )
         except subprocess.TimeoutExpired as exc:
-            raise ValueError(f'Hermes did not finish within {timeout}s. Inspect its job/session status before retrying.') from exc
+            raise ValueError(
+                f"Hermes did not finish within {timeout}s. Inspect its job/session status before retrying."
+            ) from exc
         if check and result.returncode:
-            raise ValueError(redact(result.stderr or result.stdout or f'Command exited {result.returncode}')[-6000:])
+            raise ValueError(
+                redact(
+                    result.stderr
+                    or result.stdout
+                    or f"Command exited {result.returncode}"
+                )[-6000:]
+            )
         return result
 
-    def chat(self,args,home,report):
-        binary=Path(self.command()[0])
-        python=binary.parent/('python.exe' if os.name=='nt' else 'python')
-        if not python.is_file():python=binary.resolve().parent/'python'
-        if len(self.command())!=1 or not python.is_file():return self.run(args,home=home,timeout=600)
+    def chat(self, args, home, report):
+        binary = Path(self.command()[0])
+        python = binary.parent / ("python.exe" if os.name == "nt" else "python")
+        if not python.is_file():
+            python = binary.resolve().parent / "python"
+        if len(self.command()) != 1 or not python.is_file():
+            return self.run(args, home=home, timeout=600)
         import queue
-        events=queue.Queue(maxsize=1024)
+
+        events = queue.Queue(maxsize=1024)
         env = self.env(home)
         # Recover inside Hermes's current conversation, without rewriting config
         # or restarting a CLI turn that may already have performed tool actions.
-        env['TAMANITOMO_CHAT_FALLBACKS'] = json.dumps(_chat_fallbacks(cc.load(home)))
+        env["TAMANITOMO_CHAT_FALLBACKS"] = json.dumps(_chat_fallbacks(cc.load(home)))
         # Stderr is kept out of the browser stream; only explicit JSON events cross it.
-        with tempfile.TemporaryFile(mode='w+',encoding='utf-8') as errors:
-            proc=subprocess.Popen([str(python),str(KIT/'kit/app/hermes_stream.py'),*args],env=env,
-                cwd=str(KIT),stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=errors,text=True,encoding='utf-8',errors='replace')
+        with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as errors:
+            proc = subprocess.Popen(
+                [str(python), str(KIT / "kit/app/hermes_stream.py"), *args],
+                env=env,
+                cwd=str(KIT),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=errors,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+
             def read():
-                for line in proc.stdout:events.put(line)
+                for line in proc.stdout:
+                    events.put(line)
                 events.put(None)
-            threading.Thread(target=read,daemon=True).start()
+
+            threading.Thread(target=read, daemon=True).start()
             import time
-            deadline=time.monotonic()+600;final='';session=None
+
+            deadline = time.monotonic() + 600
+            final = ""
+            session = None
             try:
                 while True:
-                    if time.monotonic()>deadline:raise ValueError('Hermes chat timed out. Inspect the session before retrying.')
-                    try:line=events.get(timeout=.5)
-                    except queue.Empty:continue
-                    if line is None:break
-                    try:event=json.loads(line)
-                    except ValueError:continue
-                    if event.get('event')=='delta':report.stream(event.get('text',''))
-                    elif event.get('event')=='final':final=event.get('text','')
-                    elif event.get('event')=='session':session=event.get('id')
-                    elif event.get('event')=='fallback':report('Continuing with the next configured provider')
-                code=proc.wait(timeout=5)
-                errors.seek(0);error=errors.read()[-6000:]
-                if code:raise ValueError(redact(error or final or 'Hermes chat failed'))
-                result=subprocess.CompletedProcess(args,code,final,error);result.session=session
+                    if time.monotonic() > deadline:
+                        raise ValueError(
+                            "Hermes chat timed out. Inspect the session before retrying."
+                        )
+                    try:
+                        line = events.get(timeout=0.5)
+                    except queue.Empty:
+                        continue
+                    if line is None:
+                        break
+                    try:
+                        event = json.loads(line)
+                    except ValueError:
+                        continue
+                    if event.get("event") == "delta":
+                        report.stream(event.get("text", ""))
+                    elif event.get("event") == "final":
+                        final = event.get("text", "")
+                    elif event.get("event") == "session":
+                        session = event.get("id")
+                    elif event.get("event") == "fallback":
+                        report("Continuing with the next configured provider")
+                code = proc.wait(timeout=5)
+                errors.seek(0)
+                error = errors.read()[-6000:]
+                if code:
+                    raise ValueError(redact(error or final or "Hermes chat failed"))
+                result = subprocess.CompletedProcess(args, code, final, error)
+                result.session = session
                 return result
             finally:
-                if proc.poll() is None:proc.kill();proc.wait()
+                if proc.poll() is None:
+                    proc.kill()
+                    proc.wait()
                 proc.stdout.close()
 
     def home(self, profile):
-        if profile in ('', 'default', None): return self.root
-        path = cp.profile_path(self.root,profile)
-        if not path.is_dir(): raise ValueError('Profile does not exist')
+        if profile in ("", "default", None):
+            return self.root
+        path = cp.profile_path(self.root, profile)
+        if not path.is_dir():
+            raise ValueError("Profile does not exist")
         return path
 
     def info(self):
         try:
             command = self.command()
             available = True
-            error = ''
+            error = ""
         except ValueError as exc:
-            command=[]; available=False; error=str(exc)
-        return {'root':str(self.root),'managed':self.managed,'available':available,'error':error,
-                'command':command,'data_separate_from_code':True}
+            command = []
+            available = False
+            error = str(exc)
+        return {
+            "root": str(self.root),
+            "managed": self.managed,
+            "available": available,
+            "error": error,
+            "command": command,
+            "data_separate_from_code": True,
+        }
 
     def catalog(self):
         # This optional adapter is isolated from chat/config functionality. The
         # protocol is a JSON list, never an arbitrary module provided by a client.
         command = self.command()
         binary = Path(command[0])
-        python = binary.parent/('python.exe' if os.name=='nt' else 'python')
+        python = binary.parent / ("python.exe" if os.name == "nt" else "python")
         if not python.is_file():
-            try: python = binary.resolve().parent/'python'
-            except OSError: pass
-        if not python.is_file(): return []
-        source = ('import dataclasses,json; from hermes_cli.provider_catalog import provider_catalog; '
-                  'print(json.dumps([dataclasses.asdict(p) for p in provider_catalog()]))')
+            try:
+                python = binary.resolve().parent / "python"
+            except OSError:
+                pass
+        if not python.is_file():
+            return []
+        source = (
+            "import dataclasses,json; from hermes_cli.provider_catalog import provider_catalog; "
+            "print(json.dumps([dataclasses.asdict(p) for p in provider_catalog()]))"
+        )
         try:
-            r = subprocess.run([str(python),'-c',source],env=self.env(),capture_output=True,text=True,timeout=30)
-            rows=json.loads(r.stdout)
-            return rows if r.returncode==0 and isinstance(rows,list) else []
-        except (OSError,ValueError,subprocess.SubprocessError): return []
+            r = subprocess.run(
+                [str(python), "-c", source],
+                env=self.env(),
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            rows = json.loads(r.stdout)
+            return rows if r.returncode == 0 and isinstance(rows, list) else []
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return []
 
     def install(self, report):
         """Run official staged installer, omitting its global command/PATH stage.
@@ -240,163 +377,329 @@ class Runtime:
         if not self.managed:
             try:
                 self.command()
-            except ValueError: pass
-            else: raise ValueError('An existing Hermes installation was found. Use its Update action instead.')
-        if (self.root/'.companion-runtime.json').is_file() and cp.venv_executable(self.root/'hermes-agent','hermes').exists():
-            return {'installed':True,'already_installed':True}
-        self.root.mkdir(parents=True,exist_ok=True)
-        ext='ps1' if os.name=='nt' else 'sh'
-        url=f'https://hermes-agent.nousresearch.com/install.{ext}'
-        report('Downloading the official Hermes installer')
-        with urllib.request.urlopen(url,timeout=60) as response:
-            content=response.read(4_000_001)
-        if len(content)>4_000_000: raise ValueError('Unexpected installer size')
-        installer=self.root/f'.companion-install.{ext}'
-        installer.write_bytes(content)
-        env=dict(os.environ,HERMES_HOME=str(self.root),PYTHONUTF8='1')
-        env.pop('HERMES_PROFILE',None)
-        stages=(('uv','git','node','system-packages','repository','python','venv','dependencies',
-                 'node-deps','config-templates','platform-sdks','bootstrap-marker') if os.name=='nt' else
-                ('prerequisites','repository','venv','python-deps','node-deps','config','complete'))
-        manifest_args=(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(installer),'-Manifest']
-                       if os.name=='nt' else ['bash',str(installer),'--manifest'])
-        manifest_result=subprocess.run(manifest_args,env=env,stdin=subprocess.DEVNULL,capture_output=True,
-                                       text=True,encoding='utf-8',errors='replace',timeout=60)
-        try:
-            manifest=json.loads(manifest_result.stdout)
-            available={s['name'] for s in manifest['stages']}
-            compatible=manifest_result.returncode==0 and manifest['protocol_version']==1 and set(stages)<=available
-        except (ValueError,KeyError,TypeError):compatible=False
-        if not compatible:raise ValueError('The official installer interface changed. No install stages were run; update the kit or install Hermes separately.')
-        for stage in stages:
-            report('Installing Hermes: '+stage)
-            if os.name=='nt':
-                argv=['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(installer),
-                      '-HermesHome',str(self.root),'-InstallDir',str(self.root/'hermes-agent'),
-                      '-Stage',stage,'-NonInteractive','-SkipSetup']
+            except ValueError:
+                pass
             else:
-                argv=['bash',str(installer),'--hermes-home',str(self.root),'--dir',str(self.root/'hermes-agent'),
-                      '--stage',stage,'--non-interactive','--skip-setup']
+                raise ValueError(
+                    "An existing Hermes installation was found. Use its Update action instead."
+                )
+        if (self.root / ".companion-runtime.json").is_file() and cp.venv_executable(
+            self.root / "hermes-agent", "hermes"
+        ).exists():
+            return {"installed": True, "already_installed": True}
+        self.root.mkdir(parents=True, exist_ok=True)
+        ext = "ps1" if os.name == "nt" else "sh"
+        url = f"https://hermes-agent.nousresearch.com/install.{ext}"
+        report("Downloading the official Hermes installer")
+        with urllib.request.urlopen(url, timeout=60) as response:
+            content = response.read(4_000_001)
+        if len(content) > 4_000_000:
+            raise ValueError("Unexpected installer size")
+        installer = self.root / f".companion-install.{ext}"
+        installer.write_bytes(content)
+        env = dict(os.environ, HERMES_HOME=str(self.root), PYTHONUTF8="1")
+        env.pop("HERMES_PROFILE", None)
+        stages = (
+            (
+                "uv",
+                "git",
+                "node",
+                "system-packages",
+                "repository",
+                "python",
+                "venv",
+                "dependencies",
+                "node-deps",
+                "config-templates",
+                "platform-sdks",
+                "bootstrap-marker",
+            )
+            if os.name == "nt"
+            else (
+                "prerequisites",
+                "repository",
+                "venv",
+                "python-deps",
+                "node-deps",
+                "config",
+                "complete",
+            )
+        )
+        manifest_args = (
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(installer),
+                "-Manifest",
+            ]
+            if os.name == "nt"
+            else ["bash", str(installer), "--manifest"]
+        )
+        manifest_result = subprocess.run(
+            manifest_args,
+            env=env,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+        try:
+            manifest = json.loads(manifest_result.stdout)
+            available = {s["name"] for s in manifest["stages"]}
+            compatible = (
+                manifest_result.returncode == 0
+                and manifest["protocol_version"] == 1
+                and set(stages) <= available
+            )
+        except (ValueError, KeyError, TypeError):
+            compatible = False
+        if not compatible:
+            raise ValueError(
+                "The official installer interface changed. No install stages were run; update the kit or install Hermes separately."
+            )
+        for stage in stages:
+            report("Installing Hermes: " + stage)
+            if os.name == "nt":
+                argv = [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(installer),
+                    "-HermesHome",
+                    str(self.root),
+                    "-InstallDir",
+                    str(self.root / "hermes-agent"),
+                    "-Stage",
+                    stage,
+                    "-NonInteractive",
+                    "-SkipSetup",
+                ]
+            else:
+                argv = [
+                    "bash",
+                    str(installer),
+                    "--hermes-home",
+                    str(self.root),
+                    "--dir",
+                    str(self.root / "hermes-agent"),
+                    "--stage",
+                    stage,
+                    "--non-interactive",
+                    "--skip-setup",
+                ]
             try:
-                r=subprocess.run(argv,env=env,stdin=subprocess.DEVNULL,capture_output=True,text=True,
-                                 encoding='utf-8',errors='replace',timeout=1800)
+                r = subprocess.run(
+                    argv,
+                    env=env,
+                    stdin=subprocess.DEVNULL,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=1800,
+                )
             except subprocess.TimeoutExpired as exc:
-                raise ValueError(f'Installer stage {stage} timed out; rerun installation to recover.') from exc
-            if r.returncode: raise ValueError(f'Installer stage {stage} failed:\n'+redact(r.stderr or r.stdout)[-6000:])
+                raise ValueError(
+                    f"Installer stage {stage} timed out; rerun installation to recover."
+                ) from exc
+            if r.returncode:
+                raise ValueError(
+                    f"Installer stage {stage} failed:\n"
+                    + redact(r.stderr or r.stdout)[-6000:]
+                )
         sync_bundled_plugins(self.root)
-        command=self.command()
-        cp.atomic_write(self.root/'.companion-runtime.json',json.dumps({'command':command}))
-        return {'installed':True,'installer_sha256':hashlib.sha256(content).hexdigest(),'root':str(self.root)}
+        command = self.command()
+        cp.atomic_write(
+            self.root / ".companion-runtime.json", json.dumps({"command": command})
+        )
+        return {
+            "installed": True,
+            "installer_sha256": hashlib.sha256(content).hexdigest(),
+            "root": str(self.root),
+        }
 
 
 class Operations:
     """Durable action status, streamed output, and one mutation per installation."""
+
     def __init__(self, directory):
-        self.directory=Path(directory)
-        self.pool=ThreadPoolExecutor(max_workers=4,thread_name_prefix='companion')
-        self.lock=threading.Lock()
-        self.rows={}
-        self.busy=set()
+        self.directory = Path(directory)
+        self.pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="companion")
+        self.lock = threading.Lock()
+        self.rows = {}
+        self.busy = set()
+
     def submit(self, scope, label, action, *, profile="default", kind="runtime"):
         with self.lock:
             if scope in self.busy:
-                raise ValueError('Another action is still running for this installation.')
+                raise ValueError(
+                    "Another action is still running for this installation."
+                )
             self.busy.add(scope)
             ident = uuid.uuid4().hex
-            row={'id':ident,'scope':scope,'profile':profile or 'default','kind':kind,
-                 'label':label,'status':'running','progress':'Starting',
-                 'started_at':dt.datetime.now(dt.timezone.utc).isoformat()}
-            self.rows[ident]=row
+            row = {
+                "id": ident,
+                "scope": scope,
+                "profile": profile or "default",
+                "kind": kind,
+                "label": label,
+                "status": "running",
+                "progress": "Starting",
+                "started_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            }
+            self.rows[ident] = row
             self._save(row)
+
         def report(message):
             with self.lock:
-                row['progress']=redact(message); self._save(row)
+                row["progress"] = redact(message)
+                self._save(row)
+
         def stream(delta):
-            with self.lock:row['stream_text']=(row.get('stream_text','')+str(delta))[-1000000:]
-        def percent(done,total):
+            with self.lock:
+                row["stream_text"] = (row.get("stream_text", "") + str(delta))[
+                    -1000000:
+                ]
+
+        def percent(done, total):
             """How far along, when the worker actually knows.
 
             A long render reported one unchanging line for two minutes, which is
             indistinguishable from a job that has hung. `None` means genuinely
             unknown and leaves the indicator spinning rather than inventing a
             number for it."""
-            value=None
+            value = None
             if total:
-                try:value=max(0,min(100,round(float(done)/float(total)*100)))
-                except (TypeError,ValueError,ZeroDivisionError):value=None
+                try:
+                    value = max(0, min(100, round(float(done) / float(total) * 100)))
+                except (TypeError, ValueError, ZeroDivisionError):
+                    value = None
             with self.lock:
-                row['percent']=value; self._save(row)
-        report.stream=stream
-        report.percent=percent
+                row["percent"] = value
+                self._save(row)
+
+        report.stream = stream
+        report.percent = percent
+
         def work():
             try:
-                result=action(report)
-                with self.lock: row.update(status='complete',result=result,progress='Complete')
+                result = action(report)
+                with self.lock:
+                    row.update(status="complete", result=result, progress="Complete")
             except Exception as exc:
-                with self.lock: row.update(status='failed',error=redact(exc),progress='Needs attention')
+                with self.lock:
+                    row.update(
+                        status="failed", error=redact(exc), progress="Needs attention"
+                    )
             finally:
                 with self.lock:
-                    row['finished_at']=dt.datetime.now(dt.timezone.utc).isoformat()
-                    self.busy.discard(scope); self._save(row)
+                    row["finished_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+                    self.busy.discard(scope)
+                    self._save(row)
+
         self.pool.submit(work)
         return dict(row)
 
-    def _save(self,row):
-        self.directory.mkdir(parents=True,exist_ok=True)
-        cp.atomic_write(self.directory/(row['id']+'.json'),json.dumps(row,ensure_ascii=False))
+    def _save(self, row):
+        self.directory.mkdir(parents=True, exist_ok=True)
+        cp.atomic_write(
+            self.directory / (row["id"] + ".json"), json.dumps(row, ensure_ascii=False)
+        )
 
     def get(self, ident):
-        if not re.fullmatch('[a-f0-9]{32}',ident): raise ValueError('Unknown operation')
+        if not re.fullmatch("[a-f0-9]{32}", ident):
+            raise ValueError("Unknown operation")
         with self.lock:
-            if ident in self.rows: return dict(self.rows[ident])
-        row=read_json(self.directory/(ident+'.json'),None)
-        if row is None: raise ValueError('Unknown operation')
-        if row['status']=='running':
-            row.update(status='interrupted',error='The app stopped before this action completed. Inspect the current state before retrying.')
+            if ident in self.rows:
+                return dict(self.rows[ident])
+        row = read_json(self.directory / (ident + ".json"), None)
+        if row is None:
+            raise ValueError("Unknown operation")
+        if row["status"] == "running":
+            row.update(
+                status="interrupted",
+                error="The app stopped before this action completed. Inspect the current state before retrying.",
+            )
         return row
 
 
 @contextlib.contextmanager
 def session_db(c):
-    path=c.home/'state.db'
-    if not path.exists(): yield None; return
-    resolved=path.resolve()
-    shared=bool(c.profile and resolved==(c.hermes_root/'state.db').resolve())
-    if c.is_root and resolved.is_relative_to((c.hermes_root/'profiles').resolve()):
-        raise ValueError('The root session store redirects into a named profile')
-    con=sqlite3.connect(resolved.as_uri()+'?mode=ro',uri=True,timeout=3)
-    con.row_factory=sqlite3.Row
+    path = c.home / "state.db"
+    if not path.exists():
+        yield None
+        return
+    resolved = path.resolve()
+    shared = bool(c.profile and resolved == (c.hermes_root / "state.db").resolve())
+    if c.is_root and resolved.is_relative_to((c.hermes_root / "profiles").resolve()):
+        raise ValueError("The root session store redirects into a named profile")
+    con = sqlite3.connect(resolved.as_uri() + "?mode=ro", uri=True, timeout=3)
+    con.row_factory = sqlite3.Row
     try:
-        con.execute('PRAGMA query_only=ON')
-        columns={r[1] for r in con.execute('PRAGMA table_info(sessions)')}
-        if not {'id','source','started_at'}<=columns: raise ValueError('Unsupported Hermes sessions schema. Vault access remains available.')
-        if 'profile_name' not in columns:
-            if shared: raise ValueError('Cannot safely scope this shared session store')
-            scope='1=1';params=()
+        con.execute("PRAGMA query_only=ON")
+        columns = {r[1] for r in con.execute("PRAGMA table_info(sessions)")}
+        if not {"id", "source", "started_at"} <= columns:
+            raise ValueError(
+                "Unsupported Hermes sessions schema. Vault access remains available."
+            )
+        if "profile_name" not in columns:
+            if shared:
+                raise ValueError("Cannot safely scope this shared session store")
+            scope = "1=1"
+            params = ()
         elif c.is_root:
-            scope="lower(coalesce(profile_name,'')) IN ('','default')";params=()
+            scope = "lower(coalesce(profile_name,'')) IN ('','default')"
+            params = ()
         elif shared:
-            scope="lower(coalesce(profile_name,''))=?";params=(c.profile.lower(),)
+            scope = "lower(coalesce(profile_name,''))=?"
+            params = (c.profile.lower(),)
         else:
-            scope="lower(coalesce(profile_name,'')) IN ('','default',?)";params=(c.profile.lower(),)
-        yield con,columns,scope,params
+            scope = "lower(coalesce(profile_name,'')) IN ('','default',?)"
+            params = (c.profile.lower(),)
+        yield con, columns, scope, params
     except sqlite3.Error as exc:
-        raise ValueError('Hermes session history is temporarily unavailable or its schema changed.') from exc
-    finally: con.close()
+        raise ValueError(
+            "Hermes session history is temporarily unavailable or its schema changed."
+        ) from exc
+    finally:
+        con.close()
 
 
 def _page_cursor(value):
-    if not value:return None
+    if not value:
+        return None
     try:
-        if len(value)>300:raise ValueError()
-        row=json.loads(base64.urlsafe_b64decode(value+'='*(-len(value)%4)))
-        if not isinstance(row,list) or len(row)!=2 or isinstance(row[0],bool) or not isinstance(row[0],(int,float)) or not math.isfinite(row[0]):raise ValueError()
+        if len(value) > 300:
+            raise ValueError()
+        row = json.loads(base64.urlsafe_b64decode(value + "=" * (-len(value) % 4)))
+        if (
+            not isinstance(row, list)
+            or len(row) != 2
+            or isinstance(row[0], bool)
+            or not isinstance(row[0], (int, float))
+            or not math.isfinite(row[0])
+        ):
+            raise ValueError()
         return row
-    except (ValueError,TypeError,UnicodeError):raise ValueError('Invalid history cursor')
+    except (ValueError, TypeError, UnicodeError):
+        raise ValueError("Invalid history cursor")
 
 
-def _encode_cursor(stamp,ident):
-    return base64.urlsafe_b64encode(json.dumps([stamp,ident],separators=(',',':')).encode()).decode().rstrip('=')
+def _encode_cursor(stamp, ident):
+    return (
+        base64.urlsafe_b64encode(
+            json.dumps([stamp, ident], separators=(",", ":")).encode()
+        )
+        .decode()
+        .rstrip("=")
+    )
 
 
 def job_usage(c, jobs, now=None):
@@ -405,96 +708,197 @@ def job_usage(c, jobs, now=None):
     Windows attribute a run to its start time, not to individual token timestamps.
     Compressed continuations belong to the original cron run.
     """
-    now=time.time() if now is None else now
-    unavailable={'available':False,'jobs':{},'note':'Token accounting is unavailable in this Hermes session store.'}
+    now = time.time() if now is None else now
+    unavailable = {
+        "available": False,
+        "jobs": {},
+        "note": "Token accounting is unavailable in this Hermes session store.",
+    }
     try:
         with session_db(c) as state:
-            if state is None:return unavailable
-            con,columns,scope,params=state
-            if not {'input_tokens','output_tokens'}<=columns:return unavailable
-            fields=['id','source','started_at','input_tokens','output_tokens']
-            fields += [f for f in ('parent_session_id','api_call_count') if f in columns]
-            deadline=time.monotonic()+2
-            con.set_progress_handler(lambda:int(time.monotonic()>deadline),1000)
-            rows=[dict(r) for r in con.execute(f"SELECT {','.join(fields)} FROM sessions WHERE {scope} AND started_at>=? ORDER BY started_at DESC LIMIT 10001",(*params,now-7*86400))]
-    except (ValueError,sqlite3.Error):return unavailable
-    truncated=len(rows)>10000;rows=rows[:10000]
-    by_id={r['id']:r for r in rows};runs={}
-    pattern=re.compile(r'^cron_(.+)_(\d{8}_\d{6})$')
-    allowed={str(j['id']) for j in jobs}
+            if state is None:
+                return unavailable
+            con, columns, scope, params = state
+            if not {"input_tokens", "output_tokens"} <= columns:
+                return unavailable
+            fields = ["id", "source", "started_at", "input_tokens", "output_tokens"]
+            fields += [
+                f for f in ("parent_session_id", "api_call_count") if f in columns
+            ]
+            deadline = time.monotonic() + 2
+            con.set_progress_handler(lambda: int(time.monotonic() > deadline), 1000)
+            rows = [
+                dict(r)
+                for r in con.execute(
+                    f"SELECT {','.join(fields)} FROM sessions WHERE {scope} AND started_at>=? ORDER BY started_at DESC LIMIT 10001",
+                    (*params, now - 7 * 86400),
+                )
+            ]
+    except (ValueError, sqlite3.Error):
+        return unavailable
+    truncated = len(rows) > 10000
+    rows = rows[:10000]
+    by_id = {r["id"]: r for r in rows}
+    runs = {}
+    pattern = re.compile(r"^cron_(.+)_(\d{8}_\d{6})$")
+    allowed = {str(j["id"]) for j in jobs}
     for row in rows:
-        root=row;seen=set()
-        while root.get('parent_session_id') in by_id and root['id'] not in seen:
-            seen.add(root['id']);root=by_id[root['parent_session_id']]
-        match=pattern.fullmatch(str(root['id']))
-        if not match or root['source']!='cron' or match[1] not in allowed:continue
-        run=runs.setdefault(root['id'],{'job':match[1],'at':root['started_at'],'tokens':0,'recorded':False})
-        tokens=max(0,int(row.get('input_tokens') or 0))+max(0,int(row.get('output_tokens') or 0))
-        run['tokens']+=tokens;run['recorded']|=tokens>0 or bool(row.get('api_call_count'))
-    totals={}
+        root = row
+        seen = set()
+        while root.get("parent_session_id") in by_id and root["id"] not in seen:
+            seen.add(root["id"])
+            root = by_id[root["parent_session_id"]]
+        match = pattern.fullmatch(str(root["id"]))
+        if not match or root["source"] != "cron" or match[1] not in allowed:
+            continue
+        run = runs.setdefault(
+            root["id"],
+            {"job": match[1], "at": root["started_at"], "tokens": 0, "recorded": False},
+        )
+        tokens = max(0, int(row.get("input_tokens") or 0)) + max(
+            0, int(row.get("output_tokens") or 0)
+        )
+        run["tokens"] += tokens
+        run["recorded"] |= tokens > 0 or bool(row.get("api_call_count"))
+    totals = {}
     for job in jobs:
-        own=sorted((r for r in runs.values() if r['job']==str(job['id'])),key=lambda r:r['at'],reverse=True)
-        total={'runs':len(own),'last_run':own[0]['tokens'] if own and own[0]['recorded'] else None}
-        for label,seconds in (('hour',3600),('day',86400),('week',7*86400)):
-            window=[r for r in own if r['at']>=now-seconds]
-            total[label]=sum(r['tokens'] for r in window) if window and all(r['recorded'] for r in window) else None
-        totals[str(job['id'])]=total
-    return {'available':True,'jobs':totals,'partial':truncated,
-            'note':'Recorded input + output tokens, grouped by run start in the last hour, 24 hours, and 7 days. Unrecorded usage is unknown; image charges and costs are not included.'}
+        own = sorted(
+            (r for r in runs.values() if r["job"] == str(job["id"])),
+            key=lambda r: r["at"],
+            reverse=True,
+        )
+        total = {
+            "runs": len(own),
+            "last_run": own[0]["tokens"] if own and own[0]["recorded"] else None,
+        }
+        for label, seconds in (("hour", 3600), ("day", 86400), ("week", 7 * 86400)):
+            window = [r for r in own if r["at"] >= now - seconds]
+            total[label] = (
+                sum(r["tokens"] for r in window)
+                if window and all(r["recorded"] for r in window)
+                else None
+            )
+        totals[str(job["id"])] = total
+    return {
+        "available": True,
+        "jobs": totals,
+        "partial": truncated,
+        "note": "Recorded input + output tokens, grouped by run start in the last hour, 24 hours, and 7 days. Unrecorded usage is unknown; image charges and costs are not included.",
+    }
 
 
 def sessions_page(c, limit=100, before=None):
-    if type(limit)!=int or not 1<=limit<=200:raise ValueError('History page size must be 1–200')
-    cursor=_page_cursor(before)
+    if type(limit) != int or not 1 <= limit <= 200:
+        raise ValueError("History page size must be 1–200")
+    cursor = _page_cursor(before)
     with session_db(c) as state:
-        if state is None:return {'sessions':[],'next_cursor':None}
-        con,columns,scope,params=state
-        fields=[f for f in ('id','source','title','started_at','last_activity_at','model','message_count') if f in columns]
-        if 'source' in columns:
-            scope+=" AND lower(coalesce(source,'')) NOT IN ('cron','subagent','tool','config-audit','local-default-audit','local-tool-proof')"
+        if state is None:
+            return {"sessions": [], "next_cursor": None}
+        con, columns, scope, params = state
+        fields = [
+            f
+            for f in (
+                "id",
+                "source",
+                "title",
+                "started_at",
+                "last_activity_at",
+                "model",
+                "message_count",
+            )
+            if f in columns
+        ]
+        if "source" in columns:
+            scope += " AND lower(coalesce(source,'')) NOT IN ('cron','subagent','tool','config-audit','local-default-audit','local-tool-proof')"
         if cursor:
-            if not isinstance(cursor[1],str):raise ValueError('Invalid session cursor')
-            scope+=' AND (coalesce(started_at,0),id)<(?,?)';params=(*params,*cursor)
-        rows=[dict(r) for r in con.execute(f"SELECT {','.join(fields)} FROM sessions WHERE {scope} ORDER BY coalesce(started_at,0) DESC,id DESC LIMIT ?",(*params,limit+1))]
-        more=len(rows)>limit;rows=rows[:limit]
-        return {'sessions':rows,'next_cursor':_encode_cursor(rows[-1]['started_at'] or 0,rows[-1]['id']) if more else None}
+            if not isinstance(cursor[1], str):
+                raise ValueError("Invalid session cursor")
+            scope += " AND (coalesce(started_at,0),id)<(?,?)"
+            params = (*params, *cursor)
+        rows = [
+            dict(r)
+            for r in con.execute(
+                f"SELECT {','.join(fields)} FROM sessions WHERE {scope} ORDER BY coalesce(started_at,0) DESC,id DESC LIMIT ?",
+                (*params, limit + 1),
+            )
+        ]
+        more = len(rows) > limit
+        rows = rows[:limit]
+        return {
+            "sessions": rows,
+            "next_cursor": (
+                _encode_cursor(rows[-1]["started_at"] or 0, rows[-1]["id"])
+                if more
+                else None
+            ),
+        }
 
 
 def sessions(c, limit=100):
-    return sessions_page(c,limit)['sessions']
+    return sessions_page(c, limit)["sessions"]
 
 
 def messages_page(c, session, limit=200, before=None):
-    if type(limit)!=int or not 1<=limit<=200:raise ValueError('History page size must be 1–200')
-    cursor=_page_cursor(before)
+    if type(limit) != int or not 1 <= limit <= 200:
+        raise ValueError("History page size must be 1–200")
+    cursor = _page_cursor(before)
     with session_db(c) as state:
-        if state is None:raise ValueError('Session does not exist')
-        con,_,scope,params=state
-        if not con.execute(f'SELECT id FROM sessions WHERE id=? AND {scope}',(session,*params)).fetchone():
-            raise ValueError('Session does not belong to this companion')
-        cols={r[1] for r in con.execute('PRAGMA table_info(messages)')}
-        if not {'role','content','timestamp','session_id'}<=cols:raise ValueError('Unsupported Hermes messages schema')
-        conditions="session_id=? AND role IN ('user','assistant')";values=(session,)
-        if '_compressed_summary' in cols:conditions+=' AND coalesce(_compressed_summary,0)=0'
-        if 'display_kind' in cols:conditions+=" AND coalesce(display_kind,'')=''"
-        if {'active','compacted'}<=cols:conditions+=' AND (active=1 OR compacted=1)'
+        if state is None:
+            raise ValueError("Session does not exist")
+        con, _, scope, params = state
+        if not con.execute(
+            f"SELECT id FROM sessions WHERE id=? AND {scope}", (session, *params)
+        ).fetchone():
+            raise ValueError("Session does not belong to this companion")
+        cols = {r[1] for r in con.execute("PRAGMA table_info(messages)")}
+        if not {"role", "content", "timestamp", "session_id"} <= cols:
+            raise ValueError("Unsupported Hermes messages schema")
+        conditions = "session_id=? AND role IN ('user','assistant')"
+        values = (session,)
+        if "_compressed_summary" in cols:
+            conditions += " AND coalesce(_compressed_summary,0)=0"
+        if "display_kind" in cols:
+            conditions += " AND coalesce(display_kind,'')=''"
+        if {"active", "compacted"} <= cols:
+            conditions += " AND (active=1 OR compacted=1)"
         if cursor:
-            if type(cursor[1])!=int:raise ValueError('Invalid message cursor')
-            conditions+=' AND (coalesce(timestamp,0),rowid)<(?,?)';values+=tuple(cursor)
-        rows=[dict(r) for r in con.execute(f'SELECT rowid AS _cursor_id,role,content,timestamp FROM messages WHERE {conditions} ORDER BY coalesce(timestamp,0) DESC,rowid DESC LIMIT ?',(*values,limit+1))]
-        more=len(rows)>limit;rows=rows[:limit]
-        next_cursor=_encode_cursor(rows[-1]['timestamp'] or 0,rows[-1]['_cursor_id']) if more else None
-        for row in rows:del row['_cursor_id']
-        return {'messages':list(reversed(rows)),'next_cursor':next_cursor}
+            if type(cursor[1]) != int:
+                raise ValueError("Invalid message cursor")
+            conditions += " AND (coalesce(timestamp,0),rowid)<(?,?)"
+            values += tuple(cursor)
+        rows = [
+            dict(r)
+            for r in con.execute(
+                f"SELECT rowid AS _cursor_id,role,content,timestamp FROM messages WHERE {conditions} ORDER BY coalesce(timestamp,0) DESC,rowid DESC LIMIT ?",
+                (*values, limit + 1),
+            )
+        ]
+        more = len(rows) > limit
+        rows = rows[:limit]
+        next_cursor = (
+            _encode_cursor(rows[-1]["timestamp"] or 0, rows[-1]["_cursor_id"])
+            if more
+            else None
+        )
+        for row in rows:
+            del row["_cursor_id"]
+        return {"messages": list(reversed(rows)), "next_cursor": next_cursor}
 
 
 def messages(c, session, limit=200):
-    return messages_page(c,session,limit)['messages']
+    return messages_page(c, session, limit)["messages"]
 
 
 # Sources that are the companion working, not the companion talking. The feed is
 # the conversation, so scheduled runs, sub-agents and tool calls stay out of it.
-FEED_EXCLUDED_SOURCES=('cron','subagent','tool','config-audit','local-default-audit','local-tool-proof')
+FEED_EXCLUDED_SOURCES = (
+    "cron",
+    "subagent",
+    "tool",
+    "config-audit",
+    "local-default-audit",
+    "local-tool-proof",
+)
 
 
 def feed_page(c, limit=60, before=None):
@@ -502,28 +906,40 @@ def feed_page(c, limit=60, before=None):
     import companion_transcript as transcript
 
     if type(limit) != int or not 1 <= limit <= 200:
-        raise ValueError('History page size must be 1-200')
+        raise ValueError("History page size must be 1-200")
     cursor = _page_cursor(before)
     if cursor and type(cursor[1]) != int:
-        raise ValueError('Invalid message cursor')
+        raise ValueError("Invalid message cursor")
 
     def read(view):
         if view is None:
-            return {'messages': [], 'next_cursor': None}
+            return {"messages": [], "next_cursor": None}
         records, more = view.page(limit, cursor)
-        rows = [{'role': 'user' if record.speaker == 'owner' else 'assistant',
-                 'content': record.content, 'timestamp': record.occurred_at,
-                 'session': record.source_session,
-                 'source': 'tamanitomo' if record.source_kind == 'workspace'
-                           else view.session(record.source_session)['source']}
-                for record in records]
-        next_cursor = _encode_cursor(records[-1].occurred_at, int(records[-1].source_message)) if more else None
-        return {'messages': list(reversed(rows)), 'next_cursor': next_cursor}
+        rows = [
+            {
+                "role": "user" if record.speaker == "owner" else "assistant",
+                "content": record.content,
+                "timestamp": record.occurred_at,
+                "session": record.source_session,
+                "source": (
+                    "tamanitomo"
+                    if record.source_kind == "workspace"
+                    else view.session(record.source_session)["source"]
+                ),
+            }
+            for record in records
+        ]
+        next_cursor = (
+            _encode_cursor(records[-1].occurred_at, int(records[-1].source_message))
+            if more
+            else None
+        )
+        return {"messages": list(reversed(rows)), "next_cursor": next_cursor}
 
     return transcript.owner_evidence(c, read)
 
 
-RESUMABLE_SOURCES=('cli','desktop','tui')
+RESUMABLE_SOURCES = ("cli", "desktop", "tui")
 
 
 def workspace_sessions_path(c):
@@ -533,8 +949,8 @@ def workspace_sessions_path(c):
     from one typed at a real terminal. The difference matters to the person
     reading the feed, so the workspace notes its own as it makes them.
     """
-    new_path = Path(c.home)/'.tamanitomo-sessions.json'
-    old_path = Path(c.home)/'.companion-kit-sessions.json'
+    new_path = Path(c.home) / ".tamanitomo-sessions.json"
+    old_path = Path(c.home) / ".companion-kit-sessions.json"
     if not new_path.exists() and old_path.exists():
         return old_path
     return new_path
@@ -542,19 +958,24 @@ def workspace_sessions_path(c):
 
 def read_workspace_sessions(c):
     try:
-        rows=json.loads(workspace_sessions_path(c).read_text(encoding='utf-8'))
-        return {str(x) for x in rows} if isinstance(rows,list) else set()
-    except (OSError,ValueError,TypeError):return set()
+        rows = json.loads(workspace_sessions_path(c).read_text(encoding="utf-8"))
+        return {str(x) for x in rows} if isinstance(rows, list) else set()
+    except (OSError, ValueError, TypeError):
+        return set()
 
 
-def note_workspace_session(c,session):
+def note_workspace_session(c, session):
     """Remember one, keeping the file small enough to read on every feed page."""
-    if not session:return
-    known=read_workspace_sessions(c)
-    if session in known:return
-    rows=[*sorted(known),str(session)][-400:]
-    try:cp.atomic_write(workspace_sessions_path(c),json.dumps(rows))
-    except OSError:pass
+    if not session:
+        return
+    known = read_workspace_sessions(c)
+    if session in known:
+        return
+    rows = [*sorted(known), str(session)][-400:]
+    try:
+        cp.atomic_write(workspace_sessions_path(c), json.dumps(rows))
+    except OSError:
+        pass
 
 
 def resumable_session(c, ident):
@@ -562,10 +983,10 @@ def resumable_session(c, ident):
     import companion_transcript as transcript
 
     def read(view):
-        return bool(view and view.owner_session(ident) in ('workspace', 'terminal'))
+        return bool(view and view.owner_session(ident) in ("workspace", "terminal"))
 
     if not transcript.owner_evidence(c, read):
-        raise ValueError('This session is not a local conversation with the owner.')
+        raise ValueError("This session is not a local conversation with the owner.")
     return ident
 
 
@@ -576,11 +997,15 @@ def latest_session(c):
     def read(view):
         if view is None:
             return None
-        rows = view.con.execute('SELECT id FROM sessions s WHERE ' + view.scope
-                                + ' ORDER BY coalesce(started_at,0) DESC LIMIT 200', view.params)
+        rows = view.con.execute(
+            "SELECT id FROM sessions s WHERE "
+            + view.scope
+            + " ORDER BY coalesce(started_at,0) DESC LIMIT 200",
+            view.params,
+        )
         for row in rows:
-            if view.owner_session(row['id']) in ('workspace', 'terminal'):
-                return row['id']
+            if view.owner_session(row["id"]) in ("workspace", "terminal"):
+                return row["id"]
         return None
 
     return transcript.owner_evidence(c, read)

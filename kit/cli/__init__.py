@@ -15,12 +15,14 @@
 
 `bin/tamanitomo` is a thin entry point onto `main.run()`.
 """
-from __future__ import annotations
-import pathlib, sys
 
-__version__='2.2.0'
+from __future__ import annotations
+import pathlib
+import sys
+
+__version__ = "2.2.0"
 
 # The runtime helpers are flat modules meant to be runnable on their own
 # (`python companion_self.py ...` appears in every cron prompt), so they are
 # imported by name rather than as a package.
-sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/'scripts'))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))

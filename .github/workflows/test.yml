@@ -28,6 +28,12 @@ jobs:
         with:
           node-version: '22'
       - run: python -m pip install -r requirements.txt
+      - name: Check Python formatting
+        if: matrix.python == '3.13'
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m black --check kit/scripts kit/cli kit/app launch.py update_release.py
+          python -m ruff check kit/scripts kit/cli kit/app
       - name: Run tests (no hermes on PATH)
         run: python -m pytest -q -rs --junitxml=junit.xml
       - name: Report failed tests as annotations

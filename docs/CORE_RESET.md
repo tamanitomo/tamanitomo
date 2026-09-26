@@ -51,3 +51,18 @@ release integrity check and final responsive browser results here.
   provider: a primary HTTP 500 switched to the fallback, returned exit code 0,
   streamed six deltas and produced the clean final reply. This used temporary
   homes and fixture tokens, with no live provider requests or user-data changes.
+
+## Phase 4 — readable code and explicit rules
+
+- Formatted all 109 Python modules in `kit/scripts`, `kit/cli` and `kit/app`, plus
+  launch/update entry points. Expanded chained statements and split compound
+  imports. Black and focused Ruff rules now have reproducible dev dependencies
+  and a CI check.
+- Verified the formatting pass has identical executable ASTs after normalizing
+  import grouping and excluding docstrings. The representative 300-test domain
+  run passed in 3.75s.
+- Added module-level explanations and `ARCHITECTURE.md` for deterministic limits,
+  evidence-backed memory and the six zero-inference maintenance routines.
+- Follow-up review repaired three inference edge cases before consolidation:
+  endpoint credential isolation, native Anthropic routing, and transient failure
+  during schema correction. These behavior changes have separate regressions.

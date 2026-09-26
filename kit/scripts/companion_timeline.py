@@ -11,8 +11,19 @@ the oldest captures go — except anything copied into an album, which is what
 albums are for. The copy is a copy: favouriting never moves the original out of
 the timeline, so the day it belonged to still reads correctly.
 """
+
 from __future__ import annotations
-import argparse, datetime as dt, hashlib, html, io, json, os, pathlib, re, sys, tempfile
+import argparse
+import datetime as dt
+import hashlib
+import html
+import io
+import json
+import os
+import pathlib
+import re
+import sys
+import tempfile
 import urllib.request
 import companion_config as cc
 from companion_platform import atomic_write, file_lock
@@ -20,181 +31,293 @@ from companion_presence import current
 
 # Only used when no budget is set at all; a calendar is a poor way to bound a
 # folder whose file sizes nobody controls.
-DAYS=30
+DAYS = 30
 # A state confirmed this long ago is still "what I am doing now" when the loop
 # records on its own clock between quarter-hour boundaries.
-RECENT=10
-MAX_BYTES=32*1024*1024
-ALBUM_NAME=re.compile(r'^[A-Za-z0-9][A-Za-z0-9 _-]{0,60}$')
-ID=re.compile(r'^[a-f0-9]{24}$')
-IMAGE=re.compile(r'^[a-f0-9]{24}(?:_[a-zA-Z0-9_-]{1,32})?\.(png|jpg|webp)$')
+RECENT = 10
+MAX_BYTES = 32 * 1024 * 1024
+ALBUM_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _-]{0,60}$")
+ID = re.compile(r"^[a-f0-9]{24}$")
+IMAGE = re.compile(r"^[a-f0-9]{24}(?:_[a-zA-Z0-9_-]{1,32})?\.(png|jpg|webp)$")
 
-def now_utc():return dt.datetime.now(dt.timezone.utc)
-def root(c):return c.data/'image-timeline'
+
+def now_utc():
+    return dt.datetime.now(dt.timezone.utc)
+
+
+def root(c):
+    return c.data / "image-timeline"
+
 
 def timestamp(value):
-    stamp=dt.datetime.fromisoformat(value)
-    if stamp.tzinfo is None:raise ValueError('Timeline timestamps require a timezone')
+    stamp = dt.datetime.fromisoformat(value)
+    if stamp.tzinfo is None:
+        raise ValueError("Timeline timestamps require a timezone")
     return stamp.astimezone(dt.timezone.utc)
 
 
 def records(c):
-    for path in sorted((root(c)/'captures').glob('*.json')):
-        if not ID.fullmatch(path.stem) or path.is_symlink():continue
-        row=json.loads(path.read_text(encoding='utf-8'))
-        if row.get('id')!=path.stem:raise ValueError('Capture id mismatch')
-        yield path,row
+    for path in sorted((root(c) / "captures").glob("*.json")):
+        if not ID.fullmatch(path.stem) or path.is_symlink():
+            continue
+        row = json.loads(path.read_text(encoding="utf-8"))
+        if row.get("id") != path.stem:
+            raise ValueError("Capture id mismatch")
+        yield path, row
 
 
 def render_gallery(c):
-    from companion_media_review import metadata,preferences,should_blur
-    prefs=preferences(c)
-    cards=[]
-    for _,row in sorted(records(c),key=lambda item:item[1]['created_at'],reverse=True):
-        filename=row.get('filename','')
-        if row.get('status')!='saved' or not IMAGE.fullmatch(filename):continue
-        scene=row['scene'];state=scene['state'];esc=html.escape
-        caption=' · '.join([state['activity'],state['location'],', '.join(item['description'] for item in state['outfit'])])
-        meta=metadata(root(c)/'images'/filename)
-        conceal=' style="filter:blur(28px)" title="Sensitive or unreviewed image; click to reveal"' if should_blur(prefs,meta) else ''
-        cards.append(f'<article><a href="images/{filename}"><img{conceal} loading="lazy" src="images/{filename}" alt="{esc(caption,quote=True)}"></a><a download href="images/{filename}">Save favorite</a><time>{esc(scene["recorded_at"])}</time><p>{esc(caption)}</p><p>{esc(str(meta.get("generation") or row.get("provider") or "Source not recorded"))}</p></article>')
-    document='''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    from companion_media_review import metadata, preferences, should_blur
+
+    prefs = preferences(c)
+    cards = []
+    for _, row in sorted(
+        records(c), key=lambda item: item[1]["created_at"], reverse=True
+    ):
+        filename = row.get("filename", "")
+        if row.get("status") != "saved" or not IMAGE.fullmatch(filename):
+            continue
+        scene = row["scene"]
+        state = scene["state"]
+        esc = html.escape
+        caption = " · ".join(
+            [
+                state["activity"],
+                state["location"],
+                ", ".join(item["description"] for item in state["outfit"]),
+            ]
+        )
+        meta = metadata(root(c) / "images" / filename)
+        conceal = (
+            ' style="filter:blur(28px)" title="Sensitive or unreviewed image; click to reveal"'
+            if should_blur(prefs, meta)
+            else ""
+        )
+        cards.append(
+            f'<article><a href="images/{filename}"><img{conceal} loading="lazy" src="images/{filename}" alt="{esc(caption,quote=True)}"></a><a download href="images/{filename}">Save favorite</a><time>{esc(scene["recorded_at"])}</time><p>{esc(caption)}</p><p>{esc(str(meta.get("generation") or row.get("provider") or "Source not recorded"))}</p></article>'
+        )
+    document = (
+        """<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Image timeline</title><style>body{margin:0;background:#101820;color:#edf3f7;font:16px system-ui;padding:32px}h1{margin-bottom:8px}header{max-width:850px;margin-bottom:32px}header p{color:#b4c5d0;line-height:1.6}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:20px}article{background:#1c2933;border-radius:12px;overflow:hidden}img{width:100%;aspect-ratio:4/5;object-fit:contain;background:#0b1117}time,p{display:block;margin:14px}time{font-size:13px;color:#88c9de}p{line-height:1.5}</style>
-<header><h1>'''+html.escape(c.agent)+''' · Image timeline</h1><p>A glimpse of each recorded moment. Images are generated from the companion’s continuing authored life. This folder is bounded by a storage budget, and the oldest go first when it is full. Anything copied into an album is kept whatever happens here. An absent image means no successful capture, not an uneventful day.</p></header><main class="grid">'''+(''.join(cards) or '<p>No images yet. The first capture needs a current state and a working image provider.</p>')+'</main></html>'
-    atomic_write(root(c)/'index.html',document)
+<header><h1>"""
+        + html.escape(c.agent)
+        + """ · Image timeline</h1><p>A glimpse of each recorded moment. Images are generated from the companion’s continuing authored life. This folder is bounded by a storage budget, and the oldest go first when it is full. Anything copied into an album is kept whatever happens here. An absent image means no successful capture, not an uneventful day.</p></header><main class="grid">"""
+        + (
+            "".join(cards)
+            or "<p>No images yet. The first capture needs a current state and a working image provider.</p>"
+        )
+        + "</main></html>"
+    )
+    atomic_write(root(c) / "index.html", document)
 
 
-def _size(c,row):
-    names=set()
-    if row.get('filename'):names.add(row['filename'])
-    for v in row.get('variants',[]):
-        if isinstance(v,dict) and v.get('filename'):names.add(v['filename'])
-    total=0
+def _size(c, row):
+    names = set()
+    if row.get("filename"):
+        names.add(row["filename"])
+    for v in row.get("variants", []):
+        if isinstance(v, dict) and v.get("filename"):
+            names.add(v["filename"])
+    total = 0
     for name in names:
-        try:total+=(root(c)/'images'/name).stat().st_size
-        except OSError:pass
+        try:
+            total += (root(c) / "images" / name).stat().st_size
+        except OSError:
+            pass
     return total
 
-def _drop(c,path,row):
-    names=set()
-    if row.get('filename'):names.add(row['filename'])
-    for v in row.get('variants',[]):
-        if isinstance(v,dict) and v.get('filename'):names.add(v['filename'])
+
+def _drop(c, path, row):
+    names = set()
+    if row.get("filename"):
+        names.add(row["filename"])
+    for v in row.get("variants", []):
+        if isinstance(v, dict) and v.get("filename"):
+            names.add(v["filename"])
     for name in names:
-        if not IMAGE.fullmatch(name) or (not name.startswith(row['id']+'.') and not name.startswith(row['id']+'_')):
-            raise ValueError('Unsafe managed image name')
+        if not IMAGE.fullmatch(name) or (
+            not name.startswith(row["id"] + ".")
+            and not name.startswith(row["id"] + "_")
+        ):
+            raise ValueError("Unsafe managed image name")
         # Unlinking a symlink removes only the link, never its target.
-        image=root(c)/'images'/name
+        image = root(c) / "images" / name
         image.unlink(missing_ok=True)
         from companion_media_review import sidecar
+
         sidecar(image).unlink(missing_ok=True)
     path.unlink()
 
-def _prune(c,now):
-    rows=sorted(records(c),key=lambda item:item[1]['created_at'])
-    removed=0
+
+def _prune(c, now):
+    rows = sorted(records(c), key=lambda item: item[1]["created_at"])
+    removed = 0
     # Validate every managed name on the way past, not only the ones about to be
     # removed. Corrupt metadata that is currently inside the budget is still
     # corrupt metadata, and finding it later is finding it too late.
-    for _,row in rows:
-        names=set()
-        if row.get('filename'):names.add(row['filename'])
-        for v in row.get('variants',[]):
-            if isinstance(v,dict) and v.get('filename'):names.add(v['filename'])
+    for _, row in rows:
+        names = set()
+        if row.get("filename"):
+            names.add(row["filename"])
+        for v in row.get("variants", []):
+            if isinstance(v, dict) and v.get("filename"):
+                names.add(v["filename"])
         for name in names:
-            if not IMAGE.fullmatch(name) or (not name.startswith(row['id']+'.') and not name.startswith(row['id']+'_')):
-                raise ValueError('Unsafe managed image name')
+            if not IMAGE.fullmatch(name) or (
+                not name.startswith(row["id"] + ".")
+                and not name.startswith(row["id"] + "_")
+            ):
+                raise ValueError("Unsafe managed image name")
     # A pending capture that never landed is a failure, not a file to keep
     # waiting for.
-    for path,row in rows:
-        if row.get('status')=='pending' and now-timestamp(row['created_at'])>dt.timedelta(minutes=15):
-            row.update(status='failed',error='Capture timed out before a successful save')
-            atomic_write(path,json.dumps(row,ensure_ascii=False,indent=2))
-    budget=int(float(getattr(c,'timeline_budget_gb',0) or 0)*1_000_000_000)
-    total=sum(_size(c,row) for _,row in rows)
-    freed=0
+    for path, row in rows:
+        if row.get("status") == "pending" and now - timestamp(
+            row["created_at"]
+        ) > dt.timedelta(minutes=15):
+            row.update(
+                status="failed", error="Capture timed out before a successful save"
+            )
+            atomic_write(path, json.dumps(row, ensure_ascii=False, indent=2))
+    budget = int(float(getattr(c, "timeline_budget_gb", 0) or 0) * 1_000_000_000)
+    total = sum(_size(c, row) for _, row in rows)
+    freed = 0
     if budget:
-        for path,row in rows:
-            if total<=budget:break
-            size=_size(c,row)
-            _drop(c,path,row);removed+=1;total-=size;freed+=size
+        for path, row in rows:
+            if total <= budget:
+                break
+            size = _size(c, row)
+            _drop(c, path, row)
+            removed += 1
+            total -= size
+            freed += size
     else:
         # No budget set: fall back to the old calendar so the folder is still
         # bounded by something.
-        cutoff=now-dt.timedelta(days=DAYS)
-        for path,row in rows:
-            if timestamp(row['created_at'])>cutoff:continue
-            freed+=_size(c,row);_drop(c,path,row);removed+=1
-    for temp in (root(c)/'images').glob('.capture-*'):
-        if temp.is_file() and dt.datetime.fromtimestamp(temp.lstat().st_mtime,dt.timezone.utc)<=now-dt.timedelta(days=1):
+        cutoff = now - dt.timedelta(days=DAYS)
+        for path, row in rows:
+            if timestamp(row["created_at"]) > cutoff:
+                continue
+            freed += _size(c, row)
+            _drop(c, path, row)
+            removed += 1
+    for temp in (root(c) / "images").glob(".capture-*"):
+        if temp.is_file() and dt.datetime.fromtimestamp(
+            temp.lstat().st_mtime, dt.timezone.utc
+        ) <= now - dt.timedelta(days=1):
             temp.unlink()
     render_gallery(c)
-    return {'removed':removed,'freed_bytes':freed,'bytes_used':total,
-            'budget_bytes':budget or None,'retention_days':None if budget else DAYS,
-            'gallery':str(root(c)/'index.html')}
+    return {
+        "removed": removed,
+        "freed_bytes": freed,
+        "bytes_used": total,
+        "budget_bytes": budget or None,
+        "retention_days": None if budget else DAYS,
+        "gallery": str(root(c) / "index.html"),
+    }
 
 
 # ---- albums ---------------------------------------------------------------
-def albums_root(c):return c.data/'albums'
+def albums_root(c):
+    return c.data / "albums"
+
 
 def albums(c):
-    folder=albums_root(c)
-    if not folder.is_dir():return []
-    out=[]
+    folder = albums_root(c)
+    if not folder.is_dir():
+        return []
+    out = []
     for path in sorted(folder.iterdir()):
-        if not path.is_dir() or path.is_symlink():continue
-        files=[f for f in path.iterdir() if f.is_file() and not f.name.startswith('.')]
-        out.append({'name':path.name,'count':len(files),
-                    'bytes':sum(f.stat().st_size for f in files),'path':str(path)})
+        if not path.is_dir() or path.is_symlink():
+            continue
+        files = [
+            f for f in path.iterdir() if f.is_file() and not f.name.startswith(".")
+        ]
+        out.append(
+            {
+                "name": path.name,
+                "count": len(files),
+                "bytes": sum(f.stat().st_size for f in files),
+                "path": str(path),
+            }
+        )
     return out
 
-def favorite(c,ident,album='Favorites'):
+
+def favorite(c, ident, album="Favorites"):
     """Copy a capture into an album. The original stays where it is.
 
     Moving it would take the image out of the day it belongs to, and the
     timeline would then be quietly wrong about that afternoon.
     """
     if not ALBUM_NAME.fullmatch(album):
-        raise ValueError('album names are letters, digits, spaces, hyphens and underscores')
-    path=capture_path(c,ident)
-    row=json.loads(path.read_text(encoding='utf-8'))
-    if row.get('status')!='saved':raise ValueError('only a saved capture can be kept')
-    name=row['filename']
-    if not IMAGE.fullmatch(name):raise ValueError('Unsafe managed image name')
-    source=root(c)/'images'/name
-    if not source.is_file():raise ValueError('the image is already gone')
-    folder=albums_root(c)/album;folder.mkdir(parents=True,exist_ok=True)
-    target=folder/name
+        raise ValueError(
+            "album names are letters, digits, spaces, hyphens and underscores"
+        )
+    path = capture_path(c, ident)
+    row = json.loads(path.read_text(encoding="utf-8"))
+    if row.get("status") != "saved":
+        raise ValueError("only a saved capture can be kept")
+    name = row["filename"]
+    if not IMAGE.fullmatch(name):
+        raise ValueError("Unsafe managed image name")
+    source = root(c) / "images" / name
+    if not source.is_file():
+        raise ValueError("the image is already gone")
+    folder = albums_root(c) / album
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / name
     if not target.exists():
         import shutil as _shutil
-        _shutil.copy2(source,target)
-        scene=row.get('scene',{}).get('state',{})
-        caption=(f"{row['scene'].get('recorded_at','')} — {scene.get('activity','')} at "
-                 f"{scene.get('location','')}\n")
-        (folder/(name+'.txt')).write_text(caption,encoding='utf-8')
-    from companion_media_review import metadata,write_metadata
-    write_metadata(target,metadata(source))
-    return {'album':album,'file':str(target),'kept':True,
-            'note':'Copied, not moved. The timeline still holds the original until retention takes it.'}
 
-def add_to_album(c,source,album='Favorites'):
+        _shutil.copy2(source, target)
+        scene = row.get("scene", {}).get("state", {})
+        caption = (
+            f"{row['scene'].get('recorded_at','')} — {scene.get('activity','')} at "
+            f"{scene.get('location','')}\n"
+        )
+        (folder / (name + ".txt")).write_text(caption, encoding="utf-8")
+    from companion_media_review import metadata, write_metadata
+
+    write_metadata(target, metadata(source))
+    return {
+        "album": album,
+        "file": str(target),
+        "kept": True,
+        "note": "Copied, not moved. The timeline still holds the original until retention takes it.",
+    }
+
+
+def add_to_album(c, source, album="Favorites"):
     """Put a file the human chose into an album, timeline or not."""
     if not ALBUM_NAME.fullmatch(album):
-        raise ValueError('album names are letters, digits, spaces, hyphens and underscores')
-    data,ext=load_image(str(source))
-    digest=hashlib.sha256(data).hexdigest()[:24]
-    folder=albums_root(c)/album;folder.mkdir(parents=True,exist_ok=True)
-    target=folder/f'{digest}.{ext}'
-    if not target.exists():target.write_bytes(data)
-    from companion_media_review import metadata,write_metadata
-    if pathlib.Path(str(source)).is_file():write_metadata(target,metadata(pathlib.Path(source)))
-    return {'album':album,'file':str(target),'bytes':len(data)}
+        raise ValueError(
+            "album names are letters, digits, spaces, hyphens and underscores"
+        )
+    data, ext = load_image(str(source))
+    digest = hashlib.sha256(data).hexdigest()[:24]
+    folder = albums_root(c) / album
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / f"{digest}.{ext}"
+    if not target.exists():
+        target.write_bytes(data)
+    from companion_media_review import metadata, write_metadata
+
+    if pathlib.Path(str(source)).is_file():
+        write_metadata(target, metadata(pathlib.Path(source)))
+    return {"album": album, "file": str(target), "bytes": len(data)}
 
 
-def prune(c,now=None):
-    if root(c).is_symlink() or (root(c)/'images').is_symlink() or (root(c)/'captures').is_symlink():raise ValueError('Timeline directories must not be symlinks')
-    if not root(c).exists():return {'removed':0,'retention_days':DAYS}
-    with file_lock(root(c)/'.lock'):return _prune(c,now or now_utc())
+def prune(c, now=None):
+    if (
+        root(c).is_symlink()
+        or (root(c) / "images").is_symlink()
+        or (root(c) / "captures").is_symlink()
+    ):
+        raise ValueError("Timeline directories must not be symlinks")
+    if not root(c).exists():
+        return {"removed": 0, "retention_days": DAYS}
+    with file_lock(root(c) / ".lock"):
+        return _prune(c, now or now_utc())
 
 
 def bounds(now):
@@ -206,88 +329,153 @@ def bounds(now):
     the confirming record is recent, whether it landed before or after the
     boundary.
     """
-    slot=now.replace(minute=now.minute//15*15,second=0,microsecond=0)
-    return min(slot,now-dt.timedelta(minutes=RECENT))-dt.timedelta(seconds=1),now
+    slot = now.replace(minute=now.minute // 15 * 15, second=0, microsecond=0)
+    return min(slot, now - dt.timedelta(minutes=RECENT)) - dt.timedelta(seconds=1), now
 
 
-def prepare(c,now=None):
-    now=now or now_utc();prune(c,now)
-    if not c.image_timeline:return {'ready':False,'reason':'Image timeline is off'}
+def prepare(c, now=None):
+    now = now or now_utc()
+    prune(c, now)
+    if not c.image_timeline:
+        return {"ready": False, "reason": "Image timeline is off"}
     # Nobody photographs themselves asleep, and a night of it is thirty near-identical
     # dark rooms in the gallery. The sleep window is declared at wind-down precisely so
     # this is a fact on disk rather than a judgement call the model makes at 03:00.
     import companion_sleep
-    night=companion_sleep.status(c,now)
-    if night.get('asleep'):
-        until=night.get('until_local') or night.get('until')
-        return {'ready':False,'asleep':night,
-                'reason':('Asleep'+(f' until {until}' if until else '')
-                          +'; no timeline images while asleep. The night resumes on its own.')}
-    scene=current(c)
+
+    night = companion_sleep.status(c, now)
+    if night.get("asleep"):
+        until = night.get("until_local") or night.get("until")
+        return {
+            "ready": False,
+            "asleep": night,
+            "reason": (
+                "Asleep"
+                + (f" until {until}" if until else "")
+                + "; no timeline images while asleep. The night resumes on its own."
+            ),
+        }
+    scene = current(c)
     # A recorded undressed moment can only be photographed honestly or not at all.
     # Without the permissions for the first, the second is the answer -- and saying
     # so here costs nothing, where letting the job find out costs a model call.
-    reason=private_reason(c,scene['state']) if scene else None
+    reason = private_reason(c, scene["state"]) if scene else None
     # Her own "not this one" is final. Permissions can unlock a moment that is
     # merely undressed; they never overrule her asking not to be photographed.
-    if reason=='declared':
-        return {'ready':False,'reason':'She marked this moment private; no photo of this one.'}
-    if reason=='undressed':
+    if reason == "declared":
+        return {
+            "ready": False,
+            "reason": "She marked this moment private; no photo of this one.",
+        }
+    if reason == "undressed":
         from companion_portrait import undressed_render_allowed
-        allowed,why=undressed_render_allowed(c)
+
+        allowed, why = undressed_render_allowed(c)
         if not allowed:
-            return {'ready':False,'reason':f'A private moment ({why}); no photo of this one.'}
-    now=now.astimezone(dt.timezone.utc)
-    seconds=c.image_interval_minutes*60
-    slot=dt.datetime.fromtimestamp(int(now.timestamp())//seconds*seconds,tz=dt.timezone.utc)
-    start,end=bounds(now)
-    if not scene or not scene['state'].get('confirmed',True) or not start<=timestamp(scene['recorded_at'])<=end:
-        return {'ready':False,'reason':'No state confirmed recently enough to make an honest scene; skip rather than invent one'}
+            return {
+                "ready": False,
+                "reason": f"A private moment ({why}); no photo of this one.",
+            }
+    now = now.astimezone(dt.timezone.utc)
+    seconds = c.image_interval_minutes * 60
+    slot = dt.datetime.fromtimestamp(
+        int(now.timestamp()) // seconds * seconds, tz=dt.timezone.utc
+    )
+    start, end = bounds(now)
+    if (
+        not scene
+        or not scene["state"].get("confirmed", True)
+        or not start <= timestamp(scene["recorded_at"]) <= end
+    ):
+        return {
+            "ready": False,
+            "reason": "No state confirmed recently enough to make an honest scene; skip rather than invent one",
+        }
     from companion_render import load_styles
-    style=load_styles().get(c.image_style)
-    if not style or c.image_style in ('none','unset'):return {'ready':False,'reason':'Choose a timeline image style first'}
+
+    style = load_styles().get(c.image_style)
+    if not style or c.image_style in ("none", "unset"):
+        return {"ready": False, "reason": "Choose a timeline image style first"}
     # The id is what names the file on disk, so deriving it from the clock alone gave
     # every companion capturing in the same quarter hour the same filename. Scoping it
     # keeps two companions' pictures from ever being the same picture by name.
-    ident=hashlib.sha256((c.profile+'\0'+slot.isoformat()).encode()).hexdigest()[:24]
-    path=root(c)/'captures'/(ident+'.json')
-    with file_lock(root(c)/'.lock'):
-        if path.exists():return {'ready':False,'reason':'This interval has already been claimed','capture':json.loads(path.read_text(encoding='utf-8'))}
+    ident = hashlib.sha256((c.profile + "\0" + slot.isoformat()).encode()).hexdigest()[
+        :24
+    ]
+    path = root(c) / "captures" / (ident + ".json")
+    with file_lock(root(c) / ".lock"):
+        if path.exists():
+            return {
+                "ready": False,
+                "reason": "This interval has already been claimed",
+                "capture": json.loads(path.read_text(encoding="utf-8")),
+            }
         from companion_day import visual_key
-        captures=[row for _,row in records(c)]
-        recent=[row for row in captures if row.get('status') in ('saved','pending') and
-                now-timestamp(row['created_at'])<dt.timedelta(minutes=c.image_interval_minutes)]
-        if recent:return {'ready':False,'reason':'Waiting for the photo interval'}
+
+        captures = [row for _, row in records(c)]
+        recent = [
+            row
+            for row in captures
+            if row.get("status") in ("saved", "pending")
+            and now - timestamp(row["created_at"])
+            < dt.timedelta(minutes=c.image_interval_minutes)
+        ]
+        if recent:
+            return {"ready": False, "reason": "Waiting for the photo interval"}
         # The interval is a ceiling on how often a photo may be taken, not a quota to
         # fill. Without this, a quiet hour of the same scene became four near-identical
         # pictures, and each one cost a generation call to produce something already in
         # the gallery. A photograph is worth taking when there is something new in it.
-        saved=[row for row in captures if row.get('status')=='saved']
-        latest=max(saved,key=lambda row:row['created_at'],default=None)
-        if (latest and latest.get('image_style')==c.image_style
-                and visual_key(latest['scene']['state'])==visual_key(scene['state'])):
-            return {'ready':False,'reason':'The current visible moment already has an image'}
-        row={'id':ident,'created_at':now.isoformat(),'status':'pending','scene':scene,'image_style':c.image_style,'image_style_guidance':style['soul']}
-        atomic_write(path,json.dumps(row,ensure_ascii=False,indent=2))
-    return {'ready':True,'capture_id':ident,'scene':scene,'image_style_guidance':style['soul'],'instruction':'Generate one image with the configured Hermes image provider, matching this saved scene and the SOUL visual identity. Import the actual returned local file or HTTPS URL with save. Do not send it to the user.'}
+        saved = [row for row in captures if row.get("status") == "saved"]
+        latest = max(saved, key=lambda row: row["created_at"], default=None)
+        if (
+            latest
+            and latest.get("image_style") == c.image_style
+            and visual_key(latest["scene"]["state"]) == visual_key(scene["state"])
+        ):
+            return {
+                "ready": False,
+                "reason": "The current visible moment already has an image",
+            }
+        row = {
+            "id": ident,
+            "created_at": now.isoformat(),
+            "status": "pending",
+            "scene": scene,
+            "image_style": c.image_style,
+            "image_style_guidance": style["soul"],
+        }
+        atomic_write(path, json.dumps(row, ensure_ascii=False, indent=2))
+    return {
+        "ready": True,
+        "capture_id": ident,
+        "scene": scene,
+        "image_style_guidance": style["soul"],
+        "instruction": "Generate one image with the configured Hermes image provider, matching this saved scene and the SOUL visual identity. Import the actual returned local file or HTTPS URL with save. Do not send it to the user.",
+    }
 
 
-def private_reason(c,state):
+def private_reason(c, state):
     """'declared', 'undressed' or None -- see companion_presence.private_reason."""
-    from companion_presence import private_reason as reason,wardrobe
-    try:closet=wardrobe(c)['items']
-    except (OSError,ValueError):closet=()
-    return reason(state,closet)
+    from companion_presence import private_reason as reason, wardrobe
+
+    try:
+        closet = wardrobe(c)["items"]
+    except (OSError, ValueError):
+        closet = ()
+    return reason(state, closet)
 
 
-def is_private(state,c=None):
+def is_private(state, c=None):
     """Whether this moment is one the camera treats as private at all.
 
     Her own marker first, and the undressed states as a floor beneath it, so an
     older record written before the marker existed is still covered.
     """
-    if c is not None:return private_reason(c,state) is not None
+    if c is not None:
+        return private_reason(c, state) is not None
     from companion_presence import private_reason as reason
+
     return reason(state) is not None
 
 
@@ -299,215 +487,350 @@ def owning_capture(filename):
     `<id>_v2.json`, which never exists -- so deleting a variant removed the picture
     and left the capture still advertising it.
     """
-    stem=pathlib.Path(str(filename or '')).stem
-    ident=stem.split('_',1)[0]
-    return ident if ID.fullmatch(ident) else ''
+    stem = pathlib.Path(str(filename or "")).stem
+    ident = stem.split("_", 1)[0]
+    return ident if ID.fullmatch(ident) else ""
 
 
-def forget_image(c,filename,now=None):
+def forget_image(c, filename, now=None):
     """Take one managed image out of its capture, after the file itself is gone.
 
     Removing the primary of a capture that still has other renders promotes one of
     them rather than retiring the moment: the picture was deleted, not the memory.
     Only when nothing is left does the capture become `deleted`.
     """
-    ident=owning_capture(filename)
-    if not ident:return {'updated':False,'reason':'not a managed timeline image'}
-    path=capture_path(c,ident)
-    if path.is_symlink() or not path.is_file():return {'updated':False,'reason':'no capture for this image'}
-    with file_lock(root(c)/'.lock'):
-        row=json.loads(path.read_text(encoding='utf-8'))
-        variants=[v for v in (row.get('variants') or []) if isinstance(v,dict) and v.get('filename')]
-        remaining=[v for v in variants if v['filename']!=filename]
+    ident = owning_capture(filename)
+    if not ident:
+        return {"updated": False, "reason": "not a managed timeline image"}
+    path = capture_path(c, ident)
+    if path.is_symlink() or not path.is_file():
+        return {"updated": False, "reason": "no capture for this image"}
+    with file_lock(root(c) / ".lock"):
+        row = json.loads(path.read_text(encoding="utf-8"))
+        variants = [
+            v
+            for v in (row.get("variants") or [])
+            if isinstance(v, dict) and v.get("filename")
+        ]
+        remaining = [v for v in variants if v["filename"] != filename]
         # A capture with no variant list at all is its own single image.
-        if not variants and row.get('filename')==filename:remaining=[]
-        row['variants']=remaining
-        if row.get('filename')==filename or row.get('primary_filename')==filename:
-            promoted=remaining[0]['filename'] if remaining else None
-            row['filename']=promoted
-            row['primary_filename']=promoted
+        if not variants and row.get("filename") == filename:
+            remaining = []
+        row["variants"] = remaining
+        if row.get("filename") == filename or row.get("primary_filename") == filename:
+            promoted = remaining[0]["filename"] if remaining else None
+            row["filename"] = promoted
+            row["primary_filename"] = promoted
             if promoted:
-                for v in remaining:v['selected']=(v['filename']==promoted)
-        if not row.get('filename'):row.update(status='deleted',filename=None,primary_filename=None)
-        atomic_write(path,json.dumps(row,ensure_ascii=False,indent=2))
-    try:render_gallery(c)
-    except (OSError,ValueError):pass
-    return {'updated':True,'capture':ident,'status':row.get('status'),'primary':row.get('filename'),
-            'remaining':[v['filename'] for v in row.get('variants',[])]}
+                for v in remaining:
+                    v["selected"] = v["filename"] == promoted
+        if not row.get("filename"):
+            row.update(status="deleted", filename=None, primary_filename=None)
+        atomic_write(path, json.dumps(row, ensure_ascii=False, indent=2))
+    try:
+        render_gallery(c)
+    except (OSError, ValueError):
+        pass
+    return {
+        "updated": True,
+        "capture": ident,
+        "status": row.get("status"),
+        "primary": row.get("filename"),
+        "remaining": [v["filename"] for v in row.get("variants", [])],
+    }
 
 
-def capture_path(c,ident):
-    if not ID.fullmatch(ident):raise ValueError('Invalid capture id')
-    return root(c)/'captures'/(ident+'.json')
+def capture_path(c, ident):
+    if not ID.fullmatch(ident):
+        raise ValueError("Invalid capture id")
+    return root(c) / "captures" / (ident + ".json")
 
 
 def load_image(source):
-    if source.startswith('https://'):
-        with urllib.request.urlopen(source,timeout=30) as response:
-            if not response.geturl().startswith('https://'):raise ValueError('Image URL redirected away from HTTPS')
-            data=response.read(MAX_BYTES+1)
+    if source.startswith("https://"):
+        with urllib.request.urlopen(source, timeout=30) as response:
+            if not response.geturl().startswith("https://"):
+                raise ValueError("Image URL redirected away from HTTPS")
+            data = response.read(MAX_BYTES + 1)
     else:
-        path=pathlib.Path(source)
-        if not path.is_file() or path.stat().st_size>MAX_BYTES:raise ValueError('Source must be an image file under 32 MB')
-        data=path.read_bytes()
-    if len(data)>MAX_BYTES:raise ValueError('Image exceeds 32 MB')
+        path = pathlib.Path(source)
+        if not path.is_file() or path.stat().st_size > MAX_BYTES:
+            raise ValueError("Source must be an image file under 32 MB")
+        data = path.read_bytes()
+    if len(data) > MAX_BYTES:
+        raise ValueError("Image exceeds 32 MB")
     from PIL import Image
+
     with Image.open(io.BytesIO(data)) as image:
-        ext={'PNG':'png','JPEG':'jpg','WEBP':'webp'}.get(image.format)
-        if ext is None:raise ValueError('Use a PNG, JPEG or WebP image')
+        ext = {"PNG": "png", "JPEG": "jpg", "WEBP": "webp"}.get(image.format)
+        if ext is None:
+            raise ValueError("Use a PNG, JPEG or WebP image")
         image.verify()
-    return data,ext
+    return data, ext
 
 
-def save(c,ident,source,provider,now=None,prompts=None):
-    now=now or now_utc();prune(c,now)
-    if not c.image_timeline:raise ValueError('Image timeline is off')
-    path=capture_path(c,ident)
-    with file_lock(root(c)/'.lock'):
-        row=json.loads(path.read_text(encoding='utf-8'))
-        if row['status']=='saved':
-            try:return {**row,'share':share_opportunity(c,row,now)}
-            except Exception as exc:return {**row,'share':{'ok':False,'why':f'could not check: {exc}'}}
-        if row['status']!='pending':raise ValueError('Capture is not pending')
-        if now-timestamp(row['created_at'])>dt.timedelta(minutes=15):raise ValueError('Capture expired; do not label a delayed image as current')
-        if not isinstance(provider,str) or not provider.strip() or len(provider)>200:raise ValueError('Record the actual provider/model name')
-        data,ext=load_image(source);name=ident+'.'+ext
+def save(c, ident, source, provider, now=None, prompts=None):
+    now = now or now_utc()
+    prune(c, now)
+    if not c.image_timeline:
+        raise ValueError("Image timeline is off")
+    path = capture_path(c, ident)
+    with file_lock(root(c) / ".lock"):
+        row = json.loads(path.read_text(encoding="utf-8"))
+        if row["status"] == "saved":
+            try:
+                return {**row, "share": share_opportunity(c, row, now)}
+            except Exception as exc:
+                return {**row, "share": {"ok": False, "why": f"could not check: {exc}"}}
+        if row["status"] != "pending":
+            raise ValueError("Capture is not pending")
+        if now - timestamp(row["created_at"]) > dt.timedelta(minutes=15):
+            raise ValueError("Capture expired; do not label a delayed image as current")
+        if not isinstance(provider, str) or not provider.strip() or len(provider) > 200:
+            raise ValueError("Record the actual provider/model name")
+        data, ext = load_image(source)
+        name = ident + "." + ext
         # Register the intended managed name first so an interrupted copy remains cleanable.
-        row['filename']=name;atomic_write(path,json.dumps(row,ensure_ascii=False,indent=2))
-        folder=root(c)/'images';folder.mkdir(parents=True,exist_ok=True)
-        fd,temp=tempfile.mkstemp(prefix='.capture-',dir=folder)
+        row["filename"] = name
+        atomic_write(path, json.dumps(row, ensure_ascii=False, indent=2))
+        folder = root(c) / "images"
+        folder.mkdir(parents=True, exist_ok=True)
+        fd, temp = tempfile.mkstemp(prefix=".capture-", dir=folder)
         try:
-            with os.fdopen(fd,'wb') as out:out.write(data);out.flush();os.fsync(out.fileno())
-            os.replace(temp,folder/name)
+            with os.fdopen(fd, "wb") as out:
+                out.write(data)
+                out.flush()
+                os.fsync(out.fileno())
+            os.replace(temp, folder / name)
         finally:
-            if os.path.exists(temp):os.unlink(temp)
-        from companion_media_review import metadata,write_metadata
-        meta=metadata(pathlib.Path(source)) if not str(source).startswith(('http:','https:')) and pathlib.Path(source).is_file() else {}
-        if meta.get('generation')=='Generation source not recorded':meta.pop('generation')
-        if prompts and 'prompts' not in meta:meta['prompts']=prompts
-        write_metadata(folder/name,{'generation':provider,**meta})
-        from companion_media_review import preferences,inspect
-        if preferences(c)['review_provider']=='local-nsfw':
-            decision=meta.get('review',{})
-            if decision.get('provider')!='local-nsfw' or decision.get('sha256')!=hashlib.sha256(data).hexdigest():
-                try:inspect(c,folder/name,'Local timeline capture')
-                except ValueError:pass  # Keep the local capture; unavailable scans remain unknown and blurred.
-        meta_updated=metadata(folder/name)
-        rating=meta_updated.get('review',{}).get('rating',meta_updated.get('rating','safe'))
-        blur=meta_updated.get('review',{}).get('blur',meta_updated.get('blur',False))
-        v_entry={'filename':name,'provider':provider,'created_at':now.isoformat(),'rating':rating}
-        if blur:v_entry['blur']=True
-        row['primary_filename']=name
-        row['variants']=[v_entry]
-        p_data=prompts or meta_updated.get('prompts')
-        if p_data:row['prompts']=p_data
-        if meta_updated.get('active_prompt_type'):row['active_prompt_type']=meta_updated['active_prompt_type']
-        row.update(status='saved',saved_at=now.isoformat(),provider=provider,sha256=hashlib.sha256(data).hexdigest())
-        atomic_write(path,json.dumps(row,ensure_ascii=False,indent=2));render_gallery(c)
-    try:share_info=share_opportunity(c,row,now)
-    except Exception as exc:share_info={'ok':False,'why':f'could not check: {exc}'}
-    return {**row,'share':share_info}
+            if os.path.exists(temp):
+                os.unlink(temp)
+        from companion_media_review import metadata, write_metadata
+
+        meta = (
+            metadata(pathlib.Path(source))
+            if not str(source).startswith(("http:", "https:"))
+            and pathlib.Path(source).is_file()
+            else {}
+        )
+        if meta.get("generation") == "Generation source not recorded":
+            meta.pop("generation")
+        if prompts and "prompts" not in meta:
+            meta["prompts"] = prompts
+        write_metadata(folder / name, {"generation": provider, **meta})
+        from companion_media_review import preferences, inspect
+
+        if preferences(c)["review_provider"] == "local-nsfw":
+            decision = meta.get("review", {})
+            if (
+                decision.get("provider") != "local-nsfw"
+                or decision.get("sha256") != hashlib.sha256(data).hexdigest()
+            ):
+                try:
+                    inspect(c, folder / name, "Local timeline capture")
+                except ValueError:
+                    pass  # Keep the local capture; unavailable scans remain unknown and blurred.
+        meta_updated = metadata(folder / name)
+        rating = meta_updated.get("review", {}).get(
+            "rating", meta_updated.get("rating", "safe")
+        )
+        blur = meta_updated.get("review", {}).get(
+            "blur", meta_updated.get("blur", False)
+        )
+        v_entry = {
+            "filename": name,
+            "provider": provider,
+            "created_at": now.isoformat(),
+            "rating": rating,
+        }
+        if blur:
+            v_entry["blur"] = True
+        row["primary_filename"] = name
+        row["variants"] = [v_entry]
+        p_data = prompts or meta_updated.get("prompts")
+        if p_data:
+            row["prompts"] = p_data
+        if meta_updated.get("active_prompt_type"):
+            row["active_prompt_type"] = meta_updated["active_prompt_type"]
+        row.update(
+            status="saved",
+            saved_at=now.isoformat(),
+            provider=provider,
+            sha256=hashlib.sha256(data).hexdigest(),
+        )
+        atomic_write(path, json.dumps(row, ensure_ascii=False, indent=2))
+        render_gallery(c)
+    try:
+        share_info = share_opportunity(c, row, now)
+    except Exception as exc:
+        share_info = {"ok": False, "why": f"could not check: {exc}"}
+    return {**row, "share": share_info}
 
 
-def add_variant(c,ident,source,provider,prompts=None,now=None):
-    now=now or now_utc();prune(c,now)
-    path=capture_path(c,ident)
-    with file_lock(root(c)/'.lock'):
-        if not path.exists():raise ValueError('Capture not found')
-        row=json.loads(path.read_text(encoding='utf-8'))
-        if row.get('status')!='saved':raise ValueError('Can only add variant to a saved capture')
-        if not isinstance(provider,str) or not provider.strip() or len(provider)>200:raise ValueError('Record the actual provider/model name')
-        data,ext=load_image(source)
-        variants=row.get('variants') or []
-        if not variants and row.get('filename'):
-            variants=[{'filename':row['filename'],'provider':row.get('provider',''),'created_at':row.get('saved_at') or row.get('created_at'),'rating':'safe'}]
-        suffix_idx=len(variants)+1
-        name=f"{ident}_v{suffix_idx}.{ext}"
-        folder=root(c)/'images';folder.mkdir(parents=True,exist_ok=True)
-        fd,temp=tempfile.mkstemp(prefix='.capture-',dir=folder)
+def add_variant(c, ident, source, provider, prompts=None, now=None):
+    now = now or now_utc()
+    prune(c, now)
+    path = capture_path(c, ident)
+    with file_lock(root(c) / ".lock"):
+        if not path.exists():
+            raise ValueError("Capture not found")
+        row = json.loads(path.read_text(encoding="utf-8"))
+        if row.get("status") != "saved":
+            raise ValueError("Can only add variant to a saved capture")
+        if not isinstance(provider, str) or not provider.strip() or len(provider) > 200:
+            raise ValueError("Record the actual provider/model name")
+        data, ext = load_image(source)
+        variants = row.get("variants") or []
+        if not variants and row.get("filename"):
+            variants = [
+                {
+                    "filename": row["filename"],
+                    "provider": row.get("provider", ""),
+                    "created_at": row.get("saved_at") or row.get("created_at"),
+                    "rating": "safe",
+                }
+            ]
+        suffix_idx = len(variants) + 1
+        name = f"{ident}_v{suffix_idx}.{ext}"
+        folder = root(c) / "images"
+        folder.mkdir(parents=True, exist_ok=True)
+        fd, temp = tempfile.mkstemp(prefix=".capture-", dir=folder)
         try:
-            with os.fdopen(fd,'wb') as out:out.write(data);out.flush();os.fsync(out.fileno())
-            os.replace(temp,folder/name)
+            with os.fdopen(fd, "wb") as out:
+                out.write(data)
+                out.flush()
+                os.fsync(out.fileno())
+            os.replace(temp, folder / name)
         finally:
-            if os.path.exists(temp):os.unlink(temp)
-        from companion_media_review import metadata,write_metadata
-        meta=metadata(pathlib.Path(source)) if not str(source).startswith(('http:','https:')) and pathlib.Path(source).is_file() else {}
-        if meta.get('generation')=='Generation source not recorded':meta.pop('generation')
-        if prompts and 'prompts' not in meta:meta['prompts']=prompts
-        write_metadata(folder/name,{'generation':provider,**meta})
-        from companion_media_review import preferences,inspect
-        if preferences(c)['review_provider']=='local-nsfw':
-            decision=meta.get('review',{})
-            if decision.get('provider')!='local-nsfw' or decision.get('sha256')!=hashlib.sha256(data).hexdigest():
-                try:inspect(c,folder/name,'Timeline capture variant')
-                except ValueError:pass
-        meta_updated=metadata(folder/name)
-        rating=meta_updated.get('review',{}).get('rating',meta_updated.get('rating','safe'))
-        blur=meta_updated.get('review',{}).get('blur',meta_updated.get('blur',False))
-        v_entry={'filename':name,'provider':provider,'created_at':now.isoformat(),'rating':rating}
-        if blur:v_entry['blur']=True
+            if os.path.exists(temp):
+                os.unlink(temp)
+        from companion_media_review import metadata, write_metadata
+
+        meta = (
+            metadata(pathlib.Path(source))
+            if not str(source).startswith(("http:", "https:"))
+            and pathlib.Path(source).is_file()
+            else {}
+        )
+        if meta.get("generation") == "Generation source not recorded":
+            meta.pop("generation")
+        if prompts and "prompts" not in meta:
+            meta["prompts"] = prompts
+        write_metadata(folder / name, {"generation": provider, **meta})
+        from companion_media_review import preferences, inspect
+
+        if preferences(c)["review_provider"] == "local-nsfw":
+            decision = meta.get("review", {})
+            if (
+                decision.get("provider") != "local-nsfw"
+                or decision.get("sha256") != hashlib.sha256(data).hexdigest()
+            ):
+                try:
+                    inspect(c, folder / name, "Timeline capture variant")
+                except ValueError:
+                    pass
+        meta_updated = metadata(folder / name)
+        rating = meta_updated.get("review", {}).get(
+            "rating", meta_updated.get("rating", "safe")
+        )
+        blur = meta_updated.get("review", {}).get(
+            "blur", meta_updated.get("blur", False)
+        )
+        v_entry = {
+            "filename": name,
+            "provider": provider,
+            "created_at": now.isoformat(),
+            "rating": rating,
+        }
+        if blur:
+            v_entry["blur"] = True
         variants.append(v_entry)
-        row['variants']=variants
-        atomic_write(path,json.dumps(row,ensure_ascii=False,indent=2));render_gallery(c)
+        row["variants"] = variants
+        atomic_write(path, json.dumps(row, ensure_ascii=False, indent=2))
+        render_gallery(c)
     return row
 
 
-def select_variant(c,ident,filename):
-    path=capture_path(c,ident)
-    with file_lock(root(c)/'.lock'):
-        if not path.exists():raise ValueError('Capture not found')
-        row=json.loads(path.read_text(encoding='utf-8'))
-        if row.get('status')!='saved':raise ValueError('Capture is not saved')
-        if not IMAGE.fullmatch(filename) or (not filename.startswith(ident+'.') and not filename.startswith(ident+'_')):
-            raise ValueError('Invalid variant filename for this capture')
-        variants=row.get('variants',[])
-        valid_filenames=[v['filename'] for v in variants if isinstance(v,dict) and v.get('filename')]
-        if row.get('filename') and row['filename'] not in valid_filenames:
-            valid_filenames.append(row['filename'])
+def select_variant(c, ident, filename):
+    path = capture_path(c, ident)
+    with file_lock(root(c) / ".lock"):
+        if not path.exists():
+            raise ValueError("Capture not found")
+        row = json.loads(path.read_text(encoding="utf-8"))
+        if row.get("status") != "saved":
+            raise ValueError("Capture is not saved")
+        if not IMAGE.fullmatch(filename) or (
+            not filename.startswith(ident + ".")
+            and not filename.startswith(ident + "_")
+        ):
+            raise ValueError("Invalid variant filename for this capture")
+        variants = row.get("variants", [])
+        valid_filenames = [
+            v["filename"] for v in variants if isinstance(v, dict) and v.get("filename")
+        ]
+        if row.get("filename") and row["filename"] not in valid_filenames:
+            valid_filenames.append(row["filename"])
         if filename not in valid_filenames:
-            raise ValueError('Filename is not a recorded variant for this capture')
-        if not (root(c)/'images'/filename).is_file():
-            raise ValueError('Variant image file does not exist on disk')
-        row['filename']=filename
-        row['primary_filename']=filename
+            raise ValueError("Filename is not a recorded variant for this capture")
+        if not (root(c) / "images" / filename).is_file():
+            raise ValueError("Variant image file does not exist on disk")
+        row["filename"] = filename
+        row["primary_filename"] = filename
         for v in variants:
-            if isinstance(v,dict) and v.get('filename')==filename and v.get('provider'):
-                row['provider']=v['provider']
+            if (
+                isinstance(v, dict)
+                and v.get("filename") == filename
+                and v.get("provider")
+            ):
+                row["provider"] = v["provider"]
                 break
-        atomic_write(path,json.dumps(row,ensure_ascii=False,indent=2));render_gallery(c)
+        atomic_write(path, json.dumps(row, ensure_ascii=False, indent=2))
+        render_gallery(c)
     return row
 
 
-def fail(c,ident,reason):
-    path=capture_path(c,ident)
-    with file_lock(root(c)/'.lock'):
-        row=json.loads(path.read_text(encoding='utf-8'))
-        if row['status']=='saved':raise ValueError('A saved capture cannot be marked failed')
-        row.update(status='failed',error=str(reason)[:600]);atomic_write(path,json.dumps(row,ensure_ascii=False,indent=2))
+def fail(c, ident, reason):
+    path = capture_path(c, ident)
+    with file_lock(root(c) / ".lock"):
+        row = json.loads(path.read_text(encoding="utf-8"))
+        if row["status"] == "saved":
+            raise ValueError("A saved capture cannot be marked failed")
+        row.update(status="failed", error=str(reason)[:600])
+        atomic_write(path, json.dumps(row, ensure_ascii=False, indent=2))
     return row
 
 
 def latest(c):
-    saved=[row for _,row in records(c) if row.get('status')=='saved' and row.get('filename')]
-    if not saved:return None
-    latest_row=max(saved,key=lambda r:r['created_at'])
-    img_path=root(c)/'images'/latest_row['filename']
-    if not img_path.is_file():return None
-    scene=latest_row.get('scene',{}).get('state',{})
+    saved = [
+        row
+        for _, row in records(c)
+        if row.get("status") == "saved" and row.get("filename")
+    ]
+    if not saved:
+        return None
+    latest_row = max(saved, key=lambda r: r["created_at"])
+    img_path = root(c) / "images" / latest_row["filename"]
+    if not img_path.is_file():
+        return None
+    scene = latest_row.get("scene", {}).get("state", {})
     return {
-        'id':latest_row['id'],
-        'filename':latest_row['filename'],
-        'path':str(img_path),
-        'created_at':latest_row['created_at'],
-        'activity':scene.get('activity',''),
-        'location':scene.get('location',''),
-        'outfit':[item['id'] if isinstance(item,dict) else item for item in scene.get('outfit',[])]
+        "id": latest_row["id"],
+        "filename": latest_row["filename"],
+        "path": str(img_path),
+        "created_at": latest_row["created_at"],
+        "activity": scene.get("activity", ""),
+        "location": scene.get("location", ""),
+        "outfit": [
+            item["id"] if isinstance(item, dict) else item
+            for item in scene.get("outfit", [])
+        ],
     }
 
 
-PHOTO_SHARES_PER_DAY=2
+PHOTO_SHARES_PER_DAY = 2
 
-def share_opportunity(c,row,now=None):
+
+def share_opportunity(c, row, now=None):
     """Whether this capture may be offered to the human unprompted, and why not.
 
     Photos set to "yes" used to depend entirely on a model deciding, unprompted, to
@@ -515,51 +838,71 @@ def share_opportunity(c,row,now=None):
     job now asks this after every save, so the choice is put in front of her with
     the answer already known.
     """
-    now=now or now_utc()
-    if c.may_send('image')!='yes' or c.outreach=='never':
-        return {'ok':False,'why':'photos are not sent unprompted for this companion'}
-    variant=(row.get('variants') or [{}])[0]
-    if variant.get('rating') in ('nsfw','unknown'):
+    now = now or now_utc()
+    if c.may_send("image") != "yes" or c.outreach == "never":
+        return {"ok": False, "why": "photos are not sent unprompted for this companion"}
+    variant = (row.get("variants") or [{}])[0]
+    if variant.get("rating") in ("nsfw", "unknown"):
         import companion_media
+
         if not companion_media.adult_ready(c)[0]:
-            return {'ok':False,'why':'this picture is rated adult and adult images are not available'}
+            return {
+                "ok": False,
+                "why": "this picture is rated adult and adult images are not available",
+            }
     import companion_outbox as outbox
-    local=now.astimezone(outbox._tz(c)).date().isoformat()
-    shared=[e for e in outbox.fold(c) if e.get('content')=='image'
-            and str(e.get('queued_at',''))[:10]==local]
-    left=max(0,min(PHOTO_SHARES_PER_DAY,c.outreach_per_day or PHOTO_SHARES_PER_DAY)-len(shared))
-    if not left:return {'ok':False,'why':'already shared the photos for today'}
-    return {'ok':True,'left_today':left}
 
-def share(c,body,ident=None,reason='',priority='normal',ttl_hours=6,now=None):
-    body=(body or '').strip()
-    if not body:raise ValueError('body text required to share a photo')
+    local = now.astimezone(outbox._tz(c)).date().isoformat()
+    shared = [
+        e
+        for e in outbox.fold(c)
+        if e.get("content") == "image" and str(e.get("queued_at", ""))[:10] == local
+    ]
+    left = max(
+        0,
+        min(PHOTO_SHARES_PER_DAY, c.outreach_per_day or PHOTO_SHARES_PER_DAY)
+        - len(shared),
+    )
+    if not left:
+        return {"ok": False, "why": "already shared the photos for today"}
+    return {"ok": True, "left_today": left}
+
+
+def share(c, body, ident=None, reason="", priority="normal", ttl_hours=6, now=None):
+    body = (body or "").strip()
+    if not body:
+        raise ValueError("body text required to share a photo")
     import companion_outbox as outbox
-    target=None
+
+    target = None
     if ident:
-        path=capture_path(c,ident)
-        if not path.exists():raise ValueError('capture not found')
-        row=json.loads(path.read_text(encoding='utf-8'))
-        if row.get('status')!='saved':raise ValueError('only a saved capture can be shared')
-        target=root(c)/'images'/row['filename']
+        path = capture_path(c, ident)
+        if not path.exists():
+            raise ValueError("capture not found")
+        row = json.loads(path.read_text(encoding="utf-8"))
+        if row.get("status") != "saved":
+            raise ValueError("only a saved capture can be shared")
+        target = root(c) / "images" / row["filename"]
     else:
-        info=latest(c)
-        if not info:raise ValueError('no saved timeline images available to share')
-        target=pathlib.Path(info['path'])
-        ident=info['id']
-    if not target.is_file():raise ValueError('image file is missing')
-    entry={
-        'kind':'image',
-        'body':body,
-        'media_path':str(target),
-        'reason':reason or f'sharing timeline photo {ident}',
-        'priority':priority,
-        'ttl_hours':ttl_hours
+        info = latest(c)
+        if not info:
+            raise ValueError("no saved timeline images available to share")
+        target = pathlib.Path(info["path"])
+        ident = info["id"]
+    if not target.is_file():
+        raise ValueError("image file is missing")
+    entry = {
+        "kind": "image",
+        "body": body,
+        "media_path": str(target),
+        "reason": reason or f"sharing timeline photo {ident}",
+        "priority": priority,
+        "ttl_hours": ttl_hours,
     }
-    return outbox.queue(c,entry,now)
+    return outbox.queue(c, entry, now)
 
 
-def fingerprint(c,now=None):
+def fingerprint(c, now=None):
     """Stable bytes describing whether a photo is warranted. Identical means no run.
 
     `prepare` already refuses to claim a picture of an unchanged scene — but it runs
@@ -568,65 +911,114 @@ def fingerprint(c,now=None):
     Hermes hashes this instead and skips the run outright, so a scene that has not
     moved costs nothing at all.
     """
-    now=now or now_utc()
-    if not c.image_timeline:return 'timeline off\n'
+    now = now or now_utc()
+    if not c.image_timeline:
+        return "timeline off\n"
     import companion_sleep
-    night=companion_sleep.status(c,now)
-    if night.get('asleep'):return f"asleep {night.get('source')} until={night.get('until','-')}\n"
-    scene=current(c)
-    if not scene:return 'no scene\n'
+
+    night = companion_sleep.status(c, now)
+    if night.get("asleep"):
+        return f"asleep {night.get('source')} until={night.get('until','-')}\n"
+    scene = current(c)
+    if not scene:
+        return "no scene\n"
     from companion_day import visual_key
-    state=scene['state']
+
+    state = scene["state"]
     # The same question prepare asks, in the same order: is this moment already
     # photographed? Only the visible fields belong here -- mood and private stance
     # change a sentence, not a picture.
-    reason=private_reason(c,state)
-    if reason=='declared':return 'private moment (declared)\n'
-    if reason=='undressed':
+    reason = private_reason(c, state)
+    if reason == "declared":
+        return "private moment (declared)\n"
+    if reason == "undressed":
         from companion_portrait import undressed_render_allowed
-        if not undressed_render_allowed(c)[0]:return 'private moment\n'
-    return (f"style {c.image_style} scene {visual_key(state)} "
-            f"confirmed {bool(state.get('confirmed',True))}\n")
+
+        if not undressed_render_allowed(c)[0]:
+            return "private moment\n"
+    return (
+        f"style {c.image_style} scene {visual_key(state)} "
+        f"confirmed {bool(state.get('confirmed',True))}\n"
+    )
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--home',type=pathlib.Path)
-    sub=parser.add_subparsers(dest='action',required=True)
-    for action in ('prepare','prune','status','latest','fingerprint'):sub.add_parser(action)
-    p=sub.add_parser('save');p.add_argument('--id',required=True);p.add_argument('--source',required=True);p.add_argument('--provider',required=True)
-    p=sub.add_parser('fail');p.add_argument('--id',required=True);p.add_argument('--reason',required=True)
-    p=sub.add_parser('keep',help='copy a capture into an album; the original stays')
-    p.add_argument('--id',required=True);p.add_argument('--album',default='Favorites')
-    p=sub.add_parser('album-add',help='put any image file into an album')
-    p.add_argument('--source',required=True);p.add_argument('--album',default='Favorites')
-    sub.add_parser('albums')
-    p=sub.add_parser('add-variant',help='add an alternative render variant to a saved capture')
-    p.add_argument('--id',required=True);p.add_argument('--source',required=True);p.add_argument('--provider',required=True)
-    p=sub.add_parser('select-variant',help='select the active variant for a capture')
-    p.add_argument('--id',required=True);p.add_argument('--filename',required=True)
-    sh=sub.add_parser('share',help='queue a timeline photo to share with the human')
-    sh.add_argument('--body',required=True,help='message to accompany the photo')
-    sh.add_argument('--id',help='specific capture id (default: latest)')
-    sh.add_argument('--reason',default='',help='reason for sharing')
-    sh.add_argument('--priority',choices=['normal','high'],default='normal')
-    args=parser.parse_args();c=cc.load(args.home)
-    if args.action=='fingerprint':
-        sys.stdout.write(fingerprint(c));return
-    if args.action=='prepare':out=prepare(c)
-    elif args.action=='prune':out=prune(c)
-    elif args.action=='save':out=save(c,args.id,args.source,args.provider)
-    elif args.action=='add-variant':out=add_variant(c,args.id,args.source,args.provider)
-    elif args.action=='select-variant':out=select_variant(c,args.id,args.filename)
-    elif args.action=='fail':out=fail(c,args.id,args.reason)
-    elif args.action=='keep':out=favorite(c,args.id,args.album)
-    elif args.action=='album-add':out=add_to_album(c,args.source,args.album)
-    elif args.action=='albums':out={'albums':albums(c)}
-    elif args.action=='latest':out=latest(c) or {'status':'no saved images'}
-    elif args.action=='share':out=share(c,args.body,args.id,args.reason,args.priority)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--home", type=pathlib.Path)
+    sub = parser.add_subparsers(dest="action", required=True)
+    for action in ("prepare", "prune", "status", "latest", "fingerprint"):
+        sub.add_parser(action)
+    p = sub.add_parser("save")
+    p.add_argument("--id", required=True)
+    p.add_argument("--source", required=True)
+    p.add_argument("--provider", required=True)
+    p = sub.add_parser("fail")
+    p.add_argument("--id", required=True)
+    p.add_argument("--reason", required=True)
+    p = sub.add_parser("keep", help="copy a capture into an album; the original stays")
+    p.add_argument("--id", required=True)
+    p.add_argument("--album", default="Favorites")
+    p = sub.add_parser("album-add", help="put any image file into an album")
+    p.add_argument("--source", required=True)
+    p.add_argument("--album", default="Favorites")
+    sub.add_parser("albums")
+    p = sub.add_parser(
+        "add-variant", help="add an alternative render variant to a saved capture"
+    )
+    p.add_argument("--id", required=True)
+    p.add_argument("--source", required=True)
+    p.add_argument("--provider", required=True)
+    p = sub.add_parser("select-variant", help="select the active variant for a capture")
+    p.add_argument("--id", required=True)
+    p.add_argument("--filename", required=True)
+    sh = sub.add_parser("share", help="queue a timeline photo to share with the human")
+    sh.add_argument("--body", required=True, help="message to accompany the photo")
+    sh.add_argument("--id", help="specific capture id (default: latest)")
+    sh.add_argument("--reason", default="", help="reason for sharing")
+    sh.add_argument("--priority", choices=["normal", "high"], default="normal")
+    args = parser.parse_args()
+    c = cc.load(args.home)
+    if args.action == "fingerprint":
+        sys.stdout.write(fingerprint(c))
+        return
+    if args.action == "prepare":
+        out = prepare(c)
+    elif args.action == "prune":
+        out = prune(c)
+    elif args.action == "save":
+        out = save(c, args.id, args.source, args.provider)
+    elif args.action == "add-variant":
+        out = add_variant(c, args.id, args.source, args.provider)
+    elif args.action == "select-variant":
+        out = select_variant(c, args.id, args.filename)
+    elif args.action == "fail":
+        out = fail(c, args.id, args.reason)
+    elif args.action == "keep":
+        out = favorite(c, args.id, args.album)
+    elif args.action == "album-add":
+        out = add_to_album(c, args.source, args.album)
+    elif args.action == "albums":
+        out = {"albums": albums(c)}
+    elif args.action == "latest":
+        out = latest(c) or {"status": "no saved images"}
+    elif args.action == "share":
+        out = share(c, args.body, args.id, args.reason, args.priority)
     else:
-        prune(c);out={'enabled':c.image_timeline,'gallery':str(root(c)/'index.html'),'captures':[{k:r.get(k) for k in ('id','created_at','status','error')} for _,r in records(c)]}
-    print(json.dumps(out,ensure_ascii=False,indent=2))
+        prune(c)
+        out = {
+            "enabled": c.image_timeline,
+            "gallery": str(root(c) / "index.html"),
+            "captures": [
+                {k: r.get(k) for k in ("id", "created_at", "status", "error")}
+                for _, r in records(c)
+            ],
+        }
+    print(json.dumps(out, ensure_ascii=False, indent=2))
 
-if __name__=='__main__':
-    try:main()
-    except (ValueError,OSError,KeyError,TypeError) as exc:print(json.dumps({'error':str(exc)}),file=sys.stderr);sys.exit(1)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (ValueError, OSError, KeyError, TypeError) as exc:
+        print(json.dumps({"error": str(exc)}), file=sys.stderr)
+        sys.exit(1)
