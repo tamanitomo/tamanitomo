@@ -228,6 +228,23 @@ def move(c,relative,target):
     if source.is_dir() and dest.is_relative_to(source):raise ValueError('Cannot move a folder into itself')
     with cp.file_lock(c.vault/'.companion-editor.lock'):
         if dest.exists():raise FileExistsError('A file or folder already exists at the destination.')
+        relinked=[]
+        if source.is_file() and source.suffix.lower()=='.md':
+            # LINK-06: retarget other notes' wikilinks to this note before it moves, while
+            # the index can still resolve them against the old path (see vault_link_index
+            # for exactly what is, and is not yet, rewritten).
+            from . import vault_link_index as vli
+            entries,_=vli.build(c)
+            lookup=vli.build_lookup(entries)
+            for rel in vli.candidates_for_move(entries,relative):
+                note_path=resolve(c,rel)
+                try:data=note_path.read_bytes();original=data.decode('utf-8')
+                except (OSError,UnicodeError):continue
+                new_text,changed=vli.rewrite_wikilinks_in_text(original,lookup,relative,target)
+                if not changed:continue
+                backup(c,rel,data)
+                cp.atomic_write(note_path,new_text)
+                relinked.append(rel)
         pairs=[(relative,target)] if source.is_file() else [
             (rel,(Path(target)/full.relative_to(source)).as_posix())
             for full,rel in files(c) if full.is_relative_to(source)]
@@ -236,7 +253,7 @@ def move(c,relative,target):
         for old_rel,new_rel in pairs:
             try:_migrate_backup(c,old_rel,new_rel)
             except OSError:pass
-    return {'moved':target}
+    return {'moved':target,'relinked':sorted(relinked)}
 
 def files(c,limit=20000):
     import os

@@ -263,6 +263,56 @@ class VaultFileActionsApi(unittest.TestCase):
         (self.vault / 'notes/project/a.md').write_text('a')
         self.assertEqual(self.move('notes/project', 'notes/project/inner').status_code, 400)
 
+    def test_move_to_a_different_folder_with_the_same_basename_touches_nothing(self):
+        (self.vault / 'notes/Robin.md').write_text('# Robin\n', encoding='utf-8')
+        (self.vault / 'notes/Journal.md').write_text('Saw [[Robin]] and [[Robin#Likes]] today.\n', encoding='utf-8')
+        r = self.move('notes/Robin.md', 'people/Robin.md')
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()['relinked'], [], 'a bare wikilink by basename already reads correctly')
+        self.assertEqual((self.vault / 'notes/Journal.md').read_text(),
+                          'Saw [[Robin]] and [[Robin#Likes]] today.\n', 'basename unchanged, so text unchanged too')
+
+    def test_move_rewrites_unambiguous_inbound_wikilinks_on_rename(self):
+        (self.vault / 'notes/Robin.md').write_text('# Robin\n', encoding='utf-8')
+        (self.vault / 'notes/Journal.md').write_text('Saw [[Robin]] and [[Robin#Likes]] today.\n', encoding='utf-8')
+        r = self.move('notes/Robin.md', 'notes/Robert.md')
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()['relinked'], ['notes/Journal.md'])
+        self.assertEqual((self.vault / 'notes/Journal.md').read_text(), 'Saw [[Robert]] and [[Robert#Likes]] today.\n')
+
+    def test_move_rewrites_a_path_style_link_to_the_new_path(self):
+        (self.vault / 'notes/Robin.md').write_text('# Robin\n', encoding='utf-8')
+        (self.vault / 'notes/Journal.md').write_text('See [[notes/Robin.md]].\n', encoding='utf-8')
+        r = self.move('notes/Robin.md', 'people/Robin.md')
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual((self.vault / 'notes/Journal.md').read_text(), 'See [[people/Robin.md]].\n')
+
+    def test_move_rewrite_keeps_basename_when_it_actually_changes(self):
+        (self.vault / 'notes/Robin.md').write_text('# Robin\n', encoding='utf-8')
+        (self.vault / 'notes/Journal.md').write_text('Saw [[Robin]] today.\n', encoding='utf-8')
+        self.move('notes/Robin.md', 'notes/Rob.md')
+        self.assertEqual((self.vault / 'notes/Journal.md').read_text(), 'Saw [[Rob]] today.\n')
+
+    def test_move_does_not_rewrite_an_ambiguous_referrer(self):
+        (self.vault / 'notes/a.md').write_text('# A', encoding='utf-8')
+        (self.vault / 'notes/dup').mkdir(); (self.vault / 'notes/dup/a.md').write_text('# A dup', encoding='utf-8')
+        (self.vault / 'notes/linker.md').write_text('[[a]]', encoding='utf-8')
+        self.move('notes/a.md', 'notes/renamed.md')
+        self.assertEqual((self.vault / 'notes/linker.md').read_text(), '[[a]]')
+
+    def test_move_relink_backs_up_the_rewritten_note(self):
+        (self.vault / 'notes/Robin.md').write_text('# Robin\n', encoding='utf-8')
+        (self.vault / 'notes/Journal.md').write_text('[[Robin]]\n', encoding='utf-8')
+        self.move('notes/Robin.md', 'notes/Rob.md')
+        backups = self.vault / vault.BACKUPS / hashlib.sha256('notes/Journal.md'.encode()).hexdigest()[:24]
+        self.assertEqual([p.read_bytes() for p in backups.glob('*.bak')], [b'[[Robin]]\n'])
+
+    def test_move_does_not_touch_a_note_that_never_referenced_it(self):
+        (self.vault / 'notes/Robin.md').write_text('# Robin\n', encoding='utf-8')
+        (self.vault / 'notes/Unrelated.md').write_text('Nothing relevant here.\n', encoding='utf-8')
+        self.move('notes/Robin.md', 'notes/Rob.md')
+        self.assertEqual((self.vault / 'notes/Unrelated.md').read_text(), 'Nothing relevant here.\n')
+
     def test_move_migrates_the_notes_backup_history(self):
         rel = 'notes/a.md'; note = self.vault / rel; note.write_text('v0')
         rev = self.client.get('/api/vault/file', params={'profile': 'nova', 'path': rel}, headers=self.h).json()['revision']

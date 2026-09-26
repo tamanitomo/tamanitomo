@@ -696,6 +696,24 @@ class VaultEditor(Browser):
         self.assertFalse((self.vault / 'notes/A.md').exists())
         self.assertIsNone(self.status('notes/A.md'), 'the old tab is closed')
 
+    def test_21_renaming_a_note_rewrites_inbound_wikilinks(self):
+        (self.vault / 'notes/Robin.md').write_text('# Robin\n', encoding='utf-8')
+        (self.vault / 'notes/Journal.md').write_text('Saw [[Robin]] today.\n', encoding='utf-8')
+        self.vault_page()
+        self.page.wait_for_selector('[data-vault-file="notes/Robin.md"]')
+        self.page.click('[data-vault-actions="notes/Robin.md"]')
+        self.page.click('[data-vault-do="move"]')
+        self.page.fill('#vault-move-target', 'notes/Robert.md')
+        self.page.click('#vault-move-form button.act')
+        until(lambda: (self.vault / 'notes/Robert.md').exists(), what='renamed on disk')
+        until(lambda: (self.vault / 'notes/Journal.md').read_text() == 'Saw [[Robert]] today.\n', what='backlink rewritten')
+
+        # An already-open note whose text just changed underneath it shows the new version,
+        # the same as any other external edit -- no separate code path for this.
+        self.open('notes/Journal.md', mode='preview')
+        until(lambda: 'Robert' in self.page.inner_text('#vault-preview'), what='reading pane shows the rewritten link')
+        self.shot('11-link-aware-rename')
+
 
 if __name__ == '__main__':
     unittest.main()

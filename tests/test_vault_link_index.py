@@ -247,6 +247,90 @@ class BuildIntegrationTests(unittest.TestCase):
         self.assertFalse(report['incomplete'])
 
 
+class RewriteWikilinksTests(unittest.TestCase):
+    """LINK-06: rewriting inbound wikilinks after a note moves. Pure function -- entries
+    are hand-built lookups, no filesystem involved."""
+
+    def lookup(self, entries):
+        return vli.build_lookup(entries)
+
+    def test_bare_target_is_retargeted_to_the_new_basename(self):
+        entries = {'old.md': vli.parse_note('# Old'), 'other.md': vli.parse_note('See [[Old]].')}
+        text, changed = vli.rewrite_wikilinks_in_text('See [[Old]].', self.lookup(entries), 'old.md', 'folder/New.md')
+        self.assertTrue(changed)
+        self.assertEqual(text, 'See [[New]].')
+
+    def test_path_style_target_is_retargeted_to_the_new_full_path(self):
+        entries = {'folder/old.md': vli.parse_note('# Old'), 'other.md': vli.parse_note('[[folder/old.md]]')}
+        text, changed = vli.rewrite_wikilinks_in_text('[[folder/old.md]]', self.lookup(entries), 'folder/old.md', 'folder2/New.md')
+        self.assertTrue(changed)
+        self.assertEqual(text, '[[folder2/New.md]]')
+
+    def test_path_style_target_without_extension_keeps_no_extension(self):
+        entries = {'folder/old.md': vli.parse_note('# Old'), 'other.md': vli.parse_note('[[folder/old]]')}
+        text, changed = vli.rewrite_wikilinks_in_text('[[folder/old]]', self.lookup(entries), 'folder/old.md', 'folder2/New.md')
+        self.assertEqual(text, '[[folder2/New]]')
+
+    def test_heading_block_and_label_survive_the_rewrite(self):
+        entries = {'old.md': vli.parse_note('# Old'), 'other.md': vli.parse_note('x')}
+        lookup = self.lookup(entries)
+        cases = [
+            ('[[Old#Section]]', '[[New#Section]]'),
+            ('[[Old^blk]]', '[[New^blk]]'),
+            ('[[Old|Label Text]]', '[[New|Label Text]]'),
+            ('![[Old]]', '![[New]]'),
+        ]
+        for original, expected in cases:
+            text, changed = vli.rewrite_wikilinks_in_text(original, lookup, 'old.md', 'New.md')
+            self.assertTrue(changed, original)
+            self.assertEqual(text, expected, original)
+
+    def test_an_ambiguous_target_is_left_untouched(self):
+        entries = {'a.md': vli.parse_note('# A'), 'dup/a.md': vli.parse_note('# A dup'), 'linker.md': vli.parse_note('[[a]]')}
+        text, changed = vli.rewrite_wikilinks_in_text('[[a]]', self.lookup(entries), 'a.md', 'renamed.md')
+        self.assertFalse(changed)
+        self.assertEqual(text, '[[a]]')
+
+    def test_a_link_to_a_different_note_is_left_untouched(self):
+        entries = {'old.md': vli.parse_note('# Old'), 'other.md': vli.parse_note('# Other')}
+        text, changed = vli.rewrite_wikilinks_in_text('See [[Other]] and [[Old]].', self.lookup(entries), 'old.md', 'New.md')
+        self.assertTrue(changed)
+        self.assertEqual(text, 'See [[Other]] and [[New]].')
+
+    def test_a_link_inside_a_fenced_code_block_is_never_rewritten(self):
+        entries = {'old.md': vli.parse_note('# Old'), 'other.md': vli.parse_note('x')}
+        text, changed = vli.rewrite_wikilinks_in_text('```\n[[Old]]\n```\n', self.lookup(entries), 'old.md', 'New.md')
+        self.assertFalse(changed)
+        self.assertEqual(text, '```\n[[Old]]\n```\n')
+
+    def test_a_link_inside_an_inline_code_span_is_never_rewritten(self):
+        entries = {'old.md': vli.parse_note('# Old'), 'other.md': vli.parse_note('x')}
+        text, changed = vli.rewrite_wikilinks_in_text('Type `[[Old]]` literally, but [[Old]] here.', self.lookup(entries), 'old.md', 'New.md')
+        self.assertTrue(changed)
+        self.assertEqual(text, 'Type `[[Old]]` literally, but [[New]] here.')
+
+    def test_crlf_line_endings_are_preserved_exactly(self):
+        entries = {'old.md': vli.parse_note('# Old'), 'other.md': vli.parse_note('x')}
+        text, changed = vli.rewrite_wikilinks_in_text('one\r\nSee [[Old]].\r\ntwo', self.lookup(entries), 'old.md', 'New.md')
+        self.assertTrue(changed)
+        self.assertEqual(text, 'one\r\nSee [[New]].\r\ntwo')
+
+    def test_candidates_for_move_finds_only_unambiguous_referrers(self):
+        entries = {
+            'target.md': vli.parse_note('# Target'),
+            'linker.md': vli.parse_note('[[Target]]'),
+            'unrelated.md': vli.parse_note('[[Something Else]]'),
+        }
+        self.assertEqual(vli.candidates_for_move(entries, 'target.md'), ['linker.md'])
+
+    def test_candidates_for_move_excludes_ambiguous_referrers(self):
+        entries = {
+            'a.md': vli.parse_note('# A'), 'dup/a.md': vli.parse_note('# A dup'),
+            'linker.md': vli.parse_note('[[a]]'),
+        }
+        self.assertEqual(vli.candidates_for_move(entries, 'a.md'), [])
+
+
 class HeadingSectionTests(unittest.TestCase):
     def test_extracts_the_named_sections_lines_only(self):
         body = '# Title\nIntro.\n## Sub\nFirst.\nSecond.\n## Sub2\nOther.\n'

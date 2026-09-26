@@ -305,11 +305,12 @@ async function runVaultAction(action,path,isDir){
    const target=$('vault-move-target').value.trim();
    if(!await closeIfOpen())return;
    try{
-    await post('/vault/move',{path,target});
+    const d=await post('/vault/move',{path,target});
     $('product-dialog').close();
     if(openNote?.path===path)openNote=null;
     await listVault(parent,false);await listVault(target.split('/').slice(0,-1).join('/'),false);
-    notice('Moved to '+target+'.');
+    const n=(d.relinked||[]).length;
+    notice('Moved to '+target+'.'+(n?` Updated ${n} note${n===1?'':'s'} that linked to it.`:''));
    }catch(err){notice(err.message,true);}
   };
   return;

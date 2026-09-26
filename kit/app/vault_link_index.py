@@ -189,6 +189,101 @@ def resolve(link, source_rel, lookup):
     return resolve_wiki(link['target'], lookup) if link['kind'] == 'wiki' else resolve_md(link['target'], source_rel, lookup)
 
 
+# --- Link-aware rename/move (LINK-06) --------------------------------------------------
+# Wikilinks only, in this first slice: a markdown-style [label](href) link to the moved
+# note is not rewritten -- a stated limitation, not silent loss. It simply shows up in the
+# Unresolved report afterwards, same as any other broken link. Folder moves relocate their
+# files (vault.move()) but do not walk descendants for link rewriting either; both are real
+# gaps to close later, not assumed-away.
+
+_LINESEP = re.compile(r'\r\n|\r|\n')
+
+
+def _split_keep_seps(text):
+    """[(line_without_separator, separator), ...], separator '' for a final unterminated
+    line -- so a rewrite can reassemble the exact original CRLF/LF mix untouched."""
+    parts, pos = [], 0
+    for m in _LINESEP.finditer(text):
+        parts.append((text[pos:m.start()], m.group()))
+        pos = m.end()
+    parts.append((text[pos:], ''))
+    return parts
+
+
+def _apply_edits(line, edits):
+    """`edits`: [(start, end, replacement), ...] spans into `line`, any order, non-overlapping."""
+    if not edits:
+        return line
+    out, pos = [], 0
+    for start, end, repl in sorted(edits):
+        out.append(line[pos:start])
+        out.append(repl)
+        pos = end
+    out.append(line[pos:])
+    return ''.join(out)
+
+
+def candidates_for_move(entries, old_rel):
+    """Relative paths of notes with at least one wikilink resolving UNAMBIGUOUSLY to
+    old_rel -- a cheap pre-filter over already-parsed data, before any file is reopened."""
+    lookup = build_lookup(entries)
+    out = []
+    for rel, e in entries.items():
+        if rel == old_rel:
+            continue
+        for link in e.get('outbound', ()):
+            if link['kind'] == 'wiki' and resolve_wiki(link['target'], lookup) == [old_rel]:
+                out.append(rel)
+                break
+    return out
+
+
+def _new_wiki_target(target, new_rel):
+    """The replacement bare/path target text for a link that used to read `target`.
+    A path-style target (one with a '/') is retargeted to the new full relative path,
+    keeping or dropping '.md' exactly as the original did; a bare target is retargeted to
+    the new basename only, matching how it was written (short, without a path)."""
+    if '/' not in target:
+        return Path(new_rel).stem
+    if target.lower().endswith('.md'):
+        return new_rel
+    return new_rel[:-3] if new_rel.lower().endswith('.md') else new_rel
+
+
+def rewrite_wikilinks_in_text(text, lookup, old_rel, new_rel):
+    """(new_text, changed). Rewrites every wikilink whose target resolves UNAMBIGUOUSLY to
+    old_rel, preserving heading/block fragments, a label, and the embed marker. Skips
+    fenced code blocks and inline code spans -- the same constructs parse_note itself never
+    reads a link from, so nothing is rewritten here that a read would not have seen either."""
+    fenced = False
+    changed = False
+    out = []
+    for body, sep in _split_keep_seps(text):
+        if _FENCE.match(body):
+            out.append(body + sep); fenced = not fenced; continue
+        if fenced:
+            out.append(body + sep); continue
+        # Code spans are masked (interior blanked to NULs, same length) so match offsets
+        # into `body` stay valid for reconstruction, while a link written inside one can
+        # never match `_WIKILINK` against the masked text.
+        masked = _CODE_SPAN.sub(lambda m: m.group()[0] + '\0' * (len(m.group()) - 2) + m.group()[-1], body)
+        edits = []
+        for m in _WIKILINK.finditer(masked):
+            embed, target, heading, block, label = m.groups()
+            target = target.strip()
+            if resolve_wiki(target, lookup) != [old_rel]:
+                continue
+            new_target = _new_wiki_target(target, new_rel)
+            if new_target == target:
+                continue
+            replacement = (embed + '[[' + new_target + (f'#{heading}' if heading else '')
+                           + (f'^{block}' if block else '') + (f'|{label}' if label else '') + ']]')
+            edits.append((m.start(), m.end(), replacement))
+            changed = True
+        out.append(_apply_edits(body, edits) + sep)
+    return ''.join(out), changed
+
+
 # --- Embeds (LINK-03: safe, non-recursive depth-1 `![[...]]`) -------------------------
 
 IMAGE_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'}
