@@ -1,5 +1,5 @@
-"""Vault link-index routes, through the real app (LINK-01/LINK-02 first slice, backlinks
-half of LINK-04). Synthetic vault only."""
+"""Vault link-index routes, through the real app (LINK-01 through LINK-03: index/resolver,
+backlinks half of LINK-04, and safe embeds). Synthetic vault only."""
 import sys, tempfile, unittest
 from pathlib import Path
 
@@ -35,6 +35,9 @@ class VaultLinksRoutes(unittest.TestCase):
     def backlinks(self, path):
         return self.client.get('/api/vault/links/backlinks', params={'profile': 'nova', 'path': path}, headers=self.h)
 
+    def embed(self, path, target):
+        return self.client.get('/api/vault/links/embed', params={'profile': 'nova', 'path': path, 'target': target}, headers=self.h)
+
     def test_health_reflects_the_real_vault(self):
         self.write('a.md', '[[missing]]')
         self.write('b.md', '# B')
@@ -61,6 +64,38 @@ class VaultLinksRoutes(unittest.TestCase):
 
     def test_wrong_token_is_refused(self):
         r = self.client.get('/api/vault/links/health', params={'profile': 'nova'}, headers={'x-tamanitomo-token': 'nope'})
+        self.assertEqual(r.status_code, 401)
+
+    def test_embed_resolves_a_note_excerpt(self):
+        self.write('journal.md', '# Journal')
+        self.write('robin.md', '# Robin\nDetails.')
+        body = self.embed('journal.md', 'Robin').json()
+        self.assertEqual(body['kind'], 'note')
+        self.assertEqual(body['path'], 'robin.md')
+
+    def test_embed_resolves_an_image(self):
+        self.write('journal.md', '# Journal')
+        (self.vault / 'photo.png').write_bytes(b'fake-bytes')
+        body = self.embed('journal.md', 'photo.png').json()
+        self.assertEqual(body, {'kind': 'image', 'path': 'photo.png'})
+
+    def test_embed_missing_target_reported_not_500(self):
+        self.write('journal.md', '# Journal')
+        body = self.embed('journal.md', 'Nowhere').json()
+        self.assertEqual(body['kind'], 'missing')
+
+    def test_embed_source_outside_the_vault_is_refused_not_500(self):
+        r = self.embed('../outside.md', 'Robin')
+        self.assertEqual(r.status_code, 400, r.text)
+
+    def test_embed_hidden_target_path_is_refused_not_500(self):
+        self.write('journal.md', '# Journal')
+        r = self.embed('journal.md', '.hidden/secret.md')
+        self.assertEqual(r.status_code, 400, r.text)
+
+    def test_embed_wrong_token_is_refused(self):
+        r = self.client.get('/api/vault/links/embed', params={'profile': 'nova', 'path': 'journal.md', 'target': 'Robin'},
+                             headers={'x-tamanitomo-token': 'nope'})
         self.assertEqual(r.status_code, 401)
 
     def test_another_profiles_vault_is_isolated(self):

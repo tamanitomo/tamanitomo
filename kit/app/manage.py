@@ -1629,6 +1629,13 @@ def register(app, select, load, operations):
         result['incomplete']=incomplete
         return result
 
+    @app.get('/api/vault/links/embed')
+    def vault_links_embed(path:str,target:str):
+        from . import vault, vault_link_index as vli
+        c=load()
+        vault.resolve(c,path)          # same authorization boundary as every other vault route
+        return vli.resolve_embed(c,target)
+
     @app.post('/api/vault/trash')
     def vault_trash(payload:dict):
         from . import vault

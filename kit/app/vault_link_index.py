@@ -1,9 +1,10 @@
-"""Derived Vault link index: parsed links, headings, block ids, properties and search
-text, incrementally maintained (LINK-01, LINK-02 first slice).
+"""Derived Vault link index: parsed links, headings, block ids, properties, search text
+and safe embeds, incrementally maintained (LINK-01 through LINK-03).
 
-NOT ACTIVATED: no route registers this yet. This is the index and resolver only --
-backlinks, outline, embeds, safe file operations, link-aware rename, the command
-palette and a local graph (LINK-03 through LINK-09) are later work.
+`/api/vault/links/*` registers the health, backlinks (LINK-04's backlinks half) and embed
+(LINK-03) routes. Outline/properties panel UI, safe file operations, link-aware rename,
+the command palette and a local graph (the rest of LINK-04 through LINK-09) are later
+work.
 
 Reuses `kit/app/vault.py`'s authorization boundary: `vault.files()` for the walk
 (hidden/symlink/secret exclusion already applied per file via `vault.resolve()`), so
@@ -185,6 +186,106 @@ def resolve_md(href, source_rel, lookup):
 
 def resolve(link, source_rel, lookup):
     return resolve_wiki(link['target'], lookup) if link['kind'] == 'wiki' else resolve_md(link['target'], source_rel, lookup)
+
+
+# --- Embeds (LINK-03: safe, non-recursive depth-1 `![[...]]`) -------------------------
+
+IMAGE_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'}
+EMBED_EXCERPT_LIMIT = 4_000
+
+
+def resolve_asset(c, target):
+    """Resolve a non-note embed target (an image, normally linked with its extension) by
+    exact filename. A live walk, not index-backed -- LINK-09 is where a large vault's
+    asset lookup gets its own cache; this stays correct and simple until then.
+
+    An explicit path (one containing '/') goes through vault.resolve() directly, same as
+    every other vault route -- a hidden or traversal target is refused (ValueError), not
+    quietly reported as "missing"."""
+    target = target.strip()
+    if not target:
+        return []
+    if '/' in target:
+        full = vault.resolve(c, target)
+        return [target] if full.is_file() else []
+    name = target.lower()
+    out = []
+    for full, rel in vault.files(c):
+        if full.suffix.lower() == '.md':
+            continue
+        if Path(rel).name.lower() == name:
+            out.append(rel)
+    return out
+
+
+def heading_section(body, heading):
+    """Lines of `body` under a heading matching `heading` (case-insensitive), up to the
+    next heading of equal or shallower level. None when no such heading exists."""
+    needle = heading.strip().casefold()
+    lines = body.splitlines()
+    start = level = None
+    for i, line in enumerate(lines):
+        m = _HEADING.match(line)
+        if m and m.group(2).strip().casefold() == needle:
+            start, level = i + 1, len(m.group(1))
+            break
+    if start is None:
+        return None
+    out = []
+    for line in lines[start:]:
+        m = _HEADING.match(line)
+        if m and len(m.group(1)) <= level:
+            break
+        out.append(line)
+    return '\n'.join(out).strip()
+
+
+def resolve_embed(c, raw_target):
+    """What a `![[Target]]` or `![[Target#Heading]]` embed should show: an image, a note
+    excerpt (whole note, or one heading's section), unresolved, or ambiguous.
+
+    Depth-1 only: any `![[...]]` embed markers inside a returned note excerpt are defanged
+    to plain `[[...]]` links (never re-expanded), and the excerpt is length-capped -- an
+    embed can never pull in another embed's content, nor an unbounded amount of text."""
+    target = raw_target.strip()
+    heading = None
+    if '#' in target:
+        head, _, rest = target.rpartition('#')
+        if head.strip():
+            target, heading = head.strip(), rest.strip() or None
+    if not target:
+        return {'kind': 'missing', 'target': raw_target}
+    entries, incomplete = build(c)
+    lookup = build_lookup(entries)
+    note_key = target[:-3] if target.lower().endswith('.md') else target
+    note_candidates = resolve_wiki(note_key, lookup)
+    asset_candidates = [] if note_candidates else resolve_asset(c, target)
+    candidates = note_candidates or asset_candidates
+    if len(candidates) > 1:
+        return {'kind': 'ambiguous', 'target': raw_target, 'candidates': candidates}
+    if not candidates:
+        return {'kind': 'missing', 'target': raw_target}
+    rel = candidates[0]
+    if asset_candidates:
+        if Path(rel).suffix.lower() not in IMAGE_EXT:
+            return {'kind': 'unsupported', 'target': raw_target, 'path': rel}
+        return {'kind': 'image', 'path': rel}
+    try:
+        full = vault.resolve(c, rel)
+        body = full.read_text(encoding='utf-8')
+    except (ValueError, OSError, UnicodeError):
+        return {'kind': 'missing', 'target': raw_target}
+    _, body = parse_frontmatter(body)
+    if heading:
+        section = heading_section(body, heading)
+        if section is None:
+            return {'kind': 'missing', 'target': raw_target, 'path': rel}
+        excerpt = section
+    else:
+        excerpt = body.strip()
+    truncated = len(excerpt) > EMBED_EXCERPT_LIMIT
+    excerpt = excerpt[:EMBED_EXCERPT_LIMIT].replace('![[', '[[')
+    return {'kind': 'note', 'path': rel, 'heading': heading, 'excerpt': excerpt, 'truncated': truncated}
 
 
 # --- Index build (incremental) --------------------------------------------------------

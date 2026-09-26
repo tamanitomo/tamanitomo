@@ -471,6 +471,7 @@ function paintReading(m){
       const target=b.dataset.link.trim(),file=target.endsWith('.md')?target:target+'.md';
       open(file.includes('/')?file:(folder?folder+'/'+file:'notes/'+file));
     };
+    hydrateVaultEmbeds(pane,m.path);
   }
   const toc=extractVaultTOC(body),list=$('vault-toc-list');
   if(list){

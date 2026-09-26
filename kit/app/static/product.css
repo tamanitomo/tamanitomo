@@ -523,6 +523,14 @@ dialog.photo-viewer::backdrop{background:rgba(0,0,0,0.94)}
 .vault-conflict-bar p{margin:0 0 8px}
 .vault-retry-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:color-mix(in srgb,var(--warn) 10%,transparent)}
 .vault-draft-note{margin:0;padding:6px 18px;border-top:1px solid var(--surface-2);flex:none}
+/* Safe embeds (LINK-03): `![[Note]]`, `![[Note#Heading]]`, `![[image.png]]`. */
+.vault-embed{margin:10px 0}
+.vault-embed-note{border:1px solid var(--surface-3);border-radius:8px;padding:10px 14px;background:var(--surface-2)}
+.vault-embed-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:700;margin-bottom:6px}
+.vault-embed-body :first-child{margin-top:0}
+.vault-embed-body :last-child{margin-bottom:0}
+.vault-embed-image img{max-width:100%;border-radius:8px;display:block}
+.vault-embed-missing{padding:6px 0;color:var(--faint)}
 .vault-diff{max-height:30vh;overflow:auto;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--edge);border-radius:8px;padding:8px;margin-bottom:12px;white-space:pre-wrap}
 .vault-diff-add{background:color-mix(in srgb,var(--good) 14%,transparent)}
 .vault-diff-del{background:color-mix(in srgb,var(--bad) 14%,transparent)}

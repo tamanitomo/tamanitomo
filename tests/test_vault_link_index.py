@@ -1,8 +1,9 @@
-"""Vault link index: parser, resolver and backlinks (LINK-01/LINK-02 first slice).
+"""Vault link index: parser, resolver, backlinks and embeds (LINK-01 through LINK-03).
 
-NOT ACTIVATED: no route serves this yet (see kit/app/vault_link_index.py). Pure-function
-tests for the parser/resolver/backlinks, plus a real-filesystem test of the incremental
-build through kit/app/vault.files() (the same authorization boundary the editor uses).
+Pure-function tests for the parser/resolver/backlinks/embeds, plus real-filesystem tests
+of the incremental build and embed resolution through kit/app/vault.files()/vault.resolve()
+(the same authorization boundary the editor uses). Route-level tests live in
+tests/test_vault_links_routes.py.
 """
 import sys, tempfile, unittest
 from pathlib import Path
@@ -227,6 +228,97 @@ class BuildIntegrationTests(unittest.TestCase):
         self.assertEqual(report['notes'], 1)
         self.assertEqual(report['unresolved'], 1)
         self.assertFalse(report['incomplete'])
+
+
+class HeadingSectionTests(unittest.TestCase):
+    def test_extracts_the_named_sections_lines_only(self):
+        body = '# Title\nIntro.\n## Sub\nFirst.\nSecond.\n## Sub2\nOther.\n'
+        self.assertEqual(vli.heading_section(body, 'Sub'), 'First.\nSecond.')
+
+    def test_stops_at_a_shallower_or_equal_heading_not_a_deeper_one(self):
+        body = '## Sub\nText.\n### Nested\nStill inside.\n## Next\nOutside.\n'
+        self.assertEqual(vli.heading_section(body, 'Sub'), 'Text.\n### Nested\nStill inside.')
+
+    def test_missing_heading_returns_none(self):
+        self.assertIsNone(vli.heading_section('# Title\nBody.\n', 'Nope'))
+
+
+class EmbedTests(unittest.TestCase):
+    """Real filesystem, through vault.resolve()/vault.files() -- the same authorization
+    boundary as every other embed-adjacent route (LINK-03)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
+        self.c = companion(Path(self.tmp.name))
+
+    def write(self, rel, text=''):
+        path = self.c.vault / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding='utf-8')
+        return path
+
+    def test_embeds_a_whole_note(self):
+        self.write('robin.md', '# Robin\nSome details about Robin.\n')
+        result = vli.resolve_embed(self.c, 'Robin')
+        self.assertEqual(result, {'kind': 'note', 'path': 'robin.md', 'heading': None,
+                                   'excerpt': '# Robin\nSome details about Robin.', 'truncated': False})
+
+    def test_embeds_one_heading_section_only(self):
+        self.write('robin.md', '# Robin\nIntro.\n## Likes\nCoffee.\nTea.\n## Dislikes\nRain.\n')
+        result = vli.resolve_embed(self.c, 'Robin#Likes')
+        self.assertEqual(result['kind'], 'note')
+        self.assertEqual(result['heading'], 'Likes')
+        self.assertEqual(result['excerpt'], 'Coffee.\nTea.')
+
+    def test_missing_heading_on_an_existing_note_is_reported_missing(self):
+        self.write('robin.md', '# Robin\n')
+        result = vli.resolve_embed(self.c, 'Robin#NoSuchHeading')
+        self.assertEqual(result['kind'], 'missing')
+
+    def test_embeds_an_image_by_filename(self):
+        self.write('assets/photo.png', 'not-really-png-bytes')
+        result = vli.resolve_embed(self.c, 'photo.png')
+        self.assertEqual(result, {'kind': 'image', 'path': 'assets/photo.png'})
+
+    def test_a_non_image_asset_is_reported_unsupported_not_rendered(self):
+        self.write('assets/notes.pdf', '%PDF-fake')
+        result = vli.resolve_embed(self.c, 'notes.pdf')
+        self.assertEqual(result['kind'], 'unsupported')
+
+    def test_ambiguous_basename_is_reported_not_guessed(self):
+        self.write('a.md', '# A one')
+        self.write('dup/a.md', '# A two')
+        result = vli.resolve_embed(self.c, 'a')
+        self.assertEqual(result['kind'], 'ambiguous')
+        self.assertEqual(set(result['candidates']), {'a.md', 'dup/a.md'})
+
+    def test_unresolved_target_is_missing_not_a_guess(self):
+        result = vli.resolve_embed(self.c, 'Nowhere')
+        self.assertEqual(result, {'kind': 'missing', 'target': 'Nowhere'})
+
+    def test_frontmatter_is_not_included_in_the_excerpt(self):
+        self.write('robin.md', '---\ntitle: Robin\n---\n# Robin\nBody only.\n')
+        result = vli.resolve_embed(self.c, 'Robin')
+        self.assertNotIn('title:', result['excerpt'])
+        self.assertEqual(result['excerpt'], '# Robin\nBody only.')
+
+    def test_a_nested_embed_marker_is_defanged_never_re_expanded(self):
+        self.write('outer.md', '# Outer\n![[inner.md]]\nMore text.\n')
+        self.write('inner.md', '# Inner\n')
+        result = vli.resolve_embed(self.c, 'outer')
+        self.assertNotIn('![[', result['excerpt'])
+        self.assertIn('[[inner.md]]', result['excerpt'])
+
+    def test_a_very_long_note_is_truncated_not_dumped_whole(self):
+        self.write('long.md', '# Long\n' + ('x' * (vli.EMBED_EXCERPT_LIMIT + 500)))
+        result = vli.resolve_embed(self.c, 'long')
+        self.assertTrue(result['truncated'])
+        self.assertLessEqual(len(result['excerpt']), vli.EMBED_EXCERPT_LIMIT)
+
+    def test_a_protected_or_hidden_target_is_refused_not_embedded(self):
+        self.write('.hidden/secret.md', '# Secret')
+        with self.assertRaises(ValueError):
+            vli.resolve_embed(self.c, '.hidden/secret')
 
 
 if __name__ == '__main__':

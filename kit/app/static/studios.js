@@ -63,6 +63,15 @@ function renderObsidianMarkdown(source){
    continue;
   }
   if(inCode){codeLines.push(line);continue;}
+  // A `![[...]]` alone on its line is a safe, non-recursive depth-1 embed (LINK-03):
+  // resolved and painted in by hydrateVaultEmbeds after this HTML is in the document.
+  const embedMatch=line.trim().match(/^!\[\[([^\]]+)\]\]$/);
+  if(embedMatch){
+   if(inList){html.push(listType==='ol'?'</ol>':'</ul>');inList=false;}
+   const raw=embedMatch[1].split('|')[0].trim();
+   html.push(`<div class="vault-embed" data-embed-target="${esc(raw)}"><span class="dim small">Loading embed…</span></div>`);
+   continue;
+  }
   if(/^(---|___|\*\*\*)$/.test(line.trim())){if(inList){html.push(listType==='ol'?'</ol>':'</ul>');inList=false;}html.push('<hr>');continue;}
   const hMatch=line.match(/^(#{1,6})\s+(.+)$/);
   if(hMatch){
@@ -129,6 +138,33 @@ function extractVaultTOC(text){
   if(m)headings.push({id:'vault-heading-'+(idx++),level:m[1].length,title:m[2].replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g,'$2'||'$1').replace(/[*_`]/g,'')});
  }
  return headings;
+}
+
+/* Safe embeds (LINK-03): `![[Note]]` and `![[Note#Heading]]` for note excerpts,
+   `![[image.png]]` for images. Non-recursive depth-1 -- the excerpt the server returns
+   already has its own `![[...]]` markers defanged to plain links, and rendering it here
+   never re-runs hydrateVaultEmbeds, so an embed can never pull in another embed. */
+function renderVaultEmbed(data){
+ if(data.kind==='image')return `<div class="vault-embed-image"><img src="${mediaUrl('/api/vault/download?path='+encodeURIComponent(data.path))}" loading="lazy" alt="${esc(data.path.split('/').pop())}"></div>`;
+ if(data.kind==='note')return `<div class="vault-embed-note"><div class="vault-embed-label">↳ ${esc(data.path)}${data.heading?' § '+esc(data.heading):''}</div><div class="vault-embed-body">${renderObsidianMarkdown(data.excerpt)}</div>${data.truncated?'<p class="dim small">Truncated — open the note to see the rest.</p>':''}</div>`;
+ if(data.kind==='unsupported')return `<div class="vault-embed-missing dim small">File type not previewed: ${esc(data.path||data.target)}</div>`;
+ if(data.kind==='ambiguous')return `<div class="vault-embed-missing dim small">Embed target is ambiguous between: ${esc((data.candidates||[]).join(', '))}</div>`;
+ return `<div class="vault-embed-missing dim small">Embed not found: ${esc(data.target||'')}</div>`;
+}
+async function hydrateVaultEmbeds(container,sourcePath){
+ const nodes=[...container.querySelectorAll('.vault-embed[data-embed-target]')];
+ if(!nodes.length)return;
+ const pending=new Map();
+ await Promise.all(nodes.map(async el=>{
+  const target=el.dataset.embedTarget;
+  if(!pending.has(target))pending.set(target,api('/vault/links/embed?path='+encodeURIComponent(sourcePath)+'&target='+encodeURIComponent(target)).catch(()=>({kind:'missing',target})));
+  const data=await pending.get(target);
+  el.innerHTML=renderVaultEmbed(data);
+  for(const b of el.querySelectorAll('.wiki-link'))b.onclick=()=>{
+   const t=b.dataset.link.trim(),file=t.endsWith('.md')?t:t+'.md';
+   readNote(file.includes('/')?file:sourcePath.split('/').slice(0,-1).concat(file).join('/'));
+  };
+ }));
 }
 
 function filterVaultEntry(f){

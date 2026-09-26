@@ -576,5 +576,38 @@ class VaultEditor(Browser):
         self.assertEqual(self.page.evaluate('VaultEditor.drafts()'), [])
 
 
+    def test_17_safe_embeds_render_images_and_note_excerpts_non_recursively(self):
+        import base64
+        png = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=')
+        (self.vault / 'notes/photo.png').write_bytes(png)
+        (self.vault / 'notes/Deep.md').write_text('# Deep\nIntro.\n## Likes\nCoffee and tea.\n## Dislikes\nRain.\n', encoding='utf-8')
+        (self.vault / 'notes/Inner.md').write_text('# Inner\nInner text.\n', encoding='utf-8')
+        (self.vault / 'notes/Middle.md').write_text('# Middle\n![[Inner]]\n', encoding='utf-8')
+        (self.vault / 'notes/Embeds.md').write_text(
+            '# Embeds\n\n![[photo.png]]\n\n![[Deep#Likes]]\n\n![[Middle]]\n\n![[Nowhere]]\n', encoding='utf-8')
+        self.vault_page()
+        self.open('notes/Embeds.md', mode='preview')
+        until(lambda: self.page.locator('#vault-preview .vault-embed-image img').count() == 1, what='image embed hydrated')
+        self.assertGreater(self.page.eval_on_selector('#vault-preview .vault-embed-image img', 'i=>i.naturalWidth'), 0)
+
+        until(lambda: self.page.locator('#vault-preview .vault-embed-note').count() == 2, what='note embeds hydrated')
+        labels = self.page.eval_on_selector_all('#vault-preview .vault-embed-label', 'els=>els.map(e=>e.textContent)')
+        self.assertTrue(any('Deep' in l and 'Likes' in l for l in labels))
+        self.assertTrue(any('Middle' in l for l in labels))
+        body_text = self.page.inner_text('#vault-preview')
+        self.assertIn('Coffee and tea.', body_text)
+        self.assertNotIn('Rain.', body_text, 'only the requested heading section is embedded')
+
+        # Middle embeds Inner; that inner embed must show as an inert link, never expanded (depth-1, non-recursive).
+        middle_embed = self.page.locator('#vault-preview .vault-embed-note', has_text='Middle')
+        self.assertEqual(middle_embed.locator('.vault-embed-note').count(), 0, 'no nested embed card')
+        self.assertEqual(middle_embed.locator('.wiki-link', has_text='Inner').count(), 1, 'nested embed shown as a plain link')
+        self.assertNotIn('Inner text.', body_text, "the inner note's own body was never fetched or expanded")
+
+        until(lambda: self.page.locator('#vault-preview .vault-embed-missing').count() == 1, what='missing embed reported')
+        self.assertIn('Nowhere', self.page.inner_text('#vault-preview .vault-embed-missing'))
+        self.shot('08-embeds')
+
+
 if __name__ == '__main__':
     unittest.main()
