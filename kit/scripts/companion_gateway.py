@@ -112,14 +112,8 @@ def _json(path):
     except (ValueError,OSError):return {}
 
 def _alive(record):
-    """Linux process identity includes start ticks to reject recycled PIDs."""
-    if not sys.platform.startswith('linux'):return None
-    pid=record.get('pid')
-    if not isinstance(pid,int) or pid<=0:return False
-    try:
-        fields=pathlib.Path(f'/proc/{pid}/stat').read_text().rsplit(')',1)[1].split()
-        return fields[0]!='Z' and int(fields[19])==record.get('start_time')
-    except (OSError,ValueError,IndexError):return False
+    """Preserve process identity checks where supported; unknown is not dead."""
+    return cp.process_matches(record.get('pid'), record.get('start_time'))
 
 def _env_values(home):
     # Only used locally; values never enter a returned report or subprocess argv.

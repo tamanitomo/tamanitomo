@@ -13,15 +13,9 @@ from .common import print, resolve
 
 
 def lan_addresses():
-    addresses=set()
-    try:addresses.update(a[4][0] for a in socket.getaddrinfo(socket.gethostname(),None,socket.AF_INET))
-    except OSError:pass
-    # UDP connect asks the kernel for a route; no packets or external requests are sent.
-    try:
-        with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as probe:
-            probe.connect(('192.0.2.1',9));addresses.add(probe.getsockname()[0])
-    except OSError:pass
-    return sorted(a for a in addresses if not a.startswith('127.') and a!='0.0.0.0')
+    import companion_platform as cp
+    return cp.lan_addresses()
+
 
 def cmd_app(args):
     """Open the companion workspace and Hermes management app."""
@@ -36,7 +30,7 @@ def cmd_app(args):
     with cp.file_lock(state/'.token.lock'):
         if not token_file.exists():cp.atomic_write(token_file,secrets.token_urlsafe(32)+'\n')
         if os.name!='nt':token_file.chmod(0o600)
-        token=getattr(args,'token','') or token_file.read_text().strip()
+        token=getattr(args,'token','') or token_file.read_text(encoding='utf-8').strip()
     if not token:raise ValueError('The access token is empty. Remove the access-token file and relaunch to generate a new one.')
     host=getattr(args,'host','0.0.0.0');port=getattr(args,'port',8770)
     browser_host='127.0.0.1' if host in ('0.0.0.0','::') else host
@@ -54,7 +48,7 @@ def cmd_app(args):
         except (OSError,ValueError):return False
     if port==8770:
         try:
-            saved=json.loads(registry.read_text())
+            saved=json.loads(registry.read_text(encoding='utf-8'))
             if saved.get('host')==host and saved.get('root')==str(c.hermes_root) and reuse(int(saved['port'])):return 0
         except (OSError,ValueError,KeyError,TypeError):pass
     sock=socket.socket(socket.AF_INET6 if ':' in host else socket.AF_INET,socket.SOCK_STREAM)
@@ -62,7 +56,9 @@ def cmd_app(args):
     try:
         sock.bind((host,port))
     except OSError:
-        if port!=8770:raise
+        if port!=8770:
+            sock.close()
+            raise
         # Reuse only a workspace that proves it knows this installation's token.
         if reuse(port):sock.close();return 0
         sock.bind((host,0))

@@ -16,7 +16,11 @@ ROOT=Path(__file__).resolve().parent
 def setup_lock():
     """Serialize first launches so two windows cannot install into one venv."""
     with (ROOT/'.bootstrap.lock').open('a+b') as handle:
-        handle.write(b'0');handle.flush();handle.seek(0)
+        handle.seek(0, 2)
+        if not handle.tell():
+            handle.write(b'0')
+            handle.flush()
+        handle.seek(0)
         deadline=time.monotonic()+600
         while True:
             try:
@@ -53,10 +57,10 @@ def bootstrap(args):
         if not stamp.exists() and old_stamp.exists():
             try:old_stamp.replace(stamp)
             except OSError:stamp=old_stamp
-        if not stamp.exists() or stamp.read_text().strip()!=fingerprint:
+        if not stamp.exists() or stamp.read_text(encoding='utf-8').strip()!=fingerprint:
             print('Installing tamanitomo dependencies…',flush=True)
             subprocess.run([str(python),'-m','pip','install','-r',str(ROOT/'requirements.txt')],check=True)
-            stamp.write_text(fingerprint+'\n')
+            stamp.write_text(fingerprint+'\n', encoding='utf-8', newline='\n')
     command=[str(python),str(ROOT/'bin/tamanitomo'),*(args or ['app'])]
     # subprocess preserves Windows Ctrl-C handling; POSIX exec avoids an extra process.
     if os.name=='nt':return subprocess.call(command)

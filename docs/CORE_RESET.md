@@ -19,3 +19,19 @@ migration.
 
 The final phase will record the consolidated suite timing, startup measurement,
 release integrity check and final responsive browser results here.
+
+## Phase 2 — portable hosts
+
+- Shared standard-library network, memory and process probes across entry points.
+- Native Windows process checks never use `os.kill(pid, 0)`; Unix-only locks and
+  process groups remain guarded. Linux start-time identity checks are optional:
+  unavailable process metadata is reported as unknown, not as a dead process.
+- Native RAM measurements use sysconf, macOS tools or Windows APIs. Missing
+  measurements are marked unknown instead of inventing host capacity.
+- Bootstrap/update locks no longer grow on every launch. Hosted bindings support
+  IPv6; launchers preserve paths with spaces and Unicode. Git records platform
+  line-ending rules.
+- Verification: 71 platform, launcher, gateway, installer and chat checks pass;
+  POSIX launcher `--help` succeeds in 0.354s with a temporary home.
+- Native Windows/macOS execution remains a CI responsibility; local tests exercise
+  their branches with controlled adapters.

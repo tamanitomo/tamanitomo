@@ -5,7 +5,11 @@ from pathlib import Path
 @contextlib.contextmanager
 def runtime_lock(root):
     with (root/'.runtime.lock').open('a+b') as f:
-        f.write(b'0');f.flush();f.seek(0)
+        f.seek(0, 2)
+        if not f.tell():
+            f.write(b'0')
+            f.flush()
+        f.seek(0)
         try:
             if os.name=='nt':
                 import msvcrt
@@ -26,7 +30,7 @@ def apply_pending(root):
 def _apply_pending(root):
     folder=root/'.pending-update';manifest=folder/'SHA256SUMS.json'
     if not manifest.exists():return
-    hashes=json.loads(manifest.read_text());old=json.loads((root/'SHA256SUMS.json').read_text())
+    hashes=json.loads(manifest.read_text(encoding='utf-8'));old=json.loads((root/'SHA256SUMS.json').read_text(encoding='utf-8'))
     for name,digest in hashes.items():
         path=Path(name)
         if path.is_absolute() or '..' in path.parts or '\\' in name:raise ValueError('Unsafe staged path')

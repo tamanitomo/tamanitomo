@@ -37,9 +37,12 @@ class Console:
         else:
             import pty,fcntl,termios,struct
             self.master,slave=pty.openpty()
-            fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',32,110,0,0))
             try:
+                fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',32,110,0,0))
                 self.process=subprocess.Popen(argv,cwd=str(home),env=env,stdin=slave,stdout=slave,stderr=slave,start_new_session=True)
+            except BaseException:
+                os.close(self.master)
+                raise
             finally:os.close(slave)
         threading.Thread(target=self._read,daemon=True,name='hermes-console').start()
         threading.Thread(target=self._expiry,daemon=True,name='hermes-console-expiry').start()
@@ -60,11 +63,12 @@ class Console:
         except (OSError,EOFError):pass
         except Exception as exc:self.error=str(exc)
         finally:
-            self.finished=True
             if os.name!='nt':
                 try:os.close(self.master)
                 except OSError:pass
-                self.process.wait()
+                self.close()
+            else:
+                self.finished=True
 
     def read(self):
         self.last_access=time.monotonic()
@@ -81,12 +85,45 @@ class Console:
         else:os.write(self.master,data.encode('utf-8'))
 
     def close(self):
-        if self.finished:return
-        if os.name=='nt':self.process.terminate(force=True)
-        else:
-            try:os.killpg(self.process.pid,signal.SIGTERM)
-            except ProcessLookupError:pass
-        self.finished=True
+        """Release the console with bounded waits, even if a child ignores TERM."""
+        if self.finished:
+            return
+        try:
+            if os.name == 'nt':
+                try:
+                    self.process.terminate(force=True)
+                except (OSError, EOFError):
+                    pass
+                return
+            if self.process.poll() is not None:
+                return
+            try:
+                os.killpg(self.process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                return
+            except (OSError, AttributeError):
+                try:
+                    self.process.terminate()
+                except ProcessLookupError:
+                    return
+            try:
+                self.process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(self.process.pid, signal.SIGKILL)
+                except (OSError, AttributeError):
+                    try:
+                        self.process.kill()
+                    except ProcessLookupError:
+                        return
+                try:
+                    self.process.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    self.error = 'The console process did not exit after being stopped.'
+        except OSError as exc:
+            self.error = f'The console could not be stopped: {exc}'
+        finally:
+            self.finished = True
 
 class Consoles:
     def __init__(self):self.rows={};self.lock=threading.Lock()

@@ -99,77 +99,11 @@ def is_mobile() -> bool:
     return False
 
 def get_host_memory() -> dict:
-    """Return memory metrics (in MB) and mobile environment status.
-    Returns: {'total_mb': int, 'available_mb': int, 'is_mobile': bool}
-    """
-    total_mb = 0
-    available_mb = 0
-    mobile = is_mobile()
+    """Return measured host memory and mobile status; zero means unavailable."""
+    from companion_platform import host_memory
 
-    # 1. Linux / Android (/proc/meminfo)
-    if os.path.exists('/proc/meminfo'):
-        try:
-            with open('/proc/meminfo', 'r', encoding='utf-8') as f:
-                meminfo = {}
-                for line in f:
-                    parts = line.split(':')
-                    if len(parts) == 2:
-                        key = parts[0].strip()
-                        val_str = parts[1].strip().split()[0]
-                        if val_str.isdigit():
-                            meminfo[key] = int(val_str)
-                total_kb = meminfo.get('MemTotal', 0)
-                avail_kb = meminfo.get('MemAvailable')
-                if avail_kb is None:
-                    avail_kb = meminfo.get('MemFree', 0) + meminfo.get('Buffers', 0) + meminfo.get('Cached', 0)
-                total_mb = total_kb // 1024
-                available_mb = avail_kb // 1024
-        except Exception:
-            pass
+    return {**host_memory(), 'is_mobile': is_mobile()}
 
-    # 2. Darwin (macOS)
-    if total_mb == 0 and platform.system() == 'Darwin':
-        try:
-            res = subprocess.run(['sysctl', '-n', 'hw.memsize'], capture_output=True, text=True, timeout=2)
-            if res.returncode == 0 and res.stdout.strip().isdigit():
-                total_mb = int(res.stdout.strip()) // (1024 * 1024)
-                available_mb = int(total_mb * 0.5)
-        except Exception:
-            pass
-
-    # 3. Windows
-    if total_mb == 0 and os.name == 'nt':
-        try:
-            import ctypes
-            class MEMORYSTATUSEX(ctypes.Structure):
-                _fields_ = [
-                    ("dwLength", ctypes.c_ulong),
-                    ("dwMemoryLoad", ctypes.c_ulong),
-                    ("ullTotalPhys", ctypes.c_ulonglong),
-                    ("ullAvailPhys", ctypes.c_ulonglong),
-                    ("ullTotalPageFile", ctypes.c_ulonglong),
-                    ("ullAvailPageFile", ctypes.c_ulonglong),
-                    ("ullTotalVirtual", ctypes.c_ulonglong),
-                    ("ullAvailVirtual", ctypes.c_ulonglong),
-                    ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
-                ]
-            stat = MEMORYSTATUSEX()
-            stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
-            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
-                total_mb = int(stat.ullTotalPhys // (1024 * 1024))
-                available_mb = int(stat.ullAvailPhys // (1024 * 1024))
-        except Exception:
-            pass
-
-    if total_mb == 0:
-        total_mb = 8192
-        available_mb = 4096
-
-    return {
-        'total_mb': total_mb,
-        'available_mb': available_mb,
-        'is_mobile': mobile,
-    }
 
 def validate_model_safety(model_size_gb: float, mem_info: dict | None = None) -> tuple[bool, str]:
     """Validate whether a model of given size in GB can safely run on this host.

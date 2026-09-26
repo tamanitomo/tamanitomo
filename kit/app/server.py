@@ -31,27 +31,9 @@ def _json_safe(value):
     return value
 
 def get_network_ips():
-    ips = set()
-    import socket
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ips.add(s.getsockname()[0])
-        s.close()
-    except Exception:
-        pass
-    try:
-        import subprocess
-        out = subprocess.run(["ip", "-br", "a"], capture_output=True, text=True, timeout=1).stdout
-        for line in out.splitlines():
-            parts = line.split()
-            if len(parts) >= 3 and parts[1] == "UP":
-                ip = parts[2].split("/")[0]
-                if not ip.startswith(("127.", "172.17.", "172.18.")):
-                    ips.add(ip)
-    except Exception:
-        pass
-    return sorted(ips)
+    from companion_platform import lan_addresses
+
+    return lan_addresses()
 
 def build(home=None,token='',state_dir=None):
     """Create a workspace; profile selection is local to each request."""
