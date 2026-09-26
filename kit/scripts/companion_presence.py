@@ -808,7 +808,7 @@ def render_emotive(c, now=None):
     )
     lines += [
         "## Right now",
-        f"_as of {when.strftime('%A %-d %B, %H:%M')}_",
+        f"_as of {when.strftime('%A')} {when.day} {when.strftime('%B, %H:%M')}_",
         "",
         f"**Mood.** {state.get('mood') or 'unrecorded'}",
         "",

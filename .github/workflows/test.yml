@@ -35,7 +35,7 @@ jobs:
           python -m black --check kit/scripts kit/cli kit/app launch.py update_release.py
           python -m ruff check kit/scripts kit/cli kit/app
       - name: Run tests (no hermes on PATH)
-        run: python -m pytest -q -rs --junitxml=junit.xml
+        run: python -m pytest -q -rs --durations=5 --junitxml=junit.xml
       - name: Report failed tests as annotations
         # Job logs need a signed-in viewer; check-run annotations are public. So an annotation
         # carries only the test id, its file and the exception class as a category -- never the
@@ -89,4 +89,4 @@ jobs:
           node-version: '22'
       - run: python -m pip install -r requirements.txt
       - name: Run all domain suites
-        run: python -m pytest -q -rs
+        run: python -m pytest -q -rs --durations=5

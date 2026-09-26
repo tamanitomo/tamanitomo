@@ -54,28 +54,31 @@ class VaultHistoryTests(unittest.TestCase):
 
     def test_a_quiet_period_produces_no_commit(self):
         vault.init(self.c)
-        self.file.write_text("first")
+        self.file.write_text("first", encoding="utf-8")
         self.assertTrue(vault.commit(self.c)["committed"])
         self.assertEqual(vault.commit(self.c)["reason"], "nothing changed")
 
     def test_an_old_version_comes_back_beside_the_file_not_over_it(self):
         vault.init(self.c)
-        self.file.write_text("the careful original")
+        self.file.write_text("the careful original", encoding="utf-8")
         vault.commit(self.c)
         old = vault.history(self.c, self.relative)[0]["commit"]
-        self.file.write_text("a consolidation that went too far")
+        self.file.write_text("a consolidation that went too far", encoding="utf-8")
         vault.commit(self.c)
         result = vault.restore(self.c, self.relative, old)
-        self.assertEqual(self.file.read_text(), "a consolidation that went too far")
         self.assertEqual(
-            pathlib.Path(result["restored"]).read_text(), "the careful original"
+            self.file.read_text(encoding="utf-8"), "a consolidation that went too far"
+        )
+        self.assertEqual(
+            pathlib.Path(result["restored"]).read_text(encoding="utf-8"),
+            "the careful original",
         )
         self.assertIn("not over it", result["note"])
 
     def test_history_lists_every_version_newest_first(self):
         vault.init(self.c)
         for text in ("one", "two", "three"):
-            self.file.write_text(text)
+            self.file.write_text(text, encoding="utf-8")
             vault.commit(self.c)
         versions = vault.history(self.c, self.relative)
         self.assertEqual(len(versions), 3)
@@ -266,20 +269,20 @@ class VaultApiTests(WorkspaceFixture):
     def test_vault_boundaries_and_note_conflicts(self):
         (self.vault / "notes").mkdir()
         note = self.vault / "notes/hello.md"
-        note.write_text("# Hello\n")
+        note.write_text("# Hello\n", encoding="utf-8")
         response = self.client.get(
             "/api/vault/file?profile=nova&path=notes/hello.md", headers=self.headers
         )
         body = response.json()
         self.assertTrue(body["editable"])
-        note.write_text("Changed elsewhere")
+        note.write_text("Changed elsewhere", encoding="utf-8")
         write = self.client.put(
             "/api/vault/file?profile=nova",
             headers=self.headers,
             json={**body, "text": "overwrite"},
         )
         self.assertEqual(write.status_code, 409)
-        self.assertEqual(note.read_text(), "Changed elsewhere")
+        self.assertEqual(note.read_text(encoding="utf-8"), "Changed elsewhere")
         for path in (
             "../outside.md",
             "/etc/passwd",
@@ -308,7 +311,7 @@ class VaultApiTests(WorkspaceFixture):
 
     def test_symlink_cannot_escape_vault(self):
         outside = Path(self.tmp.name) / "outside.md"
-        outside.write_text("not in vault")
+        outside.write_text("not in vault", encoding="utf-8")
         try:
             (self.vault / "escape.md").symlink_to(outside)
         except OSError:
@@ -421,7 +424,7 @@ class VaultEditorTests(WorkspaceFixture):
             400,
         )
         self.assertEqual(self.save_note("notes/new.md", "fresh", "").status_code, 400)
-        self.assertEqual((real / "a.md").read_text(), "original")
+        self.assertEqual((real / "a.md").read_text(encoding="utf-8"), "original")
         self.assertEqual(list(outside.iterdir()), [])
 
     def test_file_actions_require_current_revisions_and_safe_destinations(self):
@@ -444,11 +447,11 @@ class VaultEditorTests(WorkspaceFixture):
             upper.write_text("another file", encoding="utf-8")
             with self.assertRaises(FileExistsError):
                 editor.move(self.c, "notes/a.md", "notes/A.md", revision)
-            self.assertEqual(upper.read_text(), "another file")
+            self.assertEqual(upper.read_text(encoding="utf-8"), "another file")
             upper.unlink()
         editor.move(self.c, "notes/a.md", "notes/A.md", revision)
         self.assertIn("A.md", {p.name for p in upper.parent.iterdir()})
-        self.assertEqual(upper.read_text(), "original")
+        self.assertEqual(upper.read_text(encoding="utf-8"), "original")
         replace = os.replace
         calls = 0
 
@@ -462,7 +465,7 @@ class VaultEditorTests(WorkspaceFixture):
         with patch.object(editor.os, "replace", side_effect=fail_second_move):
             with self.assertRaises(OSError):
                 editor.move(self.c, "notes/A.md", "notes/a.md", revision)
-        self.assertEqual(upper.read_text(), "original")
+        self.assertEqual(upper.read_text(encoding="utf-8"), "original")
         self.assertFalse(list(upper.parent.glob(".vault-move-*")))
 
     def test_duplicate_preserves_text_and_binary_bytes_without_collisions(self):
@@ -543,7 +546,11 @@ class VaultEditorTests(WorkspaceFixture):
         )
         self.assertEqual(result["links"]["updated"], [])
         self.assertEqual(result["links"]["ambiguous"][0]["path"], "Citing.md")
-        self.assertTrue((self.vault / "Citing.md").read_text().startswith("[[Note]]"))
+        self.assertTrue(
+            (self.vault / "Citing.md")
+            .read_text(encoding="utf-8")
+            .startswith("[[Note]]")
+        )
 
     def test_link_index_reuses_unchanged_notes_and_tracks_changes_and_removal(self):
         note(self.vault, "notes/a.md", "# A")
@@ -653,3 +660,56 @@ class VaultEditorTests(WorkspaceFixture):
         self.assertEqual(image.status_code, 200)
         self.assertEqual(image.headers["content-type"], "image/png")
         self.assertEqual(image.content, raw)
+
+
+@unittest.skipUnless(shutil.which("git"), "git is not installed")
+def test_vault_history_accepts_windows_paths_without_changing_git_tree_names(tmp_path):
+    companion = cc.Companion(hermes_root=tmp_path / "home", vault=tmp_path / "vault")
+    path = companion.vault / "soul" / "SOUL.md"
+    path.parent.mkdir(parents=True)
+    path.write_text("A saved memory.", encoding="utf-8")
+    assert vault.commit(companion)["committed"]
+    relative = pathlib.PureWindowsPath("soul", "SOUL.md")
+    versions = vault.history(companion, relative)
+    assert len(versions) == 1
+    commit = versions[0]["commit"]
+    assert vault.show(companion, relative, commit) == "A saved memory."
+    restored = vault.restore(companion, relative, commit)
+    assert Path(restored["restored"]).parent == path.parent
+    assert Path(restored["restored"]).read_text(encoding="utf-8") == "A saved memory."
+
+
+def test_file_actions_allow_symlinked_ancestors_but_refuse_links_inside_vault(tmp_path):
+    import pytest
+
+    real = tmp_path / "real"
+    real.mkdir()
+    alias = tmp_path / "alias"
+    try:
+        alias.symlink_to(real, target_is_directory=True)
+    except OSError:
+        pytest.skip("Symlinks unavailable")
+    companion = cc.Companion(
+        hermes_root=tmp_path / "home", vault=alias / "vault", soul_in_vault=False
+    )
+    companion.vault.mkdir()
+    assert editor.mkdir(companion, "notes") == {"created": "notes"}
+    path = companion.vault / "notes/original.md"
+    path.write_bytes(b"# Original\r\n")
+    revision = hashlib.sha256(path.read_bytes()).hexdigest()
+    copied = editor.duplicate(companion, "notes/original.md", revision)
+    assert (companion.vault / copied["duplicated"]).read_bytes() == path.read_bytes()
+    moved = editor.move(companion, "notes/original.md", "notes/moved.md", revision)
+    assert moved["moved"] == "notes/moved.md"
+    assert (companion.vault / "notes/moved.md").read_bytes() == b"# Original\r\n"
+    (companion.vault / "linked").symlink_to(
+        companion.vault / "notes", target_is_directory=True
+    )
+    with pytest.raises(ValueError, match="symbolic link"):
+        editor.mkdir(companion, "linked/new")
+    with pytest.raises(ValueError, match="symbolic link"):
+        editor.duplicate(companion, "linked/moved.md", revision)
+    with pytest.raises(ValueError, match="symbolic link"):
+        editor.move(companion, "notes/moved.md", "linked/renamed.md", revision)
+    with pytest.raises(ValueError, match="symbolic link"):
+        editor.mkdir(dataclasses.replace(companion, vault=alias), "rejected")

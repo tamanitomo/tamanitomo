@@ -490,7 +490,9 @@ class ProfileTests(unittest.TestCase):
     def test_config_inside_a_profile_dir_pins_that_profile(self):
         home = self.tmp / ".hermes/profiles/nova"
         home.mkdir(parents=True)
-        (home / cc.CONFIG_NAME).write_text(json.dumps({"agent": "Nova"}))
+        (home / cc.CONFIG_NAME).write_text(
+            json.dumps({"agent": "Nova"}), encoding="utf-8"
+        )
         c = cc.load(home)
         self.assertEqual(c.profile, "nova")
         self.assertEqual(c.home, home)
@@ -503,7 +505,7 @@ class ProfileTests(unittest.TestCase):
     def test_corrupt_config_fails_instead_of_using_unrelated_defaults(self):
         home = self.tmp / "h"
         home.mkdir()
-        (home / cc.CONFIG_NAME).write_text("{not json")
+        (home / cc.CONFIG_NAME).write_text("{not json", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "Invalid companion configuration"):
             cc.load(home)
 
@@ -583,7 +585,8 @@ class HomeInvariantTests(unittest.TestCase):
                     "hermes_root": "/somewhere/else",
                     "vault": str(tmp / "vault"),
                 }
-            )
+            ),
+            encoding="utf-8",
         )
         c = cc.load(home)
         self.assertEqual(c.home, home)
@@ -935,7 +938,7 @@ def test_bootstrap_forwards_unicode_and_spaced_arguments(tmp_path):
     python.parent.mkdir(parents=True)
     python.touch()
     (tmp_path / ".venv/.tamanitomo-requirements").write_text(
-        hashlib.sha256(requirements).hexdigest() + "\n"
+        hashlib.sha256(requirements).hexdigest() + "\n", encoding="utf-8"
     )
     arguments = ["app", "--home", str(tmp_path / "My companion 雪")]
     target = "subprocess.call" if os.name == "nt" else "os.execv"
@@ -959,7 +962,8 @@ def test_ipv6_launcher_reuses_and_opens_the_ipv6_loopback_url(tmp_path):
     state.mkdir()
     companion = SimpleNamespace(hermes_root=tmp_path / "hermes", profile="")
     (state / "workspace-server.json").write_text(
-        json.dumps({"host": "::", "port": 54321, "root": str(companion.hermes_root)})
+        json.dumps({"host": "::", "port": 54321, "root": str(companion.hermes_root)}),
+        encoding="utf-8",
     )
     reply = io.BytesIO(
         json.dumps({"app": "tamanitomo", "root": str(companion.hermes_root)}).encode()
@@ -1085,3 +1089,29 @@ class AwakeFingerprintProseTests(unittest.TestCase):
             first,
             "an unconfirmed (carried-forward) scene must be distinguishable from a confirmed one",
         )
+
+
+def test_presence_and_daylight_dates_use_portable_unpadded_days(tmp_path):
+    from types import SimpleNamespace
+
+    import companion_sensors as sensors
+
+    class PortableDateTime(dt.datetime):
+        def strftime(self, format):
+            assert "%-" not in format and "%#" not in format
+            return super().strftime(format)
+
+    now = PortableDateTime(2026, 9, 1, 14, 5, tzinfo=dt.timezone.utc)
+    companion = SimpleNamespace(agent="Nova", timezone="UTC", soul_dir=tmp_path)
+    state = {"recorded_at": now.isoformat(), "state": {"mood": "content"}}
+    with (
+        patch.object(dt, "datetime", PortableDateTime),
+        patch.object(presence, "current", return_value=state),
+        patch.object(presence, "mood_history", return_value=[]),
+    ):
+        rendered = presence.render_emotive(companion, now)
+        daylight, metadata = sensors.daylight(companion, now)
+    date = f"{now.strftime('%A')} 1 {now.strftime('%B')}"
+    assert f"_as of {date}, 14:05_" in rendered
+    assert daylight.startswith(f"It is {date}, in autumn.")
+    assert metadata["season"] == "autumn"

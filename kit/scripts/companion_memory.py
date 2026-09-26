@@ -362,20 +362,21 @@ def snapshot(c, name, text, today=None):
     the day it was true.
     """
     today = today or dt.date.today()
-    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    original = text.encode("utf-8")
+    digest = hashlib.sha256(original).hexdigest()
     folder = archive_dir(c) / "snapshots"
     folder.mkdir(parents=True, exist_ok=True)
     target = folder / f"{pathlib.Path(name).stem}-{today.isoformat()}-{digest[:16]}.md"
     if target.exists():
         return {"snapshot": str(target), "written": False}
     try:
-        with target.open("x", encoding="utf-8") as handle:
-            handle.write(text)
+        with target.open("xb") as handle:
+            handle.write(original)
             handle.flush()
             os.fsync(handle.fileno())
     except FileExistsError:
         return {"snapshot": str(target), "written": False}
-    if target.read_text(encoding="utf-8") != text:
+    if target.read_bytes() != original:
         raise ValueError("Snapshot did not round-trip; live memory left untouched")
     return {"snapshot": str(target), "written": True}
 

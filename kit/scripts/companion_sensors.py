@@ -118,7 +118,7 @@ def daylight(c, now):
     """No network at all: the season, the moon, and how long the day is."""
     season = SEASONS_NORTH[now.month - 1]
     lines = [
-        f"It is {now.strftime('%A %-d %B')}, in {season}.",
+        f"It is {now.strftime('%A')} {now.day} {now.strftime('%B')}, in {season}.",
         f"The moon is {moon_phase(now)}.",
     ]
     sun = c.soul_dir / "ambient/weather.json"

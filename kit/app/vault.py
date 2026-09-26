@@ -358,15 +358,18 @@ def _no_symlink_on_path(c, path):
     """Every component from `path` up to the vault root, inclusive: a symlink anywhere
     on that chain (including `path` itself, if it already exists) is refused. Walks the
     given path directly -- never `.resolve()` first, which would silently follow a
-    symlink and check the WRONG chain."""
-    root = c.vault.resolve()
-    node = path
+    symlink and check the wrong chain. The boundary uses the same lexical spelling
+    so symlinked ancestors above the vault (such as macOS /var) are not inspected."""
+    root = c.vault.absolute()
+    node = path.absolute()
+    if node != root and root not in node.parents:
+        raise ValueError("Path leaves the vault")
     for _ in range(
         200
     ):  # the vault cannot be 200 directories deep; a safety bound, not a real limit
         if node.is_symlink():
             raise ValueError("That path passes through a symbolic link.")
-        if node == root or node.parent == node:
+        if node == root:
             return
         node = node.parent
     raise ValueError("Path is too deep to validate safely.")

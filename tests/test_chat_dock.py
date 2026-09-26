@@ -124,7 +124,7 @@ def workspace(tmp_path):
     c.home.mkdir(parents=True)
     c.save()
     (c.home / ".tamanitomo-chat-owner.json").write_text(
-        json.dumps({"telegram": ["4242"]})
+        json.dumps({"telegram": ["4242"]}), encoding="utf-8"
     )
     runtime.note_workspace_session(c, "web")
     with sqlite3.connect(c.home / "state.db") as db:
@@ -358,9 +358,9 @@ def test_local_adapter_and_profile_credentials_are_scoped(tmp_path, monkeypatch)
     monkeypatch.setenv("OPENAI_API_KEY", "primary-key-never-forwarded")
     c = cc.Companion(hermes_root=tmp_path / "home", vault=tmp_path / "vault")
     c.home.mkdir(parents=True)
-    (c.home / ".env").write_text("SECONDARY_KEY=secondary-only\n")
+    (c.home / ".env").write_text("SECONDARY_KEY=secondary-only\n", encoding="utf-8")
     (c.home / "config.yaml").write_text(
-        "model:\n  provider: openai\n  default: primary\n"
+        "model:\n  provider: openai\n  default: primary\n", encoding="utf-8"
     )
     c.models["fallbacks"] = [
         {"provider": "deepseek", "model": "secondary", "api_key_env": "SECONDARY_KEY"},
@@ -478,12 +478,14 @@ class StreamProcessTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "cli.py").write_text(
-                "\nfrom types import SimpleNamespace\ndef _configure_quiet_agent(agent):agent.configured=True\ndef _run_quiet_single_query(instance,query):\n    assert instance.agent.configured\n    instance.agent.stream_delta_callback('Hello ')\n    instance.agent.stream_delta_callback(None)\n    instance.agent.stream_delta_callback('there')\n    print('Hello there')\n    raise SystemExit(0)\n"
+                "\nfrom types import SimpleNamespace\ndef _configure_quiet_agent(agent):agent.configured=True\ndef _run_quiet_single_query(instance,query):\n    assert instance.agent.configured\n    instance.agent.stream_delta_callback('Hello ')\n    instance.agent.stream_delta_callback(None)\n    instance.agent.stream_delta_callback('there')\n    print('Hello there')\n    raise SystemExit(0)\n",
+                encoding="utf-8",
             )
             (root / "hermes_cli").mkdir()
-            (root / "hermes_cli/__init__.py").write_text("")
+            (root / "hermes_cli/__init__.py").write_text("", encoding="utf-8")
             (root / "hermes_cli/main.py").write_text(
-                "\nimport cli\nfrom types import SimpleNamespace\ndef main():\n    agent=SimpleNamespace()\n    cli._configure_quiet_agent(agent)\n    cli._run_quiet_single_query(SimpleNamespace(agent=agent,session_id='own-session'),'hello')\n"
+                "\nimport cli\nfrom types import SimpleNamespace\ndef main():\n    agent=SimpleNamespace()\n    cli._configure_quiet_agent(agent)\n    cli._run_quiet_single_query(SimpleNamespace(agent=agent,session_id='own-session'),'hello')\n",
+                encoding="utf-8",
             )
             result = subprocess.run(
                 [sys.executable, str(ROOT / "kit/app/hermes_stream.py"), "chat"],

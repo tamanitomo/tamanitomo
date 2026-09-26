@@ -41,7 +41,8 @@ class WorkspaceFixture(unittest.TestCase):
         self.c.life.mkdir(parents=True)
         self.c.save()
         self.c.soul.write_text(
-            cr.render_template("SOUL.md.tmpl", cr.mapping_for(self.c, "warm", "none"))
+            cr.render_template("SOUL.md.tmpl", cr.mapping_for(self.c, "warm", "none")),
+            encoding="utf-8",
         )
         self.other = cc.Companion(
             agent="Rowan",

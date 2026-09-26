@@ -42,15 +42,15 @@ class JournalTests(unittest.TestCase):
     def test_append_preserves_history_and_retries_without_duplicates(self):
         path = journal.path_for(self.c, "daily")
         path.parent.mkdir(parents=True)
-        path.write_text("## 2026-09-10\nAn older entry.\n")
+        path.write_text("## 2026-09-10\nAn older entry.\n", encoding="utf-8")
         data = {
             "date": "2026-09-11",
             "text": "Today's thought has an apostrophe and $HOME.",
         }
         self.assertTrue(journal.append(self.c, "daily", data)["written"])
         self.assertFalse(journal.append(self.c, "daily", data)["written"])
-        self.assertIn("An older entry.", path.read_text())
-        self.assertEqual(path.read_text().count("## 2026-09-11"), 1)
+        self.assertIn("An older entry.", path.read_text(encoding="utf-8"))
+        self.assertEqual(path.read_text(encoding="utf-8").count("## 2026-09-11"), 1)
         with self.assertRaises(ValueError):
             journal.append(self.c, "daily", {**data, "text": "different"})
 
@@ -58,33 +58,35 @@ class JournalTests(unittest.TestCase):
         path = journal.path_for(self.c, "daily")
         path.parent.mkdir(parents=True)
         original = "## 2026-09-11\nWritten before this helper existed.\n"
-        path.write_text(original)
+        path.write_text(original, encoding="utf-8")
         self.assertFalse(
             journal.append(
                 self.c, "daily", {"date": "2026-09-11", "text": "New draft"}
             )["written"]
         )
-        self.assertEqual(path.read_text(), original)
+        self.assertEqual(path.read_text(encoding="utf-8"), original)
 
     def test_empty_stub_is_filled_but_a_real_entry_is_never_overwritten(self):
         path = journal.path_for(self.c, "daily")
         path.parent.mkdir(parents=True)
         path.write_text(
-            "## 2026-09-11\n<!-- companion-journal:daily-2026-09-11 -->\n<!-- /companion-journal:daily-2026-09-11 -->\n"
+            "## 2026-09-11\n<!-- companion-journal:daily-2026-09-11 -->\n<!-- /companion-journal:daily-2026-09-11 -->\n",
+            encoding="utf-8",
         )
         first = journal.append(
             self.c, "daily", {"date": "2026-09-11", "text": "The real entry."}
         )
         self.assertTrue(first["written"])
         self.assertEqual(first.get("replaced"), "empty stub")
-        self.assertIn("The real entry.", path.read_text())
+        self.assertIn("The real entry.", path.read_text(encoding="utf-8"))
         with self.assertRaises(ValueError):
             journal.append(
                 self.c, "daily", {"date": "2026-09-11", "text": "A rewrite."}
             )
-        self.assertIn("The real entry.", path.read_text())
+        self.assertIn("The real entry.", path.read_text(encoding="utf-8"))
         path.write_text(
-            "## 2026-09-12\n<!-- companion-journal:daily-2026-09-12 -->\n   \n<!-- /companion-journal:daily-2026-09-12 -->\n"
+            "## 2026-09-12\n<!-- companion-journal:daily-2026-09-12 -->\n   \n<!-- /companion-journal:daily-2026-09-12 -->\n",
+            encoding="utf-8",
         )
         with self.assertRaises(ValueError):
             journal.append(self.c, "daily", {"date": "2026-09-12", "text": "Body."})
@@ -204,14 +206,15 @@ class Fixture:
                     "primary_filename": name,
                     "variants": [{"filename": name}],
                 }
-            )
+            ),
+            encoding="utf-8",
         )
         return name
 
     def reflection(self, c, day, text):
         path = c.soul_dir / "Lifelog.md"
-        old = path.read_text() if path.exists() else ""
-        path.write_text(old + f"\n## {day}\n\n{text}\n")
+        old = path.read_text(encoding="utf-8") if path.exists() else ""
+        path.write_text(old + f"\n## {day}\n\n{text}\n", encoding="utf-8")
 
 
 def tree(path):
@@ -361,7 +364,7 @@ class TruthfulStates(unittest.TestCase):
         self.f.capture(self.f.nova, ep, "c" * 24)
         (
             self.f.nova.data / "image-timeline/captures" / ("d" * 24 + ".json")
-        ).write_text("{not json")
+        ).write_text("{not json", encoding="utf-8")
         d = self.f.get("/api/journal/archive/2026-09-22").json()
         self.assertEqual(d["sources"]["photos"], "unavailable")
         self.assertEqual(d["scenes"][0]["photos"], [])
@@ -433,7 +436,8 @@ class TruthfulStates(unittest.TestCase):
                         }
                     ],
                 }
-            )
+            ),
+            encoding="utf-8",
         )
         d = self.f.get("/api/journal/archive/2026-09-23").json()
         self.assertEqual(
@@ -612,10 +616,11 @@ class Dates(unittest.TestCase):
             },
         ]
         (folder / "2026-09-26.jsonl").write_text(
-            "".join((json.dumps(r) + "\n" for r in rows))
+            "".join((json.dumps(r) + "\n" for r in rows)), encoding="utf-8"
         )
         (folder / "2026-09-27.jsonl").write_text(
-            json.dumps({**rows[1], "id": "d-4", "activity": "elsewhere"}) + "\n"
+            json.dumps({**rows[1], "id": "d-4", "activity": "elsewhere"}) + "\n",
+            encoding="utf-8",
         )
         scenes = self.f.get("/api/journal/archive/2026-09-26").json()["scenes"]
         self.assertEqual(
@@ -689,7 +694,8 @@ class Isolation(unittest.TestCase):
                     "state": state("foreign"),
                 }
             )
-            + "\n"
+            + "\n",
+            encoding="utf-8",
         )
         folder = self.f.nova.life / "episodes"
         folder.mkdir(parents=True, exist_ok=True)
@@ -755,7 +761,9 @@ class AlbumFixture(unittest.TestCase):
             "image_style": "anime-modern",
             "image_style_guidance": "x",
         }
-        (tl.root(self.c) / "captures" / (ident + ".json")).write_text(json.dumps(row))
+        (tl.root(self.c) / "captures" / (ident + ".json")).write_text(
+            json.dumps(row), encoding="utf-8"
+        )
         return row
 
 
@@ -792,11 +800,13 @@ class BudgetTests(AlbumFixture):
             "image_style_guidance": "y",
         }
         (tl.root(self.c) / "captures" / ("c" * 24 + ".json")).write_text(
-            json.dumps(row)
+            json.dumps(row), encoding="utf-8"
         )
         tl.prune(self.c, self.now)
         after = json.loads(
-            (tl.root(self.c) / "captures" / ("c" * 24 + ".json")).read_text()
+            (tl.root(self.c) / "captures" / ("c" * 24 + ".json")).read_text(
+                encoding="utf-8"
+            )
         )
         self.assertEqual(after["status"], "failed")
 
@@ -827,7 +837,7 @@ class AlbumTests(AlbumFixture):
         ident = "f" * 24
         self.capture(ident, self.now)
         result = tl.favorite(self.c, ident)
-        caption = pathlib.Path(result["file"] + ".txt").read_text()
+        caption = pathlib.Path(result["file"] + ".txt").read_text(encoding="utf-8")
         self.assertIn("reading at home", caption)
 
     def test_a_person_can_add_their_own_pictures(self):
@@ -852,7 +862,9 @@ class AlbumTests(AlbumFixture):
             "image_style": "x",
             "image_style_guidance": "y",
         }
-        (tl.root(self.c) / "captures" / (ident + ".json")).write_text(json.dumps(row))
+        (tl.root(self.c) / "captures" / (ident + ".json")).write_text(
+            json.dumps(row), encoding="utf-8"
+        )
         with self.assertRaisesRegex(ValueError, "saved"):
             tl.favorite(self.c, ident)
 
@@ -887,7 +899,8 @@ class ReflectionTests(unittest.TestCase):
         self.c.home.mkdir(parents=True)
         self.c.soul_dir.mkdir(parents=True)
         self.c.soul.write_text(
-            "A companion.\n" + slf.BEGIN + "\nI like books.\n" + slf.END + "\n"
+            "A companion.\n" + slf.BEGIN + "\nI like books.\n" + slf.END + "\n",
+            encoding="utf-8",
         )
         self.now = dt.datetime(2026, 9, 12, 11, tzinfo=dt.timezone.utc)
 
@@ -920,7 +933,10 @@ class ReflectionTests(unittest.TestCase):
         ]
         reflection.validate(plan, "daily", source, [], "Alex")
         reflection.apply_plan(self.c, "daily", "2026-09-11", plan, source, self.now)
-        self.assertIn("## 2026-09-11", journal.path_for(self.c, "daily").read_text())
+        self.assertIn(
+            "## 2026-09-11",
+            journal.path_for(self.c, "daily").read_text(encoding="utf-8"),
+        )
         fact = slf.facts(self.c.human_dir)[0]
         self.assertEqual(fact["statement"], "Alex's sister is Bee.")
         self.assertTrue(
@@ -953,7 +969,10 @@ class ReflectionTests(unittest.TestCase):
         self.assertEqual(second["status"], "skipped")
         self.assertEqual(len(calls), 1)
         self.assertEqual(
-            journal.path_for(self.c, "daily").read_text().count("## 2026-09-11"), 1
+            journal.path_for(self.c, "daily")
+            .read_text(encoding="utf-8")
+            .count("## 2026-09-11"),
+            1,
         )
 
     def test_checkin_does_not_clear_a_conversation_that_arrives_during_generation(self):
@@ -1090,5 +1109,7 @@ def test_rollover_finds_windows_python_and_preserves_the_host_environment(tmp_pa
     assert run.call_args.args[0][0] == str(interpreter)
     environment = run.call_args.kwargs["env"]
     assert environment["PATH"] == "native search path"
-    assert environment["SystemRoot"] == "C:\\Windows"
+    assert {key.upper(): value for key, value in environment.items()}[
+        "SYSTEMROOT"
+    ] == "C:\\Windows"
     assert environment["HERMES_HOME"] == str(companion.home)

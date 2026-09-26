@@ -99,7 +99,8 @@ def make(tmp, **kw):
     c = cc.Companion(**base)
     c.soul_dir.mkdir(parents=True, exist_ok=True)
     (c.soul_dir / "ActiveContext.md").write_text(
-        "## Right now\nAt the desk.\n\n## Active open loops\n### Porch light\n- waiting on the switch\n### Dentist\n- open since Tuesday\n\n## Ignore me\nnot injected\n"
+        "## Right now\nAt the desk.\n\n## Active open loops\n### Porch light\n- waiting on the switch\n### Dentist\n- open since Tuesday\n\n## Ignore me\nnot injected\n",
+        encoding="utf-8",
     )
     return c
 
@@ -292,15 +293,15 @@ class SoulBlockTests(unittest.TestCase):
         self.c = make(self.tmp)
         self.c.home.mkdir(parents=True, exist_ok=True)
         self.c.soul.write_text(
-            "# SOUL\n\nWritten by the human.\n\n## Essence\nChosen.\n"
+            "# SOUL\n\nWritten by the human.\n\n## Essence\nChosen.\n", encoding="utf-8"
         )
 
     def test_init_appends_without_altering_existing_text(self):
-        before = self.c.soul.read_text()
+        before = self.c.soul.read_text(encoding="utf-8")
         r = slf.soul_init(self.c)
         self.assertTrue(r["written"])
         self.assertTrue(r["appended"])
-        after = self.c.soul.read_text()
+        after = self.c.soul.read_text(encoding="utf-8")
         self.assertTrue(after.startswith(before.rstrip("\n")))
         self.assertIn("Written by the human.", after)
 
@@ -386,7 +387,10 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(
             [f["statement"] for f in slf.facts(self.c.human_dir)], ["works days"]
         )
-        self.assertIn("works nights", (self.c.human_dir / "facts.jsonl").read_text())
+        self.assertIn(
+            "works nights",
+            (self.c.human_dir / "facts.jsonl").read_text(encoding="utf-8"),
+        )
 
     def test_retract_mistaken_fact_preserves_history_and_is_idempotent(self):
         old = slf.record_fact(
@@ -402,7 +406,7 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(slf.facts(self.c.human_dir), [])
         self.assertIn(
             "Misclassified agent thought",
-            (self.c.human_dir / "facts.jsonl").read_text(),
+            (self.c.human_dir / "facts.jsonl").read_text(encoding="utf-8"),
         )
         with self.assertRaises(ValueError):
             slf.retract_fact(self.c.human_dir, "missing", "No such fact.", self.now)
@@ -414,7 +418,8 @@ class LedgerTests(unittest.TestCase):
 
         path = self.tmp / "input.json"
         path.write_text(
-            json.dumps([{"kind": "pref", "text": "A quiet room"}, {"kind": "episode"}])
+            json.dumps([{"kind": "pref", "text": "A quiet room"}, {"kind": "episode"}]),
+            encoding="utf-8",
         )
         with (
             patch.object(
@@ -546,7 +551,7 @@ class LedgerTests(unittest.TestCase):
 
     def test_corrupt_lines_are_skipped(self):
         slf.record_fact(self.c.human_dir, "likes rain", "said so", self.now)
-        with (self.c.human_dir / "facts.jsonl").open("a") as f:
+        with (self.c.human_dir / "facts.jsonl").open("a", encoding="utf-8") as f:
             f.write("{bad\n\n")
         self.assertEqual(len(slf.facts(self.c.human_dir)), 1)
 
@@ -658,7 +663,8 @@ class MemoryPressureTests(unittest.TestCase):
 
     def test_caps_are_per_file_characters_not_context_budget_or_utf8_bytes(self):
         (self.c.home / "config.yaml").write_text(
-            "memory:\n  memory_char_limit: 100\n  user_char_limit: 50\n"
+            "memory:\n  memory_char_limit: 100\n  user_char_limit: 50\n",
+            encoding="utf-8",
         )
         (self.dir / "MEMORY.md").write_text("é" * 80, encoding="utf-8")
         rows = {r["file"]: r for r in mem.status(self.c)}
@@ -672,7 +678,7 @@ class MemoryPressureTests(unittest.TestCase):
 
         self.fill("MEMORY.md", 100)
         source = self.dir / "MEMORY.md"
-        before = source.read_text()
+        before = source.read_text(encoding="utf-8")
         original = mem.atomic_write
 
         def fail_source(path, text):
@@ -684,10 +690,10 @@ class MemoryPressureTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 mem.archive(self.c, "MEMORY.md", apply=True)
         dest = mem.archive_for(self.c, "MEMORY.md")
-        once = dest.read_text()
-        self.assertEqual(source.read_text(), before)
+        once = dest.read_text(encoding="utf-8")
+        self.assertEqual(source.read_text(encoding="utf-8"), before)
         mem.archive(self.c, "MEMORY.md", apply=True)
-        self.assertEqual(dest.read_text(), once)
+        self.assertEqual(dest.read_text(encoding="utf-8"), once)
         self.assertFalse(dest.with_suffix(".pending.json").exists())
         self.assertEqual(mem.archive(self.c, "MEMORY.md", apply=True)["moved"], 0)
 
@@ -696,20 +702,22 @@ class MemoryPressureTests(unittest.TestCase):
 
         self.fill("MEMORY.md", 100)
         source = self.dir / "MEMORY.md"
-        before = source.read_text()
+        before = source.read_text(encoding="utf-8")
         dest = mem.archive_for(self.c, "MEMORY.md")
         original = mem.atomic_write
 
         def concurrent_write(path, text):
             result = original(path, text)
             if pathlib.Path(path) == dest:
-                source.write_text(before + mem.ENTRY_DELIMITER + "Concurrent fact")
+                source.write_text(
+                    before + mem.ENTRY_DELIMITER + "Concurrent fact", encoding="utf-8"
+                )
             return result
 
         with patch.object(mem, "atomic_write", side_effect=concurrent_write):
             with self.assertRaisesRegex(ValueError, "changed"):
                 mem.archive(self.c, "MEMORY.md", apply=True)
-        self.assertIn("Concurrent fact", source.read_text())
+        self.assertIn("Concurrent fact", source.read_text(encoding="utf-8"))
         with self.assertRaisesRegex(ValueError, "unfinished"):
             mem.archive(self.c, "MEMORY.md", apply=True)
 
@@ -889,7 +897,9 @@ class AutomaticMemoryTests(unittest.TestCase):
             home.mkdir()
             c = cc.Companion(hermes_root=home, vault=root / "vault")
             c.save()
-            (home / "config.yaml").write_text("memory:\n  memory_char_limit: 1000\n")
+            (home / "config.yaml").write_text(
+                "memory:\n  memory_char_limit: 1000\n", encoding="utf-8"
+            )
             (home / "memories").mkdir()
             entries = [
                 "oldmap " + "x" * 290,
@@ -897,7 +907,7 @@ class AutomaticMemoryTests(unittest.TestCase):
                 "recent " + "z" * 290,
             ]
             source = home / "memories/MEMORY.md"
-            source.write_text(memory.ENTRY_DELIMITER.join(entries))
+            source.write_text(memory.ENTRY_DELIMITER.join(entries), encoding="utf-8")
             command = [
                 sys.executable,
                 str(pathlib.Path(memory.__file__).with_name("companion_context.py")),
@@ -909,13 +919,15 @@ class AutomaticMemoryTests(unittest.TestCase):
             )
             self.assertTrue(json.loads(first.stdout)["context"])
             self.assertLess(memory.status(c)[1]["fraction"], 0.8)
-            archive = memory.archive_for(c, "MEMORY.md").read_text()
+            archive = memory.archive_for(c, "MEMORY.md").read_text(encoding="utf-8")
             self.assertIn(entries[0], archive)
-            self.assertIn(entries[-1], source.read_text())
+            self.assertIn(entries[-1], source.read_text(encoding="utf-8"))
             subprocess.run(
                 command, input="{}", text=True, capture_output=True, check=True
             )
-            self.assertEqual(archive, memory.archive_for(c, "MEMORY.md").read_text())
+            self.assertEqual(
+                archive, memory.archive_for(c, "MEMORY.md").read_text(encoding="utf-8")
+            )
             self.assertIn("oldmap", json.dumps(recall.search(c, "oldmap")))
 
 
@@ -951,7 +963,7 @@ class MemoryCapTests(unittest.TestCase):
         self.assertEqual(mem.caps(self.c), plan["caps"])
         import yaml
 
-        cfg = yaml.safe_load((self.c.home / "config.yaml").read_text())
+        cfg = yaml.safe_load((self.c.home / "config.yaml").read_text(encoding="utf-8"))
         self.assertEqual(cfg["model"]["default"], "test")
 
     def test_it_explains_itself_in_words_a_person_can_check(self):
@@ -991,7 +1003,8 @@ class FactQualityTests(unittest.TestCase):
         self.c.home.mkdir(parents=True)
         self.c.soul_dir.mkdir(parents=True)
         self.c.soul.write_text(
-            "A companion.\n" + slf.BEGIN + "\nI like books.\n" + slf.END + "\n"
+            "A companion.\n" + slf.BEGIN + "\nI like books.\n" + slf.END + "\n",
+            encoding="utf-8",
         )
         self.now = dt.datetime(2026, 9, 23, 11, tzinfo=dt.timezone.utc)
         self.source = {
@@ -1123,7 +1136,7 @@ class FactQualityTests(unittest.TestCase):
             if key
             else list(folder.glob("*.attempts.json"))
         )
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
 
     def test_the_whole_attempt_is_counted_before_the_request(self):
         self.converse("I play Fire Emblem all the time.")
@@ -1531,7 +1544,9 @@ class HeldFactTests(unittest.TestCase):
         )
         self.c.home.mkdir(parents=True)
         self.c.soul_dir.mkdir(parents=True)
-        self.c.soul.write_text("A companion.\n" + slf.BEGIN + "\n" + slf.END + "\n")
+        self.c.soul.write_text(
+            "A companion.\n" + slf.BEGIN + "\n" + slf.END + "\n", encoding="utf-8"
+        )
         self.now = dt.datetime(2026, 9, 23, 11, tzinfo=dt.timezone.utc)
         self.source = {
             "1": {
@@ -1837,7 +1852,9 @@ class ReadOnlyTests(unittest.TestCase):
             )
             c.home.mkdir(parents=True)
             c.soul_dir.mkdir(parents=True)
-            c.soul.write_text("A companion.\n" + slf.BEGIN + "\n" + slf.END + "\n")
+            c.soul.write_text(
+                "A companion.\n" + slf.BEGIN + "\n" + slf.END + "\n", encoding="utf-8"
+            )
             now = dt.datetime(2026, 9, 23, 11, tzinfo=dt.timezone.utc)
             a = slf.record_fact(
                 c.human_dir,
@@ -1908,3 +1925,20 @@ class ReadOnlyTests(unittest.TestCase):
             )
             self.assertEqual(len(rows), 1)
             self.assertEqual(snapshot(), before)
+
+
+def test_memory_snapshots_preserve_bom_newlines_and_utf8_exactly(tmp_path):
+    from types import SimpleNamespace
+
+    companion = SimpleNamespace(soul_dir=tmp_path)
+    text = "\ufefffirst\r\n§\r\n茶\n"
+    today = dt.date(2026, 9, 25)
+    first = mem.snapshot(companion, "MEMORY.md", text, today)
+    target = pathlib.Path(first["snapshot"])
+    assert first["written"] is True
+    assert target.read_bytes() == text.encode("utf-8")
+    unchanged_at = target.stat().st_mtime_ns
+    second = mem.snapshot(companion, "MEMORY.md", text, today)
+    assert second == {"snapshot": str(target), "written": False}
+    assert target.stat().st_mtime_ns == unchanged_at
+    assert target.read_bytes() == text.encode("utf-8")

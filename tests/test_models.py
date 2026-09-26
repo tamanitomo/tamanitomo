@@ -164,7 +164,8 @@ def test_configured_order_deduplicates_and_finishes_locally(companion):
                     {"provider": "lmstudio", "model": "small"},
                 ]
             }
-        )
+        ),
+        encoding="utf-8",
     )
     routes = inference.configured_routes(companion)
     assert [row["model"] for row in routes] == ["primary", "secondary", "qwen", "small"]
@@ -187,7 +188,9 @@ def test_all_eight_fallbacks_and_custom_endpoints_survive_config_and_cli(compani
     assert c.fallbacks() == entries
     assert write_fallbacks(c, entries) == entries
     assert (
-        yaml.safe_load((c.home / "config.yaml").read_text())["fallback_providers"]
+        yaml.safe_load((c.home / "config.yaml").read_text(encoding="utf-8"))[
+            "fallback_providers"
+        ]
         == entries
     )
 
@@ -229,7 +232,7 @@ def test_each_route_uses_only_its_own_profile_credential(companion, monkeypatch)
     monkeypatch.delenv("PRIMARY_TEST_KEY", raising=False)
     monkeypatch.delenv("BACKUP_TEST_KEY", raising=False)
     (companion.home / ".env").write_text(
-        "PRIMARY_TEST_KEY=first-key\nBACKUP_TEST_KEY=second-key\n"
+        "PRIMARY_TEST_KEY=first-key\nBACKUP_TEST_KEY=second-key\n", encoding="utf-8"
     )
     with api({"primary": 429}) as (base, calls):
         companion.models["fallbacks"] = [
@@ -246,7 +249,7 @@ def test_each_route_uses_only_its_own_profile_credential(companion, monkeypatch)
 
 def test_reflection_uses_same_fallback_cascade(companion):
     companion.soul.parent.mkdir(parents=True, exist_ok=True)
-    companion.soul.write_text("A synthetic companion.")
+    companion.soul.write_text("A synthetic companion.", encoding="utf-8")
     with api({"primary": 503}) as (base, calls):
         companion.models["fallbacks"] = [route(base, "local")]
         result, usage = reflection.request_plan(
@@ -343,7 +346,8 @@ def test_native_credentials_and_api_adapter_survive_without_public_exposure(comp
                     }
                 ],
             }
-        )
+        ),
+        encoding="utf-8",
     )
     routes = inference.configured_routes(companion)
     assert inference.credential(companion, routes[0]) == "saved-primary"
@@ -385,7 +389,7 @@ def test_endpoint_fallbacks_never_borrow_primary_credentials(companion, monkeypa
     monkeypatch.setenv("DEEPSEEK_API_KEY", "named-provider-secret")
     monkeypatch.setenv("SECONDARY_ROUTE_KEY", "route-secret")
     (companion.home / "config.yaml").write_text(
-        "model:\n  provider: openai\n  default: primary\n"
+        "model:\n  provider: openai\n  default: primary\n", encoding="utf-8"
     )
     companion.models["fallbacks"] = [
         {
@@ -441,7 +445,8 @@ def test_anthropic_endpoint_uses_native_adapter_unless_openai_mode_is_explicit(
                     "base_url": "https://api.anthropic.com",
                 }
             }
-        )
+        ),
+        encoding="utf-8",
     )
     result = worker.complete(
         companion, payload(), worker.resolve(companion), allow_remote=True
@@ -741,11 +746,11 @@ def test_fallback_settings_validate_before_writing_and_preserve_order(probe_work
         "/api/environment", headers=headers, json={"fallbacks": chain}
     )
     assert response.status_code == 200, response.text
-    saved = yaml.safe_load((home / "config.yaml").read_text())
+    saved = yaml.safe_load((home / "config.yaml").read_text(encoding="utf-8"))
     assert saved["fallback_providers"] == chain
     assert saved["terminal"] == {"backend": "local"}
     assert saved["model"]["default"] == "primary-model"
-    assert (vault / "Keep.md").read_text() == "Original note.\n"
+    assert (vault / "Keep.md").read_text(encoding="utf-8") == "Original note.\n"
 
 
 BUDGET_WINDOWS = [2048, 4096, 8192, 16384, 32768, 65536, 131072, 200192, 272000, 900000]
@@ -759,9 +764,12 @@ class DynamicContextTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             home = pathlib.Path(tmp)
-            (home / "companion.json").write_text(json.dumps({"context_tokens": 65536}))
+            (home / "companion.json").write_text(
+                json.dumps({"context_tokens": 65536}), encoding="utf-8"
+            )
             (home / "config.yaml").write_text(
-                "model:\n  default: first\n  provider: example\n  base_url: https://api.example.test/v1\n"
+                "model:\n  default: first\n  provider: example\n  base_url: https://api.example.test/v1\n",
+                encoding="utf-8",
             )
             (home / "models_dev_cache.json").write_text(
                 json.dumps(
@@ -774,15 +782,18 @@ class DynamicContextTests(unittest.TestCase):
                             },
                         }
                     }
-                )
+                ),
+                encoding="utf-8",
             )
             self.assertEqual(cc.load(home).context_tokens, 1000000)
             (home / "config.yaml").write_text(
-                "model:\n  default: second\n  provider: example\n  base_url: https://api.example.test/v1\n"
+                "model:\n  default: second\n  provider: example\n  base_url: https://api.example.test/v1\n",
+                encoding="utf-8",
             )
             self.assertEqual(cc.load(home).context_tokens, 8192)
             (home / "companion.json").write_text(
-                json.dumps({"context_tokens": 32768, "context_mode": "fixed"})
+                json.dumps({"context_tokens": 32768, "context_mode": "fixed"}),
+                encoding="utf-8",
             )
             self.assertEqual(cc.load(home).context_tokens, 32768)
 
@@ -793,10 +804,12 @@ class DynamicContextTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             home = pathlib.Path(tmp)
             (home / "config.yaml").write_text(
-                "model:\n  default: first\n  provider: example\n  base_url: https://other.example.test/v1\n"
+                "model:\n  default: first\n  provider: example\n  base_url: https://other.example.test/v1\n",
+                encoding="utf-8",
             )
             (home / "context_length_cache.yaml").write_text(
-                "context_lengths:\n  first@https://api.example.test/v1: 1000000\n"
+                "context_lengths:\n  first@https://api.example.test/v1: 1000000\n",
+                encoding="utf-8",
             )
             (home / "models_dev_cache.json").write_text(
                 json.dumps(
@@ -806,11 +819,14 @@ class DynamicContextTests(unittest.TestCase):
                             "models": {"first": {"limit": {"context": 1000000}}},
                         }
                     }
-                )
+                ),
+                encoding="utf-8",
             )
             value, source = cc.detect_context_tokens(home)
             self.assertFalse(cc.detected_for_real(source))
-            (home / "config.yaml").write_text("model:\n  context_length: 8192\n")
+            (home / "config.yaml").write_text(
+                "model:\n  context_length: 8192\n", encoding="utf-8"
+            )
             self.assertEqual(cc.detect_context_tokens(home)[0], 8192)
 
 
@@ -853,7 +869,9 @@ class ModelsApiTests(WorkspaceFixture):
             "unrelated": {"keep": True},
             "hooks": {"x": "echo hello"},
         }
-        (self.c.home / "config.yaml").write_text(yaml.safe_dump(before))
+        (self.c.home / "config.yaml").write_text(
+            yaml.safe_dump(before), encoding="utf-8"
+        )
         response = self.post(
             "/api/environment",
             {
@@ -862,7 +880,9 @@ class ModelsApiTests(WorkspaceFixture):
             },
         )
         self.assertEqual(response.status_code, 200, response.text)
-        after = yaml.safe_load((self.c.home / "config.yaml").read_text())
+        after = yaml.safe_load(
+            (self.c.home / "config.yaml").read_text(encoding="utf-8")
+        )
         self.assertEqual(after["unrelated"], before["unrelated"])
         self.assertEqual(after["model"]["context_length"], 32768)
         self.assertEqual(after["hooks"], before["hooks"])
@@ -880,7 +900,9 @@ class ModelsApiTests(WorkspaceFixture):
         self.assertFalse((self.c.home / "config.yaml").exists())
 
     def test_credentials_are_write_only_and_preserve_other_values(self):
-        (self.c.home / ".env").write_text("KEEP=value\nOPENROUTER_API_KEY=old\n")
+        (self.c.home / ".env").write_text(
+            "KEEP=value\nOPENROUTER_API_KEY=old\n", encoding="utf-8"
+        )
         with patch.object(Runtime, "catalog", return_value=[]):
             response = self.post(
                 "/api/credentials",
@@ -888,7 +910,7 @@ class ModelsApiTests(WorkspaceFixture):
             )
             self.assertEqual(response.status_code, 200, response.text)
             self.assertNotIn("a-private-key", self.get("/api/providers").text)
-        self.assertIn("KEEP=value", (self.c.home / ".env").read_text())
+        self.assertIn("KEEP=value", (self.c.home / ".env").read_text(encoding="utf-8"))
         self.assertEqual(
             self.post(
                 "/api/credentials", {"name": "PATH", "value": "/bad"}

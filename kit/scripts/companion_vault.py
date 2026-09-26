@@ -114,7 +114,12 @@ def history(c, relative, limit=20):
     if _git(root, "rev-parse", "--verify", "HEAD").returncode:
         return []
     r = _git(
-        root, "log", f"-{max(1,min(limit,200))}", "--format=%H\t%cI\t%s", "--", relative
+        root,
+        "log",
+        f"-{max(1,min(limit,200))}",
+        "--format=%H\t%cI\t%s",
+        "--",
+        pathlib.Path(relative).as_posix(),
     )
     if r.returncode:
         raise ValueError((r.stderr or "no history for that path").strip()[:200])
@@ -127,6 +132,8 @@ def history(c, relative, limit=20):
 
 
 def show(c, relative, commit_id):
+    # Git tree paths always use '/', including when the local filesystem uses '\\'.
+    relative = pathlib.Path(relative).as_posix()
     r = _git(pathlib.Path(c.vault), "show", f"{commit_id}:{relative}")
     if r.returncode:
         raise ValueError((r.stderr or "that version does not exist").strip()[:200])

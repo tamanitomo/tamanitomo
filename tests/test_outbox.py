@@ -73,7 +73,10 @@ class QueueTests(OutboxFixture):
         outbox.mark(self.c, entry["id"], "sent", "ok", self.day)
         self.assertEqual([e["status"] for e in outbox.fold(self.c)], ["sent"])
         self.assertEqual(outbox.waiting(self.c, self.day), [])
-        self.assertIn("thinking about you", (self.c.life / "outbox.jsonl").read_text())
+        self.assertIn(
+            "thinking about you",
+            (self.c.life / "outbox.jsonl").read_text(encoding="utf-8"),
+        )
 
     def test_high_priority_goes_to_the_front(self):
         self.q(body="ordinary")
@@ -122,7 +125,8 @@ class DispatcherTests(OutboxFixture):
         (thread / "relationship-thread.json").write_text(
             json.dumps(
                 {"last_from_human": (self.night - dt.timedelta(minutes=5)).isoformat()}
-            )
+            ),
+            encoding="utf-8",
         )
         result, sent = self.dispatch(self.night)
         self.assertEqual(result["handled"][0]["action"], "sent")
@@ -133,7 +137,8 @@ class DispatcherTests(OutboxFixture):
         (thread / "relationship-thread.json").write_text(
             json.dumps(
                 {"last_from_human": (self.night - dt.timedelta(minutes=5)).isoformat()}
-            )
+            ),
+            encoding="utf-8",
         )
         for i in range(3):
             self.q(body=f"thought {i}", now=self.evening)
@@ -150,14 +155,19 @@ class DispatcherTests(OutboxFixture):
         (thread / "relationship-thread.json").write_text(
             json.dumps(
                 {"last_from_human": (self.night - dt.timedelta(hours=5)).isoformat()}
-            )
+            ),
+            encoding="utf-8",
         )
         result, _ = self.dispatch(self.night)
         self.assertEqual(result["handled"][0]["action"], "hold")
 
     def test_a_photo_set_to_ask_is_withheld_with_a_reason_she_can_act_on(self):
         self.c.content_permissions = {"image": "ask"}
-        self.q(kind="image", body="the light in the kitchen", media_path="/tmp/x.png")
+        self.q(
+            kind="image",
+            body="the light in the kitchen",
+            media_path=str(self.c.vault / "x.png"),
+        )
         result, sent = self.dispatch(self.day)
         self.assertEqual(result["handled"][0]["action"], "withhold")
         self.assertIn("offer it in words", result["handled"][0]["reason"])
@@ -165,7 +175,7 @@ class DispatcherTests(OutboxFixture):
 
     def test_a_photo_set_to_no_never_goes(self):
         self.c.content_permissions = {"image": "no"}
-        self.q(kind="image", body="look", media_path="/tmp/x.png")
+        self.q(kind="image", body="look", media_path=str(self.c.vault / "x.png"))
         result, sent = self.dispatch(self.day)
         self.assertEqual(result["handled"][0]["action"], "withhold")
         sent.assert_not_called()
@@ -228,7 +238,8 @@ def make(tmp, **kw):
     c = cc.Companion(**base)
     c.soul_dir.mkdir(parents=True, exist_ok=True)
     (c.soul_dir / "ActiveContext.md").write_text(
-        "## Right now\nAt the desk.\n\n## Active open loops\n### Porch light\n- waiting on the switch\n### Dentist\n- open since Tuesday\n\n## Ignore me\nnot injected\n"
+        "## Right now\nAt the desk.\n\n## Active open loops\n### Porch light\n- waiting on the switch\n### Dentist\n- open since Tuesday\n\n## Ignore me\nnot injected\n",
+        encoding="utf-8",
     )
     return c
 
@@ -332,9 +343,9 @@ class OutreachGateTests(unittest.TestCase):
     def test_corruption_cannot_create_an_available_slot(self):
         out.path(self.c).parent.mkdir(parents=True, exist_ok=True)
         for content in ("{bad\n", "[]\n", '{"kind":"outreach","day":"bad"}\n'):
-            out.path(self.c).write_text(content)
+            out.path(self.c).write_text(content, encoding="utf-8")
             self.assertFalse(out.claim(self.c, "test", self.noon)["allowed"])
-            self.assertEqual(out.path(self.c).read_text(), content)
+            self.assertEqual(out.path(self.c).read_text(encoding="utf-8"), content)
 
     def test_simultaneous_processes_cannot_overbook_the_daily_cap(self):
         import json
@@ -368,7 +379,9 @@ def test_maintenance_wrappers_dispatch_six_helpers_without_model_calls(tmp_path)
 
     from kit.cli.scaffold import write_job_script
 
-    manifest = json.loads((ROOT / "kit/templates/cron/manifest.json").read_text())
+    manifest = json.loads(
+        (ROOT / "kit/templates/cron/manifest.json").read_text(encoding="utf-8")
+    )
     specs = {row["key"]: row for row in manifest["jobs"]}
     expected = {
         "timeline_cleanup": ("companion_timeline", ["prune"]),
@@ -425,7 +438,7 @@ def test_updater_drains_the_hermes_root_and_resumes_after_install_failure(tmp_pa
 
     app_root = tmp_path / "application"
     app_root.mkdir()
-    (app_root / "VERSION").write_text("3.5.0")
+    (app_root / "VERSION").write_text("3.5.0", encoding="utf-8")
     hermes_root = tmp_path / "separate Hermes home"
     paused = [(hermes_root, "dispatch-job")]
     runtime = object()
@@ -480,7 +493,8 @@ def test_updater_only_pauses_and_resumes_enabled_dispatch_jobs(tmp_path):
                     {"id": "unrelated", "name": "Other scheduled job", "enabled": True},
                 ]
             }
-        )
+        ),
+        encoding="utf-8",
     )
     calls = []
 
