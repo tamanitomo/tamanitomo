@@ -1,0 +1,357 @@
+/* Tamanitomo / Living Archive
+ * Presentation-only layer. Load AFTER product.css and chat-dock.css.
+ * All colors inherit the existing Appearance tokens. No editor state or data API changes.
+ */
+#vault[data-immersive="true"] {
+  --va-line: color-mix(in srgb, var(--ink) 10%, transparent);
+  --va-soft: color-mix(in srgb, var(--accent) 8%, transparent);
+  --va-paper: color-mix(in srgb, var(--panel) 93%, var(--bg));
+  --va-serif: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  padding: 4px 0 20px;
+  color: var(--ink);
+}
+#vault[data-immersive]::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -40px -12px 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 78% 0%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 55%);
+}
+#vault[data-immersive] [hidden] { display: none !important; }
+#vault[data-immersive] button, #vault[data-immersive] a { -webkit-tap-highlight-color: transparent; }
+#vault[data-immersive] :is(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+#vault[data-immersive] .va-masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 12px 4px 26px;
+}
+#vault[data-immersive] .va-heading { display: flex; align-items: center; gap: 18px; min-width: 0; }
+#vault[data-immersive] .va-seal {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 58px;
+  width: 58px;
+  height: 58px;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--va-soft), transparent 75%);
+}
+#vault[data-immersive] .va-seal::before {
+  content: ""; position: absolute; inset: 6px; border: 1px solid var(--va-line); border-radius: 50%;
+}
+#vault[data-immersive] .va-seal svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.25; }
+#vault[data-immersive] .va-eyebrow {
+  font: 600 10px/1.5 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+#vault[data-immersive] .va-heading h1 {
+  font: 400 clamp(30px, 2.7vw, 42px)/1.15 var(--va-serif);
+  letter-spacing: -.035em;
+  margin: 2px 0 5px;
+  color: var(--ink);
+}
+#vault[data-immersive] .va-heading p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--dim); }
+#vault[data-immersive] .va-masthead-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+#vault[data-immersive] .vault-views {
+  display: inline-flex; gap: 3px; padding: 4px; margin: 0;
+  border: 1px solid var(--va-line); border-radius: 9px;
+  background: color-mix(in srgb, var(--bg) 75%, transparent);
+}
+#vault[data-immersive] .vault-view-tab {
+  border: 0; border-radius: 6px; margin: 0; padding: 8px 14px;
+  background: transparent; color: var(--dim); font-size: 12px; font-weight: 500;
+  min-height: 34px; box-shadow: none;
+}
+#vault[data-immersive] .vault-view-tab[aria-selected="true"] { background: var(--surface-2); color: var(--ink); }
+#vault[data-immersive] .va-focus, #vault[data-immersive] .va-browse {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 40px; padding: 8px 12px; border: 1px solid var(--va-line); border-radius: 8px;
+  background: transparent; color: var(--dim); font-size: 12px;
+}
+#vault[data-immersive] .va-focus svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+#vault[data-immersive] .va-focus[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+#vault[data-immersive] .va-browse { display: none; }
+
+/* One continuous workspace, not two floating cards. */
+#vault[data-immersive] .obsidian-layout {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  gap: 0;
+  height: max(560px, calc(100dvh - 222px));
+  min-height: 560px;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--va-line);
+  border-radius: 16px;
+  background: var(--va-paper);
+  box-shadow: 0 24px 70px -40px color-mix(in srgb, var(--bg) 80%, black);
+}
+#vault[data-immersive] .vault-sidebar {
+  position: relative; inset: auto;
+  display: flex; flex-direction: column;
+  width: auto; min-width: 0; min-height: 0; height: auto;
+  padding: 0; margin: 0;
+  border: 0; border-right: 1px solid var(--va-line); border-radius: 0;
+  background: color-mix(in srgb, var(--bg) 42%, var(--panel));
+  overflow: hidden; box-shadow: none;
+}
+#vault[data-immersive] .vault-topbar { padding: 20px 15px 16px; background: none; border-bottom: 1px solid var(--va-line); }
+#vault[data-immersive] .vault-actions-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0 0 17px; }
+#vault[data-immersive] .vault-actions-row :is(button, a) {
+  display: inline-flex; justify-content: center; align-items: center;
+  padding: 8px 4px; min-height: 34px; margin: 0;
+  border: 1px solid var(--va-line); border-radius: 6px;
+  text-decoration: none; background: transparent; color: var(--dim); font-size: 11px;
+}
+#vault[data-immersive] .vault-actions-row #new-note {
+  background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 650;
+}
+#vault[data-immersive] .vault-actions-row :is(#vault-trash, a[download]) { border-color: transparent; padding-block: 3px; min-height: 26px; }
+#vault[data-immersive] .vault-search-row {
+  display: flex; align-items: center; gap: 8px; padding: 0 9px;
+  background: var(--bg); border: 1px solid var(--va-line); border-radius: 7px;
+}
+#vault[data-immersive] .vault-search-icon { font-size: 12px; opacity: .7; filter: grayscale(1); }
+#vault[data-immersive] #vault-query {
+  width: 100%; min-width: 0; margin: 0; padding: 10px 0;
+  color: var(--ink); background: none; border: 0; border-radius: 0;
+  box-shadow: none; font-size: 11px; line-height: 1.5;
+}
+#vault[data-immersive] #vault-query::placeholder { color: var(--dim); opacity: .9; }
+#vault[data-immersive] .vault-search-row:focus-within { border-color: var(--accent); }
+#vault[data-immersive] #vault-query:focus-visible { outline-offset: 4px; }
+#vault[data-immersive] .vault-filters { display: flex; gap: 4px; flex-wrap: wrap; margin: 12px 0 0; }
+#vault[data-immersive] .vault-filter-pill {
+  background: transparent; color: var(--dim); border: 1px solid transparent;
+  border-radius: 5px; padding: 5px 7px; margin: 0; font-size: 10px; min-height: 28px;
+}
+#vault[data-immersive] .vault-filter-pill[aria-selected="true"] {
+  background: var(--va-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+#vault[data-immersive] .va-collections-label {
+  padding: 21px 19px 8px; font-size: 9px; font-weight: 650; letter-spacing: .18em; color: var(--dim);
+}
+#vault[data-immersive] .vault-tree-container {
+  min-height: 0; flex: 1; overflow: auto; padding: 4px 10px 20px;
+  scrollbar-width: thin; scrollbar-color: var(--edge-2) transparent;
+}
+#vault[data-immersive] .vault-node-row { display: flex; align-items: center; gap: 2px; border-radius: 6px; margin: 2px 0; }
+#vault[data-immersive] .vault-node {
+  display: flex; align-items: center; justify-content: space-between; gap: 5px;
+  width: 100%; min-width: 0; flex: 1; min-height: 35px;
+  background: none; border: 0; border-radius: 6px;
+  color: var(--ink-2); padding: 7px; text-align: left; font-size: 12px;
+}
+#vault[data-immersive] .vault-node-left { display: flex; align-items: center; gap: 7px; min-width: 0; }
+#vault[data-immersive] .vault-node-left > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#vault[data-immersive] .vault-node-icon { flex: 0 0 15px; width: 15px; font-size: 12px; opacity: .6; filter: grayscale(1); }
+#vault[data-immersive] .vault-folder-children { margin: 3px 0 8px 13px; padding-left: 6px; border-left: 1px solid var(--va-line); }
+#vault[data-immersive] .vault-node:hover, #vault[data-immersive] .vault-node-row:focus-within { background: var(--wash, var(--va-soft)); }
+#vault[data-immersive] .vault-node.active-file {
+  color: var(--accent); background: var(--va-soft); box-shadow: inset 2px 0 0 var(--accent);
+}
+#vault[data-immersive] .vault-node-actions {
+  flex: 0 0 26px; min-height: 32px; padding: 4px; margin: 0; border: 0; color: var(--dim); background: none;
+}
+#vault[data-immersive] .vault-node-tag { font-size: 9px; padding: 2px 5px; color: var(--dim); background: var(--surface-2); border: 1px solid var(--va-line); border-radius: 4px; white-space: nowrap; }
+#vault[data-immersive] .va-rail-footer {
+  display: flex; align-items: center; gap: 8px; padding: 14px 18px;
+  border-top: 1px solid var(--va-line); color: var(--dim); font-size: 10px; line-height: 1.6;
+}
+#vault[data-immersive] .va-rail-footer svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; flex-shrink: 0; }
+
+/* The active document owns the visual hierarchy. */
+#vault[data-immersive] .vault-main-pane {
+  display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  height: 100%; width: auto; margin: 0; padding: 0;
+  border: 0; border-radius: 0; box-shadow: none; overflow: hidden; background: transparent;
+}
+#vault[data-immersive] .vault-tabs {
+  display: flex; flex: 0 0 auto; gap: 0; overflow-x: auto;
+  min-height: 43px; padding: 0 17px; margin: 0;
+  background: color-mix(in srgb, var(--bg) 26%, transparent);
+  border-bottom: 1px solid var(--va-line); scrollbar-width: thin;
+}
+#vault[data-immersive] .vault-tabs:empty { display: none; }
+#vault[data-immersive] .vault-tab {
+  display: flex; align-items: center; position: relative;
+  padding: 0 7px; margin: 0; border: 0; border-radius: 0; background: none;
+  color: var(--dim); flex: 0 0 auto;
+}
+#vault[data-immersive] .vault-tab > button {
+  min-height: 42px; padding: 0 7px; margin: 0; background: none; color: inherit; border: 0;
+  font-size: 11px; white-space: nowrap;
+}
+#vault[data-immersive] .vault-tab.is-active { color: var(--ink); background: var(--va-paper); }
+#vault[data-immersive] .vault-tab.is-active::after { content: ""; position: absolute; inset: auto 13px 0; height: 2px; background: var(--accent); }
+#vault[data-immersive] .vault-tab .vault-tab-close { color: var(--dim); font-size: 15px; }
+#vault[data-immersive] .vault-tab-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; margin-right: 7px; background: transparent; }
+#vault[data-immersive] .vault-tab[data-state="dirty"] .vault-tab-dot,
+#vault[data-immersive] .vault-tab[data-state="saving"] .vault-tab-dot { background: var(--warn); }
+#vault[data-immersive] .vault-tab[data-state="conflict"] .vault-tab-dot,
+#vault[data-immersive] .vault-tab[data-state="failed"] .vault-tab-dot { background: var(--bad); }
+#vault[data-immersive] #vault-document { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; padding: 0; margin: 0; border: 0; background: none; }
+#vault[data-immersive] .vault-doc-header {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+  flex: 0 0 auto; gap: 12px; padding: 17px 24px;
+  background: transparent; border-bottom: 1px solid var(--va-line);
+}
+#vault[data-immersive] .vault-doc-header > div:first-child { min-width: 0; }
+#vault[data-immersive] .vault-doc-title { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; color: var(--dim); font-size: 11px; overflow-wrap: anywhere; }
+#vault[data-immersive] .vault-doc-title strong { color: var(--ink-2); font-weight: 550; }
+#vault[data-immersive] .vault-doc-meta { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 6px; color: var(--dim); font-size: 10px; }
+#vault[data-immersive] .vault-doc-header .actions { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; margin: 0; }
+#vault[data-immersive] .vault-doc-header .actions > :is(button, a) {
+  border: 1px solid var(--va-line); border-radius: 6px; padding: 6px 9px;
+  margin: 0; min-height: 30px; color: var(--dim); background: none; text-decoration: none; font-size: 10px;
+}
+#vault[data-immersive] .vault-mode-switch { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--va-line); border-radius: 7px; background: var(--bg); }
+#vault[data-immersive] .vault-mode-btn { padding: 5px 9px; min-height: 25px; border: 0; border-radius: 4px; font-size: 10px; color: var(--dim); background: none; }
+#vault[data-immersive] .vault-mode-btn.active { background: var(--surface-3); color: var(--ink); }
+#vault[data-immersive] #save-note:not(:disabled) { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+#vault[data-immersive] .vault-status.status-saved { color: var(--good); }
+#vault[data-immersive] .vault-status:is(.status-dirty, .status-saving, .status-draft) { color: var(--warn); }
+#vault[data-immersive] .vault-status:is(.status-conflict, .status-failed, .status-offline) { color: var(--bad); }
+#vault[data-immersive] .vault-files-toggle { display: none; }
+#vault[data-immersive] .vault-toolbar-editor { display: flex; flex-wrap: wrap; gap: 4px; padding: 7px 22px; border-bottom: 1px solid var(--va-line); background: none; }
+#vault[data-immersive] .vault-tool-btn { min-width: 28px; min-height: 28px; padding: 4px 7px; border: 0; border-radius: 4px; color: var(--dim); background: transparent; font-size: 11px; }
+#vault[data-immersive] .vault-tool-btn:hover { background: var(--surface-2); color: var(--ink); }
+#vault[data-immersive] .vault-editor-content { display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+#vault[data-immersive] .vault-split-view { display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+#vault[data-immersive] .vault-split-view > :is(.vault-source, .vault-preview-container) { flex: 1 1 0; min-width: 0; min-height: 0; }
+#vault[data-immersive] .vault-source { background: transparent; overflow: hidden; }
+#vault[data-immersive] .vault-source .cm-editor { height: 100%; background: transparent; color: var(--ink-2); }
+#vault[data-immersive] .vault-source .cm-scroller { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 14px; line-height: 1.8; overflow: auto; }
+#vault[data-immersive] .vault-source .cm-content { padding: 28px 22px; }
+#vault[data-immersive] .vault-source .cm-gutters { background: transparent; color: var(--dim); border-color: var(--va-line); }
+#vault[data-immersive] .vault-preview-container {
+  overflow: auto; padding: clamp(28px, 3.5vw, 56px) clamp(24px, 4.5vw, 74px) 56px;
+  background: transparent; color: var(--ink-2);
+  scrollbar-width: thin; scrollbar-color: var(--edge-2) transparent;
+  font: 17px/1.85 var(--va-serif);
+}
+#vault[data-immersive] .vault-preview-container > * { max-width: 680px; margin-inline: auto; }
+#vault[data-immersive] .vault-preview-container :is(h1,h2,h3,h4) { color: var(--ink); font-family: var(--va-serif); font-weight: 400; line-height: 1.3; }
+#vault[data-immersive] .vault-preview-container h1 { margin-top: 0; margin-bottom: 24px; font-size: clamp(30px, 2.5vw, 40px); letter-spacing: -.025em; }
+#vault[data-immersive] .vault-preview-container h2 { margin-top: 32px; margin-bottom: 13px; font-size: 25px; letter-spacing: -.015em; }
+#vault[data-immersive] .vault-preview-container h3 { margin-top: 26px; font-size: 21px; }
+#vault[data-immersive] .vault-preview-container p { margin-block: 0 19px; }
+#vault[data-immersive] .vault-preview-container blockquote {
+  margin-block: 28px; padding: 8px 0 8px 22px;
+  border: 0; border-left: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 0; color: var(--ink); background: none; font-size: 20px; font-style: italic;
+}
+#vault[data-immersive] .vault-preview-container .wiki-link { display: inline; min-height: auto; padding: 1px 3px; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 2px; background: var(--va-soft); font: inherit; color: var(--accent); }
+#vault[data-immersive] .vault-preview-container :is(pre, code) { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .85em; }
+#vault[data-immersive] .vault-preview-container pre { overflow-x: auto; padding: 16px; border-radius: 7px; background: var(--bg); }
+#vault[data-immersive] .vault-preview-container img { max-width: 100%; height: auto; border-radius: 8px; }
+#vault[data-immersive] .vault-split-view[data-mode="split"] .vault-preview-container { border-left: 1px solid var(--va-line); padding: 28px 26px; }
+#vault[data-immersive] .vault-toc-panel { width: 210px; flex: 0 0 210px; padding: 25px 18px; border: 0; border-left: 1px solid var(--va-line); overflow: auto; background: color-mix(in srgb, var(--bg) 22%, transparent); font-size: 11px; }
+#vault[data-immersive] .vault-toc-header { color: var(--dim); text-transform: uppercase; letter-spacing: .14em; font-size: 9px; font-weight: 650; margin: 0 0 13px; }
+#vault[data-immersive] .vault-toc-header:not(:first-child) { margin-top: 28px; }
+#vault[data-immersive] #vault-toc :is(button, a) { display: block; text-align: left; color: var(--ink-2); padding: 7px 0; border: 0; background: none; font-size: 11px; text-decoration: none; }
+#vault[data-immersive] .vault-draft-note { flex: 0 0 auto; padding: 12px 22px; margin: 0; color: var(--dim); border-top: 1px solid var(--va-line); background: transparent; font-size: 10px; line-height: 1.6; }
+#vault[data-immersive] .vault-draft-note button { color: var(--accent); font-size: inherit; }
+#vault[data-immersive] :is(.vault-protected-bar, .vault-conflict-bar, .vault-retry-bar) {
+  margin: 10px 18px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-left-width: 3px; border-radius: 6px; color: var(--ink); background: color-mix(in srgb, var(--warn) 8%, var(--panel)); font-size: 12px;
+}
+#vault[data-immersive] .vault-conflict-bar p { margin: 0 0 10px; }
+#vault[data-immersive] .vault-conflict-bar .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+#vault[data-immersive] .vault-conflict-bar button { min-height: 34px; }
+
+/* Empty state is an invitation, never invented activity or invented memories. */
+#vault[data-immersive] .vault-empty-state.va-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 380px; flex: 1; margin: auto; padding: 50px 30px; text-align: center; }
+#vault[data-immersive] .va-archive-mark { position: relative; width: 150px; height: 150px; display: grid; place-items: center; margin-bottom: 26px; border: 1px solid var(--va-line); border-radius: 50%; color: var(--accent); background: radial-gradient(circle, var(--va-soft), transparent 68%); }
+#vault[data-immersive] .va-archive-mark::before { content: ""; position: absolute; inset: 15px; border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent); border-radius: 50%; }
+#vault[data-immersive] .va-archive-mark svg { width: 52px; height: 52px; fill: none; stroke: currentColor; stroke-width: 1; }
+#vault[data-immersive] .va-empty h2 { max-width: 400px; font: 400 33px/1.3 var(--va-serif); letter-spacing: -.025em; margin: 0 0 16px; }
+#vault[data-immersive] .va-empty p { max-width: 330px; color: var(--dim); font-size: 13px; line-height: 1.8; margin: 0 0 23px; }
+#vault[data-immersive] .va-empty .va-empty-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+#vault[data-immersive] .va-empty-actions button { min-height: 40px; padding: 8px 16px; border: 1px solid var(--va-line); border-radius: 7px; background: none; color: var(--ink); font-size: 12px; }
+#vault[data-immersive] .va-empty-actions button:first-child { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+#vault[data-immersive] .va-empty small { margin-top: 28px; font-size: 10px; color: var(--dim); }
+
+/* Recent is a compact library rather than oversized placeholder artwork. */
+#vault[data-immersive] .vault-recent { padding: 25px; min-height: 400px; border: 1px solid var(--va-line); border-radius: 16px; background: var(--va-paper); }
+#vault[data-immersive] .vault-recent-filters { display: flex; gap: 12px; margin-bottom: 25px; }
+#vault[data-immersive] .vault-recent-filters :is(input, select) { min-width: 0; padding: 11px 13px; border: 1px solid var(--va-line); border-radius: 7px; background: var(--bg); color: var(--ink); font-size: 12px; }
+#vault[data-immersive] .vault-recent-filters input { flex: 1; }
+#vault[data-immersive] #vault-recent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap: 12px; }
+#vault[data-immersive] #vault-recent-grid .photo-card { display: grid; grid-template-columns: 52px minmax(0,1fr); gap: 15px; align-items: center; padding: 17px; margin: 0; border: 1px solid var(--va-line); border-radius: 8px; color: var(--ink); background: transparent; text-align: left; }
+#vault[data-immersive] #vault-recent-grid :is(.file-art, .photo-wrap) { display: grid; place-items: center; width: 52px; height: 62px; min-height: 0; aspect-ratio: auto; margin: 0; border: 1px solid var(--va-line); border-radius: 5px; background: var(--va-soft); color: var(--accent); }
+#vault[data-immersive] #vault-recent-grid .file-art svg { width: 24px; height: 24px; }
+#vault[data-immersive] #vault-recent-grid .photo-wrap img { width: 100%; height: 100%; object-fit: cover; }
+#vault[data-immersive] #vault-recent-grid .photo-meta { padding: 0; }
+#vault[data-immersive] #vault-recent-grid .photo-meta p { margin: 5px 0; font: 17px/1.35 var(--va-serif); }
+#vault[data-immersive] #vault-recent-grid .photo-meta small { color: var(--dim); font-size: 10px; }
+#vault[data-immersive] .vault-recent-more { display: flex; gap: 16px; align-items: center; margin-top: 18px; }
+
+@media (min-width: 901px) {
+  #vault[data-immersive][data-va-focus="true"] .obsidian-layout { grid-template-columns: minmax(0, 1fr); }
+  #vault[data-immersive][data-va-focus="true"] .vault-sidebar { display: none; }
+  #vault[data-immersive][data-va-focus="true"] .vault-preview-container { padding-inline: max(35px, calc((100% - 720px) / 2)); }
+}
+@media (min-width: 901px) and (max-width: 1200px) {
+  #vault[data-immersive] .obsidian-layout { grid-template-columns: 220px minmax(0,1fr); }
+  #vault[data-immersive] .va-seal { display: none; }
+  #vault[data-immersive] .vault-doc-header { padding: 15px 18px; }
+  #vault[data-immersive] .vault-toc-panel { width: 170px; flex-basis: 170px; }
+}
+@media (max-width: 900px) {
+  #vault[data-immersive] .va-masthead { align-items: flex-start; padding: 8px 0 20px; flex-wrap: wrap; gap: 18px; }
+  #vault[data-immersive] .va-heading { gap: 12px; }
+  #vault[data-immersive] .va-heading h1 { font-size: 35px; }
+  #vault[data-immersive] .va-heading p { font-size: 12px; }
+  #vault[data-immersive] .va-seal { width: 48px; height: 48px; flex-basis: 48px; }
+  #vault[data-immersive] .va-masthead-actions { justify-content: flex-start; width: 100%; }
+  #vault[data-immersive] .va-focus { display: none; }
+  #vault[data-immersive] .va-browse { display: inline-flex; }
+  #vault[data-immersive] .obsidian-layout { display: flex; flex-direction: column; height: auto; min-height: 65svh; overflow: visible; border-radius: 12px; }
+  #vault[data-immersive] .vault-sidebar { display: none; position: relative; inset: auto; width: 100%; height: auto; max-height: 65svh; border: 0; border-bottom: 1px solid var(--va-line); border-radius: 12px 12px 0 0; transform: none; }
+  body.vault-files-open #vault[data-immersive] .vault-sidebar { display: flex; }
+  #vault[data-immersive] .vault-topbar { padding: 17px; }
+  #vault[data-immersive] #vault-query, #vault[data-immersive] .vault-recent-filters :is(input, select) { font-size: 16px; }
+  #vault[data-immersive] .vault-node, #vault[data-immersive] .vault-node-actions { min-height: 44px; }
+  #vault[data-immersive] .vault-mode-btn { min-height: 34px; }
+  #vault[data-immersive] .vault-actions-row { grid-template-columns: repeat(4, minmax(0,1fr)); }
+  #vault[data-immersive] .vault-main-pane { min-height: 65svh; height: auto; overflow: visible; }
+  #vault[data-immersive] #vault-document { overflow: visible; }
+  #vault[data-immersive] .vault-editor-content { min-height: 50svh; overflow: visible; flex-direction: column; }
+  #vault[data-immersive] .vault-split-view { overflow: visible; }
+  #vault[data-immersive] .vault-split-view[data-mode="split"] { flex-direction: column; }
+  #vault[data-immersive] .vault-split-view[data-mode="split"] .vault-source { min-height: 40svh; }
+  #vault[data-immersive] .vault-split-view[data-mode="split"] .vault-preview-container { border-left: 0; border-top: 1px solid var(--va-line); }
+  #vault[data-immersive] .vault-source { min-height: 55svh; }
+  #vault[data-immersive] .vault-source .cm-editor { min-height: 55svh; }
+  #vault[data-immersive] .vault-preview-container { overflow: visible; padding: 30px 24px; font-size: 16px; }
+  #vault[data-immersive] .vault-doc-header { padding: 15px; }
+  #vault[data-immersive] .vault-doc-header .actions { gap: 5px; }
+  #vault[data-immersive] .vault-doc-header .actions > :is(button,a) { min-height: 36px; }
+  #vault[data-immersive] .vault-files-toggle { display: inline-flex; }
+  #vault[data-immersive] .vault-toc-panel { flex-basis: auto; width: 100%; max-height: 300px; border-left: 0; border-top: 1px solid var(--va-line); }
+  #vault[data-immersive] .vault-tabs { padding-inline: 5px; }
+  #vault[data-immersive] .vault-recent { padding: 18px; }
+  #vault[data-immersive] .vault-recent-filters { flex-direction: column; }
+  #vault[data-immersive] .vault-draft-note { font-size: 11px; padding-inline: 15px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #vault[data-immersive], #vault[data-immersive] * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+@media (forced-colors: active) {
+  #vault[data-immersive] .obsidian-layout, #vault[data-immersive] .vault-node.active-file { border: 1px solid CanvasText; }
+  #vault[data-immersive] .vault-node.active-file { outline: 1px solid Highlight; }
+}
