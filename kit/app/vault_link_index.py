@@ -12,6 +12,7 @@ Parsing skips fenced and inline code but is not a full CommonMark parser.
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import os
 import re
@@ -54,6 +55,16 @@ def _strip_code(line, fenced):
     return _CODE_SPAN.sub("", line), fenced
 
 
+def _json_safe(obj):
+    if isinstance(obj, dict):
+        return {str(k): _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_json_safe(v) for v in obj]
+    if isinstance(obj, (dt.date, dt.datetime)):
+        return obj.isoformat()
+    return obj
+
+
 def parse_frontmatter(text):
     """(properties dict, body). Malformed YAML keeps the note indexed (title/links/
     tags from the body still work) with `_malformed: True` rather than failing closed.
@@ -65,7 +76,7 @@ def parse_frontmatter(text):
         data = yaml.safe_load(m.group(1))
     except yaml.YAMLError:
         return {"_malformed": True}, text[m.end() :]
-    return (data if isinstance(data, dict) else {}), text[m.end() :]
+    return (_json_safe(data) if isinstance(data, dict) else {}), text[m.end() :]
 
 
 def parse_note(text):
