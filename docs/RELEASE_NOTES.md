@@ -1,12 +1,23 @@
-Tamanitomo 3.6.0: one chat dock, five destinations, and resilient model routing.
+Tamanitomo 3.6.1: connected accounts you can actually see, and put to work in one step.
 
-- **One conversation, wherever you are.** The floating chat dock is the sole chat surface: a desktop card and a phone bubble that opens into a 65vh sheet. Replies stream through Hermes and recover after a dropped connection without resending the turn.
-- **Five clear destinations.** Home, Journal, Vault, Photos and Settings lead the workspace. Relationship, calendar, identity and companion tools remain available as subviews.
-- **Provider recovery.** Configured workers and chat can move from a primary provider to a secondary and then a local model on transient errors. The model probe tests one saved route without changing configuration.
-- **A complete Vault.** The existing CodeMirror editor, tabs, autosave, exact-byte backups and conflict recovery are preserved. Notes gain a derived link index, backlinks, outline, properties, safe embeds and link-aware file actions.
-- **More portable hosts.** Memory, process, locks, launchers and IPv6 browser URLs handle platform differences explicitly. Unknown hardware readings remain unknown.
-- **A smaller, clearer core.** Python is formatted consistently, deterministic limits and evidence-backed memory are documented, and seven focused test suites cover the application.
-- **Safer updates.** The updater pauses active dispatcher schedules and waits for dispatcher work to finish before changing application files, then restores the schedules it paused.
+- **Connected accounts & routing.** A new settings panel shows every provider this
+  companion can reach — API key, OAuth sign-in, or reachable endpoint — next to the
+  primary model, tier status, and how many jobs follow it versus have their own
+  override. "Use everywhere" points the primary model, both tiers, and every shipped
+  job at one account in a single operation.
+- **OAuth sign-ins are visible immediately.** Hermes's own record of a Grok or ChatGPT
+  sign-in now shows up in the provider list right away, marked active, instead of
+  waiting on the model cache to notice. "Connect Grok" / "Connect ChatGPT" buttons use
+  the existing device-code flow as an alternative to the raw Hermes console.
+- **Connecting an account now offers to use it.** Right after signing in, choose
+  whether that account should generate this companion's images (with a style picker,
+  offered only when Hermes reports an image-capable provider for it) and then whether
+  it should provide voice (with a voice picker) — no more separate, undiscoverable
+  steps to actually put a freshly connected account to work.
+- **A steadier Vault.** Adds the Living Archive presentation and fixes date/datetime
+  properties not serializing correctly in the link index.
+- **More portable hosts.** Further process, file, and locking fixes for Windows and
+  macOS surfaced by the platform test matrix.
 
 ### Install or update
 

@@ -1,3 +1,24 @@
+## 3.6.1 — Connected accounts & routing, and a steadier Vault (2026-09-27)
+
+- Add a "Connected accounts & routing" settings panel: every reachable provider (API
+  key, OAuth sign-in, or reachable endpoint) alongside the primary model, tier status,
+  and how many jobs follow it versus override it, with a "Use everywhere" action that
+  points the primary model, both tiers, and every shipped job at one account in a
+  single operation.
+- Read Hermes's own `auth.json` for OAuth sign-ins, so a freshly connected account
+  (Grok, ChatGPT) is reported immediately and marked active, independent of the model
+  cache. Add explicit "Connect Grok" / "Connect ChatGPT" sign-in buttons using the
+  existing device-code flow as an alternative to the raw Hermes console.
+- After a successful OAuth sign-in, offer to use that account for this companion's
+  images (only when Hermes reports an image-capable provider for it, with a style
+  picker) and then for voice (mapped to the matching voice engine, noting that speech
+  needs its own key since sign-in covers chat only), so connecting an account and
+  putting it to work no longer take unrelated, undiscoverable steps.
+- Add the Vault's Living Archive presentation.
+- Fix date/datetime properties not serializing to ISO strings in the Vault link index.
+- Fix Windows and macOS portability issues in process, file, and locking behavior
+  surfaced by the platform test matrix.
+
 ## 3.6.0 — Core cohesion, one chat dock and a linked Vault (2026-09-25)
 
 - Replace the previous conversation stack with one floating desktop/mobile dock using the
