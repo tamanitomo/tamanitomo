@@ -8,6 +8,7 @@ import pathlib
 import re
 import sys
 import secrets
+from functools import lru_cache
 
 from .wardrobe import (
     filter_wardrobe_items,
@@ -24,6 +25,19 @@ sys.path.insert(0, str(KIT / "kit/scripts"))
 STATIC = pathlib.Path(__file__).resolve().parent / "static"
 
 import companion_config as cc
+
+
+@lru_cache(maxsize=128)
+def _asset_digest(path, mtime_ns, ctime_ns, size):
+    """Reuse content hashes until the asset changes on disk."""
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+
+
+def asset_version(path):
+    stat = path.stat()
+    return _asset_digest(path, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
 
 
 def _json_safe(value):
@@ -45,6 +59,8 @@ def build(home=None, token="", state_dir=None):
     from fastapi import Body, FastAPI, HTTPException, Request
     from fastapi.responses import FileResponse, JSONResponse, HTMLResponse, Response
     from fastapi.staticfiles import StaticFiles
+    from starlette.middleware.gzip import GZipMiddleware
+    from starlette.concurrency import run_in_threadpool
 
     from .runtime import Runtime, Operations, app_directory
 
@@ -174,7 +190,7 @@ def build(home=None, token="", state_dir=None):
             and request.url.path not in ("/api/auth/pin", "/api/network")
         ):
             try:
-                c = load()
+                c = await run_in_threadpool(load)
                 if c.remote_pin:
                     import hashlib
 
@@ -254,8 +270,6 @@ def build(home=None, token="", state_dir=None):
                         {"detail": "Unknown installation"}, status_code=400
                     )
                 write_lock = app.state.write_locks[installation]
-                from starlette.concurrency import run_in_threadpool
-
                 await run_in_threadpool(write_lock.acquire)
                 runtime = runtimes[installation]
                 if str(runtime.root) in app.state.operations.busy:
@@ -1544,17 +1558,41 @@ def build(home=None, token="", state_dir=None):
     def index():
         # A refreshed page must not combine new controllers with cached older
         # helpers after a kit update. Asset URLs identify the exact file bytes.
-        import hashlib
-        import re
-
         def versioned(match):
             path = STATIC / pathlib.Path(match[2]).name
-            digest = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+            digest = asset_version(path)
             return f'{match[1]}="{match[2]}?v={digest}"'
 
         html = (STATIC / "index.html").read_text(encoding="utf-8")
         html = re.sub(r'(src|href)="(/static/[^"?]+)"', versioned, html)
         return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
-    app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
+    class VersionedStaticFiles(StaticFiles):
+        async def get_response(self, path, scope):
+            response = await super().get_response(path, scope)
+            # Only the actual content hash earns long-lived caching. Unversioned
+            # URLs (including manifest icons) must revalidate after an update.
+            response.headers["Cache-Control"] = "no-cache"
+            version = Request(scope).query_params.get("v")
+            if version and response.status_code in (200, 304):
+                full_path, stat_result = await run_in_threadpool(self.lookup_path, path)
+                if stat_result and version == await run_in_threadpool(
+                    asset_version, pathlib.Path(full_path)
+                ):
+                    response.headers["Cache-Control"] = (
+                        "public, max-age=31536000, immutable"
+                    )
+            return response
+
+    # Compress public assets only: chat/terminal streams must flush immediately,
+    # and authenticated responses retain their existing privacy/cache semantics.
+    app.mount(
+        "/static",
+        GZipMiddleware(
+            VersionedStaticFiles(directory=str(STATIC)),
+            minimum_size=1024,
+            compresslevel=5,
+        ),
+        name="static",
+    )
     return app

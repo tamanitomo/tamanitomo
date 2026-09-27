@@ -169,9 +169,6 @@ window.waitForRestart = function(targetVersion, previousInstance) {
 };
 
 async function boot(){
-  // Learn whether there is a face to show before anything draws one: a page
-  // that renders first would otherwise show the initial and keep it.
-  await refreshPortraitState();
   $('installation-select').value=INSTALLATION;$('installation-select').onchange=e=>installationChanged(e.target.value);
   const data=await api('/profiles');roster=data.profiles;
   if(!PROFILE){const remembered=localStorage.getItem('last-profile-'+INSTALLATION);PROFILE=data.selected_profile&&data.selected_profile!=='default'?data.selected_profile:roster.some(p=>p.id===remembered)?remembered:roster.find(p=>p.installed)?.id||'default';}
@@ -180,7 +177,8 @@ async function boot(){
   const selected=roster.find(p=>p.id===PROFILE);
   $('who').textContent=selected?.name||'Welcome home';$('sub').textContent=selected?.installed?'A continuing life, together.':'Your companion workspace';
   // Adopt this companion's saved appearance before the first page draws.
-  if(window.Appearance)await window.Appearance.load();
+  // Resolve the profile first, then load its face and theme concurrently.
+  await Promise.all([refreshPortraitState(),window.Appearance?.load()]);
   const openChat=location.hash==='#chat';
   let initial=location.hash.slice(1).split('/')[0];initial=TAB_ALIASES[initial]||initial;
   if(!PAGES.some(([id])=>id===initial))initial=selected?.installed?'now':'roster';

@@ -584,3 +584,109 @@ ${navigation}
 })().catch(error=>{console.error(error);process.exitCode=1;});
 `);
 """)
+
+
+class WorkspaceAssetPerformanceTests(WorkspaceFixture):
+    def test_versioned_assets_compress_and_cache_without_stale_updates(self):
+        from kit.app.server import asset_version
+
+        page = self.client.get("/")
+        assert page.headers["cache-control"] == "no-cache"
+        url = re.search(r'src="(/static/workspace.js\?v=[a-f0-9]+)"', page.text)[1]
+        plain = self.client.get(url, headers={"accept-encoding": "identity"})
+        compressed = self.client.get(url, headers={"accept-encoding": "gzip"})
+        assert compressed.content == plain.content
+        assert compressed.headers["content-encoding"] == "gzip"
+        assert "accept-encoding" in compressed.headers["vary"].lower()
+        assert "immutable" in compressed.headers["cache-control"]
+        unchanged = self.client.get(
+            url, headers={"if-none-match": plain.headers["etag"]}
+        )
+        assert unchanged.status_code == 304
+        for unversioned in ("/static/workspace.js", "/static/workspace.js?v=outdated"):
+            assert self.client.get(unversioned).headers["cache-control"] == "no-cache"
+        asset = Path(self.tmp.name) / "asset.js"
+        asset.write_text("old")
+        old_version = asset_version(asset)
+        asset.write_text("new")
+        assert asset_version(asset) != old_version
+        # Private API responses are still uncached and uncompressed.
+        api = self.get("/api/profiles")
+        assert api.status_code == 200
+        assert api.headers["cache-control"] == "no-store"
+        assert "content-encoding" not in api.headers
+
+    def test_lan_requests_can_read_access_configuration(self):
+        async def lan_app(scope, receive, send):
+            scope = {**scope, "client": ("192.168.1.50", 12345)}
+            await self.app(scope, receive, send)
+
+        with TestClient(lan_app) as client:
+            response = client.get("/api/profiles", headers=self.headers)
+        assert response.status_code == 200
+        assert response.json()["profiles"]
+
+
+def test_home_does_not_wait_for_update_server_or_request_unused_history():
+    source = (ROOT / "kit/app/static/product.js").read_text()
+    handler = source.split("workspaceHandlers.now=async()=>{", 1)[1].split(
+        "\nlet selectedJournal=", 1
+    )[0]
+    run_browser_contract(
+        r"""
+const assert = require('node:assert/strict');
+const requests = [];
+let homeRenderGeneration = 0;
+const reviewState = {update:null};
+const current = 'photos'; // Navigation can complete while Home requests run.
+const api = path => {
+  requests.push(path);
+  return path === '/updates' ? new Promise(()=>{}) : Promise.resolve({});
+};
+const workspaceHandlers = {};
+"""
+        + "workspaceHandlers.now=async()=>{"
+        + handler
+        + r"""
+const timer = setTimeout(()=>{throw Error('Home waited for external update discovery');}, 500);
+workspaceHandlers.now().then(()=>{
+  clearTimeout(timer);
+  assert(requests.includes('/journals?limit=1'));
+  assert(!requests.includes('/timeline'));
+});
+"""
+    )
+
+
+def test_api_coalesces_concurrent_reads_but_refreshes_after_completion_and_writes():
+    html = (ROOT / "kit/app/static/index.html").read_text()
+    source = html.split("const pendingReads=new Map();", 1)[1].split(
+        "async function requestApi", 1
+    )[0]
+    run_browser_contract(
+        r"""
+const assert = require('node:assert/strict');
+const pendingReads = new Map();
+let profile = 'nova', count = 0;
+const scoped = path => path + '?profile=' + profile;
+let resolve;
+const requestApi = () => {count++; return new Promise(done=>{resolve=done;});};
+"""
+        + source
+        + r"""
+(async()=>{
+  const first = api('/overview');
+  assert.strictEqual(first, api('/overview'));
+  assert.equal(count, 1);
+  resolve({}); await first;
+  const second = api('/overview');
+  assert.equal(count, 2);
+  profile = 'rowan';
+  assert.notStrictEqual(api('/overview'), second);
+  api('/appearance', {method:'POST'});
+  const afterWrite = api('/overview');
+  assert.equal(count, 5);
+  assert.notStrictEqual(afterWrite, second);
+})();
+"""
+    )

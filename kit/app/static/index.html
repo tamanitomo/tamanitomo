@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="/static/product.css">
 <link rel="stylesheet" href="/static/chat-dock.css">
 <link rel="stylesheet" href="/static/vault-atmosphere.css">
-<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/static/icon_32.png" type="image/png">
 <link rel="manifest" href="/static/site.webmanifest">
 <script>
 /* Paint the saved palette before the first render, so the workspace never
@@ -21,7 +21,7 @@
 
 <header>
   <div class="brand">
-    <img class="brand-logo" src="/static/favicon.svg" alt="Tamanitomo" width="34" height="34">
+    <img class="brand-logo" src="/static/icon_64.png" alt="Tamanitomo" width="34" height="34">
     <div class="brand-name-group">
       <span class="brand-name">Tamanitomo</span>
       <span class="brand-sub">魂の友</span>
@@ -196,7 +196,20 @@ document.addEventListener('error',event=>{
   if(!other)portraitStored=false;
 },true);
 const workspaceHandlers={};
-async function api(path,options){
+// Share simultaneous default GETs (for example Home and the review banner),
+// without keeping stale data between renders or across writes.
+const pendingReads=new Map();
+function api(path,options){
+  if(options){pendingReads.clear();return requestApi(path,options);}
+  const key=scoped('/api'+path);
+  if(pendingReads.has(key))return pendingReads.get(key);
+  const pending=requestApi(path).finally(()=>{
+    if(pendingReads.get(key)===pending)pendingReads.delete(key);
+  });
+  pendingReads.set(key,pending);
+  return pending;
+}
+async function requestApi(path,options){
   const opts=Object.assign({headers:{'content-type':'application/json'}},options||{});
   if(token){
     opts.headers['x-tamanitomo-token']=token;
@@ -813,21 +826,21 @@ async function paintImageBlock(){
 }
 
 
-setInterval(()=>{if(current==='now'&&!$('product-dialog').open)render('now').catch(()=>{});},30000);
+setInterval(()=>{if(!document.hidden&&current==='now'&&!$('product-dialog').open)render('now').catch(()=>{});},30000);
 </script>
-<script src="/static/appearance.js"></script>
-<script src="/static/editing.js"></script>
-<script src="/static/feelings.js"></script>
-<script src="/static/workspace.js"></script>
-<script src="/static/us.js"></script>
-<script src="/static/product.js"></script>
-<script src="/static/journal.js"></script>
-<script src="/static/onboarding.js"></script>
-<script src="/static/studios.js"></script>
-<script src="/static/vault-editor.bundle.js"></script>
-<script src="/static/vault-editor.js"></script>
-<script src="/static/vault-atmosphere.js"></script>
-<script src="/static/voice-chat.js"></script>
-<script src="/static/settings.js"></script>
-<script src="/static/chat-dock.js"></script>
+<script defer src="/static/appearance.js"></script>
+<script defer src="/static/editing.js"></script>
+<script defer src="/static/feelings.js"></script>
+<script defer src="/static/workspace.js"></script>
+<script defer src="/static/us.js"></script>
+<script defer src="/static/product.js"></script>
+<script defer src="/static/journal.js"></script>
+<script defer src="/static/onboarding.js"></script>
+<script defer src="/static/studios.js"></script>
+<script defer src="/static/vault-editor.bundle.js"></script>
+<script defer src="/static/vault-editor.js"></script>
+<script defer src="/static/vault-atmosphere.js"></script>
+<script defer src="/static/voice-chat.js"></script>
+<script defer src="/static/settings.js"></script>
+<script defer src="/static/chat-dock.js"></script>
 </html>

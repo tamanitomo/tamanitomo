@@ -781,17 +781,36 @@ async function showLevelEvent(ev,agent){
   await seen();levelShowing=false;
 }
 
+function homeUpdateNotice(updateInfo){
+  return updateInfo?.has_update?`<div class="notice-strip update-strip">
+    <div class="update-strip-text">
+      <p><strong>Tamanitomo v${esc(updateInfo.latest_version)}</strong> is available. (Installed: v${esc(updateInfo.version)})</p>
+      <p class="dim small">Your companions’ memories, journals, and vault remain completely untouched.</p>
+    </div>
+    <button class="act small" data-settings-panel="updates">See what’s new &amp; update</button>
+  </div>`:'';
+}
+let homeRenderGeneration=0;
 workspaceHandlers.now=async()=>{
-  const [d,content,journal,timeline,closet,updateInfo,emotions]=await Promise.all([
+  const generation=++homeRenderGeneration;
+  // External update discovery must never hold the local Home screen hostage.
+  const updateRequest=api('/updates').catch(()=>null);
+  const updateInfo=reviewState.update;
+  const [d,content,journal,closet,emotions]=await Promise.all([
     api('/overview'),
     api('/content'),
-    api('/journals'),
-    api('/timeline'),
+    api('/journals?limit=1'),
     api('/closet').catch(()=>null),
-    api('/updates').catch(()=>null),
     api('/feelings').catch(()=>null)
   ]);
-  if(current!=='now')return;
+  if(current!=='now'||generation!==homeRenderGeneration)return;
+  updateRequest.then(info=>{
+    if(current==='now'&&generation===homeRenderGeneration&&info){
+      setReviewBanner(d.problems.length,info,d.setup_pending,d.agent);
+      const host=$('home-update-notice');
+      if(host){host.innerHTML=homeUpdateNotice(info);wireRoutes(host);}
+    }
+  });
   profileTimezone=d.timezone;$('who').textContent=d.agent;if($('crumb-agent'))$('crumb-agent').textContent=d.agent;
   if($('companion-avatar-pill'))$('companion-avatar-pill').outerHTML=
     faceHtml(d.agent,'profile-avatar-pill').replace('class="avatar has-face','id="companion-avatar-pill" class="avatar has-face');
@@ -832,13 +851,7 @@ workspaceHandlers.now=async()=>{
   }
 
   $('now').innerHTML=`
-  ${updateInfo?.has_update?`<div class="notice-strip update-strip">
-    <div class="update-strip-text">
-      <p><strong>Tamanitomo v${esc(updateInfo.latest_version)}</strong> is available. (Installed: v${esc(updateInfo.version)})</p>
-      <p class="dim small">Your companions’ memories, journals, and vault remain completely untouched.</p>
-    </div>
-    <button class="act small" data-settings-panel="updates">See what’s new &amp; update</button>
-  </div>`:''}
+  <div id="home-update-notice">${homeUpdateNotice(updateInfo)}</div>
 
   <div class="presence-sanctuary">
     <div class="presence-hero-card">

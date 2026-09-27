@@ -2264,4 +2264,6 @@ workspaceHandlers['local-models']=async()=>{
   };
   wireEngineActions();
 };
-boot().catch(e=>{notice(e.message,true);$('who').textContent='Connection needed';});
+document.addEventListener('DOMContentLoaded',()=>{
+  boot().catch(e=>{notice(e.message,true);$('who').textContent='Connection needed';});
+},{once:true});
