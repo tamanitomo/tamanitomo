@@ -756,6 +756,11 @@ const settingsPanels=[
   placeHermesCards(host,['installation','stack','gateway','lifecycle']);
  }},
 
+{group:'Models & providers',id:'models-overview',bare:true,title:'Connected accounts & routing',
+ blurb:'Which accounts are connected, and what is actually using them',
+ keywords:'grok chatgpt openai oauth signed in account connected routing primary provider active use everywhere',
+ render:renderModelsOverview},
+
 {group:'Models & providers',id:'hermes-models',bare:true,title:'Models & fallbacks',
  blurb:'Which model answers, and what answers when it cannot',
  keywords:'model provider fallback openrouter ollama base url presets cascade reasoning',
@@ -900,6 +905,105 @@ async function wireAvailableModel(providerField,modelField,urlField,{primary=fal
   if(urlField)urlField.onchange=()=>refresh();
   if(!primary)for(const id of ['primary-provider','primary-url'])$(id)?.addEventListener('change',()=>{if(!select.value){modelField.value='';refresh();}});
   refresh();
+}
+
+/* ---------------------------------------------------- models overview panel
+   The question the three cards below never answered on their own: an account
+   being connected — an API key saved, or an OAuth sign-in Hermes itself
+   recorded — is not the same as anything actually calling it. This reads the
+   same discovery the model editor uses, plus Hermes's own auth.json, and adds
+   the one action that was missing: point everything at an account in one
+   step instead of editing the primary model, each tier, and every job by hand. */
+const KIND_LABELS={oauth:'Signed in',api_key:'API key saved',reachable:'Reachable',profile:'Current primary',custom:'Custom endpoint'};
+async function renderModelsOverview(host){
+  host.innerHTML='<p class="dim" role="status">Loading…</p>';
+  let providers,env,jobsData;
+  try{
+    [providers,env,jobsData]=await Promise.all([
+      api('/models/providers'),
+      api('/environment'),
+      api('/jobs').catch(()=>({jobs:[]})),
+    ]);
+  }catch(error){
+    host.innerHTML=`<h2 style="margin-top:0">Connected accounts &amp; routing</h2><p class="bad">${esc(error.message)}</p>`;
+    return;
+  }
+  const primaryProvider=env.model.provider||'';
+  const primaryModel=env.model.default||'';
+  const modelJobs=(jobsData.jobs||[]).filter(j=>!j.no_agent);
+  const overrides=new Map();
+  for(const j of modelJobs){
+    if(!j.provider)continue;
+    overrides.set(j.provider,(overrides.get(j.provider)||0)+1);
+  }
+  const followingPrimary=modelJobs.length-[...overrides.values()].reduce((a,b)=>a+b,0);
+  const tierLine=t=>{
+    const tier=env.tiers?.[t];
+    return tier?.model
+      ?`${t==='loops'?'Loops':'Reflection'}: <strong>${esc(tier.provider||primaryProvider||'?')} / ${esc(tier.model)}</strong>`
+      :`${t==='loops'?'Loops':'Reflection'}: <span class="dim">follows the primary model</span>`;
+  };
+  const rows=(providers.providers||[]).filter(r=>r.provider||r.base_url);
+  const active=providers.active_provider?rows.find(r=>r.provider===providers.active_provider):null;
+  const mismatch=active&&active.provider!==primaryProvider;
+  const isPrimaryRow=r=>r.provider===primaryProvider&&(r.base_url||'')===(env.model.base_url||'');
+
+  host.innerHTML=`
+  <h2 style="margin-top:0">Connected accounts &amp; routing</h2>
+  <p class="dim">What this companion actually knows how to reach, and what is using it right now. Connecting an account — even signing in with OAuth — never moves anything on its own; use “Use everywhere” to point everything at it.</p>
+  ${mismatch?`<div class="notice-strip"><p><strong>You’re signed in to ${esc(active.label)}, but nothing is using it yet.</strong></p>
+    <p class="dim small">The primary model is still <code>${esc(primaryProvider||'unset')}${primaryModel?' / '+esc(primaryModel):''}</code>${modelJobs.length?`, and ${followingPrimary} of ${modelJobs.length} job(s) follow it`:''}. Pick a model for ${esc(active.label)} below and apply it.</p></div>`:''}
+  ${rows.length?`<table style="width:100%"><tbody>
+  ${rows.map(r=>`<tr>
+    <td><strong>${esc(r.label)}</strong>${r.active?' <span class="pill status-good">Active sign-in</span>':''}${isPrimaryRow(r)?' <span class="pill">Primary</span>':''}</td>
+    <td><span class="pill ${r.ready?'status-good':'status-warn'}">${esc(KIND_LABELS[r.kind]||r.kind||'Known')}</span></td>
+    <td class="dim small">${r.models?r.models+' model'+(r.models===1?'':'s')+' known':'No models listed yet'}</td>
+    <td>${isPrimaryRow(r)?'<span class="dim small">Already primary</span>':`<button type="button" class="quiet" data-use-everywhere="${esc(r.key)}">Use everywhere…</button>`}</td>
+  </tr>
+  <tr class="use-everywhere-row" data-use-everywhere-row="${esc(r.key)}" hidden><td colspan="4" style="padding-top:0">
+    ${modelPickerHTML('use-everywhere-'+esc(r.key),'')}
+    <div class="actions" style="margin-top:6px"><button type="button" class="act small" data-confirm-use="${esc(r.key)}">Apply everywhere</button>
+    <span class="dim small" data-use-everywhere-status="${esc(r.key)}"></span></div>
+  </td></tr>`).join('')}
+  </tbody></table>`:'<p class="dim">No provider has been reached yet. Add an API key or sign in below.</p>'}
+
+  <h3 class="section-subheading">What is running where</h3>
+  <dl class="fact-list">
+    <div><dt>Primary</dt><dd>${primaryProvider?esc(primaryProvider)+(primaryModel?' / '+esc(primaryModel):''):'<span class="dim">Not set</span>'}</dd></div>
+    <div><dt>Tiers</dt><dd>${tierLine('loops')}<br>${tierLine('reflection')}</dd></div>
+    <div><dt>Jobs</dt><dd>${modelJobs.length
+      ?`${followingPrimary} of ${modelJobs.length} model-backed job${modelJobs.length===1?'':'s'} follow the primary model.`+
+        (overrides.size?' Their own override: '+[...overrides].map(([p,n])=>`${esc(p)} (${n})`).join(', ')+'.':'')
+      :'<span class="dim">No model-backed jobs installed yet.</span>'}
+      <button type="button" class="link-button small" id="overview-jump-jobs">Edit per-job routing →</button></dd></div>
+  </dl>`;
+
+  for(const button of host.querySelectorAll('[data-use-everywhere]')){
+    button.onclick=()=>{
+      const row=host.querySelector(`[data-use-everywhere-row="${CSS.escape(button.dataset.useEverywhere)}"]`);
+      row.hidden=!row.hidden;
+      if(row.hidden||row.dataset.wired)return;
+      row.dataset.wired='1';
+      const account=rows.find(r=>r.key===button.dataset.useEverywhere);
+      const picker=row.querySelector('[data-model-picker]');
+      const control=wireModelPicker(picker,{provider:()=>account.provider,baseUrl:()=>account.base_url||'',value:'',defaultLabel:'Choose a model'});
+      row.querySelector('[data-confirm-use]').onclick=async()=>{
+        const model=control.read().trim();
+        const status=row.querySelector('[data-use-everywhere-status]');
+        if(!model){status.innerHTML='<span class="bad">Choose a model first.</span>';return;}
+        status.textContent='';
+        try{
+          await action('/models/use-everywhere',{provider:account.provider,model,...(account.base_url?{base_url:account.base_url}:{})});
+          notice(account.label+' is now used everywhere.');
+          renderModelsOverview(host);
+          const jobsSection=document.getElementById('settings-section-jobs');
+          if(jobsSection)renderJobsPanel(jobsSection);
+        }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
+      };
+    };
+  }
+  const jump=host.querySelector('#overview-jump-jobs');
+  if(jump)jump.onclick=()=>openSettings(null,'jobs');
 }
 
 /* ------------------------------------------------------------- jobs panel

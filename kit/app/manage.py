@@ -303,6 +303,52 @@ def _live_models(home, base_url, model_cfg):
     )
 
 
+# The provider slugs Hermes routes through after `hermes auth add <slug>`.
+# These are not API-key providers (see FALLBACK_CATALOG) — the slug itself
+# carries the OAuth session, so it is what a model/job's own `provider`
+# field must hold to actually use that sign-in.
+OAUTH_PROVIDER_LABELS = {
+    "xai-oauth": "xAI Grok (signed in)",
+    "openai-codex": "ChatGPT (signed in)",
+    "qwen-oauth": "Qwen (signed in)",
+    "minimax-oauth": "MiniMax (signed in)",
+}
+
+
+def read_auth_accounts(hermes_root):
+    """OAuth sign-ins Hermes itself recorded, read straight from its own store.
+
+    This is the only ground truth for "is Grok actually connected" — the
+    provider/model cache only proves a credential worked once something
+    already asked it to. `credential_pool`'s shape is Hermes's own and not
+    documented here, so every read of it is best-effort and never raises."""
+    active = None
+    providers = set()
+    try:
+        data = json.loads((hermes_root / "auth.json").read_text(encoding="utf-8"))
+    except Exception:
+        return {"active": active, "providers": providers}
+    raw_active = data.get("active_provider")
+    if isinstance(raw_active, str) and raw_active:
+        active = raw_active.lower()
+        providers.add(active)
+    pool = data.get("credential_pool")
+    try:
+        if isinstance(pool, dict):
+            providers.update(str(k).lower() for k in pool if k)
+        elif isinstance(pool, list):
+            for entry in pool:
+                if isinstance(entry, str) and entry:
+                    providers.add(entry.lower())
+                elif isinstance(entry, dict):
+                    slug = entry.get("provider") or entry.get("slug") or entry.get("id")
+                    if isinstance(slug, str) and slug:
+                        providers.add(slug.lower())
+    except Exception:
+        pass
+    return {"active": active, "providers": providers}
+
+
 def text(value, name, maxlen=300, empty=False):
     if (
         not isinstance(value, str)
@@ -1017,14 +1063,8 @@ def register(app, select, load, operations):
             ):
                 has_cred = True
                 break
-        auth_file = c.hermes_root / "auth.json"
-        if auth_file.exists():
-            try:
-                auth_data = json.loads(auth_file.read_text(encoding="utf-8"))
-                if auth_data.get("active_provider") or auth_data.get("credential_pool"):
-                    has_cred = True
-            except Exception:
-                pass
+        if read_auth_accounts(c.hermes_root)["providers"]:
+            has_cred = True
 
         loc = {}
         try:
@@ -1912,6 +1952,7 @@ def register(app, select, load, operations):
         credential worked. And the profile's own default belongs in the list
         whether or not anything else has noticed it."""
         rt, _, h = context()
+        c = cc.load(h)
         cfg = config(h).get("model") or {}
         cache = {}
         try:
@@ -1920,7 +1961,7 @@ def register(app, select, load, operations):
             )
         except Exception:
             pass
-        labels = {"mistral": "Mistral AI"}
+        labels = dict(OAUTH_PROVIDER_LABELS, mistral="Mistral AI")
         try:
             catalog_rows = (
                 rt.catalog() if rt.info()["available"] else []
@@ -1931,10 +1972,11 @@ def register(app, select, load, operations):
                 ) or row.get("slug")
         except Exception:
             pass
+        auth = read_auth_accounts(c.hermes_root)
 
         rows, seen = {}, set()
 
-        def add(provider, base_url, ready, why):
+        def add(provider, base_url, ready, why, kind=None):
             key = f'custom:{base_url.rstrip("/")}' if base_url else provider
             if not key or key in seen:
                 return
@@ -1954,6 +1996,8 @@ def register(app, select, load, operations):
                 "models": models,
                 "ready": bool(ready or models),
                 "why": why,
+                "kind": kind or ("custom" if base_url else "reachable"),
+                "active": bool(provider) and provider == auth["active"],
             }
 
         # 1. whatever this profile is set to use right now
@@ -1962,8 +2006,14 @@ def register(app, select, load, operations):
             str(cfg.get("base_url") or ""),
             True,
             "this profile",
+            kind="profile",
         )
-        # 2. anything with a populated cache — proof a credential worked
+        # 2. accounts Hermes itself recorded as signed in — the only real proof
+        # an OAuth connection (Grok, ChatGPT, ...) exists at all, independent of
+        # whether anything has been pointed at it yet.
+        for provider in auth["providers"]:
+            add(provider, "", True, "signed in", kind="oauth")
+        # 3. anything with a populated cache — proof a credential worked
         for key, entry in cache.items():
             if not (entry or {}).get("models"):
                 continue
@@ -1971,7 +2021,7 @@ def register(app, select, load, operations):
                 add("custom", key[len("custom:") :], True, "reachable")
             else:
                 add(key.lower(), "", True, "reachable")
-        # 3. anything holding an API key, even if never listed
+        # 4. anything holding an API key, even if never listed
         try:
             from companion_gateway import _env_values
 
@@ -1984,13 +2034,20 @@ def register(app, select, load, operations):
                     bool(values.get(k) or os.environ.get(k))
                     for k in row.get("api_key_env_vars", [])
                 ):
-                    add(str(row.get("slug") or "").lower(), "", True, "key configured")
+                    add(
+                        str(row.get("slug") or "").lower(),
+                        "",
+                        True,
+                        "key configured",
+                        kind="api_key",
+                    )
         except Exception:
             pass
 
         order = sorted(
             rows.values(),
             key=lambda r: (
+                not r["active"],
                 r["why"] != "this profile",
                 -r["models"],
                 r["label"].lower(),
@@ -1998,6 +2055,7 @@ def register(app, select, load, operations):
         )
         return {
             "providers": order,
+            "active_provider": auth["active"],
             "profile": {
                 "provider": str(cfg.get("provider") or ""),
                 "base_url": str(cfg.get("base_url") or ""),
@@ -2537,6 +2595,38 @@ def register(app, select, load, operations):
             return {"moved": moved, "failed": failed, "note": note}
 
         return op("Move jobs to a provider", action)
+
+    @app.post("/api/models/use-everywhere")
+    def use_everywhere(payload: dict):
+        """One action for the question the settings page never answered on its
+        own: an account being connected — an API key saved, or an OAuth
+        sign-in Hermes recorded in auth.json — is not the same as anything
+        actually calling it. This sets the primary model, clears the tiers so
+        they follow it, and re-pins every shipped companion job through the
+        same tier cascade `apply_job_models` already uses."""
+        from kit.cli.models import apply_job_models
+
+        provider = text(payload.get("provider"), "provider", 120)
+        model = text(payload.get("model"), "model", 500)
+        row = {"provider": provider, "model": model}
+        if payload.get("base_url"):
+            row["base_url"] = payload["base_url"]
+        save_environment({"model": row, "tiers": {}})
+
+        def action(rt, p, h, report):
+            report(f"Applying {provider} to every companion job")
+            c = cc.load(h)
+            result = apply_job_models(c, run=lambda a: rt.run(a, home=h))
+            result["note"] = (
+                f"{provider} is now the primary model, used by "
+                f"{len(result.get('updated') or [])} companion job(s). Jobs you "
+                "added yourself are untouched — use “Move every job to "
+                "another provider” in Companion continuity for those. Restart "
+                "the gateway to reload persistent workers."
+            )
+            return result
+
+        return op(f"Use {provider} everywhere", action)
 
     @app.post("/api/jobs/history")
     def job_history():

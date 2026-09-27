@@ -304,6 +304,37 @@ function showNote(note,edit=false){
   if($('save-note'))$('save-note').onclick=async()=>{const d=await api('/vault/file',{method:'PUT',body:JSON.stringify({path:note.path,text:$('note-text').value,revision:note.revision})});openNote=d;showNote(d);await listVault(vaultPath);notice('Note saved.');};
   for(const b of $('vault-document').querySelectorAll('.wiki-link'))b.onclick=()=>{const target=b.dataset.link;const base=note.path.split('/').slice(0,-1).join('/');return readNote((base?base+'/':'')+target+(target.endsWith('.md')?'':'.md'));};
 }
+/* The device-code sign-in widget, shared by onboarding's own copy and this
+   settings card. Connecting an account only makes it reachable; it never
+   touches the primary model, a tier, or a job on its own, so the success
+   state points straight at the place that does. */
+let settingsOauthPoll=null;
+function wireOAuthConnect(container,provider,label){
+  clearInterval(settingsOauthPoll);
+  container.innerHTML='<p class="dim small">Starting sign-in…</p>';
+  post('/onboarding/oauth/start',{provider}).then(res=>{
+    if(res.status==='approved')return oauthConnected(container,label);
+    if(res.status==='error')return oauthFailed(container,res.error);
+    container.innerHTML=`<p class="small">Open <a href="${esc(res.verification_url||'#')}" target="_blank" rel="noopener" id="oauth-connect-url">the verification page</a> and enter code <code id="oauth-connect-code">${esc(res.user_code||'—')}</code>.</p><p class="dim small" id="oauth-connect-status">⏳ Waiting for your approval…</p>`;
+    const sid=res.session_id;
+    settingsOauthPoll=setInterval(async()=>{
+      try{
+        const poll=await api('/onboarding/oauth/poll/'+sid);
+        if(poll.user_code&&$('oauth-connect-code'))$('oauth-connect-code').textContent=poll.user_code;
+        if(poll.verification_url&&$('oauth-connect-url'))$('oauth-connect-url').href=poll.verification_url;
+        if(poll.status==='approved'){clearInterval(settingsOauthPoll);oauthConnected(container,label);}
+        else if(poll.status==='error'){clearInterval(settingsOauthPoll);oauthFailed(container,poll.error);}
+      }catch(e){/* keep polling through a transient network hiccup */}
+    },3000);
+  }).catch(error=>{container.innerHTML=`<p class="bad small">${esc(error.message)}</p>`;});
+}
+function oauthConnected(container,label){
+  container.innerHTML=`<p class="small"><span class="pill status-good">Connected</span> ${esc(label)} is signed in.</p><button type="button" class="quiet" id="oauth-connect-use">Use it everywhere →</button>`;
+  $('oauth-connect-use').onclick=()=>openSettings(null,'models-overview');
+}
+function oauthFailed(container,message){
+  container.innerHTML=`<p class="bad small">Sign-in failed: ${esc(message||'Unknown error')}</p>`;
+}
 let envState=null;
 /* The Hermes environment, drawn into whichever container asks for it. The
    unified Settings page hosts it as several of its panels; nothing below
@@ -326,6 +357,11 @@ async function renderHermesInto(host){
 
   <div class="actions"><button class="act">Save models</button><button class="quiet" id="test-model" type="button">Test saved model</button><button class="quiet" id="apply-models" type="button">Apply job models</button></div></form><p class="dim small">${esc(d.restart_note)}</p></div>
   <div class="card" data-hermes-card="accounts"><h2>Accounts and credentials</h2><p class="dim">Sign in through Hermes or add an API key. Saved keys stay hidden.</p>
+  <h3 class="section-subheading">Sign in with a subscription</h3>
+  <p class="dim small">Connecting an account only makes it reachable — it does not move the primary model or any job onto it. After connecting, use <strong>Connected accounts &amp; routing</strong> to put it to work.</p>
+  <div class="actions"><button type="button" class="quiet" data-oauth-connect="xai-oauth" data-oauth-label="xAI Grok">Connect Grok (SuperGrok / X Premium+)</button><button type="button" class="quiet" data-oauth-connect="openai-codex" data-oauth-label="ChatGPT">Connect ChatGPT (Plus/Pro)</button></div>
+  <div id="oauth-connect-panel"></div>
+  <h3 class="section-subheading">API key</h3>
   <form id="credentials-form"><div class="form-grid"><label>Credential<select id="credential-name"><option>Loading provider catalog…</option></select></label><label>Value (blank removes it)<input id="credential-value" type="password" autocomplete="new-password"></label></div><div class="actions"><button class="act">Save credential</button></div></form><div id="credential-status" class="dim small"></div>
   <div class="actions"><button class="quiet native-console" data-console="models">Account sign-in / OAuth</button><button class="quiet native-console" data-console="messaging">Telegram & messaging</button><button class="quiet native-console" data-console="tools">Tools, voice, images & MCP</button><button class="quiet native-console" data-console="setup">Full Hermes setup</button><button class="quiet" id="advanced-config">All Hermes settings</button></div><div id="native-console"></div></div>
   <div class="card" data-hermes-card="gateway" id="gateway-controls"><h2>Gateway & background life</h2><p class="dim">Closing this app leaves an independently running Hermes gateway and its enabled jobs running. The host must stay awake; photos require an enabled schedule and working image provider.</p><div class="grid">${Object.entries(gateway.preflight.checks).map(([key,value])=>`<div><span class="pill ${value?'status-good':'status-warn'}">${value?'Verified':'Not verified'}</span><p class="small">${esc(key.replaceAll('_',' '))}</p></div>`).join('')}</div><p class="small dim">Gateway owner: ${esc(gateway.preflight.owner_home)}</p>${gateway.preflight.notes.map(n=>`<p class="small warn">${esc(n)}</p>`).join('')}<p class="dim">Review the hooks once, verify the provider, then start the gateway and activate the routine. Model-free maintenance remains active when the routine is paused.</p>
@@ -357,6 +393,7 @@ async function renderHermesInto(host){
   bindAction('test-model','/models/probe');bindAction('apply-models','/jobs/apply-models');
   bindAction('repair-companion','/maintenance/repair');bindAction('activate-routine','/maintenance/activate');bindAction('pause-routine','/maintenance/pause');bindAction('doctor-companion','/maintenance/doctor');
   $('credentials-form').onsubmit=async e=>{e.preventDefault();await post('/credentials',{name:$('credential-name').value,value:$('credential-value').value});$('credential-value').value='';notice('Credential saved. It will not be shown again.');};
+  for(const b of host.querySelectorAll('[data-oauth-connect]'))b.onclick=()=>wireOAuthConnect($('oauth-connect-panel'),b.dataset.oauthConnect,b.dataset.oauthLabel);
   $('review-hooks').onclick=async()=>{const h=await api('/hooks');$('hook-review').innerHTML=`<details open><summary>Commands Hermes will run</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(JSON.stringify(h.hooks,null,2))}</pre><p class="dim">${esc(h.note)}</p><label>First message<input id="hook-message" value="Hello."></label><button class="act" id="approve-hooks">Approve these hooks and send my first message</button></details>`;bindAction('approve-hooks','/hooks/approve',()=>({digest:h.digest,message:$('hook-message').value}));};
   for(const b of host.querySelectorAll('.gateway-action'))b.onclick=async()=>{const affects=['stop','restart','uninstall','restart-root'].includes(b.dataset.action);if(affects&&!confirm('This can affect every profile served by the owning gateway. Continue?'))return;await action('/gateway/'+b.dataset.action,{affects_all_profiles:affects,root_restarted:false});};
   $('save-gateway-mode').onclick=()=>{if($('gateway-mode').value)return action('/gateway/'+$('gateway-mode').value);};

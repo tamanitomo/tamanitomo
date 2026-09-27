@@ -753,6 +753,79 @@ def test_fallback_settings_validate_before_writing_and_preserve_order(probe_work
     assert (vault / "Keep.md").read_text(encoding="utf-8") == "Original note.\n"
 
 
+def test_models_providers_surfaces_oauth_signins_from_auth_json(probe_workspace):
+    """`auth.json` is the only ground truth for an OAuth sign-in (Grok, ChatGPT,
+    ...). It must show up in the provider list on its own, before anything has
+    ever pointed the primary model or a job at it."""
+    client, home, vault = probe_workspace
+    headers = {"x-companion-token": "probe-token"}
+    (home / "auth.json").write_text(
+        json.dumps({"active_provider": "xai-oauth", "credential_pool": ["xai-oauth"]}),
+        encoding="utf-8",
+    )
+    response = client.get("/api/models/providers", headers=headers)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["active_provider"] == "xai-oauth"
+    signed_in = next(r for r in body["providers"] if r["provider"] == "xai-oauth")
+    assert signed_in["kind"] == "oauth"
+    assert signed_in["active"] is True
+    assert signed_in["ready"] is True
+    # The profile's own, unrelated primary provider is still listed, and is not
+    # marked active just because it happens to be configured.
+    primary = next(r for r in body["providers"] if r["provider"] == "openrouter")
+    assert primary["active"] is False
+
+
+def test_models_providers_ignores_unreadable_or_malformed_auth_json(probe_workspace):
+    client, home, vault = probe_workspace
+    headers = {"x-companion-token": "probe-token"}
+    (home / "auth.json").write_text("not json", encoding="utf-8")
+    response = client.get("/api/models/providers", headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["active_provider"] is None
+
+
+def test_use_everywhere_points_primary_at_the_connected_account_immediately(
+    probe_workspace,
+):
+    """Connecting an account has never been the same as anything using it —
+    this is the one action that closes that gap. The primary model write must
+    land synchronously, before the (Hermes-dependent) job re-pin even starts,
+    so a slow or unavailable gateway can never leave the page's own state
+    looking like nothing happened."""
+    client, home, vault = probe_workspace
+    headers = {"x-companion-token": "probe-token"}
+    response = client.post(
+        "/api/models/use-everywhere",
+        headers=headers,
+        json={"provider": "xai-oauth", "model": "grok-4"},
+    )
+    assert response.status_code == 200, response.text
+    saved = yaml.safe_load((home / "config.yaml").read_text(encoding="utf-8"))
+    assert saved["model"]["provider"] == "xai-oauth"
+    assert saved["model"]["default"] == "grok-4"
+    # No base_url was given, so a stale one from a previous local/custom
+    # provider must not survive the switch.
+    assert "base_url" not in saved["model"]
+    # Tiers are cleared so loops/reflection follow the new primary instead of
+    # quietly staying pinned to whatever they had before.
+    assert cc.load(home).models == {}
+
+
+def test_use_everywhere_rejects_a_missing_model(probe_workspace):
+    client, home, vault = probe_workspace
+    headers = {"x-companion-token": "probe-token"}
+    before = snapshot(home, vault)
+    response = client.post(
+        "/api/models/use-everywhere",
+        headers=headers,
+        json={"provider": "xai-oauth", "model": ""},
+    )
+    assert response.status_code == 400, response.text
+    assert snapshot(home, vault) == before
+
+
 BUDGET_WINDOWS = [2048, 4096, 8192, 16384, 32768, 65536, 131072, 200192, 272000, 900000]
 
 
