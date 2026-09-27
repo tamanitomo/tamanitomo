@@ -313,7 +313,7 @@ function wireOAuthConnect(container,provider,label){
   clearInterval(settingsOauthPoll);
   container.innerHTML='<p class="dim small">Starting sign-in…</p>';
   post('/onboarding/oauth/start',{provider}).then(res=>{
-    if(res.status==='approved')return oauthConnected(container,label);
+    if(res.status==='approved')return oauthConnected(container,provider,label);
     if(res.status==='error')return oauthFailed(container,res.error);
     container.innerHTML=`<p class="small">Open <a href="${esc(res.verification_url||'#')}" target="_blank" rel="noopener" id="oauth-connect-url">the verification page</a> and enter code <code id="oauth-connect-code">${esc(res.user_code||'—')}</code>.</p><p class="dim small" id="oauth-connect-status">⏳ Waiting for your approval…</p>`;
     const sid=res.session_id;
@@ -322,18 +322,74 @@ function wireOAuthConnect(container,provider,label){
         const poll=await api('/onboarding/oauth/poll/'+sid);
         if(poll.user_code&&$('oauth-connect-code'))$('oauth-connect-code').textContent=poll.user_code;
         if(poll.verification_url&&$('oauth-connect-url'))$('oauth-connect-url').href=poll.verification_url;
-        if(poll.status==='approved'){clearInterval(settingsOauthPoll);oauthConnected(container,label);}
+        if(poll.status==='approved'){clearInterval(settingsOauthPoll);oauthConnected(container,provider,label);}
         else if(poll.status==='error'){clearInterval(settingsOauthPoll);oauthFailed(container,poll.error);}
       }catch(e){/* keep polling through a transient network hiccup */}
     },3000);
   }).catch(error=>{container.innerHTML=`<p class="bad small">${esc(error.message)}</p>`;});
 }
-function oauthConnected(container,label){
-  container.innerHTML=`<p class="small"><span class="pill status-good">Connected</span> ${esc(label)} is signed in.</p><button type="button" class="quiet" id="oauth-connect-use">Use it everywhere →</button>`;
-  $('oauth-connect-use').onclick=()=>openSettings(null,'models-overview');
-}
 function oauthFailed(container,message){
   container.innerHTML=`<p class="bad small">Sign-in failed: ${esc(message||'Unknown error')}</p>`;
+}
+/* Connecting an account only makes it reachable — it does not decide what
+   uses it. Ask, in order: images, then voice, each only offered when this
+   account can actually do that job (Hermes reports an image provider for
+   it; a matching plain voice engine exists at all), then stop. */
+const OAUTH_STATUS=(label)=>`<p class="small"><span class="pill status-good">Connected</span> ${esc(label)} is signed in.</p>`;
+function oauthDone(container,label,note){
+  container.innerHTML=`${note?`<p class="dim small">${esc(note)}</p>`:''}${OAUTH_STATUS(label)}<button type="button" class="quiet" id="oauth-connect-use">Use it for chat everywhere →</button>`;
+  $('oauth-connect-use').onclick=()=>openSettings(null,'models-overview');
+}
+function oauthOfferVoice(container,provider,label,note){
+  const voiceProvider=provider==='xai-oauth'?'xai':provider==='openai-codex'?'openai':null;
+  if(!voiceProvider)return oauthDone(container,label,note);
+  container.innerHTML=`${note?`<p class="dim small">${esc(note)}</p>`:''}${OAUTH_STATUS(label)}
+  <p>Use ${esc(label)} for this companion’s voice too?</p>
+  <div class="actions"><button type="button" class="act small" id="oauth-voice-yes">Yes, choose a voice</button><button type="button" class="quiet small" id="oauth-voice-no">Not now</button></div>`;
+  $('oauth-voice-no').onclick=()=>oauthDone(container,label);
+  $('oauth-voice-yes').onclick=()=>{
+    const voices=voiceChoices[voiceProvider]||[];
+    container.innerHTML=`${OAUTH_STATUS(label)}<p>Choose a voice for ${esc(label)}:</p>
+    <select id="oauth-voice-pick">${options(voices.map(v=>[v,v]),voices[0]||'')}</select>
+    <div class="actions" style="margin-top:8px"><button type="button" class="act small" id="oauth-voice-confirm">Use this voice</button></div>
+    <p class="dim small">Speech uses its own ${esc(voiceProvider==='xai'?'XAI_API_KEY':'OPENAI_API_KEY')} — signing in above covers chat only. Add that key under API key if voice doesn’t come through.</p>
+    <p class="dim small" id="oauth-voice-status"></p>`;
+    $('oauth-voice-confirm').onclick=async()=>{
+      const status=$('oauth-voice-status');status.textContent='Saving…';
+      try{
+        await action('/voice',{provider:voiceProvider,voice:$('oauth-voice-pick').value,controls:{}});
+        oauthDone(container,label,`${label} is now this companion’s voice too.`);
+      }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
+    };
+  };
+}
+async function oauthConnected(container,provider,label){
+  container.innerHTML=`${OAUTH_STATUS(label)}<p class="dim small">Checking whether ${esc(label)} can generate images…</p>`;
+  let imgData=null;
+  try{imgData=await api('/images');}catch(e){/* Hermes unavailable — images step is skipped below */}
+  const match=imgData&&(imgData.settings.presets||[]).find(p=>p.provider==='hermes'&&p.hermes_provider===provider);
+  if(!match)return oauthOfferVoice(container,provider,label,`${label} isn’t offered as an image provider here yet.`);
+  container.innerHTML=`${OAUTH_STATUS(label)}
+  <p>Use ${esc(label)} to generate this companion’s images too?</p>
+  <div class="actions"><button type="button" class="act small" id="oauth-images-yes">Yes, choose a style</button><button type="button" class="quiet small" id="oauth-images-no">Not now</button></div>`;
+  $('oauth-images-no').onclick=()=>oauthOfferVoice(container,provider,label);
+  $('oauth-images-yes').onclick=async()=>{
+    let styles={},currentStyle='';
+    try{const s=await api('/settings');styles=s.image_styles||{};currentStyle=s.image_style||'';}catch(e){/* fall back to an empty style list */}
+    container.innerHTML=`${OAUTH_STATUS(label)}<p>Choose an image style for ${esc(label)}:</p>
+    <select id="oauth-image-style">${options(Object.entries(styles),currentStyle)}</select>
+    <div class="actions" style="margin-top:8px"><button type="button" class="act small" id="oauth-image-style-confirm">Use this style</button></div>
+    <p class="dim small" id="oauth-image-status"></p>`;
+    $('oauth-image-style-confirm').onclick=async()=>{
+      const status=$('oauth-image-status');status.textContent='Saving…';
+      try{
+        imgData.settings.default_preset=match.id;
+        await post('/images',{settings:imgData.settings,revision:imgData.revision});
+        await saveSettings({image_style:$('oauth-image-style').value});
+        oauthOfferVoice(container,provider,label,`${label} is now generating this companion’s images.`);
+      }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
+    };
+  };
 }
 let envState=null;
 /* The Hermes environment, drawn into whichever container asks for it. The
