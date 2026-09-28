@@ -503,6 +503,82 @@ class StreamProcessTests(unittest.TestCase):
             self.assertEqual(events[-1], {"event": "final", "text": "Hello there\n"})
 
 
+def stand_in_hermes(root):
+    """A minimal Hermes: its quiet runner reports argv and the fallback chain."""
+    (root / "cli.py").write_text(
+        "import os, sys\n"
+        "def _configure_quiet_agent(agent): pass\n"
+        "def _run_quiet_single_query(instance, query):\n"
+        "    print(' '.join(sys.argv[1:]), os.environ.get('TAMANITOMO_CHAT_FALLBACKS'))\n",
+        encoding="utf-8",
+    )
+    (root / "hermes_cli").mkdir()
+    (root / "hermes_cli/__init__.py").write_text("", encoding="utf-8")
+    (root / "hermes_cli/main.py").write_text(
+        "import cli\nfrom types import SimpleNamespace\n"
+        "def main():\n"
+        "    cli._run_quiet_single_query(SimpleNamespace(session_id='s1'), 'q')\n",
+        encoding="utf-8",
+    )
+    return {**os.environ, "PYTHONPATH": str(root), "HERMES_HOME": str(root)}
+
+
+class WarmBridgeTests(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.env = stand_in_hermes(self.root)
+
+    def test_a_warm_bridge_runs_the_turn_it_is_handed(self):
+        bridge = subprocess.run(
+            [sys.executable, str(ROOT / "kit/app/hermes_stream.py"), "--warm"],
+            input=json.dumps({"args": ["chat", "-q", "hi"], "fallbacks": "[]"}) + "\n",
+            env=self.env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        events = [json.loads(line) for line in bridge.stdout.splitlines()]
+        self.assertEqual(events[0], {"event": "session", "id": "s1"})
+        self.assertEqual(events[-1], {"event": "final", "text": "chat -q hi []\n"})
+
+    def test_a_discarded_spare_exits_quietly(self):
+        bridge = subprocess.run(
+            [sys.executable, str(ROOT / "kit/app/hermes_stream.py"), "--warm"],
+            input="",
+            env=self.env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual((bridge.returncode, bridge.stdout), (0, ""))
+
+    def test_a_spare_is_reused_only_while_the_config_is_unchanged(self):
+        bridges = runtime.WarmBridges()
+        self.addCleanup(bridges.close)
+        (self.root / "config.yaml").write_text("model: {}\n", encoding="utf-8")
+        bridges.prepare(sys.executable, self.env)
+        spare = next(iter(bridges.ready.values()))[0]
+        proc, errors = bridges.take(sys.executable, self.env)
+        self.assertIs(proc, spare)
+        self.addCleanup(errors.close)
+        proc.stdin.close()
+        proc.wait()
+        proc.stdout.close()
+
+        bridges.prepare(sys.executable, self.env)
+        stale = next(iter(bridges.ready.values()))[0]
+        (self.root / "config.yaml").write_text("model: {default: other}\n", encoding="utf-8")
+        proc, errors = bridges.take(sys.executable, self.env)
+        self.addCleanup(errors.close)
+        self.assertIsNot(proc, stale)
+        self.assertIsNotNone(stale.poll())
+        proc.stdin.close()
+        proc.wait()
+        proc.stdout.close()
+
+
 class ChatDockApiTests(WorkspaceFixture):
 
     def test_shared_session_database_never_returns_another_profile(self):

@@ -47,6 +47,56 @@ def configure_fallbacks(agent, emit):
     agent._try_activate_fallback = switched
 
 
+# Imported ahead of the turn by a warm bridge; together ~1.4 s of every turn.
+# Plain imports only, nothing that reads config. Names a Hermes release lacks
+# are skipped; the openai client loads its submodules lazily, hence the list.
+WARM_IMPORTS = (
+    "cli",
+    "hermes_cli.main",
+    "run_agent",
+    "model_tools",
+    "agent.agent_init",
+    "agent.conversation_loop",
+    "openai",
+    "openai._client",
+    "openai.types",
+    "openai.resources.chat",
+    "openai.lib.streaming",
+    "mcp.client.session_group",
+    "mcp.client._input_required",
+    "tools.tool_search",
+    "tools.mcp_oauth",
+)
+
+
+def wait_for_turn():
+    """Load Hermes now, then take this process's single turn from stdin.
+
+    The workspace keeps one of these waiting, so a message does not pay for
+    interpreter start-up and imports. The turn itself runs exactly as a cold
+    one does. An empty line or a closed pipe means the spare was discarded.
+    """
+    import importlib
+
+    for name in WARM_IMPORTS:
+        try:
+            importlib.import_module(name)
+        except Exception:
+            pass  # the turn's own import reports the failure as it always has
+    line = sys.stdin.readline()
+    if not line.strip():
+        raise SystemExit(0)
+    turn = json.loads(line)
+    if turn.get("fallbacks") is not None:
+        os.environ["TAMANITOMO_CHAT_FALLBACKS"] = turn["fallbacks"]
+    sys.argv = [sys.argv[0], *turn["args"]]
+    # Nothing Hermes runs may read the workspace's pipe; a cold turn has no stdin.
+    devnull = os.open(os.devnull, os.O_RDONLY)
+    os.dup2(devnull, 0)
+    os.close(devnull)
+    sys.stdin = open(os.devnull, encoding="utf-8")
+
+
 def main():
     wire = sys.stdout
 
@@ -57,6 +107,8 @@ def main():
     output = io.StringIO()
     code = 0
     with contextlib.redirect_stdout(output):
+        if sys.argv[1:2] == ["--warm"]:
+            wait_for_turn()
         import cli
 
         # These wrap functions belonging to somebody else's program, which is

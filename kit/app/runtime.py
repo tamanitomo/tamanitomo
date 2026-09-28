@@ -5,6 +5,7 @@ runs in Hermes's interpreter and fails independently when its API changes.
 """
 
 from __future__ import annotations
+import atexit
 import base64
 import math
 import contextlib
@@ -139,6 +140,110 @@ def _chat_fallbacks(companion):
     return chain
 
 
+class WarmBridges:
+    """Hermes chat bridges started ahead of the turn they will serve.
+
+    A web chat turn is a fresh Hermes process, which spent ~0.8 s starting the
+    interpreter and importing Hermes before it could read the message. One
+    bridge per environment is started after each turn and waits, imports done,
+    for the next. Hermes reads its config while importing, so a spare is only
+    used while config.yaml, .env and the interpreter are unchanged, and for at
+    most MAX_AGE seconds; otherwise the turn starts cold, as it always did.
+    """
+
+    MAX_AGE = 900
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.ready = {}
+
+    @staticmethod
+    def _key(python, env):
+        return (str(python), tuple(sorted(env.items())))
+
+    @staticmethod
+    def _stamp(python, env):
+        home = Path(env["HERMES_HOME"])
+        out = []
+        for path in (
+            home / "config.yaml",
+            home / ".env",
+            Path(python),
+            KIT / "kit/app/hermes_stream.py",
+        ):
+            try:
+                stat = path.stat()
+                out.append((stat.st_mtime_ns, stat.st_size))
+            except OSError:
+                out.append(None)
+        return tuple(out)
+
+    @staticmethod
+    def _start(python, env):
+        # Stderr is kept out of the browser stream; only explicit JSON events cross it.
+        errors = tempfile.TemporaryFile(mode="w+", encoding="utf-8")
+        proc = subprocess.Popen(
+            [str(python), str(KIT / "kit/app/hermes_stream.py"), "--warm"],
+            env=env,
+            cwd=str(KIT),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=errors,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        return proc, errors
+
+    @staticmethod
+    def _discard(spare):
+        proc, errors = spare[0], spare[1]
+        with contextlib.suppress(OSError):
+            proc.stdin.close()
+        if proc.poll() is None:
+            proc.kill()
+        proc.wait()
+        proc.stdout.close()
+        errors.close()
+
+    def take(self, python, env):
+        """A bridge for this turn: the waiting spare if still valid, else a new one."""
+        with self.lock:
+            spare = self.ready.pop(self._key(python, env), None)
+        if spare:
+            proc, errors, stamp, born = spare
+            if (
+                proc.poll() is None
+                and stamp == self._stamp(python, env)
+                and time.monotonic() - born < self.MAX_AGE
+            ):
+                return proc, errors
+            self._discard(spare)
+        return self._start(python, env)
+
+    def prepare(self, python, env):
+        key = self._key(python, env)
+        with self.lock:
+            if key in self.ready:
+                return
+            try:
+                proc, errors = self._start(python, env)
+            except OSError:
+                return
+            self.ready[key] = (proc, errors, self._stamp(python, env), time.monotonic())
+
+    def close(self):
+        with self.lock:
+            spares, self.ready = list(self.ready.values()), {}
+        for spare in spares:
+            self._discard(spare)
+
+
+_warm_bridges = WarmBridges()
+# A spare also exits by itself when the workspace's end of its pipe closes.
+atexit.register(_warm_bridges.close)
+
+
 class Runtime:
     def __init__(self, root, managed=False):
         self.root = Path(root).expanduser().absolute()
@@ -248,20 +353,16 @@ class Runtime:
         env = self.env(home)
         # Recover inside Hermes's current conversation, without rewriting config
         # or restarting a CLI turn that may already have performed tool actions.
-        env["TAMANITOMO_CHAT_FALLBACKS"] = json.dumps(_chat_fallbacks(cc.load(home)))
-        # Stderr is kept out of the browser stream; only explicit JSON events cross it.
-        with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as errors:
-            proc = subprocess.Popen(
-                [str(python), str(KIT / "kit/app/hermes_stream.py"), *args],
-                env=env,
-                cwd=str(KIT),
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=errors,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
+        fallbacks = json.dumps(_chat_fallbacks(cc.load(home)))
+        proc, errors = _warm_bridges.take(python, env)
+        with errors:
+            try:
+                proc.stdin.write(
+                    json.dumps({"args": args, "fallbacks": fallbacks}) + "\n"
+                )
+                proc.stdin.close()
+            except OSError:
+                pass  # it exited early; its stderr says why, read below
 
             def read():
                 for line in proc.stdout:
@@ -311,6 +412,8 @@ class Runtime:
                     proc.kill()
                     proc.wait()
                 proc.stdout.close()
+                # Ready the next turn while the person reads this one.
+                _warm_bridges.prepare(python, env)
 
     def home(self, profile):
         if profile in ("", "default", None):
