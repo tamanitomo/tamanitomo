@@ -165,6 +165,17 @@ INFERENCE_PRESETS = [
     },
 ]
 
+# Named groups of models that can stand as one step of the model chain.
+_FREE_PRESET = next(p for p in INFERENCE_PRESETS if p["id"] == "openrouter_free")
+CHAIN_BUNDLES = {
+    "openrouter-free": {
+        "name": "OpenRouter free cascade",
+        "description": "OpenRouter's free router, then specific free models if it is busy.",
+        "requires_env": _FREE_PRESET["requires_env"],
+        "routes": [_FREE_PRESET["primary"], *_FREE_PRESET["fallbacks"]],
+    }
+}
+
 # Recommendations describe the work, not a vendor SKU. Provider catalogues
 # change and account access differs; the UI pairs this advice with the live
 # model dropdown so a person can choose something they actually have.
@@ -2627,6 +2638,140 @@ def register(app, select, load, operations):
             return result
 
         return op(f"Use {provider} everywhere", action)
+
+    @app.get("/api/models/chain")
+    def model_chain_read():
+        """The chain Hermes will use, and which jobs are on it."""
+        from kit.cli.common import _read_jobs
+        from companion_gateway import _env_values
+        from . import model_chain as mc
+
+        rt, p, h = context()
+        routes = mc.current_routes(config(h))
+        primary = routes[0] if routes else {}
+        jobs = [
+            {
+                "id": j.get("id"),
+                "name": j.get("name") or j.get("id"),
+                "enabled": bool(j.get("enabled")),
+                "state": mc.job_state(j, primary) if primary else "unpinned",
+                "provider": j.get("provider") or "",
+                "model": j.get("model") or "",
+                "last_status": j.get("last_status"),
+                "last_error": hr.redact(str(j.get("last_error") or ""))[:300],
+            }
+            for j in _read_jobs(h / "cron/jobs.json")["jobs"]
+            if not j.get("no_agent")
+        ]
+        models = cc.load(h).models or {}
+        values = _env_values(h)
+        return {
+            "links": mc.collapse(routes, CHAIN_BUNDLES),
+            "routes": routes,
+            "jobs": jobs,
+            "tier_overrides": {
+                t: models[t]
+                for t in ("chat", "loops", "reflection")
+                if isinstance(models.get(t), dict) and models[t].get("model")
+            },
+            "bundles": [
+                {
+                    "id": key,
+                    "name": b["name"],
+                    "description": b["description"],
+                    "models": [r["model"] for r in b["routes"]],
+                    "ready": all(
+                        values.get(e) or os.environ.get(e) for e in b["requires_env"]
+                    ),
+                }
+                for key, b in CHAIN_BUNDLES.items()
+            ],
+            "max_routes": mc.MAX_ROUTES,
+        }
+
+    @app.post("/api/models/chain")
+    def model_chain_apply(payload: dict):
+        """Use one ordered chain for chat, workers and every model-backed job.
+
+        The first model becomes Hermes's primary and the rest its fallbacks, the
+        per-tier overrides are cleared so the workers follow it, and every job
+        is pinned to the first model (see model_chain for why pinned).
+
+        `jobs` is "all" (the default), "none" (save the chain, leave jobs), or a
+        list of job ids: put just those back on the chain without rewriting it.
+        """
+        from kit.cli.common import _read_jobs
+        from . import model_chain as mc
+
+        routes = mc.flatten(payload.get("links"), CHAIN_BUNDLES)
+        only = payload.get("jobs", "all")
+        if only not in ("all", "none") and not (
+            isinstance(only, list) and all(isinstance(i, str) for i in only)
+        ):
+            raise ValueError('jobs must be "all", "none" or a list of job ids')
+        rt, p, h = context()
+        rows = [
+            j
+            for j in _read_jobs(h / "cron/jobs.json")["jobs"]
+            if not j.get("no_agent")
+            and (only == "all" or (isinstance(only, list) and j.get("id") in only))
+        ]
+        primary = routes[0]
+
+        def action(rt, p, h, report):
+            if only in ("all", "none"):
+                report("Saving the model chain")
+                save_config(h, lambda cfg: mc.write_chain(cfg, routes))
+                c = cc.load(h)
+                # The workers read their tier first; empty tiers follow the chain.
+                c.models = {"fallbacks": routes[1:]}
+                c.__post_init__()
+                c.save()
+            moved, failed = [], []
+            for row in rows:
+                ident, name = row.get("id"), row.get("name") or row.get("id")
+                report(f"Moving {name}")
+                result = rt.run(
+                    [
+                        "cron",
+                        "edit",
+                        ident,
+                        "--model",
+                        primary["model"],
+                        "--provider",
+                        primary["provider"],
+                    ],
+                    home=h,
+                    check=False,
+                )
+                if result.returncode:
+                    failed.append(
+                        f"{name}: {hr.redact(result.stderr or result.stdout)[-200:]}"
+                    )
+                    continue
+                if (row.get("base_url") or "") != primary.get("base_url", ""):
+                    _write_job_base_url(h, ident, primary.get("base_url", ""))
+                moved.append(name)
+            label = f"{primary['provider']} / {primary['model']}"
+            note = (
+                f"{label} answers first, with {len(routes) - 1} "
+                f"fallback{'' if len(routes) == 2 else 's'} behind it."
+                if only in ("all", "none")
+                else f"{len(moved)} job(s) put back on {label}."
+            )
+            if rows:
+                note += f" {len(moved)} of {len(rows)} job(s) now use it."
+            if failed:
+                note += f" {len(failed)} could not be changed."
+            return {
+                "routes": routes,
+                "moved": moved,
+                "failed": failed,
+                "note": note,
+                "restart_gateway": only in ("all", "none"),
+            }
+
+        return op("Use this model chain", action)
 
     @app.post("/api/jobs/history")
     def job_history():

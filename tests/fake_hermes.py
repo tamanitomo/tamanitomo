@@ -60,6 +60,10 @@ elif args[:2] == ["cron", "edit"]:
         job["prompt"] = args[args.index("--prompt") + 1]
     if "--schedule" in args:
         job["schedule"]["expr"] = args[args.index("--schedule") + 1]
+    # Like Hermes: an empty value clears that pin.
+    for flag, key in (("--model", "model"), ("--provider", "provider")):
+        if flag in args:
+            job[key] = args[args.index(flag) + 1].strip() or None
     path.write_text(json.dumps(data), encoding="utf-8")
 elif args[:2] in (["cron", "pause"], ["cron", "resume"]):
     path = home / "cron/jobs.json"

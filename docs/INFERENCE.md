@@ -4,6 +4,24 @@ Workers and chat use an ordered, configured chain: the selected primary, seconda
 providers, then configured local models. There is no automatic enrollment in a
 cloud service or selection of an uninstalled local model.
 
+## One chain for everything
+
+**Settings → AI models → Models & fallbacks** edits that chain as an ordered list:
+the first model answers, and each one after it answers when the one before is busy
+or fails. A step is one account and model, or the **OpenRouter free cascade**
+(OpenRouter's free router, then specific free models). **Use this chain for
+everything** writes the first model as Hermes's `model` and the rest as
+`fallback_providers`, clears per-tier overrides so the workers follow it, and pins
+every model-backed scheduled job to the first model.
+
+Jobs are pinned rather than left unpinned on purpose. Hermes skips an unpinned job
+once the default model differs from the one it was created with, while a pinned job
+always runs and still falls back through `fallback_providers`. A job pinned to
+something else is listed with a **Use the chain** button. The gateway reads the
+chain when it starts, so restart it afterwards for Telegram and other chats.
+
+## Where the chain is stored
+
 The native Hermes `config.yaml` key `fallback_providers` is authoritative when
 present, including an empty list. Otherwise the companion's `models.fallbacks`
 provides the chain. For example:

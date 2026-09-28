@@ -992,3 +992,153 @@ class ModelsApiTests(WorkspaceFixture):
         )
         if os.name != "nt":
             self.assertEqual((self.c.home / ".env").stat().st_mode & 511, 384)
+
+
+class ModelChainTests(unittest.TestCase):
+    """One ordered chain decides what answers first and what answers next."""
+
+    BUNDLES = {
+        "free": {
+            "name": "Free",
+            "routes": [
+                {"provider": "openrouter", "model": "openrouter/free"},
+                {"provider": "openrouter", "model": "a:free"},
+            ],
+        }
+    }
+
+    def test_links_flatten_in_order_without_repeats(self):
+        from kit.app import model_chain as mc
+
+        routes = mc.flatten(
+            [
+                {"provider": "xai-oauth", "model": "grok-4.6"},
+                {"provider": "openai-codex", "model": "gpt-5.6-sol"},
+                {"bundle": "free"},
+                {"provider": "xai-oauth", "model": "grok-4.6"},
+            ],
+            self.BUNDLES,
+        )
+        self.assertEqual(
+            [r["model"] for r in routes],
+            ["grok-4.6", "gpt-5.6-sol", "openrouter/free", "a:free"],
+        )
+        self.assertEqual(
+            mc.collapse(routes, self.BUNDLES)[2], {"bundle": "free", "name": "Free"}
+        )
+
+    def test_a_chain_is_refused_when_hermes_could_not_use_all_of_it(self):
+        from kit.app import model_chain as mc
+
+        too_long = [{"provider": "p", "model": f"m{i}"} for i in range(mc.MAX_ROUTES + 1)]
+        for bad in ([], [{"provider": "p"}], [{"bundle": "nope"}], too_long):
+            with self.assertRaises(ValueError):
+                mc.flatten(bad, self.BUNDLES)
+
+    def test_switching_provider_drops_the_old_endpoint_but_keeps_model_settings(self):
+        from kit.app import model_chain as mc
+
+        cfg = {
+            "model": {
+                "provider": "custom",
+                "default": "local",
+                "base_url": "http://127.0.0.1:11434/v1",
+                "api_mode": "chat_completions",
+                "context_length": 65536,
+            }
+        }
+        mc.write_chain(
+            cfg,
+            [
+                {"provider": "openai-codex", "model": "gpt-5.6-sol"},
+                {"provider": "xai-oauth", "model": "grok-4.6"},
+            ],
+        )
+        self.assertEqual(
+            cfg["model"],
+            {"provider": "openai-codex", "default": "gpt-5.6-sol", "context_length": 65536},
+        )
+        self.assertEqual(cfg["fallback_providers"], [{"provider": "xai-oauth", "model": "grok-4.6"}])
+
+    def test_a_job_follows_only_when_pinned_to_the_first_model(self):
+        from kit.app import model_chain as mc
+
+        primary = {"provider": "xai-oauth", "model": "grok-4.6", "base_url": ""}
+        self.assertEqual(mc.job_state({"provider": "xai-oauth", "model": "Grok-4.6"}, primary), "follows")
+        self.assertEqual(mc.job_state({"provider": "openai-codex", "model": "gpt-5.5"}, primary), "pinned")
+        self.assertEqual(mc.job_state({}, primary), "unpinned")
+        # An endpoint spelled out on one side only is still the provider's own.
+        spelled = {**primary, "base_url": "https://api.x.ai/v1"}
+        self.assertEqual(mc.job_state({"provider": "xai-oauth", "model": "grok-4.6"}, spelled), "follows")
+        other = {"provider": "xai-oauth", "model": "grok-4.6", "base_url": "http://proxy.local/v1"}
+        self.assertEqual(mc.job_state(other, spelled), "pinned")
+
+
+class ModelChainApiTests(WorkspaceFixture):
+
+    def setUp(self):
+        super().setUp()
+        (self.c.home / "config.yaml").write_text(
+            yaml.safe_dump({"model": {"provider": "xai-oauth", "default": "grok-4.6"}}),
+            encoding="utf-8",
+        )
+        (self.c.home / "cron").mkdir(exist_ok=True)
+        (self.c.home / "cron/jobs.json").write_text(
+            json.dumps(
+                {
+                    "jobs": [
+                        {"id": "a", "name": "Nova pulse", "provider": "xai-oauth", "model": "grok-4.6"},
+                        {"id": "b", "name": "My scanner", "provider": "openai-codex", "model": "gpt-5.5",
+                         "last_status": "error", "last_error": "model at capacity"},
+                        {"id": "c", "name": "Nova vault commit", "no_agent": True},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        self.c.models = {"loops": {"provider": "openai-codex", "model": "gpt-5.6-luna"}}
+        self.c.__post_init__()
+        self.c.save()
+
+    def jobs(self):
+        return {j["id"]: j for j in json.loads((self.c.home / "cron/jobs.json").read_text())["jobs"]}
+
+    def test_the_chain_reports_which_jobs_are_on_it(self):
+        body = self.get("/api/models/chain").json()
+        self.assertEqual(body["links"], [{"provider": "xai-oauth", "model": "grok-4.6"}])
+        states = {j["id"]: j["state"] for j in body["jobs"]}
+        self.assertEqual(states, {"a": "follows", "b": "pinned"})
+        self.assertEqual(set(body["tier_overrides"]), {"loops"})
+
+    def test_one_chain_is_used_for_everything(self):
+        chain = [
+            {"provider": "openai-codex", "model": "gpt-5.6-sol"},
+            {"provider": "xai-oauth", "model": "grok-4.6"},
+            {"bundle": "openrouter-free"},
+        ]
+        row = self.wait(self.post("/api/models/chain", {"links": chain}))
+        self.assertEqual(row["status"], "complete", row)
+        saved = yaml.safe_load((self.c.home / "config.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(saved["model"]["default"], "gpt-5.6-sol")
+        self.assertEqual(saved["fallback_providers"][0]["model"], "grok-4.6")
+        self.assertEqual(saved["fallback_providers"][1]["model"], "openrouter/free")
+        self.assertEqual(cc.load(self.c.home).models, {"fallbacks": saved["fallback_providers"]})
+        jobs = self.jobs()
+        self.assertEqual((jobs["a"]["provider"], jobs["a"]["model"]), ("openai-codex", "gpt-5.6-sol"))
+        self.assertEqual((jobs["b"]["provider"], jobs["b"]["model"]), ("openai-codex", "gpt-5.6-sol"))
+        self.assertNotIn("model", jobs["c"])
+        body = self.get("/api/models/chain").json()
+        self.assertEqual(body["links"][2]["bundle"], "openrouter-free")
+        self.assertTrue(all(j["state"] == "follows" for j in body["jobs"]))
+
+    def test_one_failing_job_can_be_put_back_on_the_chain(self):
+        before = (self.c.home / "config.yaml").read_text(encoding="utf-8")
+        row = self.wait(
+            self.post(
+                "/api/models/chain",
+                {"links": [{"provider": "xai-oauth", "model": "grok-4.6"}], "jobs": ["b"]},
+            )
+        )
+        self.assertEqual(row["status"], "complete", row)
+        self.assertEqual(self.jobs()["b"]["model"], "grok-4.6")
+        self.assertEqual((self.c.home / "config.yaml").read_text(encoding="utf-8"), before)

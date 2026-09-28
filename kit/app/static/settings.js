@@ -18,17 +18,17 @@ async function hermesCards(){
   await hermesReady;
   return hermesPool;
 }
-function placeHermesCards(host,names){
+function placeHermesCards(host,names,{foldAll=false}={}){
   // The panel still holds its loading placeholder; the cards replace it rather
   // than stacking underneath it.
   host.innerHTML='';
   const pool=hermesPool;
   if(!pool||!host.isConnected)return;
-  const labels={stack:'Optional local components',gateway:'Gateway & background service',lifecycle:'Profile maintenance',presets:'Ready-made model configurations'};
+  const labels={stack:'Optional local components',gateway:'Gateway & background service',lifecycle:'Profile maintenance',presets:'Ready-made model configurations',models:'Per-tier models (advanced)'};
   for(const [index,name] of names.entries()){
     const card=pool.querySelector(`[data-hermes-card="${name}"]`);
     if(!card)continue;
-    if(index===0){host.append(card);continue;}
+    if(index===0&&!foldAll){host.append(card);continue;}
     const disclosure=document.createElement('details');
     disclosure.className='settings-advanced';
     const summary=document.createElement('summary');
@@ -735,10 +735,12 @@ const settingsPanels=[
 
 {id:'hermes-models',bare:true,title:'Models & fallbacks',
  blurb:'Which model answers, and what answers when it cannot',
- keywords:'model provider fallback openrouter ollama base url presets cascade reasoning',
+ keywords:'model provider fallback openrouter free cascade grok chatgpt ollama base url presets reasoning chain failing jobs pinned',
  async render(host){
+  host.innerHTML='<div class="panel-bare" data-chain><p class="dim" role="status">Loading…</p></div><div class="panel-bare" data-hermes-extras></div>';
+  await renderModelChain(host.querySelector('[data-chain]'));
   await hermesCards();
-  placeHermesCards(host,['models','presets']);
+  if(host.isConnected)placeHermesCards(host.querySelector('[data-hermes-extras]'),['models','presets'],{foldAll:true});
  }},
 
 {id:'hermes-accounts',bare:true,title:'Sign-ins & API keys',
@@ -975,6 +977,167 @@ async function renderModelsOverview(host){
   }
   const jump=host.querySelector('#overview-jump-jobs');
   if(jump)jump.onclick=()=>openSettings(null,'jobs');
+}
+
+/* ---------------------------------------------------------- model chain
+   One ordered list answers for everything: chat, Telegram, the companion's
+   routines and your own scheduled jobs. The first model answers; when it is
+   busy or fails, the next one does. Jobs are kept pinned to the first model,
+   which is what lets Hermes run them and still fall back. */
+const ACCOUNT_NAMES={'openai-codex':'ChatGPT (signed in)','xai-oauth':'Grok (signed in)',
+  'openrouter':'OpenRouter','anthropic':'Anthropic','deepseek':'DeepSeek','mistral':'Mistral AI',
+  'opencode-free':'OpenCode Free','ollama':'Ollama (local)'};
+function chainAccounts(data){
+  const seen=new Map();
+  for(const p of data.providers||[]){
+    const key=`${p.provider}|${p.base_url||''}`;
+    // The profile's own row repeats a signed-in account with its endpoint spelled out.
+    if(p.kind==='profile'&&(data.providers||[]).some(o=>o!==p&&o.provider===p.provider&&!o.base_url))continue;
+    if(!seen.has(key))seen.set(key,{provider:p.provider,base_url:p.base_url||'',
+      label:ACCOUNT_NAMES[p.provider]&&!p.base_url?ACCOUNT_NAMES[p.provider]:(p.label||p.provider)});
+  }
+  return [...seen.values()];
+}
+const chainRole=i=>i===0?'Answers first':`Fallback ${i}`;
+const accountName=provider=>(ACCOUNT_NAMES[provider]||provider||'').replace(' (signed in)','');
+const plural=(n,word)=>`${n} ${word}${n===1?'':'s'}`;
+
+async function renderModelChain(host){
+  const [data,accounts]=await Promise.all([api('/models/chain'),knownProviders().then(chainAccounts)]);
+  if(!host.isConnected)return;
+  let links=data.links.map(l=>({...l}));
+  const bundles=Object.fromEntries(data.bundles.map(b=>[b.id,b]));
+  const pickers=new Map();
+
+  const card=document.createElement('div');card.className='card chain-card';
+  const jobsCard=document.createElement('div');jobsCard.className='card';
+  host.replaceChildren(card,jobsCard);
+
+  // An empty endpoint means the provider's own, so Grok with its URL spelled
+  // out is still the signed-in Grok account.
+  const sameAccount=(a,link)=>a.provider===link.provider&&(a.base_url===(link.base_url||'')||!a.base_url||!link.base_url);
+  const accountOptions=link=>{
+    const match=accounts.find(a=>a.provider===link.provider&&a.base_url===(link.base_url||''))||accounts.find(a=>sameAccount(a,link));
+    const list=match||!link.provider?accounts:[{provider:link.provider,base_url:link.base_url||'',label:link.provider},...accounts];
+    const chosen=match||list[0];
+    return `<option value="">Choose an account</option>`+list.map(a=>
+      `<option value="${esc(a.provider+'|'+a.base_url)}"${link.provider&&a===chosen?' selected':''}>${esc(a.label)}</option>`).join('');
+  };
+  const stepHTML=(link,i)=>{
+    const moves=`<div class="chain-moves">
+      <button type="button" class="icon-button" data-move="-1" aria-label="Move up"${i===0?' disabled':''}>${icon('chevron_left')}</button>
+      <button type="button" class="icon-button" data-move="1" aria-label="Move down"${i===links.length-1?' disabled':''}>${icon('chevron_right')}</button>
+      <button type="button" class="icon-button" data-remove aria-label="Remove"${links.length===1?' disabled':''}>${icon('close')}</button></div>`;
+    if(link.bundle){
+      const b=bundles[link.bundle]||{name:link.bundle,models:[]};
+      return `<li class="chain-step is-bundle" data-step="${i}"><span class="chain-rank">${i+1}</span>
+        <div class="chain-body"><p class="chain-role">${chainRole(i)}</p><strong>${esc(b.name)}</strong>
+        <small class="dim">${esc(b.models.join(' → '))}</small>
+        ${b.ready===false?'<small class="warn">Needs an OpenRouter API key under Sign-ins &amp; API keys.</small>':''}</div>${moves}</li>`;
+    }
+    return `<li class="chain-step" data-step="${i}"><span class="chain-rank">${i+1}</span>
+      <div class="chain-body"><p class="chain-role">${chainRole(i)}</p>
+        <div class="chain-fields">
+          <label>Account<select data-chain-account>${accountOptions(link)}</select></label>
+          <div class="chain-model"><span class="chain-model-label">Model</span>${modelPickerHTML('chain-'+i,link.model)}</div>
+        </div></div>${moves}</li>`;
+  };
+  const collect=()=>links.map((link,i)=>link.bundle?{bundle:link.bundle}
+    :{provider:link.provider,model:(pickers.get(i)?.read()||link.model||'').trim(),...(link.base_url?{base_url:link.base_url}:{})});
+  const offChain=data.jobs.filter(j=>j.state!=='follows');
+
+  const paint=()=>{
+    // Keep what was typed before redrawing the steps.
+    links=collect().map((l,i)=>({...links[i],...l}));
+    pickers.clear();
+    const hasFree=links.some(l=>l.bundle==='openrouter-free');
+    card.innerHTML=`
+      <p class="set-hint">Chat, Telegram, your companion’s routines and your own scheduled jobs all ask these in order. When one is busy or fails, the next one answers.</p>
+      <ol class="chain-steps">${links.map(stepHTML).join('')}</ol>
+      <div class="actions">
+        <button type="button" class="quiet" data-add>+ Add a fallback</button>
+        ${hasFree?'':`<button type="button" class="quiet" data-add-free>+ Add ${esc(bundles['openrouter-free']?.name||'free cascade')}</button>`}
+      </div>
+      ${Object.keys(data.tier_overrides).length?`<p class="small warn">${Object.entries(data.tier_overrides).map(([t,m])=>`${esc(t[0].toUpperCase()+t.slice(1))} is set to ${esc(m.model)}`).join('; ')} instead of this chain. Using the chain clears that.</p>`:''}
+      <div class="panel-footer">
+        <button type="button" class="act" data-apply>Use this chain for everything</button>
+        <label class="switch-container compact-toggle"><input type="checkbox" data-move-jobs checked><span class="switch-slider" aria-hidden="true"></span><span class="switch-label">Move all ${data.jobs.length} scheduled job${data.jobs.length===1?'':'s'} too</span></label>
+        <span class="dim small" data-chain-status role="status"></span>
+      </div>
+      <div data-chain-after></div>`;
+    card.querySelectorAll('.chain-step').forEach(step=>{
+      const i=Number(step.dataset.step),link=links[i];
+      step.querySelector('[data-move]')&&step.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>{
+        const j=i+Number(b.dataset.move);links=collect().map((l,k)=>({...links[k],...l}));
+        [links[i],links[j]]=[links[j],links[i]];paint();});
+      step.querySelector('[data-remove]').onclick=()=>{links=collect().map((l,k)=>({...links[k],...l}));links.splice(i,1);paint();};
+      if(link.bundle)return;
+      const account=step.querySelector('[data-chain-account]');
+      const picker=wireModelPicker(step.querySelector('[data-model-picker]'),{
+        provider:()=>link.provider,baseUrl:()=>link.base_url||'',value:link.model,defaultLabel:'Choose a model'});
+      pickers.set(i,picker);
+      account.onchange=()=>{
+        const [provider,base_url]=account.value.split('|');
+        link.provider=provider;link.base_url=base_url||'';link.model='';
+        step.querySelector('[data-model-custom]').value='';picker.reload();
+      };
+    });
+    card.querySelector('[data-add]').onclick=()=>{links=collect().map((l,k)=>({...links[k],...l}));links.push({provider:'',model:''});paint();};
+    card.querySelector('[data-add-free]')?.addEventListener('click',()=>{links=collect().map((l,k)=>({...links[k],...l}));links.push({bundle:'openrouter-free'});paint();});
+    card.querySelector('[data-apply]').onclick=async e=>{
+      const button=e.currentTarget,status=card.querySelector('[data-chain-status]');
+      const chain=collect();
+      const missing=chain.findIndex(l=>!l.bundle&&(!l.provider||!l.model));
+      if(missing>=0){status.innerHTML=`<span class="bad">Step ${missing+1} needs an account and a model.</span>`;return;}
+      button.disabled=true;status.textContent='Saving…';
+      try{
+        const moveJobs=card.querySelector('[data-move-jobs]').checked;
+        const done=await action('/models/chain',{links:chain,jobs:moveJobs?'all':'none'});
+        clearEditorDirty(editorScope(host));
+        await renderModelChain(host);
+        const r=done.result||{},first=(r.routes||[])[0];
+        showChainResult(host.querySelector('[data-chain-after]'),{...r,note:first
+          ?`${accountName(first.provider)} · ${first.model} answers first, with ${plural((r.routes.length-1),'fallback')} behind it.`
+            +((r.moved||[]).length?` ${plural(r.moved.length,'job')} moved onto it.`:'')
+          :r.note});
+      }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;button.disabled=false;}
+    };
+  };
+
+  const paintJobs=()=>{
+    const total=data.jobs.length,on=total-offChain.length;
+    jobsCard.innerHTML=`<h2>Scheduled jobs</h2>
+      <p><span class="pill ${offChain.length?'status-warn':'status-good'}">${on} of ${total} on this chain</span></p>
+      ${offChain.length?`<p class="set-hint">These run on something else. A job pinned to another model still falls back through the chain when that model fails; put it back to use the chain’s first model.</p>
+      <ul class="chain-jobs">${offChain.map(j=>`<li>
+        <div><strong>${esc(j.name)}</strong>
+          <small class="dim">${j.state==='unpinned'?'Not pinned: Hermes skips it if the default model changes':`Pinned to ${esc(accountName(j.provider))} · ${esc(j.model)}`}${j.enabled?'':' · paused'}</small>
+          ${j.last_status==='error'&&j.last_error?`<small class="warn">Last run failed: ${esc(j.last_error)}</small>`:''}</div>
+        <button type="button" class="quiet" data-job="${esc(j.id)}">Use the chain</button></li>`).join('')}</ul>
+      ${offChain.length>1?`<div class="actions"><button type="button" class="quiet" data-all-jobs>Put all ${offChain.length} on the chain</button></div>`:''}`
+      :'<p class="dim small">Every model-backed job uses the chain’s first model, and falls back through the rest.</p>'}
+      <p class="dim small" data-jobs-status role="status"></p>`;
+    const run=async(ids,button)=>{
+      button.disabled=true;const status=jobsCard.querySelector('[data-jobs-status]');status.textContent='Moving…';
+      try{await action('/models/chain',{links:data.links.map(l=>l.bundle?{bundle:l.bundle}:l),jobs:ids});clearEditorDirty(editorScope(host));await renderModelChain(host);}
+      catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;button.disabled=false;}
+    };
+    jobsCard.querySelectorAll('[data-job]').forEach(b=>b.onclick=()=>run([b.dataset.job],b));
+    jobsCard.querySelector('[data-all-jobs]')?.addEventListener('click',e=>run(offChain.map(j=>j.id),e.currentTarget));
+  };
+  paint();paintJobs();
+}
+function showChainResult(host,result){
+  if(!host)return;
+  host.innerHTML=`<div class="chain-result"><p><strong>${esc(result.note||'Saved.')}</strong></p>
+    ${(result.failed||[]).length?`<p class="warn small">${result.failed.map(esc).join('<br>')}</p>`:''}
+    ${result.restart_gateway?`<p class="dim small">Telegram and other gateway chats read the chain when the gateway starts.</p>
+    <div class="actions"><button type="button" class="quiet" data-restart-gateway>Restart the gateway now</button></div>`:''}</div>`;
+  host.querySelector('[data-restart-gateway]')?.addEventListener('click',async e=>{
+    e.currentTarget.disabled=true;
+    try{await action('/gateway/restart',{});e.currentTarget.textContent='Gateway restarted';}
+    catch(error){host.insertAdjacentHTML('beforeend',`<p class="bad small">${esc(error.message)}</p>`);}
+  });
 }
 
 /* ------------------------------------------------------------- jobs panel

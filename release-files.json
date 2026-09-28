@@ -51,6 +51,7 @@
   "kit/app/journal_archive.py",
   "kit/app/local_models.py",
   "kit/app/manage.py",
+  "kit/app/model_chain.py",
   "kit/app/profile_editor.py",
   "kit/app/runtime.py",
   "kit/app/scanner.py",
