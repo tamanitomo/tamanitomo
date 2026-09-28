@@ -1,6 +1,6 @@
 # Private image scanning
 
-Open Settings → Media privacy & review → Install local scanner, then choose
+Open Settings → Images & voice → Photo sessions → Review & blurring → Install local scanner, then choose
 Use for this companion. Installation is shared by all profiles on the host; selecting
 it changes only the current profile. Installation downloads code and model weights,
 never uploads images, and shows progress in the app. Alternatively, set the Media

@@ -801,7 +801,7 @@ async function renderVoiceStudio(host,compact=false){
  const d=await api('/voice'),tts=d.tts;let selected=tts.provider||'edge';const draft={};
  if(!d.labels[selected]){selected='edge';}
  const heroName=chatName();
- host.innerHTML=(compact?'<h2>Voice connection</h2>':heading('Voice studio','Choose a voice and try a preview.'))+`
+ host.innerHTML=(compact?'':heading('Voice studio','Choose a voice and try a preview.'))+`
  <div class="voice-hero-card">
   <div class="voice-hero-wave" aria-hidden="true">
    <span class="wave-bar b1"></span><span class="wave-bar b2"></span><span class="wave-bar b3"></span><span class="wave-bar b4"></span><span class="wave-bar b5"></span>
@@ -828,7 +828,7 @@ async function renderVoiceStudio(host,compact=false){
    </div>
 
    <div class="actions" style="margin-top:20px;padding-top:14px;border-top:1px solid var(--edge)">
-    <button class="act">Save voice</button>
+    <button class="act">${compact?'Save':'Save voice'}</button>
     <button class="quiet" type="button" id="studio-install-voice">Install engine on Hermes host</button>
     <button class="quiet" type="button" id="studio-native-voice">Native speech setup</button>
    </div>

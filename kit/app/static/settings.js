@@ -1,4 +1,4 @@
-/* Settings: five groups, related sections together, independent saves. */
+/* Settings: one section per page, listed in SETTINGS_NAV; each saves on its own. */
 
 /* The Hermes forms are expensive to build and carry live event handlers, so
    they are rendered once into a pool that stays in the document, and the cards
@@ -152,19 +152,17 @@ function readSchedule(editor){
 /* ------------------------------------------------------------------ panels */
 
 const settingsPanels=[
-{group:'Companion',id:'contact',title:'Contact & outreach',
- blurb:'When they may write first, and how often',
+{id:'contact',title:'Contact & outreach',
+ blurb:'When they may write first, and how often. Replies are always allowed.',
  keywords:'quiet hours outreach messages photos voice notes boundaries initiative',
  async render(host){
   const s=await api('/settings');
   const perm=k=>options([['yes','Always welcome'],['ask','Ask me first'],['no','Never']],s.content_permissions[k]);
   host.innerHTML=`
-  <h2>Contact & outreach</h2>
-  <p class="dim">Limits for messages they start. Replies are always allowed.</p>
 
   <div class="contact-settings">
     <div class="contact-row">
-      <label class="contact-label" for="qs">Quiet Hours:</label>
+      <label class="contact-label" for="qs">Quiet hours</label>
       <div class="contact-controls">
         <input type="time" id="qs" value="${esc(s.quiet_start)}" placeholder="22:00" aria-label="Quiet hours start">
         <span class="range-sep" aria-hidden="true">–</span>
@@ -178,7 +176,7 @@ const settingsPanels=[
     </div>
 
     <div class="contact-row">
-      <label class="contact-label" for="out">Outreach:</label>
+      <label class="contact-label" for="out">Outreach</label>
       <div class="contact-controls">
         <select id="out">${options([['free','Social & updates'],['updates_only','Updates only'],['never','Replies only']],s.outreach)}</select>
         <div class="daily-limit-field" title="Daily message limit (0 means unlimited)">
@@ -188,16 +186,16 @@ const settingsPanels=[
       </div>
     </div>
 
-    <h3 class="section-subheading" style="margin-top:16px;margin-bottom:4px">Unprompted Media</h3>
+    <h3 class="section-subheading">Messages they start with media</h3>
     <div class="contact-row">
-      <label class="contact-label" for="pimage">Photos:</label>
+      <label class="contact-label" for="pimage">Photos</label>
       <div class="contact-controls">
         <select id="pimage">${perm('image')}</select>
       </div>
     </div>
 
     <div class="contact-row">
-      <label class="contact-label" for="pvoice">Voice Notes:</label>
+      <label class="contact-label" for="pvoice">Voice notes</label>
       <div class="contact-controls">
         <select id="pvoice">${perm('voice')}</select>
       </div>
@@ -216,14 +214,14 @@ const settingsPanels=[
   });
  }},
 
-{group:'Companion',id:'rhythm',title:'Daily rhythm',
+{id:'rhythm',title:'Daily rhythm',
  blurb:'Their own hours, and what carries between companions',
  keywords:'autonomy windows routine reflection continuity shared memory',
  async render(host){
   const s=await api('/settings');
   host.innerHTML=`
-  <h2>Daily rhythm</h2>
-  <p class="dim">Times for independent reading and projects.</p>
+  <h3 class="section-subheading">Independent time</h3>
+  <p class="set-hint">When they read, write or work on their own projects.</p>
   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0 16px">
     <div id="autonomy-times" class="time-chips" style="margin:0"></div>
     <button type="button" class="quiet small" id="add-autonomy-time" style="padding:6px 12px;height:34px">+ Add time</button>
@@ -232,7 +230,7 @@ const settingsPanels=[
   <h3 class="section-subheading">Shared memory</h3>
   <div class="contact-settings" style="margin-top:10px">
     <div class="contact-row">
-      <label class="contact-label">Shared memory:</label>
+      <label class="contact-label">Shared memory</label>
       <div class="contact-controls">
         <label class="switch-container compact-toggle" data-toggle-row title="Let your other companions use these memories">
           <input type="checkbox" id="share" ${s.share_people?'checked':''}>
@@ -242,7 +240,7 @@ const settingsPanels=[
       </div>
     </div>
   </div>
-  ${settingsFooter('Save rhythm')}`;
+  ${settingsFooter('Save')}`;
   wireToggles(host);
   const times=host.querySelector('#autonomy-times');
   const addTime=value=>{
@@ -258,7 +256,7 @@ const settingsPanels=[
     share_people:host.querySelector('#share').checked}));
  }},
 
-{group:'Companion',id:'awareness',title:'Awareness',
+{id:'awareness',title:'Awareness',
  blurb:'Where you live, and what they can passively sense',
  keywords:'sensors location weather realism ambient context senses awareness',
  async render(host){
@@ -266,11 +264,9 @@ const settingsPanels=[
   const on=Object.keys(s.available_sensors).filter(k=>s.sensors.includes(k)).length;
   const total=Object.keys(s.available_sensors).length;
   host.innerHTML=`
-  <h2>Awareness</h2>
-  <p class="dim">Choose what they can notice.</p>
   <div class="contact-settings" style="margin-bottom:18px">
     <div class="contact-row">
-      <label class="contact-label" for="loc">Where you live:</label>
+      <label class="contact-label" for="loc">Where you live</label>
       <div class="contact-controls">
         <input id="loc" value="${esc(s.location)}" placeholder="Raleigh, NC" style="max-width:300px">
       </div>
@@ -278,14 +274,14 @@ const settingsPanels=[
   </div>
 
   <div class="section-heading" style="margin-top:20px">
-    <h3 class="section-subheading" style="margin:0">Sensors</h3>
+    <h3 class="section-subheading">Sensors</h3>
     <span class="pill ${on?'status-good':'status-warn'}" id="sensor-count">${on} of ${total} on</span>
   </div>
   <div class="sensor-grid">
     ${Object.entries(s.available_sensors).map(([k,blurb])=>
       toggleRow('sensor-'+k,({dates:'Important dates',care:'Follow-ups',durations:'Milestones',thread:'Conversation rhythm',daylight:'Daylight',weather:'Weather',music:'Music'})[k]||k,({weather:'Local conditions, updated hourly.',daylight:'Seasons, moon and daylight.',dates:'Upcoming birthdays and anniversaries.',care:'Things worth checking in about.',durations:'Time since important dates.',thread:'Time since your last conversation.',music:'Spotify playback or room mood.'})[k]||blurb,s.sensors.includes(k),`data-sensor="${esc(k)}"`)).join('')}
   </div>
-  ${settingsFooter('Save awareness')}`;
+  ${settingsFooter('Save')}`;
   wireToggles(host);
   const recount=()=>{
     const live=[...host.querySelectorAll('[data-sensor]')].filter(x=>x.checked).length;
@@ -299,18 +295,16 @@ const settingsPanels=[
     sensors:[...host.querySelectorAll('[data-sensor]')].filter(x=>x.checked).map(x=>x.dataset.sensor)}));
  }},
 
-{group:'Images & voice',id:'photos',title:'Photo sessions',
- blurb:'Visual glimpses of their day, and what is blurred',
+{id:'photos',title:'Photo sessions',
+ blurb:'Pictures from their day, taken with your image provider, and what stays blurred',
  keywords:'photos timeline images style budget nsfw blur scanner nudenet review',
  async render(host){
   const [s,prefs,scanner]=await Promise.all([api('/settings'),api('/media/preferences'),api('/media/scanner')]);
   host.innerHTML=`
-  <h2>Photo sessions</h2>
-  <p class="dim">Capture scenes from their day with your connected image provider.</p>
 
   <div class="contact-settings">
     <div class="contact-row">
-      <label class="contact-label">Automatic photos:</label>
+      <label class="contact-label">Automatic photos</label>
       <div class="contact-controls">
         <label class="switch-container compact-toggle" data-toggle-row>
           <input type="checkbox" id="tl" ${s.image_timeline?'checked':''}>
@@ -325,7 +319,7 @@ const settingsPanels=[
     </div>
 
     <div class="contact-row">
-      <label class="contact-label" for="image-style">Image style:</label>
+      <label class="contact-label" for="image-style">Image style</label>
       <div class="contact-controls">
         <select id="image-style">${options(Object.entries(s.image_styles),s.image_style)}</select>
         <span class="range-sep" aria-hidden="true">·</span>
@@ -342,7 +336,7 @@ const settingsPanels=[
   <details class="settings-advanced"><summary>Review &amp; blurring</summary>
   <div class="contact-settings" style="margin-top:12px">
     <div class="contact-row">
-      <label class="contact-label" for="media-review-mode">Who checks it:</label>
+      <label class="contact-label" for="media-review-mode">Who checks it</label>
       <div class="contact-controls">
         <select id="media-review-mode">${options([
           ['none','Nobody — deliver as generated'],
@@ -363,13 +357,13 @@ const settingsPanels=[
     <p class="dim small">A vision model can also judge scene and clothing, but the picture is sent to it.</p>
     <div class="contact-settings">
       <div class="contact-row">
-        <label class="contact-label" for="media-review-provider">Provider:</label>
+        <label class="contact-label" for="media-review-provider">Provider</label>
         <div class="contact-controls">
           <input id="media-review-provider" value="${esc(prefs.review_provider==='local-nsfw'?'':prefs.review_provider)}" placeholder="openai, anthropic…">
         </div>
       </div>
       <div class="contact-row">
-        <label class="contact-label" for="media-review-model">Model:</label>
+        <label class="contact-label" for="media-review-model">Model</label>
         <div class="contact-controls">
           <input id="media-review-model" value="${esc(prefs.review_model)}" placeholder="Leave empty for the compression model">
         </div>
@@ -377,7 +371,7 @@ const settingsPanels=[
     </div>
   </div>
 
-  <h3 class="section-subheading" style="margin-top:16px;margin-bottom:6px">What stays blurred</h3>
+  <h3 class="section-subheading">What stays blurred</h3>
   <p class="dim small" style="margin-top:0">${s.adult_images
     ? 'Adult images are allowed for this companion, so the check <strong>sorts and labels</strong> rather than blocks: '
       + 'a picture meant to be explicit is delivered as it was made, not regenerated with clothes put back on. '
@@ -430,7 +424,7 @@ const settingsPanels=[
   });
  }},
 
-{group:'Companion',id:'relationship',title:'Relationship',
+{id:'relationship',title:'Relationship',
  blurb:'How closeness grows — locked by default',
  keywords:'relationship pace progression intimacy romance milestones meters peer nsfw adult images nudity',
  async render(host){
@@ -442,8 +436,7 @@ const settingsPanels=[
 
   if(!relationshipUnlocked){
     host.innerHTML=`
-    <h2>Relationship</h2>
-    <p class="dim">Unlock to change relationship preferences.</p>
+    <p class="dim">Locked. Unlock to change how your relationship develops.</p>
     <dl class="fact-list">
       <div><dt>Progression</dt><dd>${esc(labels.progression[s.relationship_progression]||s.relationship_progression)}</dd></div>
       <div><dt>Pace</dt><dd>${esc(labels.pace[s.relationship_pace]||s.relationship_pace)}</dd></div>
@@ -457,36 +450,35 @@ const settingsPanels=[
     </div>
     <p class="dim small">${net.remote_pin_configured
       ? 'Unlocking asks for your platform PIN.'
-      : 'No platform PIN is set, so unlocking asks you to type their name instead. A PIN can be set under App &amp; access → Network &amp; access.'}</p>`;
+      : 'No platform PIN is set, so unlocking asks you to type their name instead. A PIN can be set under Settings → App → Access &amp; PIN.'}</p>`;
     host.querySelector('#unlock-relationship').onclick=()=>unlockRelationship(net.remote_pin_configured);
     return;
   }
 
   host.innerHTML=`
-  <h2>Relationship <span class="pill status-warn">Unlocked</span></h2>
-  <p class="dim">Unlocked for this visit. It locks again when you reload.</p>
+  <p class="dim"><span class="pill status-warn">Unlocked</span> for this visit. It locks again when you reload.</p>
   <div class="contact-settings">
     <div class="contact-row">
-      <label class="contact-label" for="progression">Progression:</label>
+      <label class="contact-label" for="progression">Progression</label>
       <div class="contact-controls">
         <select id="progression">${options([['off','Hide progression'],['subtle','Subtle, natural familiarity'],['milestones','Show shared milestones']],s.relationship_progression)}</select>
       </div>
     </div>
     <div class="contact-row">
-      <label class="contact-label" for="pace">Pace:</label>
+      <label class="contact-label" for="pace">Pace</label>
       <div class="contact-controls">
         <select id="pace">${options([['slow','Slow and gradual'],['natural','Natural'],['quick','Open to quicker familiarity']],s.relationship_pace)}</select>
       </div>
     </div>
     <div class="contact-row">
-      <label class="contact-label" for="adult-themes">Romance:</label>
+      <label class="contact-label" for="adult-themes">Romance</label>
       <div class="contact-controls">
         <select id="adult-themes">${options([['false','Friendly / platonic only'],['true','Romantic connection enabled']],String(s.explicit))}</select>
         <span class="dim small" style="margin-left:4px">(Permanent if turned off)</span>
       </div>
     </div>
     ${s.adult_images_available?`<div class="contact-row">
-      <label class="contact-label">Adult images:</label>
+      <label class="contact-label">Adult images</label>
       <div class="contact-controls">
         <label class="switch-container compact-toggle" data-toggle-row>
           <input type="checkbox" id="adult-images" ${s.adult_images?'checked':''} ${s.explicit?'':'disabled'}>
@@ -499,13 +491,13 @@ const settingsPanels=[
       </div>
     </div>`:''}
     <div class="contact-row">
-      <label class="contact-label" for="peer-interaction">Companions:</label>
+      <label class="contact-label" for="peer-interaction">Companions</label>
       <div class="contact-controls">
         <select id="peer-interaction">${options([['true','May interact with each other'],['false','Kept apart']],String(s.peer_interaction))}</select>
       </div>
     </div>
     <div class="contact-row">
-      <label class="contact-label">Meters:</label>
+      <label class="contact-label">Meters</label>
       <div class="contact-controls">
         <label class="switch-container compact-toggle" data-toggle-row>
           <input type="checkbox" id="bars" ${s.bars?'checked':''}>
@@ -515,7 +507,7 @@ const settingsPanels=[
       </div>
     </div>
   </div>
-  ${settingsFooter('Save relationship settings')}`;
+  ${settingsFooter('Save')}`;
   wireToggles(host);
   const romance=host.querySelector('#adult-themes'),adultImages=host.querySelector('#adult-images');
   romance.onchange=()=>{
@@ -550,22 +542,20 @@ const settingsPanels=[
   });
  }},
 
-{group:'App & access',id:'appearance',title:'Appearance',
- blurb:'Theme, accent and the Hermes runtime this workspace uses',
- keywords:'theme dark light accent colour color appearance runtime installation',
+{id:'appearance',title:'Appearance',
+ blurb:'Theme and accent. Saved with the companion, so it follows them to your phone.',
+ keywords:'theme dark light accent colour color appearance mode',
  async render(host){
   host.innerHTML=appearancePanelHTML();
   wireAppearancePanel(host);
  }},
 
-{group:'App & access',id:'network',title:'Network & access',
- blurb:'Where this workspace is reachable, and the PIN that guards it',
+{id:'network',title:'Access & PIN',
+ blurb:'Addresses for your other devices, and the PIN that guards them',
  keywords:'network lan wifi address port pin security remote access localhost',
  async render(host){
   const [s,net]=await Promise.all([api('/settings'),api('/network')]);
   host.innerHTML=`
-  <h2>Network &amp; access</h2>
-  <p class="dim">Connection addresses and access controls.</p>
 
   <h3 class="section-subheading">Addresses</h3>
   <div class="endpoint-row">
@@ -587,7 +577,7 @@ const settingsPanels=[
   <p class="dim">Required on other devices and to unlock relationship settings.</p>
   <div class="contact-settings">
     <div class="contact-row">
-      <label class="contact-label" for="remote-pin-field">4-digit PIN:</label>
+      <label class="contact-label" for="remote-pin-field">4-digit PIN</label>
       <div class="contact-controls pin-row" style="margin:0">
         <input id="remote-pin-field" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4"
           placeholder="${s.remote_pin?'••••':'1234'}" aria-label="Four digit PIN">
@@ -618,14 +608,13 @@ const settingsPanels=[
   };
  }},
 
-{group:'App & access',id:'updates',title:'Updates',
+{id:'updates',title:'Updates',
  blurb:'What version you are on, and how to move',
  keywords:'update version release upgrade changelog github',
  async render(host){
   const d=await api('/updates').catch(error=>({version:'unknown',has_update:false,error:error.message}));
   host.innerHTML=`
   <div class="section-heading" style="margin-top:0">
-    <h2 style="margin:0">Updates</h2>
     <span class="pill ${d.has_update?'status-warn':'status-good'}">${d.has_update?`v${esc(d.latest_version)} available`:d.error?'Check unavailable':'Up to date'}</span>
   </div>
   <dl class="fact-list">
@@ -695,18 +684,17 @@ const settingsPanels=[
   }
  }},
 
-{group:'App & access',id:'diagnostics',title:'Diagnostics',
+{id:'diagnostics',title:'Diagnostics',
  blurb:'What is healthy, what is full, and what it has cost',
  keywords:'health diagnostics problems memory storage vault usage tokens cost',
  async render(host){
   const [health,cost]=await Promise.all([api('/health'),api('/cost')]);
   host.innerHTML=`
   <div class="section-heading" style="margin-top:0">
-    <h2 style="margin:0">Diagnostics</h2>
     <button class="quiet" id="diag-activity">Activity feed</button>
   </div>
   ${health.problems.length
-    ?`<div class="notice-strip"><p><strong>${health.problems.length} thing${health.problems.length===1?'':'s'} to look at</strong></p><ul>${health.problems.map(p=>`<li class="warn">${esc(p)}</li>`).join('')}</ul></div>`
+    ?`<div class="notice-strip notice-stack"><p><strong>${health.problems.length} thing${health.problems.length===1?'':'s'} to look at</strong></p><ul>${health.problems.map(p=>`<li class="warn">${esc(p)}</li>`).join('')}</ul></div>`
     :'<p><span class="pill status-good">Everything monitored is running normally</span></p>'}
 
   <h3 class="section-subheading">Memory capacity</h3>
@@ -715,30 +703,11 @@ const settingsPanels=[
     <td><strong>${Number(m.chars).toLocaleString()}</strong> <span class="dim">/ ${Number(m.cap).toLocaleString()}</span></td>
     <td>${m.over_warn?'<span class="warn">Approaching the limit</span>':'<span class="dim">Within capacity</span>'}</td></tr>`).join('')}</tbody></table>
 
-  <h3 class="section-subheading">Storage & Vault Backup</h3>
+  <h3 class="section-subheading">Storage &amp; vault backup</h3>
   <table><tbody>${health.storage.map(s=>`<tr><td>${esc(s.label)}</td><td>${s.files} files</td><td class="dim">${(s.bytes/1e6).toFixed(1)} MB</td></tr>`).join('')}
     <tr><td>Vault history</td><td colspan="2">${health.vault_repo?'<span class="dim">Recording every change</span>':'<span class="warn">Not a git repository — changes are not versioned</span>'}</td></tr></tbody></table>
-  <div style="margin-top:12px;margin-bottom:20px">
-    <a class="act" href="${mediaUrl('/api/vault/export')}" download style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;text-decoration:none">
-      <span>📦</span> Download Complete Vault Backup (.zip)
-    </a>
-  </div>
-
-  <h3 class="section-subheading">24/7 Background & Battery Resilience</h3>
-  <div class="card" style="padding:14px;border-radius:10px;background:var(--panel);border:1px solid var(--surface-3);margin-bottom:20px">
-    <div style="display:flex;align-items:flex-start;gap:10px">
-      <span style="font-size:20px">🔋</span>
-      <div>
-        <strong style="display:block;margin-bottom:4px">Mobile Host Battery Optimization</strong>
-        <p class="small dim" style="margin:0 0 8px">If hosting on an Android phone via Termux, prevent Android from suspending your companion when the screen is off:</p>
-        <ol class="small dim" style="margin:0 0 8px;padding-left:18px">
-          <li>Open Android <strong>Settings → Apps → Termux</strong></li>
-          <li>Tap <strong>App battery usage</strong> (or Battery Saver / Power Management)</li>
-          <li>Select <strong>Unrestricted</strong> (or <strong>Don't optimize</strong>)</li>
-        </ol>
-        <p class="small dim" style="margin:0">For Samsung, Xiaomi, or OnePlus phones, also disable aggressive memory freezing (<a href="https://dontkillmyapp.com" target="_blank" rel="noopener" style="color:var(--accent)">dontkillmyapp.com</a>).</p>
-      </div>
-    </div>
+  <div class="actions">
+    <a class="quiet" href="${mediaUrl('/api/vault/export')}" download>${icon('download')} Download vault backup (.zip)</a>
   </div>
 
   <h3 class="section-subheading">Model usage · last 30 recorded days</h3>
@@ -748,20 +717,23 @@ const settingsPanels=[
   host.querySelector('#diag-activity').onclick=showGatewayActivity;
  }},
 
-{group:'App & access',id:'hermes-core',bare:true,title:'Installation & gateway',
+{id:'hermes-core',bare:true,title:'Installation & gateway',
  blurb:'The runtime behind your companion, and the process that keeps it running',
- keywords:'hermes install update gateway routine service hooks doctor repair profile archive',
+ keywords:'hermes install update gateway routine service hooks doctor repair profile archive runtime environment existing managed android termux battery',
  async render(host){
   await hermesCards();
   placeHermesCards(host,['installation','stack','gateway','lifecycle']);
+  if(!host.isConnected)return;
+  host.prepend(runtimeCard());
+  host.append(androidHostingTips());
  }},
 
-{group:'Models & providers',id:'models-overview',bare:true,title:'Connected accounts & routing',
- blurb:'Which accounts are connected, and what is actually using them',
+{id:'models-overview',title:'Overview',
+ blurb:'Which accounts are connected, and what is using each one',
  keywords:'grok chatgpt openai oauth signed in account connected routing primary provider active use everywhere',
  render:renderModelsOverview},
 
-{group:'Models & providers',id:'hermes-models',bare:true,title:'Models & fallbacks',
+{id:'hermes-models',bare:true,title:'Models & fallbacks',
  blurb:'Which model answers, and what answers when it cannot',
  keywords:'model provider fallback openrouter ollama base url presets cascade reasoning',
  async render(host){
@@ -769,20 +741,20 @@ const settingsPanels=[
   placeHermesCards(host,['models','presets']);
  }},
 
-{group:'Models & providers',id:'hermes-accounts',bare:true,title:'Accounts & credentials',
- blurb:'API keys, sign-ins, and Hermes’s own setup menus',
+{id:'hermes-accounts',bare:true,title:'Sign-ins & API keys',
+ blurb:'Connect subscription accounts and store API keys',
  keywords:'api key credential oauth signin telegram discord token console setup',
  async render(host){
   await hermesCards();
   placeHermesCards(host,['accounts']);
  }},
 
-{group:'Models & providers',id:'jobs',title:'Companion continuity',
- blurb:'Models and reasoning for the jobs that keep a companion’s life coherent',
+{id:'jobs',title:'Scheduled jobs',
+ blurb:'The routines that keep their life going, and which model runs each',
  keywords:'continuity cron jobs schedule routine model provider reasoning tokens prompt run failures',
  render:renderJobsPanel},
 
-{group:'Images & voice',id:'connect-images',title:'Image generation',
+{id:'connect-images',title:'Image generation',
  blurb:'ComfyUI, Civitai, and the reference photograph',
  keywords:'comfyui image generation civitai lora checkpoint endpoint portrait',
  async render(host){
@@ -791,12 +763,12 @@ const settingsPanels=[
 
  }},
 
-{group:'Images & voice',id:'connect-voice',title:'Voice',
+{id:'connect-voice',title:'Voice',
  blurb:'Which engine speaks, and how it sounds',
  keywords:'voice tts speech engine piper edge elevenlabs openai speed pitch',
  render:renderVoicePanel},
 
-{group:'App & access',id:'dashboard',title:'Hermes dashboard',
+{id:'dashboard',title:'Hermes dashboard',
  blurb:'Hermes’s own interface, embedded',
  keywords:'hermes dashboard native skills mcp plugins sessions logs channels webhooks',
  render:host=>renderHermesDashboardInto(host)},
@@ -925,7 +897,7 @@ async function renderModelsOverview(host){
       api('/jobs').catch(()=>({jobs:[]})),
     ]);
   }catch(error){
-    host.innerHTML=`<h2 style="margin-top:0">Connected accounts &amp; routing</h2><p class="bad">${esc(error.message)}</p>`;
+    host.innerHTML=`<p class="bad">${esc(error.message)}</p>`;
     return;
   }
   const primaryProvider=env.model.provider||'';
@@ -949,7 +921,6 @@ async function renderModelsOverview(host){
   const isPrimaryRow=r=>r.provider===primaryProvider&&(r.base_url||'')===(env.model.base_url||'');
 
   host.innerHTML=`
-  <h2 style="margin-top:0">Connected accounts &amp; routing</h2>
   <p class="dim">What this companion actually knows how to reach, and what is using it right now. Connecting an account — even signing in with OAuth — never moves anything on its own; use “Use everywhere” to point everything at it.</p>
   ${mismatch?`<div class="notice-strip"><p><strong>You’re signed in to ${esc(active.label)}, but nothing is using it yet.</strong></p>
     <p class="dim small">The primary model is still <code>${esc(primaryProvider||'unset')}${primaryModel?' / '+esc(primaryModel):''}</code>${modelJobs.length?`, and ${followingPrimary} of ${modelJobs.length} job(s) follow it`:''}. Pick a model for ${esc(active.label)} below and apply it.</p></div>`:''}
@@ -1088,9 +1059,8 @@ async function renderJobsPanel(host){
   const legacy=jobs.filter(j=>j.legacy_worker).length;
 
   host.innerHTML=`
-  <div class="section-heading" style="margin-top:0">
-    <h2 style="margin:0">Companion continuity settings</h2>
-    <div class="actions" style="margin:0">
+  <div class="settings-toolbar">
+    <div class="actions">
       <button class="quiet" id="jobs-pause">Pause model jobs</button><button class="quiet" id="jobs-activate">Enable model jobs</button><button class="quiet" id="jobs-history">Run history</button>
       <button class="quiet" id="jobs-apply-models">Apply job models</button>
       <button class="quiet" id="jobs-repair">Install / repair</button>
@@ -1386,7 +1356,7 @@ async function unlockRelationship(pinConfigured){
     <form id="unlock-form">
       ${pinConfigured
         ?'<label>Platform PIN<input id="unlock-pin" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off"></label>'
-        :`<p class="dim small">No platform PIN is set on this workspace. Type <strong>${esc(name)}</strong> below to continue, or set a PIN first under App &amp; access → Network &amp; access.</p>
+        :`<p class="dim small">No platform PIN is set on this workspace. Type <strong>${esc(name)}</strong> below to continue, or set a PIN first under Settings → App → Access &amp; PIN.</p>
           <label>Companion name<input id="unlock-name" autocomplete="off" placeholder="${esc(name)}"></label>`}
       <p class="small" id="unlock-error" role="status"></p>
       <button class="act">Continue</button>
@@ -1411,11 +1381,69 @@ async function unlockRelationship(pinConfigured){
   };
 }
 
+/* Which Hermes this workspace drives. It lives with the installation it picks,
+   and mirrors the sidebar's picker so there is one source of truth. */
+function runtimeCard(){
+  const card=document.createElement('div');
+  card.className='card';
+  card.innerHTML=`
+    <label for="settings-installation-select">Hermes runtime</label>
+    <select id="settings-installation-select">
+      <option value="existing">Existing Hermes (system host)</option>
+      <option value="managed">Kit-managed Hermes (isolated)</option>
+    </select>
+    <p class="set-hint" style="margin-top:8px">Which Hermes installation this workspace talks to. Each keeps its own profiles and settings.</p>`;
+  const select=card.querySelector('select'),source=$('installation-select');
+  if(source){
+    select.value=source.value;
+    select.onchange=()=>{source.value=select.value;source.dispatchEvent(new Event('change'));};
+  }else select.disabled=true;
+  return card;
+}
+function androidHostingTips(){
+  const box=document.createElement('details');
+  box.className='settings-advanced';
+  box.innerHTML=`<summary>Hosting on an Android phone</summary>
+    <div class="card">
+      <p>Android suspends apps when the screen is off. To keep your companion running under Termux:</p>
+      <ol>
+        <li>Open Android <strong>Settings → Apps → Termux</strong>.</li>
+        <li>Tap <strong>App battery usage</strong> (or Battery saver / Power management).</li>
+        <li>Choose <strong>Unrestricted</strong> (or <strong>Don’t optimise</strong>).</li>
+      </ol>
+      <p class="dim">Samsung, Xiaomi and OnePlus phones also freeze background apps; see <a href="https://dontkillmyapp.com" target="_blank" rel="noopener">dontkillmyapp.com</a>.</p>
+    </div>`;
+  return box;
+}
+
 /* ----------------------------------------------------------------- the page */
 
-/* Which panel is open survives a reload, so a link that has to reload the
+/* Every section, in the order people look for them. A string is a section in
+   settingsPanels; an object is a page elsewhere in the workspace that belongs
+   here too, so there is one list to scan instead of tiles plus groups. */
+const SETTINGS_NAV=[
+  ['Companion',[
+    {route:'roster',title:'Companions',blurb:'Create, adopt, switch or archive a companion'},
+    {route:'identity',title:'Identity',blurb:'Name, personality, appearance and story'},
+    'contact','rhythm','awareness','relationship']],
+  ['AI models',[
+    'models-overview','hermes-models','hermes-accounts','jobs',
+    {route:'local-models',title:'Local models',blurb:'Run models on this machine with Ollama'}]],
+  ['Images & voice',[
+    'connect-images','photos','connect-voice',
+    {route:'image-studio',title:'Image studio',blurb:'Workflows, presets and previews'},
+    {route:'voice',title:'Voice studio',blurb:'Voices, cloning and previews'}]],
+  ['App',['appearance','network','updates']],
+  ['System',['hermes-core','diagnostics','dashboard']],
+];
+const settingsEntries=SETTINGS_NAV.flatMap(([group,items])=>items.map(item=>{
+  const panel=typeof item==='string'?settingsPanels.find(p=>p.id===item):null;
+  return panel?{...panel,group,id:panel.id}:{...item,group,id:'route:'+item.route};
+}));
+
+/* Which section is open survives a reload, so a link that has to reload the
    workspace first (switching profile, finishing onboarding) still lands on the
-   panel it meant to. */
+   section it meant to. */
 const PANEL_KEY='settings-panel';
 let settingsDirectLink=false;
 let settingsPanel=(()=>{try{return sessionStorage.getItem(PANEL_KEY);}catch(error){return null;}})();
@@ -1423,7 +1451,7 @@ function rememberPanel(id){
   settingsPanel=id;
   try{sessionStorage.setItem(PANEL_KEY,id);}catch(error){/* private window */}
 }
-/* Jump straight to a panel from anywhere: openSettings('jobs'). */
+/* Jump straight to a section from anywhere: openSettings(null,'jobs'). */
 async function openSettings(_group,panel){
   if(current==='settings'&&!await confirmEditorLeave('settings-main'))return;
   if(panel){rememberPanel(panel);settingsDirectLink=true;}
@@ -1435,75 +1463,107 @@ function aimSettings(panel){if(panel){rememberPanel(panel);settingsDirectLink=tr
 window.openSettings=openSettings;
 window.aimSettings=aimSettings;
 
+const settingsNarrow=()=>matchMedia('(max-width:760px)').matches;
+
+function settingsNavHTML(){
+  return SETTINGS_NAV.map(([group,items])=>`
+    <section class="settings-nav-group" data-nav-group>
+      <h3>${esc(group)}</h3>
+      <ul>${items.map(item=>{
+        const entry=settingsEntries.find(e=>e.id===(typeof item==='string'?item:'route:'+item.route));
+        if(!entry)return '';
+        const attrs=entry.route?`data-route="${esc(entry.route)}"`:`data-panel="${esc(entry.id)}"`;
+        return `<li><button type="button" class="settings-nav-item" ${attrs}>
+          <span class="settings-nav-text"><span>${esc(entry.title)}</span><small>${esc(entry.blurb||'')}</small></span>
+          ${entry.route?icon('arrow_right'):icon('chevron_right')}</button></li>`;
+      }).join('')}</ul>
+    </section>`).join('');
+}
+
 workspaceHandlers.settings=async()=>{
-  const order=['Companion','Models & providers','Images & voice','App & access'];
-  const groups=order.map(name=>[name,settingsPanels.filter(p=>p.group===name)]);
-  groups.find(([name])=>name==='Images & voice')[1].sort((a,b)=>['connect-images','photos','connect-voice'].indexOf(a.id)-['connect-images','photos','connect-voice'].indexOf(b.id));
-  const descriptions=['Contact, rhythm, awareness, relationship','Models, accounts, fallbacks','Providers, workflows, photos, voice','Appearance, access, installation'];
-  const requested=settingsPanels.find(p=>p.id===settingsPanel);
+  const requested=settingsEntries.find(p=>p.id===settingsPanel&&!p.route);
+  const narrow=settingsNarrow();
+  // On a phone the list is the page; a section opens only when one was asked for.
+  const opening=requested&&(!narrow||settingsDirectLink)?requested:(narrow?null:settingsEntries.find(p=>!p.route&&p.group==='Companion'));
+  settingsDirectLink=false;
   returnHermesCards();
   const keepPool=hermesPool;
   $('settings').innerHTML=`
-    <div class="home-title settings-title"><h2 class="page-title">Settings</h2></div>
-    ${subviewLinks(['roster','identity','image-studio','voice','local-models'],'Companion and creative tools')}
     <div class="settings-shell">
-      <nav class="settings-sidebar" aria-label="Settings groups">
-        <label class="settings-search-label"><span class="sr-only">Find a setting</span><input id="settings-search" type="search" placeholder="Find a setting"></label>
-        ${groups.map(([name],i)=>`<button class="settings-group-button" data-group="${i}"><span>${esc(name)}</span><small>${esc(descriptions[i])}</small><span class="settings-chevron" aria-hidden="true">›</span></button>`).join('')}
-        <div id="settings-search-results" class="settings-search-results" hidden></div>
+      <nav class="settings-nav" aria-label="Settings">
+        <h2 class="page-title settings-nav-title">Settings</h2>
+        <label class="settings-search"><span class="sr-only">Find a setting</span>
+          ${icon('search')}<input id="settings-search" type="search" placeholder="Find a setting" autocomplete="off"></label>
+        <div id="settings-nav-list">${settingsNavHTML()}</div>
+        <p class="dim small settings-nav-empty" id="settings-nav-empty" hidden>No setting matches that.</p>
       </nav>
-      <div class="settings-body" id="settings-panel">
-        <div class="settings-group-heading"><button class="quiet settings-back" id="settings-back" aria-label="Back to settings">←</button><h2 id="settings-group-title" tabindex="-1"></h2></div>
-        <div id="settings-group-content"></div>
-      </div>
+      <div class="settings-page" id="settings-panel" tabindex="-1" role="region" aria-label="Setting"></div>
     </div>`;
   wireRoutes($('settings'));
   if(keepPool)$('settings').append(keepPool);
+  const page=$('settings-panel');
   let request=0;
-  const show=async(index,focusPanel='',enter=true)=>{
+  const mark=id=>{
+    for(const b of $('settings').querySelectorAll('[data-panel]'))
+      b.toggleAttribute('aria-current',b.dataset.panel===id);
+  };
+  const show=async(entry,{focus=true}={})=>{
     if(!await confirmEditorLeave('settings-main'))return false;
-    const version=++request,[name,panels]=groups[index];
-    rememberPanel(focusPanel||panels[0].id);
+    const version=++request;
+    rememberPanel(entry.id);mark(entry.id);
     returnHermesCards();
-    $('settings-group-title').textContent=name;
-    for(const button of $('settings').querySelectorAll('[data-group]'))button.setAttribute('aria-current',Number(button.dataset.group)===index?'page':'false');
-    $('settings').classList.toggle('settings-detail',enter);
-    const content=$('settings-group-content');content.replaceChildren();
-    // Render sequentially: shared Hermes cards keep their handlers and unique IDs.
-    for(const panel of panels){
-      if(version!==request)return false;
-      const host=document.createElement('section');
-      host.dataset.settingsSection=panel.id;host.id='settings-section-'+panel.id;
-      host.className='settings-section '+(panel.bare?'panel-bare':'card');
-      host.setAttribute('aria-label',panel.title);content.append(host);
-      host.innerHTML='<p class="dim" role="status">Loading…</p>';
-      try{await panel.render(host);}catch(error){host.innerHTML=`<h3>${esc(panel.title)}</h3><p class="bad">${esc(error.message)}</p>`;}
-    }
+    $('settings').classList.add('settings-open');
+    page.innerHTML=`
+      <div class="settings-page-head">
+        <button type="button" class="quiet settings-back" id="settings-back">${icon('chevron_left')}<span>Settings</span></button>
+        <p class="settings-eyebrow">${esc(entry.group)}</p>
+        <h2 id="settings-page-title">${esc(entry.title)}</h2>
+        ${entry.blurb?`<p class="settings-lede">${esc(entry.blurb)}</p>`:''}
+      </div>
+      <section class="settings-section ${entry.bare?'panel-bare':'card'}" data-settings-section="${esc(entry.id)}" id="settings-section-${esc(entry.id)}" aria-labelledby="settings-page-title">
+        <p class="dim" role="status">Loading…</p>
+      </section>`;
+    page.querySelector('#settings-back').onclick=async()=>{
+      if(!await confirmEditorLeave('settings-main'))return;
+      returnHermesCards();
+      $('settings').classList.remove('settings-open');mark('');
+      $('settings').querySelector(`[data-panel="${CSS.escape(entry.id)}"]`)?.focus();
+      window.scrollTo({top:0});
+    };
+    const host=page.querySelector('.settings-section');
+    try{await entry.render(host);}
+    catch(error){if(version===request)host.innerHTML=`<p class="bad">${esc(error.message)}</p>`;}
     if(version!==request)return false;
-    if(enter){
-      const destination=focusPanel?document.getElementById('settings-section-'+focusPanel):$('settings-group-title');
-      destination?.scrollIntoView({block:'start'});
-      $('settings-group-title').focus({preventScroll:true});
+    if(focus){
+      if(settingsNarrow())window.scrollTo({top:0});
+      else page.scrollIntoView({block:'nearest'});
+      page.focus({preventScroll:true});
     }
     return true;
   };
-  for(const button of $('settings').querySelectorAll('[data-group]'))button.onclick=()=>show(Number(button.dataset.group));
-  $('settings-back').onclick=async()=>{
-    if(!await confirmEditorLeave('settings-main'))return;
-    $('settings').classList.remove('settings-detail');
-    $('settings').querySelector('[aria-current="page"]')?.focus();
-    $('settings').scrollIntoView({block:'start'});
-  };
-  const search=$('settings-search'),results=$('settings-search-results');
+  for(const b of $('settings').querySelectorAll('[data-panel]'))
+    b.onclick=()=>show(settingsEntries.find(e=>e.id===b.dataset.panel));
+
+  // Search narrows the list itself; Enter opens the first match.
+  const search=$('settings-search');
+  const matches=q=>settingsEntries.filter(e=>`${e.title} ${e.blurb||''} ${e.keywords||''} ${e.group}`.toLowerCase().includes(q));
   search.oninput=()=>{
-    const q=search.value.trim().toLowerCase();results.hidden=!q;
-    const matches=settingsPanels.filter(p=>`${p.title} ${p.blurb} ${p.keywords} ${p.group}`.toLowerCase().includes(q));
-    results.innerHTML=matches.map(p=>`<button class="quiet" data-panel="${esc(p.id)}">${esc(p.title)}</button>`).join('')||'<p class="dim">No matching settings.</p>';
-    for(const button of results.querySelectorAll('button'))button.onclick=async()=>{
-      const panel=settingsPanels.find(p=>p.id===button.dataset.panel);
-      if(await show(order.indexOf(panel.group),panel.id)){search.value='';results.hidden=true;}
-    };
+    const q=search.value.trim().toLowerCase();
+    const hits=new Set(matches(q).map(e=>e.id));
+    for(const b of $('settings').querySelectorAll('.settings-nav-item')){
+      const id=b.dataset.panel||'route:'+b.dataset.route;
+      b.parentElement.hidden=Boolean(q)&&!hits.has(id);
+    }
+    for(const g of $('settings').querySelectorAll('[data-nav-group]'))
+      g.hidden=![...g.querySelectorAll('li')].some(li=>!li.hidden);
+    $('settings-nav-empty').hidden=!q||hits.size>0;
   };
-  await show(requested?order.indexOf(requested.group):0,requested?.id||'',Boolean(settingsDirectLink));
-  settingsDirectLink=false;
+  search.onkeydown=e=>{
+    if(e.key!=='Enter')return;
+    const first=$('settings').querySelector('[data-nav-group]:not([hidden]) li:not([hidden])>.settings-nav-item');
+    if(first){e.preventDefault();first.click();}
+  };
+
+  if(opening)await show(opening,{focus:Boolean(requested)});
+  else $('settings').classList.remove('settings-open');
 };

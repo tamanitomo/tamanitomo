@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import subprocess
 import tempfile
 import unittest
@@ -1288,3 +1289,25 @@ class VaultMapSkipsSectionsTests(unittest.TestCase):
             ):
                 notes = vi.scan(c, with_headings=False)
             self.assertEqual([(n["dir"], n["name"]) for n in notes], [("Journal", "Tuesday")])
+
+
+class SettingsNavigationTests(unittest.TestCase):
+    """Every settings section is reachable from the list, and nothing listed is missing."""
+
+    def test_every_section_is_listed_exactly_once(self):
+        source = (ROOT / "kit/app/static/settings.js").read_text(encoding="utf-8")
+        panels = re.findall(r"^\{id:'([a-z-]+)'", source, re.M)
+        nav = source[source.index("const SETTINGS_NAV=[") : source.index("const settingsEntries")]
+        listed = [
+            item
+            for item in re.findall(r"'([a-z-]+)'", nav)
+            if item not in {"roster", "identity", "local-models", "image-studio", "voice"}
+        ]
+        self.assertEqual(sorted(panels), sorted(listed))
+        self.assertEqual(len(listed), len(set(listed)))
+
+    def test_the_settings_stylesheet_ships_and_is_linked(self):
+        page = (ROOT / "kit/app/static/index.html").read_text(encoding="utf-8")
+        shipped = json.loads((ROOT / "release-files.json").read_text(encoding="utf-8"))
+        self.assertIn('href="/static/settings.css"', page)
+        self.assertIn("kit/app/static/settings.css", shipped)

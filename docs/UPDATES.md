@@ -6,7 +6,7 @@ Keep Hermes profiles, credentials, memories, models and vaults outside the appli
 
 ## Update from a phone or desktop browser
 
-Open **Settings → App & access → Updates**, select **Check for updates**, then **Update to v… Now**. The host downloads the official asset, verifies its file manifest and available GitHub asset digest, installs changed Python requirements, backs up the old application files, applies the update and restarts the workspace. Leave the browser open while it reconnects. Hermes itself is not updated or restarted.
+Open **Settings → App → Updates**, select **Check for updates**, then **Update to v… Now**. The host downloads the official asset, verifies its file manifest and available GitHub asset digest, installs changed Python requirements, backs up the old application files, applies the update and restarts the workspace. Leave the browser open while it reconnects. Hermes itself is not updated or restarted.
 
 Git installations fetch the published release tag and require a clean checkout that can fast-forward. They do not stash changes or reset local work. ZIP installations refuse modified managed files or collisions with unmanaged files. Network errors are shown as errors rather than “up to date.” A failed dependency installation leaves the application code unchanged, although pip may already have changed some packages; rerun the update after resolving the error.
 

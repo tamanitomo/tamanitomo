@@ -30,7 +30,7 @@ Any machine with internet access, a modern browser and room for Hermes plus opti
 - **Image review:** checks actual pixels against intent. A held or unavailable review requires attention; it does not silently approve delivery. Choose a vision-capable review model. Intentional adult content is an explicit per-image option.
 - **Voice Studio:** choose a TTS engine/voice, optional reference cloning where supported, and preview it. Your own licensed/authorized reference audio is required for a cloned voice.
 - **Local models:** guided Ollama installation and model selection, with hardware guidance. ComfyUI, voice models and extra nodes are separate optional installs.
-- **Settings → System:** full Hermes setup plus model/provider, gateway and schedule management.
+- **Settings:** one searchable list. **AI models** holds providers, sign-ins, fallbacks and scheduled jobs; **System** holds the Hermes installation, gateway and diagnostics.
 - **Updates:** stage a trusted release ZIP with integrity checks and apply it on the next launcher start.
 
 ## Voice conversation

@@ -2093,10 +2093,7 @@ function appearancePanelHTML(){
   const mode=s.follow_system?'system':(window.Appearance.isDark(s.theme)?'dark':'light');
   const grid=ids=>`<div class="theme-cards-grid">${ids.map(id=>themeSwatch(id,!s.follow_system&&s.theme===id)).join('')}</div>`;
   return `
-  <h2>Appearance</h2>
-  <p class="dim">How this companion's workspace looks. Saved with the companion, so it follows them to your phone.</p>
-
-  <h3 class="section-subheading">Appearance mode</h3>
+  <h3 class="section-subheading">Mode</h3>
   <div class="segmented" role="tablist" id="appearance-mode">
     ${[['dark','Dark'],['light','Light'],['system','Match system']].map(([v,l])=>
       `<button role="tab" type="button" data-mode="${v}" aria-selected="${String(mode===v)}">${l}</button>`).join('')}
@@ -2121,20 +2118,6 @@ function appearancePanelHTML(){
       <input type="color" id="accent-custom" value="${esc(s.accent||'#6c9cff')}" aria-label="Custom accent colour">
       <span>Custom</span>
     </label>
-  </div>
-
-  <h3 class="section-subheading">Hermes runtime</h3>
-  <div class="contact-settings" style="margin-top:10px">
-    <div class="contact-row">
-      <label class="contact-label" for="settings-installation-select">Environment:</label>
-      <div class="contact-controls">
-        <select id="settings-installation-select">
-          <option value="existing">Existing Hermes (system host)</option>
-          <option value="managed">Kit-managed Hermes (isolated)</option>
-        </select>
-        <span class="dim small">Private workspace · stored locally</span>
-      </div>
-    </div>
   </div>`;
 }
 function wireAppearancePanel(panel){
@@ -2156,11 +2139,6 @@ function wireAppearancePanel(panel){
   for(const a of panel.querySelectorAll('[data-accent]'))a.onclick=async()=>{await window.Appearance.set({accent:a.dataset.accent});redraw();};
   const custom=panel.querySelector('#accent-custom');
   if(custom)custom.oninput=()=>window.Appearance.set({accent:custom.value});
-  const setInst=panel.querySelector('#settings-installation-select');
-  if(setInst&&$('installation-select')){
-    setInst.value=$('installation-select').value;
-    setInst.onchange=()=>{$('installation-select').value=setInst.value;$('installation-select').dispatchEvent(new Event('change'));};
-  }
 }
 
 
@@ -2181,10 +2159,8 @@ async function imagesPanelHTML(){
   const selected=presets.find(p=>p.id===settings.default_preset);
   const provider=selected?.provider==='comfyui'?'__comfy__':settings.default_preset||'';
   return `<script type="application/json" data-image-presets>${JSON.stringify({presets,comfy_routes:settings.comfy_routes||{},comfy_default:settings.comfy_default||''}).replaceAll("<","\\u003c")}</script>
-  <h2>Image generation</h2>
-
   <div id="settings-image-providers" data-revision="${esc(identity.revision||'')}"></div>
-  ${PROFILE!=='default'?`<label class="inline-label"><input id="set-image-inherit" type="checkbox" ${settings.inherit?'checked':''}>Use installation image defaults</label>`:''}
+  ${PROFILE!=='default'?`<label class="switch-container compact-toggle"><input id="set-image-inherit" type="checkbox" ${settings.inherit?'checked':''}><span class="switch-slider" aria-hidden="true"></span><span class="switch-label">Use installation image defaults</span></label>`:''}
   <label>Provider<select id="set-image-provider">${options([['','Choose a provider'],...presets.filter(p=>p.provider!=='comfyui').map(p=>[p.id,p.name]),['__comfy__','ComfyUI']],provider)}</select></label>
   <div class="actions"><button class="quiet" id="set-image-accounts">Connect an account</button></div>
   <div id="set-image-lanes">
@@ -2261,12 +2237,12 @@ async function imagesPanelHTML(){
     <small class="dim">ComfyUI lanes only. Hosted providers are sent labelled prose and have no LoRA to activate, so they never receive these.</small>
   </details>
 
-  <p class="dim small" style="margin:0 0 12px">${following
+  <p class="dim small">${following
     ? 'Uses their saved appearance.'
     : 'Uses their saved image description.'}
     Edit on the <button type="button" class="link-button" id="set-goto-identity">Identity page</button>.</p>
-  <div class="studio-actions">
-    <button class="act" id="set-images-save">Save image settings</button>
+  <div class="panel-footer">
+    <button class="act" id="set-images-save">Save</button>
     <span class="dim small" id="set-images-saved" role="status"></span>
   </div>`;
 }

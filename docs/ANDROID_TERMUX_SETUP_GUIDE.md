@@ -128,7 +128,7 @@ Your companion is now active in two places:
   ```text
   http://<phone-ip-address>:38439
   ```
-- If a 4-digit PIN was configured during setup (or set in Settings → Preferences → Server & Network Reachability), entering the PIN grants a 30-day session cookie. Localhost remains open without PIN.
+- If a 4-digit PIN was configured during setup (or set in Settings → App → Access & PIN), entering the PIN grants a 30-day session cookie. Localhost remains open without PIN.
 
 ---
 
