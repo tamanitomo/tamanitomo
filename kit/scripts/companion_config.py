@@ -32,6 +32,45 @@ def detected_for_real(how: str) -> bool:
     return not str(how).startswith(FALLBACK_SOURCE)
 
 
+# Session sources that are the companion's own machinery rather than a person:
+# scheduled jobs, tool runs, sub-agents and setup audits. Their "user" turns are
+# prompts the kit wrote, so they must never count as the human having spoken.
+MACHINE_SESSION_SOURCES = (
+    "cron",
+    "subagent",
+    "tool",
+    "config-audit",
+    "local-default-audit",
+    "local-tool-proof",
+)
+
+
+def machine_sources_sql(column: str) -> str:
+    """A SQL condition excluding machine sessions; the source list is constant."""
+    listed = ",".join(f"'{source}'" for source in MACHINE_SESSION_SOURCES)
+    return f"lower(coalesce({column},'')) NOT IN ({listed})"
+
+
+_parsed_files: dict = {}
+
+
+def _read_parsed(path: pathlib.Path, parse):
+    """Parse a Hermes-owned file once per on-disk version.
+
+    config.load runs on every request, and the Hermes config and the models.dev
+    catalog took ~100 ms to re-parse each time. Treat the result as read-only.
+    """
+    stat = path.stat()
+    key = (str(path), parse)
+    version = (stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
+    cached = _parsed_files.get(key)
+    if cached and cached[0] == version:
+        return cached[1]
+    value = parse(path.read_text(encoding="utf-8"))
+    _parsed_files[key] = (version, value)
+    return value
+
+
 # Hermes' own context-file rule, reproduced so we can stay under it deliberately.
 HERMES_CHARS_PER_TOKEN = 4
 HERMES_CONTEXT_FILE_FRACTION = 0.06
@@ -787,7 +826,7 @@ def detect_context_tokens(
         return DEFAULT_CONTEXT_TOKENS, FALLBACK_SOURCE + " (PyYAML unavailable)"
     cfg = {}
     try:
-        cfg = yaml.safe_load((home / "config.yaml").read_text(encoding="utf-8")) or {}
+        cfg = _read_parsed(home / "config.yaml", yaml.safe_load) or {}
     except (OSError, Exception):
         cfg = {}
     if not isinstance(cfg, dict):
@@ -809,10 +848,7 @@ def detect_context_tokens(
     for root in (hermes_root, home):
         try:
             data = (
-                yaml.safe_load(
-                    (root / "context_length_cache.yaml").read_text(encoding="utf-8")
-                )
-                or {}
+                _read_parsed(root / "context_length_cache.yaml", yaml.safe_load) or {}
             )
             cache.update(data.get("context_lengths") or {})
         except (OSError, Exception):
@@ -866,9 +902,7 @@ def detect_context_tokens(
 
     for root in dict.fromkeys((home, hermes_root)):
         try:
-            catalog = json.loads(
-                (root / "models_dev_cache.json").read_text(encoding="utf-8")
-            )
+            catalog = _read_parsed(root / "models_dev_cache.json", json.loads)
             entry = catalog.get(provider, {})
             native = urlparse(entry.get("api", "")).hostname
             if base and (not native or urlparse(base).hostname != native):

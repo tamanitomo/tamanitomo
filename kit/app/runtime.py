@@ -809,7 +809,7 @@ def sessions_page(c, limit=100, before=None):
             if f in columns
         ]
         if "source" in columns:
-            scope += " AND lower(coalesce(source,'')) NOT IN ('cron','subagent','tool','config-audit','local-default-audit','local-tool-proof')"
+            scope += " AND " + cc.machine_sources_sql("source")
         if cursor:
             if not isinstance(cursor[1], str):
                 raise ValueError("Invalid session cursor")

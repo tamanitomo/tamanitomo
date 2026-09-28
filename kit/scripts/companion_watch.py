@@ -38,6 +38,10 @@ KIT = pathlib.Path(__file__).resolve().parents[2]
 RENOTIFY_SECONDS = 6 * 3600
 STATE_UNCONFIRMED_HOURS = 3
 LOW_DISK_BYTES = 1_000_000_000
+# A passing hook run is reused briefly: the workspace polls problems every 30 s
+# and each run spawns an interpreter. Failures are always re-run.
+HOOK_PASS_REUSE_SECONDS = 300
+_hook_passes = {}
 
 
 def _tz(c):
@@ -145,6 +149,17 @@ def check_hook(c):
     hook = c.home / "hooks/companion-context.py"
     if not hook.exists():
         return ["the continuity hook is missing; every turn is running without context"]
+    import time
+
+    stat = hook.stat()
+    version = (stat.st_mtime_ns, stat.st_size)
+    passed = _hook_passes.get(str(hook))
+    if (
+        passed
+        and passed[0] == version
+        and time.monotonic() - passed[1] < HOOK_PASS_REUSE_SECONDS
+    ):
+        return []
     try:
         r = subprocess.run(
             [sys.executable, str(hook)],
@@ -167,6 +182,7 @@ def check_hook(c):
             return ["the continuity hook returned no context"]
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         return [f"the continuity hook failed: {exc}"]
+    _hook_passes[str(hook)] = (version, time.monotonic())
     return []
 
 

@@ -349,6 +349,28 @@ def compute(c, now=None) -> Dict[str, Any]:
     pace = getattr(c, "relationship_pace", "natural")
     pace_mult = PACE_MULTIPLIERS.get(pace, 1.0)
 
+    # A day is the human's day, not UTC's. Bucketing on UTC split an evening
+    # conversation across two dates for anyone west of Greenwich, turning one good
+    # evening into two thin days.
+    try:
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo(getattr(c, "timezone", "UTC") or "UTC")
+    except Exception:
+        tz = dt.timezone.utc
+
+    # Closeness is earned over days spent together, so only days that belong to THIS
+    # relationship count. Without the anchor the tally reaches back through every
+    # conversation the underlying assistant ever had, and a companion installed onto
+    # a long-lived Hermes wakes up already intimate with someone it has just met.
+    started = getattr(c, "relationship_started", "") or ""
+    first_day = None
+    if started:
+        try:
+            first_day = dt.date.fromisoformat(started)
+        except (TypeError, ValueError):
+            first_day = None
+
     # Gather each day's conversation from the session store, and the dates of any
     # recorded connections. Messages are what the human actually did; a recorded
     # connection is the companion's own note about a day, so it is worth a floor
@@ -365,16 +387,6 @@ def compute(c, now=None) -> Dict[str, Any]:
             except Exception:
                 pass
 
-    # A day is the human's day, not UTC's. Bucketing on UTC split an evening
-    # conversation across two dates for anyone west of Greenwich, turning one good
-    # evening into two thin days.
-    try:
-        from zoneinfo import ZoneInfo
-
-        tz = ZoneInfo(getattr(c, "timezone", "UTC") or "UTC")
-    except Exception:
-        tz = dt.timezone.utc
-
     db = c.home / "state.db"
     if db.exists():
         con = None
@@ -388,6 +400,16 @@ def compute(c, now=None) -> Dict[str, Any]:
             params = () if c.is_root else (c.profile.lower(),)
             con = sqlite3.connect(resolved.as_uri() + "?mode=ro", uri=True, timeout=1)
             con.execute("PRAGMA query_only=ON")
+            # Scheduled jobs and tool runs file their prompts as user turns; they
+            # were ~99% of the text read here and credited every day a job ran.
+            columns = {row[1] for row in con.execute("PRAGMA table_info(sessions)")}
+            if "source" in columns:
+                scope += " AND " + cc.machine_sources_sql("s.source")
+            if first_day is not None:
+                scope += " AND m.timestamp >= ?"
+                params += (
+                    dt.datetime.combine(first_day, dt.time(), tzinfo=tz).timestamp(),
+                )
             query = f"""SELECT m.timestamp, m.content FROM messages m JOIN sessions s ON s.id=m.session_id
                         WHERE m.role='user' AND {scope} AND coalesce(m.content,'')<>''"""
             for row in con.execute(query, params):
@@ -404,17 +426,6 @@ def compute(c, now=None) -> Dict[str, Any]:
             if con:
                 con.close()
 
-    # Closeness is earned over days spent together, so only days that belong to THIS
-    # relationship count. Without the anchor the tally reaches back through every
-    # conversation the underlying assistant ever had, and a companion installed onto
-    # a long-lived Hermes wakes up already intimate with someone it has just met.
-    started = getattr(c, "relationship_started", "") or ""
-    first_day = None
-    if started:
-        try:
-            first_day = dt.date.fromisoformat(started)
-        except (TypeError, ValueError):
-            first_day = None
     if first_day is not None:
         by_day = {d: rows for d, rows in by_day.items() if d >= first_day}
         connection_days = {d for d in connection_days if d >= first_day}

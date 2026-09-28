@@ -1115,3 +1115,111 @@ def test_presence_and_daylight_dates_use_portable_unpadded_days(tmp_path):
     assert f"_as of {date}, 14:05_" in rendered
     assert daylight.startswith(f"It is {date}, in autumn.")
     assert metadata["season"] == "autumn"
+
+
+class ClosenessCountsOnlyThePersonTests(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        self.c = cc.Companion(
+            agent="Nova",
+            profile="nova",
+            hermes_root=root / "hermes",
+            vault=root / "vault",
+            timezone="America/New_York",
+        )
+        self.c.home.mkdir(parents=True)
+        self.c.life.mkdir(parents=True)
+        self.now = dt.datetime(2026, 9, 20, 18, tzinfo=dt.timezone.utc)
+        import sqlite3
+
+        with sqlite3.connect(self.c.home / "state.db") as db:
+            db.executescript(
+                "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, profile_name TEXT);"
+                "CREATE TABLE messages (session_id TEXT, role TEXT, content TEXT, timestamp REAL);"
+            )
+
+    def say(self, source, text, when):
+        import sqlite3
+
+        with sqlite3.connect(self.c.home / "state.db") as db:
+            db.execute(
+                "INSERT OR IGNORE INTO sessions VALUES (?, ?, 'nova')", (source, source)
+            )
+            db.execute(
+                "INSERT INTO messages VALUES (?, 'user', ?, ?)",
+                (source, text, when.timestamp()),
+            )
+
+    def test_scheduled_prompts_do_not_earn_closeness(self):
+        import companion_intimacy as intimacy
+
+        self.say("cron", "Write tonight's reflection. " * 80, self.now)
+        self.say("subagent", "Summarise the vault notes. " * 80, self.now)
+        self.assertEqual(intimacy.compute(self.c, self.now)["active_days"], 0)
+        self.say("telegram", "Good morning, how did you sleep?", self.now)
+        self.assertEqual(intimacy.compute(self.c, self.now)["active_days"], 1)
+
+    def test_messages_before_the_relationship_began_are_not_read(self):
+        import companion_intimacy as intimacy
+
+        self.say("telegram", "An old conversation", self.now - dt.timedelta(days=30))
+        self.c.relationship_started = "2026-09-19"
+        self.assertEqual(intimacy.compute(self.c, self.now)["active_days"], 0)
+
+    def test_each_recorded_connection_day_counts(self):
+        import companion_feelings as feelings
+        import companion_intimacy as intimacy
+
+        for days in (1, 3):
+            feelings.record(
+                self.c,
+                {
+                    "kind": "connection",
+                    "topic": "evening talk",
+                    "text": "We talked for a while.",
+                    "evidence": f"conversation {days}",
+                    "at": (self.now - dt.timedelta(days=days)).isoformat(),
+                },
+                now=self.now,
+            )
+        self.assertEqual(intimacy.compute(self.c, self.now)["active_days"], 2)
+
+
+class ParsedFileCacheTests(unittest.TestCase):
+
+    def test_a_rewritten_file_is_parsed_again(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "data.json"
+            path.write_text('{"a": 1}', encoding="utf-8")
+            self.assertEqual(cc._read_parsed(path, json.loads), {"a": 1})
+            self.assertIs(
+                cc._read_parsed(path, json.loads), cc._read_parsed(path, json.loads)
+            )
+            path.write_text('{"a": 22}', encoding="utf-8")
+            self.assertEqual(cc._read_parsed(path, json.loads), {"a": 22})
+
+
+class HookHealthCheckTests(unittest.TestCase):
+
+    def test_a_pass_is_reused_and_a_failure_is_rechecked(self):
+        import companion_watch as watch
+
+        with tempfile.TemporaryDirectory() as tmp:
+            c = SimpleNamespace(home=Path(tmp))
+            (c.home / "hooks").mkdir()
+            hook = c.home / "hooks/companion-context.py"
+            hook.write_text("print('{\"context\": \"\"}')\n", encoding="utf-8")
+            ok = SimpleNamespace(returncode=0, stdout='{"context": ""}', stderr="")
+            bad = SimpleNamespace(returncode=1, stdout="", stderr="boom")
+            with patch.object(watch.subprocess, "run", return_value=ok) as run:
+                self.assertEqual(watch.check_hook(c), [])
+                self.assertEqual(watch.check_hook(c), [])
+                self.assertEqual(run.call_count, 1)
+            hook.write_text("raise SystemExit(1)\n", encoding="utf-8")
+            with patch.object(watch.subprocess, "run", return_value=bad) as run:
+                self.assertTrue(watch.check_hook(c))
+                self.assertTrue(watch.check_hook(c))
+                self.assertEqual(run.call_count, 2)

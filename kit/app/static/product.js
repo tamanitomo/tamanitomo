@@ -798,7 +798,8 @@ workspaceHandlers.now=async()=>{
   const updateInfo=reviewState.update;
   const [d,content,journal,closet,emotions]=await Promise.all([
     api('/overview'),
-    api('/content'),
+    // Home shows one photo and a strip of six; the full catalog is ~1 MB.
+    api('/content?limit=60'),
     api('/journals?limit=1'),
     api('/closet').catch(()=>null),
     api('/feelings').catch(()=>null)

@@ -1,4 +1,4 @@
-# Render BACKEND_TOKEN server-side; never place this file in the static web root.
+# Render the backend token placeholder below server-side; never place this file in the static web root.
 server {
     listen 8080;
     server_name companion.example.com;
