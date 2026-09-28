@@ -1311,3 +1311,30 @@ class SettingsNavigationTests(unittest.TestCase):
         shipped = json.loads((ROOT / "release-files.json").read_text(encoding="utf-8"))
         self.assertIn('href="/static/settings.css"', page)
         self.assertIn("kit/app/static/settings.css", shipped)
+
+
+class ReleaseManifestTests(unittest.TestCase):
+    """A release ZIP holds only listed files, so every app file must be listed."""
+
+    def test_every_tracked_app_file_ships(self):
+        tracked = subprocess.run(
+            ["git", "ls-files", "kit", "bin", "tools"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        if tracked.returncode:
+            self.skipTest("not a git checkout")
+        shipped = set(json.loads((ROOT / "release-files.json").read_text(encoding="utf-8")))
+        missing = [
+            name
+            for name in tracked.stdout.split()
+            if name.startswith("kit/") and "/__pycache__/" not in name and name not in shipped
+        ]
+        self.assertEqual(missing, [])
+
+    def test_every_asset_the_page_links_ships(self):
+        page = (ROOT / "kit/app/static/index.html").read_text(encoding="utf-8")
+        shipped = set(json.loads((ROOT / "release-files.json").read_text(encoding="utf-8")))
+        linked = set(re.findall(r'(?:src|href)="/static/([^"?]+)"', page))
+        self.assertEqual(sorted(f for f in linked if f"kit/app/static/{f}" not in shipped), [])
