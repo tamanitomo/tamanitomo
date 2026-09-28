@@ -81,11 +81,24 @@ def flatten(links, bundles: dict) -> list:
 
 
 def collapse(routes: list, bundles: dict) -> list:
-    """Links for display: a run of routes that is exactly a bundle shows as it."""
+    """Links for display: a run of routes that is a bundle shows as it.
+
+    A bundle with a `continues` test is recognised by its first route and then
+    every following route that passes the test, so a cascade whose members
+    were picked on another day still reads as that cascade.
+    """
     links, i = [], 0
     while i < len(routes):
         for key, bundle in bundles.items():
             members = [identity(r) for r in bundle["routes"]]
+            continues = bundle.get("continues")
+            if continues and identity(routes[i]) == members[0]:
+                j = i + 1
+                while j < len(routes) and continues(routes[j]):
+                    j += 1
+                links.append({"bundle": key, "name": bundle["name"]})
+                i = j
+                break
             window = [identity(r) for r in routes[i : i + len(members)]]
             if window == members:
                 links.append({"bundle": key, "name": bundle["name"]})
@@ -147,3 +160,37 @@ def same_route(a: dict, b: dict) -> bool:
     """Same provider and model; an endpoint left empty means that provider's own."""
     ours, theirs = identity(a), identity(b)
     return ours[:2] == theirs[:2] and (not ours[2] or not theirs[2] or ours[2] == theirs[2])
+
+
+# ------------------------------------------------ the OpenRouter free cascade
+# `openrouter/free` is OpenRouter's own router over whatever is free right now,
+# so it never goes stale. The models behind it are picked from OpenRouter's
+# live list each time the chain is used, preferring ones already known to work,
+# because free models are retired without notice.
+FREE_ROUTER = {"provider": "openrouter", "model": "openrouter/free"}
+FREE_BACKUPS = 3
+_NOT_FOR_CHAT = ("safety", "guard", "embed", "moderation")
+
+
+def pick_free_models(listed: list, preferred: list, count: int = FREE_BACKUPS) -> list:
+    """Free, tool-capable chat models from OpenRouter's /models data."""
+    usable = [
+        m
+        for m in listed
+        if isinstance(m, dict)
+        and str(m.get("id", "")).endswith(":free")
+        and "tools" in (m.get("supported_parameters") or [])
+        and not any(word in m["id"] for word in _NOT_FOR_CHAT)
+    ]
+    ids = {m["id"] for m in usable}
+    picks = [model for model in preferred if model in ids]
+    for m in sorted(usable, key=lambda m: -(m.get("context_length") or 0)):
+        if m["id"] not in picks:
+            picks.append(m["id"])
+    return picks[:count]
+
+
+def is_free_route(route: dict) -> bool:
+    return str(route.get("provider") or "").lower() == "openrouter" and (
+        str(route.get("model") or "").endswith(":free")
+    )

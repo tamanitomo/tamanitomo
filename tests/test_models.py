@@ -1060,6 +1060,14 @@ class ModelChainTests(unittest.TestCase):
         )
         self.assertEqual(cfg["fallback_providers"], [{"provider": "xai-oauth", "model": "grok-4.6"}])
 
+    def test_free_models_are_chosen_live_keeping_known_good_ones(self):
+        from kit.app import model_chain as mc
+
+        picks = mc.pick_free_models(
+            FREE_LISTING, ["gone/model:free", "nvidia/nemotron-3-super-120b-a12b:free"]
+        )
+        self.assertEqual(picks, ["nvidia/nemotron-3-super-120b-a12b:free", "big/new-model:free"])
+
     def test_a_job_follows_only_when_pinned_to_the_first_model(self):
         from kit.app import model_chain as mc
 
@@ -1074,10 +1082,25 @@ class ModelChainTests(unittest.TestCase):
         self.assertEqual(mc.job_state(other, spelled), "pinned")
 
 
+FREE_LISTING = [
+    {"id": "openrouter/free", "supported_parameters": ["tools"], "context_length": 200000},
+    {"id": "nvidia/nemotron-3-super-120b-a12b:free", "supported_parameters": ["tools"], "context_length": 262144},
+    {"id": "big/new-model:free", "supported_parameters": ["tools"], "context_length": 1000000},
+    {"id": "nvidia/nemotron-3.5-content-safety:free", "supported_parameters": ["tools"], "context_length": 900000},
+    {"id": "tiny/no-tools:free", "supported_parameters": [], "context_length": 999999},
+    {"id": "paid/model", "supported_parameters": ["tools"], "context_length": 2000000},
+]
+
+
 class ModelChainApiTests(WorkspaceFixture):
 
     def setUp(self):
         super().setUp()
+        from kit.app import manage
+
+        listing = patch.object(manage, "openrouter_listing", return_value=FREE_LISTING)
+        listing.start()
+        self.addCleanup(listing.stop)
         (self.c.home / "config.yaml").write_text(
             yaml.safe_dump({"model": {"provider": "xai-oauth", "default": "grok-4.6"}}),
             encoding="utf-8",
@@ -1130,6 +1153,28 @@ class ModelChainApiTests(WorkspaceFixture):
         body = self.get("/api/models/chain").json()
         self.assertEqual(body["links"][2]["bundle"], "openrouter-free")
         self.assertTrue(all(j["state"] == "follows" for j in body["jobs"]))
+
+    def test_the_free_cascade_is_picked_from_what_openrouter_offers_now(self):
+        row = self.wait(
+            self.post(
+                "/api/models/chain",
+                {"links": [{"provider": "xai-oauth", "model": "grok-4.3"}, {"bundle": "openrouter-free"}]},
+            )
+        )
+        self.assertEqual(row["status"], "complete", row)
+        saved = yaml.safe_load((self.c.home / "config.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(
+            [f["model"] for f in saved["fallback_providers"]],
+            ["openrouter/free", "nvidia/nemotron-3-super-120b-a12b:free", "big/new-model:free"],
+        )
+        # A model OpenRouter later retires is named, and the saved cascade still
+        # reads as the cascade even though its members differ from today's picks.
+        from kit.app import manage
+
+        with patch.object(manage, "openrouter_listing", return_value=FREE_LISTING[:2]):
+            body = self.get("/api/models/chain").json()
+        self.assertEqual(body["retired"], ["big/new-model:free"])
+        self.assertEqual(body["links"][1]["bundle"], "openrouter-free")
 
     def test_one_failing_job_can_be_put_back_on_the_chain(self):
         before = (self.c.home / "config.yaml").read_text(encoding="utf-8")

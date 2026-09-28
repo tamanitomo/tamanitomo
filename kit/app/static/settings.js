@@ -1002,8 +1002,8 @@ const chainRole=i=>i===0?'Answers first':`Fallback ${i}`;
 const accountName=provider=>(ACCOUNT_NAMES[provider]||provider||'').replace(' (signed in)','');
 const plural=(n,word)=>`${n} ${word}${n===1?'':'s'}`;
 
-async function renderModelChain(host){
-  const [data,accounts]=await Promise.all([api('/models/chain'),knownProviders().then(chainAccounts)]);
+async function renderModelChain(host,{refresh=false}={}){
+  const [data,accounts]=await Promise.all([api('/models/chain'+(refresh?'?refresh=1':'')),knownProviders().then(chainAccounts)]);
   if(!host.isConnected)return;
   let links=data.links.map(l=>({...l}));
   const bundles=Object.fromEntries(data.bundles.map(b=>[b.id,b]));
@@ -1033,6 +1033,8 @@ async function renderModelChain(host){
       return `<li class="chain-step is-bundle" data-step="${i}"><span class="chain-rank">${i+1}</span>
         <div class="chain-body"><p class="chain-role">${chainRole(i)}</p><strong>${esc(b.name)}</strong>
         <small class="dim">${esc(b.models.join(' → '))}</small>
+        <small class="dim">${b.live?`Picked from OpenRouter’s current free models${b.checked_at?' · checked '+esc(when(new Date(b.checked_at*1000).toISOString())):''}.`:'OpenRouter could not be reached; these are the last known free models.'}
+          <button type="button" class="link-button" data-refresh-free>Check again</button></small>
         ${b.ready===false?'<small class="warn">Needs an OpenRouter API key under Sign-ins &amp; API keys.</small>':''}</div>${moves}</li>`;
     }
     return `<li class="chain-step" data-step="${i}"><span class="chain-rank">${i+1}</span>
@@ -1058,6 +1060,7 @@ async function renderModelChain(host){
         <button type="button" class="quiet" data-add>+ Add a fallback</button>
         ${hasFree?'':`<button type="button" class="quiet" data-add-free>+ Add ${esc(bundles['openrouter-free']?.name||'free cascade')}</button>`}
       </div>
+      ${data.retired.length?`<p class="small warn">${esc(data.retired.join(', '))} ${data.retired.length===1?'is':'are'} no longer free on OpenRouter. Use the chain again to replace ${data.retired.length===1?'it':'them'} with current free models.</p>`:''}
       ${Object.keys(data.tier_overrides).length?`<p class="small warn">${Object.entries(data.tier_overrides).map(([t,m])=>`${esc(t[0].toUpperCase()+t.slice(1))} is set to ${esc(m.model)}`).join('; ')} instead of this chain. Using the chain clears that.</p>`:''}
       <div class="panel-footer">
         <button type="button" class="act" data-apply>Use this chain for everything</button>
@@ -1082,6 +1085,9 @@ async function renderModelChain(host){
         step.querySelector('[data-model-custom]').value='';picker.reload();
       };
     });
+    card.querySelector('[data-refresh-free]')?.addEventListener('click',async e=>{
+      e.currentTarget.disabled=true;e.currentTarget.textContent='Checking…';
+      await renderModelChain(host,{refresh:true});});
     card.querySelector('[data-add]').onclick=()=>{links=collect().map((l,k)=>({...links[k],...l}));links.push({provider:'',model:''});paint();};
     card.querySelector('[data-add-free]')?.addEventListener('click',()=>{links=collect().map((l,k)=>({...links[k],...l}));links.push({bundle:'openrouter-free'});paint();});
     card.querySelector('[data-apply]').onclick=async e=>{

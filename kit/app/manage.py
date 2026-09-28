@@ -167,14 +167,53 @@ INFERENCE_PRESETS = [
 
 # Named groups of models that can stand as one step of the model chain.
 _FREE_PRESET = next(p for p in INFERENCE_PRESETS if p["id"] == "openrouter_free")
-CHAIN_BUNDLES = {
-    "openrouter-free": {
-        "name": "OpenRouter free cascade",
-        "description": "OpenRouter's free router, then specific free models if it is busy.",
-        "requires_env": _FREE_PRESET["requires_env"],
-        "routes": [_FREE_PRESET["primary"], *_FREE_PRESET["fallbacks"]],
+_openrouter_listing = {"at": 0.0, "data": None}
+
+
+def openrouter_listing(refresh=False):
+    """OpenRouter's public model list, kept six hours; the last good one if unreachable."""
+    import urllib.request
+
+    now = time.time()
+    fresh = now - _openrouter_listing["at"] < 6 * 3600
+    if _openrouter_listing["data"] is not None and fresh and not refresh:
+        return _openrouter_listing["data"]
+    try:
+        # OpenRouter's edge stalls Python's default user agent.
+        request = urllib.request.Request(
+            "https://openrouter.ai/api/v1/models",
+            headers={"User-Agent": "tamanitomo"},
+        )
+        with urllib.request.urlopen(request, timeout=10) as reply:
+            data = json.loads(reply.read().decode("utf-8")).get("data") or []
+    except Exception:
+        return _openrouter_listing["data"]
+    _openrouter_listing.update(at=now, data=data)
+    return data
+
+
+def chain_bundles(refresh=False):
+    """The bundles a chain step can be, with the free cascade picked live."""
+    from . import model_chain as mc
+
+    known = [row["model"] for row in _FREE_PRESET["fallbacks"]]
+    listed = openrouter_listing(refresh)
+    picks = mc.pick_free_models(listed, known) if listed else known
+    return {
+        "openrouter-free": {
+            "name": "OpenRouter free cascade",
+            "description": "OpenRouter's free router, then the free models it lists right now.",
+            "requires_env": _FREE_PRESET["requires_env"],
+            "routes": [
+                dict(mc.FREE_ROUTER),
+                *({"provider": "openrouter", "model": m} for m in picks),
+            ],
+            "continues": mc.is_free_route,
+            "listed": {m.get("id") for m in listed} if listed else None,
+            "checked_at": _openrouter_listing["at"] or None,
+        }
     }
-}
+
 
 # Recommendations describe the work, not a vendor SKU. Provider catalogues
 # change and account access differs; the UI pairs this advice with the live
@@ -2640,15 +2679,17 @@ def register(app, select, load, operations):
         return op(f"Use {provider} everywhere", action)
 
     @app.get("/api/models/chain")
-    def model_chain_read():
+    def model_chain_read(refresh: bool = False):
         """The chain Hermes will use, and which jobs are on it."""
         from kit.cli.common import _read_jobs
         from companion_gateway import _env_values
         from . import model_chain as mc
 
         rt, p, h = context()
+        bundles = chain_bundles(refresh)
         routes = mc.current_routes(config(h))
         primary = routes[0] if routes else {}
+        listed = bundles["openrouter-free"]["listed"]
         jobs = [
             {
                 "id": j.get("id"),
@@ -2666,7 +2707,13 @@ def register(app, select, load, operations):
         models = cc.load(h).models or {}
         values = _env_values(h)
         return {
-            "links": mc.collapse(routes, CHAIN_BUNDLES),
+            "links": mc.collapse(routes, bundles),
+            # Free models in the saved chain that OpenRouter no longer lists.
+            "retired": [
+                r["model"]
+                for r in routes
+                if listed is not None and mc.is_free_route(r) and r["model"] not in listed
+            ],
             "routes": routes,
             "jobs": jobs,
             "tier_overrides": {
@@ -2683,8 +2730,10 @@ def register(app, select, load, operations):
                     "ready": all(
                         values.get(e) or os.environ.get(e) for e in b["requires_env"]
                     ),
+                    "live": b["listed"] is not None,
+                    "checked_at": b["checked_at"],
                 }
-                for key, b in CHAIN_BUNDLES.items()
+                for key, b in bundles.items()
             ],
             "max_routes": mc.MAX_ROUTES,
         }
@@ -2703,7 +2752,7 @@ def register(app, select, load, operations):
         from kit.cli.common import _read_jobs
         from . import model_chain as mc
 
-        routes = mc.flatten(payload.get("links"), CHAIN_BUNDLES)
+        routes = mc.flatten(payload.get("links"), chain_bundles())
         only = payload.get("jobs", "all")
         if only not in ("all", "none") and not (
             isinstance(only, list) and all(isinstance(i, str) for i in only)
