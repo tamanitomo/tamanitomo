@@ -1232,8 +1232,21 @@ function normalisePrompts(item){
   return {structured,tags,active};
 }
 
+// Lists leave out prompts and detector findings; the pane asks for them itself.
+async function loadViewerDetail(item){
+  const copies=[item,...(item.copies||[])].map(x=>x.path).filter(Boolean);
+  const query=new URLSearchParams();for(const path of new Set(copies))query.append('path',path);
+  try{
+    const d=await api('/content/detail?'+query);
+    item.prompts=item.prompts||d.prompts;item.active_prompt_type=item.active_prompt_type||d.active_prompt_type;
+    if(d.review)item.review=d.review;
+  }catch(e){}
+  item.detailLoaded=true;
+  if(!$('viewer-info-pane').hidden&&viewerItems[viewerIndex]===item)populateViewerInfo(item);
+}
 function populateViewerInfo(item){
   if(!item)return;
+  if(item.kind==='image'&&!item.detailLoaded)loadViewerDetail(item);
   const copies=(item.copies||[]).map(c=>esc(c.source+(c.path?' ('+c.path+')':''))).join('<br>')||'Original file';
   let promptsHtml='';
   const prompts=normalisePrompts(item);
@@ -1256,7 +1269,7 @@ async function populateAlbumChips(item){
   const chips=$('viewer-album-chips');
   chips.innerHTML='<span class="dim small">Loading albums…</span>';
   try{
-    if(!viewerAlbums){const tl=await api('/timeline');viewerAlbums=tl.albums||[];}
+    if(!viewerAlbums){const d=await api('/albums');viewerAlbums=d.albums||[];}
     const standard=['Favorites'],names=[...new Set([...standard,...viewerAlbums.map(a=>a.name)])];
     const isInAlbum=(name)=>{
       const copies=[item,...(item.copies||[])];

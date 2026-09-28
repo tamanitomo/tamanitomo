@@ -25,6 +25,7 @@ from fastapi.testclient import TestClient
 
 from kit.app import journal_archive as ja
 from kit.app.server import build
+from tests.support import AppFixture
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -1113,3 +1114,35 @@ def test_rollover_finds_windows_python_and_preserves_the_host_environment(tmp_pa
         "SYSTEMROOT"
     ] == "C:\\Windows"
     assert environment["HERMES_HOME"] == str(companion.home)
+
+
+class GalleryListsLeaveDetailToThePaneTests(AppFixture):
+
+    def test_prompts_and_detector_findings_come_from_detail(self):
+        import companion_media_review as review
+
+        picture = self.c.data / "creations/image-studio/evening.png"
+        picture.parent.mkdir(parents=True)
+        picture.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 64)
+        prompts = {"structured": "Scene: a window seat", "tags": "window, rain"}
+        findings = {"status": "passed", "detections": [{"class": "FACE_FEMALE"}]}
+        review.write_metadata(
+            picture, {"prompts": prompts, "review": findings, "rating": "safe"}
+        )
+
+        listed = self.client.get("/api/content").json()["items"]
+        item = next(x for x in listed if x["path"].endswith("evening.png"))
+        self.assertNotIn("prompts", item)
+        self.assertEqual(item["review"], {"status": "passed"})
+
+        detail = self.client.get(
+            "/api/content/detail", params={"path": item["path"]}
+        ).json()
+        self.assertEqual(detail["prompts"], prompts)
+        self.assertEqual(detail["review"], findings)
+
+    def test_detail_refuses_paths_outside_the_vault(self):
+        response = self.client.get(
+            "/api/content/detail", params={"path": "../h/config.yaml"}
+        )
+        self.assertGreaterEqual(response.status_code, 400)

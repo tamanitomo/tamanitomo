@@ -1,7 +1,7 @@
 """Profile-owned content catalog for the companion desktop app."""
 
 from __future__ import annotations
-from fastapi import Request
+from fastapi import Query, Request
 import datetime as dt
 import hashlib
 from functools import lru_cache
@@ -406,6 +406,45 @@ def catalog(
     }
 
 
+def summary(row):
+    """A list entry without what only the detail pane reads.
+
+    Generation prompts and the detector's findings were ~75% of every gallery
+    response; the pane fetches them from detail() when it is opened.
+    """
+    row = {key: value for key, value in row.items() if key != "prompts"}
+    if isinstance(row.get("review"), dict):
+        row["review"] = {"status": row["review"].get("status")}
+    return row
+
+
+def detail(c, paths):
+    """Prompts and full review for one picture, given the paths of its copies."""
+    import companion_timeline as timeline
+
+    files = [resolve(c, path) for path in paths]
+    out = {"prompts": None, "active_prompt_type": None, "review": None}
+    for path in files:
+        meta = review.metadata(path)
+        for key in out:
+            if out[key] is None and meta.get(key) is not None:
+                out[key] = meta[key]
+    # A photo-session capture records the prompts it was actually sent with,
+    # and wins over a studio sidecar, exactly as the catalog merges them.
+    names = {path.name for path in files}
+    for _, record in timeline.records(c):
+        if record.get("status") != "saved":
+            continue
+        variants = [v.get("filename") for v in record.get("variants", []) if isinstance(v, dict)]
+        if names & {record.get("filename"), *variants}:
+            out["prompts"] = record.get("prompts") or out["prompts"]
+            out["active_prompt_type"] = (
+                record.get("active_prompt_type") or out["active_prompt_type"]
+            )
+            break
+    return out
+
+
 def journals(c, limit=1000, before=None, q="", month="", entry_id=None):
     if type(limit) != int or not 1 <= limit <= 1000:
         raise ValueError("Journal page size must be 1–1000")
@@ -647,7 +686,13 @@ def register(app, load):
         day: str = "",
         collection: str = "all",
     ):
-        return catalog(load(), limit, before, kind, q, day, collection)
+        page = catalog(load(), limit, before, kind, q, day, collection)
+        page["items"] = [summary(row) for row in page["items"]]
+        return page
+
+    @app.get("/api/content/detail")
+    def content_detail(path: list[str] = Query(..., max_length=20)):
+        return detail(load(), path)
 
     @app.get("/api/journals")
     def read_journals(

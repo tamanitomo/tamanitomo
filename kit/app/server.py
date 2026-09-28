@@ -401,6 +401,12 @@ def build(home=None, token="", state_dir=None):
             raise HTTPException(400, "stage must be 0 to 4")
         return companion_intimacy.acknowledge_level(load(), stage)
 
+    @app.get("/api/albums")
+    def albums():
+        import companion_timeline as tl
+
+        return {"albums": tl.albums(load())}
+
     @app.get("/api/timeline")
     def timeline():
         c = load()
@@ -440,7 +446,7 @@ def build(home=None, token="", state_dir=None):
                     "filename": row["filename"],
                     "primary_filename": row.get("primary_filename", row["filename"]),
                     "variants": row.get("variants", []),
-                    "prompts": row.get("prompts"),
+                    # Prompts are fetched per picture from /api/content/detail.
                     "active_prompt_type": row.get("active_prompt_type"),
                     "activity": state.get("activity", ""),
                     "location": state.get("location", ""),
