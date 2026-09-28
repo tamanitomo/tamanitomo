@@ -80,6 +80,46 @@ def _shares_store(c, resolved):
         return False
 
 
+_recent_rows: dict = {}
+
+
+def _store_version(db):
+    out = []
+    for path in (db, db.with_name(db.name + "-wal")):
+        try:
+            stat = path.stat()
+            out.append((stat.st_mtime_ns, stat.st_size))
+        except OSError:
+            out.append(None)
+    return tuple(out)
+
+
+def _query_rows(con, scope, params):
+    columns = {row[1] for row in con.execute("PRAGMA table_info(messages)")}
+    visible = (
+        "AND (m.active=1 OR m.compacted=1)" if {"active", "compacted"} <= columns else ""
+    )
+    query = f"""
+        SELECT m.role,m.content,m.timestamp FROM messages m JOIN sessions s ON s.id=m.session_id
+        WHERE m.role IN ('user','assistant') AND {scope} {visible}
+          AND coalesce(m._compressed_summary,0)=0 AND coalesce(m.content,'')<>''
+          AND s.source IN ('telegram','cli','desktop','tui','discord')"""
+    rows = list(con.execute(query + " ORDER BY m.timestamp DESC LIMIT 60", params))
+    # A run of assistant messages must not hide the last actual human contact.
+    human_rows = list(
+        con.execute(
+            query + " AND m.role='user' ORDER BY m.timestamp DESC LIMIT 2", params
+        )
+    )
+    agent_rows = list(
+        con.execute(
+            query + " AND m.role='assistant' ORDER BY m.timestamp DESC LIMIT 1",
+            params,
+        )
+    )
+    return rows, human_rows, agent_rows
+
+
 def read(c, now=None, tail=4):
     """Last message each way, the gap, and a short tail. Never any other agent's."""
     now = now or dt.datetime.now(_tz(c))
@@ -103,32 +143,22 @@ def read(c, now=None, tail=4):
         else:
             scope = "lower(coalesce(s.profile_name,'')) IN ('','default',?)"
             params = (c.profile.lower(),)
-        con = sqlite3.connect(resolved.as_uri() + "?mode=ro", uri=True, timeout=1)
-        con.execute("PRAGMA query_only=ON")
-        columns = {row[1] for row in con.execute("PRAGMA table_info(messages)")}
-        visible = (
-            "AND (m.active=1 OR m.compacted=1)"
-            if {"active", "compacted"} <= columns
-            else ""
-        )
-        query = f"""
-            SELECT m.role,m.content,m.timestamp FROM messages m JOIN sessions s ON s.id=m.session_id
-            WHERE m.role IN ('user','assistant') AND {scope} {visible}
-              AND coalesce(m._compressed_summary,0)=0 AND coalesce(m.content,'')<>''
-              AND s.source IN ('telegram','cli','desktop','tui','discord')"""
-        rows = list(con.execute(query + " ORDER BY m.timestamp DESC LIMIT 60", params))
-        # A run of assistant messages must not hide the last actual human contact.
-        human_rows = list(
-            con.execute(
-                query + " AND m.role='user' ORDER BY m.timestamp DESC LIMIT 2", params
+        # One Home render reads the thread seven times over; the rows only
+        # change when Hermes writes, which touches the database or its WAL.
+        version = _store_version(resolved)
+        key = (str(resolved), scope, params)
+        cached = _recent_rows.get(key)
+        if cached and cached[0] == version:
+            rows, human_rows, agent_rows = cached[1]
+        else:
+            con = sqlite3.connect(
+                resolved.as_uri() + "?mode=ro", uri=True, timeout=1
             )
-        )
-        agent_rows = list(
-            con.execute(
-                query + " AND m.role='assistant' ORDER BY m.timestamp DESC LIMIT 1",
-                params,
-            )
-        )
+            con.execute("PRAGMA query_only=ON")
+            rows, human_rows, agent_rows = _query_rows(con, scope, params)
+            if len(_recent_rows) > 32:
+                _recent_rows.clear()
+            _recent_rows[key] = (version, (rows, human_rows, agent_rows))
     except (sqlite3.Error, OSError) as exc:
         return {**out, "reason": f"session database unreadable: {exc}"}
     finally:

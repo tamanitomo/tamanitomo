@@ -339,13 +339,11 @@ def build(home=None, token="", state_dir=None):
             and getattr(c, "image_mode", "none") == "none"
         ):
             setup_pending.append("images")
-        import yaml
-
         cfg_path = c.home / "config.yaml"
         has_voice = False
         if cfg_path.is_file():
             try:
-                cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+                cfg = cc.hermes_config(c.home)
                 if (cfg.get("tts") or {}).get("provider"):
                     has_voice = True
             except Exception:
@@ -378,7 +376,11 @@ def build(home=None, token="", state_dir=None):
             "commitments": commitments,
             "queued": [e for e in outbox.fold(c) if e["status"] == "queued"],
             "thread": thread.read(c, now),
-            "bars": (__import__("companion_bars").compute(c, now) if c.bars else None),
+            "bars": (
+                __import__("companion_bars").compute(c, now, intimacy)
+                if c.bars
+                else None
+            ),
             "intimacy": intimacy,
             "level_event": (
                 companion_intimacy.level_event(c, intimacy)

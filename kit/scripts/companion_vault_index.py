@@ -118,8 +118,12 @@ def headings(path: pathlib.Path) -> list:
     return out
 
 
-def scan(c) -> list:
-    """Every note under the vault as {dir, name, mtime, headings}."""
+def scan(c, with_headings=True) -> list:
+    """Every note under the vault as {dir, name, mtime, headings}.
+
+    The prompt map shows names only; reading every note's first bytes for its
+    sections is for `show` and `status`.
+    """
     root = c.vault
     excluded = _excluded(c)
     notes = []
@@ -140,7 +144,7 @@ def scan(c) -> list:
             except OSError:
                 continue
             stem = f[:-3]
-            hs = headings(p)
+            hs = headings(p) if with_headings else []
             # A lone title that only restates the file name says nothing.
             if len(hs) == 1 and re.sub(r"[\W_]+", "", hs[0].lower()) == re.sub(
                 r"[\W_]+", "", stem.lower()
@@ -253,7 +257,9 @@ def build(c, force: bool = False) -> str:
     except (OSError, ValueError, KeyError, TypeError):
         pass
     now = dt.datetime.now().astimezone()
-    text = render(c, scan(c), budget, now.strftime("%Y-%m-%d %H:%M"))
+    text = render(
+        c, scan(c, with_headings=False), budget, now.strftime("%Y-%m-%d %H:%M")
+    )
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(

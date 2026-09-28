@@ -410,7 +410,9 @@ def compute(c, now=None) -> Dict[str, Any]:
                 params += (
                     dt.datetime.combine(first_day, dt.time(), tzinfo=tz).timestamp(),
                 )
-            query = f"""SELECT m.timestamp, m.content FROM messages m JOIN sessions s ON s.id=m.session_id
+            # Sessions first: a few thousand rows, then their messages by index.
+            # Scanning every message instead cost 60 ms warm and over 1 s cold.
+            query = f"""SELECT m.timestamp, m.content FROM sessions s CROSS JOIN messages m ON m.session_id=s.id
                         WHERE m.role='user' AND {scope} AND coalesce(m.content,'')<>''"""
             for row in con.execute(query, params):
                 try:

@@ -32,7 +32,7 @@ def read_config(c):
 
     try:
         return (
-            yaml.safe_load((c.home / "config.yaml").read_text(encoding="utf-8")) or {}
+            cc.yaml_load((c.home / "config.yaml").read_text(encoding="utf-8")) or {}
         )
     except (OSError, ValueError):
         return {}

@@ -362,7 +362,7 @@ def text(value, name, maxlen=300, empty=False):
 
 def config(home):
     path = home / "config.yaml"
-    value = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
+    value = cc.yaml_load(path.read_text(encoding="utf-8")) if path.exists() else {}
     if value is None:
         value = {}
     if not isinstance(value, dict):

@@ -1,5 +1,6 @@
 """Presence, wardrobe tokens, settings, portable host probes, and launchers."""
 
+import contextlib
 import ctypes
 import datetime as dt
 import hashlib
@@ -1223,3 +1224,67 @@ class HookHealthCheckTests(unittest.TestCase):
                 self.assertTrue(watch.check_hook(c))
                 self.assertTrue(watch.check_hook(c))
                 self.assertEqual(run.call_count, 2)
+
+
+class ThreadRereadsOnlyWhenHermesWritesTests(unittest.TestCase):
+
+    def test_a_new_message_is_seen_by_the_next_read(self):
+        import sqlite3
+
+        import companion_thread as thread
+
+        with tempfile.TemporaryDirectory() as tmp:
+            c = cc.Companion(
+                agent="Nova", hermes_root=Path(tmp) / "h", vault=Path(tmp) / "v"
+            )
+            c.home.mkdir(parents=True)
+            now = dt.datetime(2026, 9, 20, 18, tzinfo=dt.timezone.utc)
+            db = c.home / "state.db"
+            with contextlib.closing(sqlite3.connect(db)) as con, con:
+                con.executescript(
+                    "CREATE TABLE sessions (id TEXT, source TEXT, profile_name TEXT);"
+                    "CREATE TABLE messages (session_id TEXT, role TEXT, content TEXT,"
+                    " timestamp REAL, _compressed_summary INTEGER);"
+                    "INSERT INTO sessions VALUES ('t', 'telegram', '');"
+                )
+                con.execute(
+                    "INSERT INTO messages VALUES ('t','user','morning',?,0)",
+                    ((now - dt.timedelta(hours=5)).timestamp(),),
+                )
+            self.assertEqual(thread.read(c, now)["hours_since_human"], 5.0)
+            self.assertEqual(thread.read(c, now)["hours_since_human"], 5.0)
+            with contextlib.closing(sqlite3.connect(db)) as con, con:
+                con.execute(
+                    "INSERT INTO messages VALUES ('t','user','back again',?,0)",
+                    ((now - dt.timedelta(hours=1)).timestamp(),),
+                )
+            self.assertEqual(thread.read(c, now)["hours_since_human"], 1.0)
+
+
+class HermesConfigParsingTests(unittest.TestCase):
+
+    def test_the_fast_parser_reads_what_pyyaml_reads(self):
+        import yaml
+
+        text = "model:\n  default: grok\n  context_length: 8192\nhooks: {}\nlist: [1, 'two', null]\n"
+        self.assertEqual(cc.yaml_load(text), yaml.safe_load(text))
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "config.yaml").write_text(text, encoding="utf-8")
+            self.assertEqual(cc.hermes_config(tmp), yaml.safe_load(text))
+            self.assertEqual(cc.hermes_config(Path(tmp) / "missing"), {})
+
+
+class VaultMapSkipsSectionsTests(unittest.TestCase):
+
+    def test_the_prompt_map_does_not_open_notes(self):
+        import companion_vault_index as vi
+
+        with tempfile.TemporaryDirectory() as tmp:
+            c = SimpleNamespace(vault=Path(tmp), profile="", share_people=True)
+            (c.vault / "Journal").mkdir()
+            (c.vault / "Journal/Tuesday.md").write_text("# Rain\n", encoding="utf-8")
+            with patch.object(vi, "_excluded", return_value=set()), patch.object(
+                vi, "headings", side_effect=AssertionError("opened a note")
+            ):
+                notes = vi.scan(c, with_headings=False)
+            self.assertEqual([(n["dir"], n["name"]) for n in notes], [("Journal", "Tuesday")])

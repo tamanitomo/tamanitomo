@@ -54,6 +54,25 @@ def machine_sources_sql(column: str) -> str:
 _parsed_files: dict = {}
 
 
+def yaml_load(text: str):
+    """Parse YAML with PyYAML's C parser when it is built in, else pure Python.
+
+    Same result; Hermes's config.yaml takes ~5 ms instead of ~33 ms, and the
+    per-turn hook parses it several times in a fresh process.
+    """
+    import yaml
+
+    return yaml.load(text, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
+
+
+def hermes_config(home) -> dict:
+    """Hermes's config.yaml for reading only, parsed once per on-disk version."""
+    path = pathlib.Path(home) / "config.yaml"
+    if not path.exists():
+        return {}
+    return _read_parsed(path, yaml_load) or {}
+
+
 def _read_parsed(path: pathlib.Path, parse):
     """Parse a Hermes-owned file once per on-disk version.
 
@@ -826,7 +845,7 @@ def detect_context_tokens(
         return DEFAULT_CONTEXT_TOKENS, FALLBACK_SOURCE + " (PyYAML unavailable)"
     cfg = {}
     try:
-        cfg = _read_parsed(home / "config.yaml", yaml.safe_load) or {}
+        cfg = hermes_config(home)
     except (OSError, Exception):
         cfg = {}
     if not isinstance(cfg, dict):
@@ -848,7 +867,7 @@ def detect_context_tokens(
     for root in (hermes_root, home):
         try:
             data = (
-                _read_parsed(root / "context_length_cache.yaml", yaml.safe_load) or {}
+                _read_parsed(root / "context_length_cache.yaml", yaml_load) or {}
             )
             cache.update(data.get("context_lengths") or {})
         except (OSError, Exception):

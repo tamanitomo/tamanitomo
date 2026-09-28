@@ -107,7 +107,8 @@ def valence(mood):
     return max(-1, min(1, score))
 
 
-def compute(c, now=None):
+def compute(c, now=None, intimacy=None):
+    """`intimacy`: a result already computed for this `now`, to reuse."""
     now = now or dt.datetime.now(_tz(c))
     import companion_presence as presence
     import companion_thread as thread
@@ -128,7 +129,7 @@ def compute(c, now=None):
         "moods_counted": len(scores),
         "register": data.get("register"),
         "feelings": __import__("companion_feelings").compute(c, now),
-        "intimacy": __import__("companion_intimacy").compute(c, now),
+        "intimacy": intimacy or __import__("companion_intimacy").compute(c, now),
     }
 
 
