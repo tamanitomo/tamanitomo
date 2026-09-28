@@ -1371,7 +1371,7 @@ function renderViewerPhoto(){
     // The home screen shows the profile photo, so setting one has to redraw it;
     // only the photo library was refreshed, and the face you had just chosen did
     // not appear anywhere until the next full reload.
-    try{await post('/portrait/from-content',{path:item.path});portraitVersion=Date.now();portraitStored=true;notice('Profile photo updated');if(current==='photos'||current==='now')render(current);}catch(err){notice('Failed: '+err.message);}
+    try{await post('/portrait/from-content',{path:item.path});await refreshPortraitState();notice('Profile photo updated');if(current==='photos'||current==='now')render(current);}catch(err){notice('Failed: '+err.message);}
   };
   if($('viewer-btn-delete')){
     $('viewer-btn-delete').onclick=async()=>{
@@ -2240,7 +2240,7 @@ async function imagesPanelHTML(){
 
   <h3 class="section-subheading">Reference photograph</h3>
   <div class="portrait-row">
-    ${portrait.stored?`<img class="portrait-thumb" src="${mediaUrl('/media/portrait?t='+Date.now())}" alt="Reference portrait">`
+    ${portrait.stored?`<img class="portrait-thumb" src="${mediaUrl('/media/portrait?v='+(portrait.version||''))}" alt="Reference portrait">`
       :'<div class="portrait-thumb portrait-empty">No photo</div>'}
     <div>
       <p class="dim">Used by providers that support a reference image.</p>
@@ -2347,7 +2347,7 @@ function wireImagesPanel(panel){
     message.textContent='storing…';
     try{
       await uploadPortrait(file);
-      portraitVersion=Date.now();await refreshPortraitState();
+      await refreshPortraitState();
       await render('settings');
     }catch(error){message.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
   };
@@ -2355,7 +2355,7 @@ function wireImagesPanel(panel){
   if(pdrop)pdrop.onclick=async()=>{
     if(!confirm('Remove the reference photograph?'))return;
     await api('/portrait',{method:'DELETE'});
-    portraitVersion=Date.now();await refreshPortraitState();
+    await refreshPortraitState();
     await render('settings');
   };
 

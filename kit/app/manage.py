@@ -3053,9 +3053,9 @@ def register(app, select, load, operations):
         return {"resolved": True, "path": resolved, **result}
 
     @app.get("/api/vault/links/embed-image")
-    def vault_links_embed_image(source: str, target: str):
+    def vault_links_embed_image(source: str, target: str, request: Request):
         from . import vault, vault_link_index as vli
-        from fastapi.responses import FileResponse
+        from fastapi.responses import FileResponse, Response
 
         c = load()
         vault.resolve(c, source)
@@ -3072,11 +3072,21 @@ def register(app, select, load, operations):
         if not path.is_file():
             raise HTTPException(404, "Image not found")
         media_type = vli.IMAGE_MEDIA_TYPES[Path(resolved).suffix.lower()]
+        # Notes are reread constantly; an image edited in place is picked up
+        # within the hour, and in the background meanwhile.
+        stat = path.stat()
+        headers = {
+            "Cache-Control": "private, max-age=3600, stale-while-revalidate=604800",
+            "ETag": f'"{stat.st_mtime_ns:x}-{stat.st_size:x}"',
+        }
+        if request.headers.get("if-none-match") == headers["ETag"]:
+            return Response(status_code=304, headers=headers)
         return FileResponse(
             path,
             media_type=media_type,
             filename=path.name,
             content_disposition_type="inline",
+            headers=headers,
         )
 
     @app.post("/api/vault/trash")

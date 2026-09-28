@@ -2,13 +2,11 @@
 server {
     listen 8080;
     server_name companion.example.com;
-    root /usr/share/nginx/html;
     client_max_body_size 32m;
     auth_request /_companion_auth;
     # Docker container addresses can change when Authelia is recreated.
     resolver 127.0.0.11 valid=10s ipv6=off;
     set $companion_auth_upstream http://Authelia:9091;
-    add_header Cache-Control "no-store" always;
     add_header Referrer-Policy "no-referrer" always;
     add_header X-Content-Type-Options "nosniff" always;
 
@@ -46,6 +44,16 @@ server {
         proxy_set_header Cookie "";
         proxy_buffering off;
     }
-    location /static/ { alias /usr/share/nginx/html/; }
-    location / { try_files $uri /index.html; }
+    # Serve the UI from the backend too. It fingerprints asset URLs (?v=) and
+    # sets every response's caching itself: versioned assets are immutable,
+    # media is kept privately for a week, and API JSON is never stored. Do not
+    # add a blanket Cache-Control here; it would override all of that.
+    location /static/ {
+        proxy_pass http://127.0.0.1:8770;
+        proxy_set_header Host companion.example.com;
+    }
+    location / {
+        proxy_pass http://127.0.0.1:8770;
+        proxy_set_header Host companion.example.com;
+    }
 }

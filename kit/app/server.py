@@ -1348,29 +1348,42 @@ def build(home=None, token="", state_dir=None):
         import companion_portrait as pt
 
         path = pt.portrait_path(c)
+        stored = path.is_file()
         return {
-            "stored": path.is_file(),
-            "image": "/media/portrait" if path.is_file() else None,
-            "filename": path.name if path.is_file() else None,
-            "bytes": path.stat().st_size if path.is_file() else 0,
+            "stored": stored,
+            "image": "/media/portrait" if stored else None,
+            "filename": path.name if stored else None,
+            "bytes": path.stat().st_size if stored else 0,
+            # Pages ask for /media/portrait?v=<version>, which may be kept forever.
+            "version": portrait_version(path) if stored else None,
         }
 
+    def portrait_version(path):
+        stat = path.stat()
+        return f"{stat.st_mtime_ns:x}-{stat.st_size:x}"
+
     @app.get("/media/portrait")
-    def portrait_media():
+    def portrait_media(request: Request, v: str = ""):
         c = load()
         import companion_portrait as pt
 
         path = pt.portrait_path(c)
         if not path.is_file():
             raise HTTPException(404)
-        stat = path.stat()
-        return FileResponse(
-            path,
-            headers={
-                "Cache-Control": "private, max-age=604800",
-                "ETag": f'"{int(stat.st_mtime)}-{stat.st_size}"',
-            },
-        )
+        version = portrait_version(path)
+        headers = {
+            # Only a URL naming the current file is immutable; an unversioned one
+            # (another profile's card) revalidates, which is a 304 when unchanged.
+            "Cache-Control": (
+                "private, max-age=31536000, immutable"
+                if v == version
+                else "private, no-cache"
+            ),
+            "ETag": f'"{version}"',
+        }
+        if request.headers.get("if-none-match") == headers["ETag"]:
+            return Response(status_code=304, headers=headers)
+        return FileResponse(path, headers=headers)
 
     @app.post("/api/portrait")
     def upload_portrait(data: bytes = Body(..., media_type="application/octet-stream")):
@@ -1561,7 +1574,7 @@ def build(home=None, token="", state_dir=None):
         ]
 
     @app.get("/")
-    def index():
+    def index(request: Request):
         # A refreshed page must not combine new controllers with cached older
         # helpers after a kit update. Asset URLs identify the exact file bytes.
         def versioned(match):
@@ -1571,14 +1584,25 @@ def build(home=None, token="", state_dir=None):
 
         html = (STATIC / "index.html").read_text(encoding="utf-8")
         html = re.sub(r'(src|href)="(/static/[^"?]+)"', versioned, html)
-        return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
+        import hashlib
+
+        # Still revalidated on every visit, but an unchanged page is a 304.
+        etag = '"' + hashlib.sha256(html.encode()).hexdigest()[:16] + '"'
+        headers = {"Cache-Control": "no-cache", "ETag": etag}
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers=headers)
+        return HTMLResponse(html, headers=headers)
 
     class VersionedStaticFiles(StaticFiles):
         async def get_response(self, path, scope):
             response = await super().get_response(path, scope)
             # Only the actual content hash earns long-lived caching. Unversioned
-            # URLs (including manifest icons) must revalidate after an update.
-            response.headers["Cache-Control"] = "no-cache"
+            # URLs (manifest icons) are kept an hour, so an update shows soon.
+            response.headers["Cache-Control"] = (
+                "public, max-age=3600"
+                if response.status_code in (200, 304)
+                else "no-cache"
+            )
             version = Request(scope).query_params.get("v")
             if version and response.status_code in (200, 304):
                 full_path, stat_result = await run_in_threadpool(self.lookup_path, path)

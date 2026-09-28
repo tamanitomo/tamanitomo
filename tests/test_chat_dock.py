@@ -604,7 +604,10 @@ class WorkspaceAssetPerformanceTests(WorkspaceFixture):
         )
         assert unchanged.status_code == 304
         for unversioned in ("/static/workspace.js", "/static/workspace.js?v=outdated"):
-            assert self.client.get(unversioned).headers["cache-control"] == "no-cache"
+            cache = self.client.get(unversioned).headers["cache-control"]
+            assert cache == "public, max-age=3600"
+        revisit = self.client.get("/", headers={"if-none-match": page.headers["etag"]})
+        assert revisit.status_code == 304
         asset = Path(self.tmp.name) / "asset.js"
         asset.write_text("old")
         old_version = asset_version(asset)
@@ -615,6 +618,29 @@ class WorkspaceAssetPerformanceTests(WorkspaceFixture):
         assert api.status_code == 200
         assert api.headers["cache-control"] == "no-store"
         assert "content-encoding" not in api.headers
+
+    def test_the_portrait_is_kept_until_it_is_replaced(self):
+        import companion_portrait as portrait
+
+        path = portrait.portrait_path(self.c)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"\x89PNG\r\n\x1a\nfirst")
+        version = self.get("/api/portrait").json()["version"]
+        current = self.client.get(
+            "/media/portrait",
+            params={"profile": "nova", "v": version},
+            headers=self.headers,
+        )
+        assert "immutable" in current.headers["cache-control"]
+        assert self.get("/media/portrait").headers["cache-control"] == "private, no-cache"
+        again = self.client.get(
+            "/media/portrait",
+            params={"profile": "nova"},
+            headers={**self.headers, "if-none-match": current.headers["etag"]},
+        )
+        assert again.status_code == 304
+        path.write_bytes(b"\x89PNG\r\n\x1a\nsecond, longer")
+        assert self.get("/api/portrait").json()["version"] != version
 
     def test_lan_requests_can_read_access_configuration(self):
         async def lan_app(scope, receive, send):

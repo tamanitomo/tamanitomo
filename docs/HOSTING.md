@@ -5,7 +5,7 @@
 - Public URL: https://tamanitomo.example.com
 - ProxyHost: Traefik → Authelia admin policy → `tamanitomo-web` Nginx container on private network.
 - BackendHost: `tamanitomo.service` (systemd user service, with legacy alias `companion-workspace.service`), one backend listening on localhost and private network (e.g. `10.0.0.2:8770` or Tailscale).
-- Nginx serves static UI files from `/opt/tamanitomo/static` and proxies API/media to the backend over the private network.
+- Nginx authenticates every request and proxies the UI, API and media to the backend over the private network.
 - Hermes profiles, vault, model credentials, and jobs remain on the backend host.
 
 The backend token is injected server-side from the root-only Nginx configuration. It is not embedded in public frontend files. Nginx independently checks Authelia on every request, including assets and media. Traefik clears client-supplied identity/token headers before authentication. A host-specific Authelia deny rule prevents non-admins falling through to an API bypass.
@@ -36,7 +36,7 @@ The container has `unless-stopped` restart policy, no published host port, a rea
 
 ## Updating
 
-Update the kit source/dependencies on the backend host, run its tests, and restart the backend after in-flight app actions complete. Copy matching `kit/app/static/` assets to the proxy host's static directory. Nginx uses no-store responses. The API location also forwards HTTP/1.1 Upgrade/Connection headers for the embedded Hermes dashboard’s WebSockets. Its server-injected backend token authenticates that connection; browser cookies remain stripped at this boundary. Do not copy the access token into that directory or into a shared source ZIP.
+Update the kit source/dependencies on the backend host, run its tests, and restart the backend after in-flight app actions complete. The UI is served by the backend, so there are no assets to copy to the proxy host. The backend sets caching per response — content-hashed assets are immutable, media is cached privately for a week, API JSON is `no-store` — so do not add a blanket `Cache-Control` header in Nginx or Traefik. The API location also forwards HTTP/1.1 Upgrade/Connection headers for the embedded Hermes dashboard’s WebSockets. Its server-injected backend token authenticates that connection; browser cookies remain stripped at this boundary. Do not copy the access token into that directory or into a shared source ZIP.
 
 Changing/rotating the backend token also requires rendering `deploy/nginx.conf.template` into the proxy host's private Nginx config and reloading Nginx. `TAMANITOMO_PUBLIC_ORIGIN` (or legacy `COMPANION_PUBLIC_ORIGIN`) permits same-origin browser writes through HTTPS termination; it does not replace token authentication. `TAMANITOMO_BIND` (or `COMPANION_BIND`) is an explicit comma-separated IPv4 listen list. Keep the backend off public interfaces.
 

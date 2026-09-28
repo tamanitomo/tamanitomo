@@ -161,7 +161,7 @@ function mediaUrl(path){return esc(rawMediaUrl(path));}
    no portrait never renders a broken image; the initial is what shows. */
 let portraitStored=false;
 async function refreshPortraitState(){
-  try{portraitStored=!!(await api('/portrait')).stored;}
+  try{const p=await api('/portrait');portraitStored=!!p.stored;portraitVersion=p.version||'';}
   catch(error){portraitStored=false;}
   return portraitStored;
 }
@@ -184,8 +184,9 @@ function faceForProfile(profileId,name,cls){
   return `<div class="avatar has-face ${esc(cls||'')}"><span>${letter}</span>`+
     `<img data-other-profile="1" src="${esc(url.pathname+url.search)}" alt="" loading="lazy"></div>`;
 }
-/* Bumped when the portrait changes, so a replaced face is not served from cache. */
-let portraitVersion=Date.now();
+/* The stored file's version, from /api/portrait: an unchanged face stays cached
+   across visits, and a replaced one gets a new URL. */
+let portraitVersion='';
 // Belt and braces: a portrait removed in another tab would otherwise linger as a
 // broken frame until the next reload. Error events do not bubble, so capture.
 document.addEventListener('error',event=>{
