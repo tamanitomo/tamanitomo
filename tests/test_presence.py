@@ -164,6 +164,14 @@ class PresenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "lists 21 items; at most 20"):
             presence.update(self.c, self.data(outfit=[f"x{i}" for i in range(21)]), self.now)
 
+    def test_an_episode_under_the_wrong_key_is_called_missing_not_too_long(self):
+        record = self.data(episode="Reading before bed.")
+        del record["text"]
+        with self.assertRaisesRegex(ValueError, r'episode text \(key "text"\) is missing'):
+            presence.update(self.c, record, self.now)
+        with self.assertRaisesRegex(ValueError, "is 1601 characters; at most 1600"):
+            presence.update(self.c, self.data(text="x" * 1601), self.now)
+
     def test_unknown_outfits_are_rejected_and_current_state_is_in_context(self):
         with self.assertRaisesRegex(ValueError, "wardrobe"):
             presence.update(self.c, self.data(outfit=["made-up"]), self.now)

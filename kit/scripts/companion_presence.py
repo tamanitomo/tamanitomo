@@ -316,8 +316,18 @@ def wardrobe(c):
 
 
 def text(value, name, limit=500):
-    if not isinstance(value, str) or not value.strip() or len(value) > limit:
-        raise ValueError(f"{name} must be nonempty text, at most {limit} characters")
+    # Missing, wrong type, blank and too long each get their own message. One
+    # shared "nonempty, at most N" sent a model that had named the field
+    # "episode" instead of "text" to shorten a 245-character episode, again
+    # and again, when the field was simply not there.
+    if value is None:
+        raise ValueError(f"{name} is missing")
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be text, not {type(value).__name__}")
+    if not value.strip():
+        raise ValueError(f"{name} is empty")
+    if len(value) > limit:
+        raise ValueError(f"{name} is {len(value)} characters; at most {limit}")
     return value.strip()
 
 
@@ -595,7 +605,7 @@ def update(c, data, now=None, dry_run=False):
             state["private"] = bool(data["private"])
         if setting in SETTINGS:
             state["setting"] = setting
-        narrative = text(data.get("text"), "episode text", 1600)
+        narrative = text(data.get("text"), "episode text (key \"text\")", 1600)
         import companion_day
 
         parent = previous
