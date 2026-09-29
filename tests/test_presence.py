@@ -153,6 +153,17 @@ class PresenceTests(unittest.TestCase):
             self.now.isoformat(),
         )
 
+    def test_a_record_nested_under_presence_is_told_where_the_fields_go(self):
+        nested = {"previous_id": None, "presence": {"activity": "reading", "location": "home", "clothes": ["pajamas"]}}
+        with self.assertRaisesRegex(ValueError, r"outfit is missing.*nested inside 'presence'.*not \"clothes\""):
+            presence.update(self.c, nested, self.now)
+
+    def test_outfit_errors_name_what_is_actually_wrong(self):
+        with self.assertRaisesRegex(ValueError, "must be a list .* not str"):
+            presence.update(self.c, self.data(outfit="pajamas"), self.now)
+        with self.assertRaisesRegex(ValueError, "lists 21 items; at most 20"):
+            presence.update(self.c, self.data(outfit=[f"x{i}" for i in range(21)]), self.now)
+
     def test_unknown_outfits_are_rejected_and_current_state_is_in_context(self):
         with self.assertRaisesRegex(ValueError, "wardrobe"):
             presence.update(self.c, self.data(outfit=["made-up"]), self.now)

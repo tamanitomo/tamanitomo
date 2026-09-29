@@ -446,8 +446,36 @@ def update(c, data, now=None, dry_run=False):
                 {item["id"]: item for item in data.get("wardrobe_additions", [])}
             )
         outfit = data.get("outfit")
-        if not isinstance(outfit, list) or len(outfit) > 20:
-            raise ValueError("outfit must list at most 20 wardrobe item IDs")
+        # One message used to cover missing, wrong type and too long, so a record
+        # that nested everything under "presence" with a "clothes" list was told
+        # "at most 20 items" nine times running, and the model rewrote a
+        # one-item list until it gave up and wrote the state file by hand.
+        if outfit is None:
+            nested = [
+                k
+                for k, v in data.items()
+                if isinstance(v, dict)
+                and {"outfit", "clothes", "location", "activity"} & set(v)
+            ]
+            raise ValueError(
+                'outfit is missing: give a top-level "outfit" list of wardrobe item IDs'
+                + (
+                    f"; the fields are nested inside {nested[0]!r}, move them to the top level"
+                    if nested
+                    else ""
+                )
+                + (
+                    '; the key is "outfit", not "clothes"'
+                    if "clothes" in data or any("clothes" in (data.get(k) or {}) for k in nested)
+                    else ""
+                )
+            )
+        if not isinstance(outfit, list):
+            raise ValueError(
+                f"outfit must be a list of wardrobe item IDs, not {type(outfit).__name__}"
+            )
+        if len(outfit) > 20:
+            raise ValueError(f"outfit lists {len(outfit)} items; at most 20")
         # An item that is not a string reached `set()` and raised TypeError, which
         # the caller's correction loop does not catch -- so a model that answered
         # with objects instead of ids took the whole tick down with an error about
