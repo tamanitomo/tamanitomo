@@ -107,8 +107,56 @@ def queue_note(c, text, audio_path, reason="", ttl_hours=4):
     }
 
 
+def hermes_tts(c, text, output_path):
+    """Synthesize with Hermes's own text_to_speech tool, in Hermes's Python.
+
+    Returns the file Hermes wrote, which may differ from `output_path`: a
+    voice-compatible provider's audio comes back as Opus (.ogg) for voice notes.
+    """
+    import os
+    import subprocess
+
+    import companion_platform as cp
+    from companion_gateway import _env_values
+
+    checkout = c.hermes_root / "hermes-agent"
+    python = cp.venv_executable(checkout)
+    if not python.is_file():
+        raise ValueError("Hermes Python is unavailable")
+    env = dict(os.environ, **_env_values(c.home))
+    env.update(HERMES_HOME=str(c.home), PYTHONPATH=str(checkout))
+    env.pop("HERMES_PROFILE", None)
+    run = subprocess.run(
+        [
+            str(python),
+            str(pathlib.Path(__file__).with_name("companion_voice_chat.py")),
+            "speak",
+        ],
+        input=json.dumps({"text": text, "path": str(output_path)}),
+        env=env,
+        cwd=checkout,
+        capture_output=True,
+        text=True,
+        timeout=660,
+    )
+    reply = next(
+        (
+            json.loads(line.split("=", 1)[1])
+            for line in run.stdout.splitlines()
+            if line.startswith("COMPANION_AUDIO=")
+        ),
+        {},
+    )
+    if run.returncode or not reply.get("success"):
+        raise ValueError(
+            "Hermes text-to-speech failed: "
+            + str(reply.get("error") or run.stderr.strip()[-300:] or "no result")
+        )
+    return pathlib.Path(reply.get("file_path") or output_path)
+
+
 def synthesize(c, text, output_path=None):
-    """Synthesize speech into a WAV file using Hermes's configured TTS provider."""
+    """Synthesize speech into an audio file using Hermes's configured TTS provider."""
     import companion_tts_adapter as adapter
     import hashlib
 
@@ -129,7 +177,14 @@ def synthesize(c, text, output_path=None):
         output_path = out_dir / f"voice_{stamp}_{ident}.wav"
     output_path = pathlib.Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    adapter.synthesize(c.home, provider, text, output_path)
+    command = ((cfg.get("tts") or {}).get("providers") or {}).get(provider) or {}
+    if command.get("type") == "command":
+        # A command provider is Hermes's to run. The adapter only knows engines it
+        # starts itself, so it would load the provider's engine in-process (for
+        # pockettts, a fresh model per note) instead of running the command.
+        output_path = hermes_tts(c, text, output_path)
+    else:
+        adapter.synthesize(c.home, provider, text, output_path)
     if not output_path.exists() or output_path.stat().st_size < 44:
         raise ValueError("TTS engine did not produce an audio file")
     return output_path
