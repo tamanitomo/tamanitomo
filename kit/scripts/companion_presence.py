@@ -427,8 +427,17 @@ def update(c, data, now=None, dry_run=False):
         raise ValueError("State must be an object")
     # Optimistic concurrency protects a chat transition from an older scheduled update.
     if "previous_id" not in data:
+        # Name the value to copy. "Read current state first" alone sent a pulse
+        # round the same read-and-retry loop eleven times: it had read the state,
+        # but kept the id somewhere other than a top-level previous_id.
+        latest = (current(c) or {}).get("id")
+        nested = [
+            k for k, v in data.items() if isinstance(v, dict) and "previous_id" in v
+        ]
         raise ValueError(
-            "Read current state first and supply previous_id (null initially)"
+            'previous_id is missing at the top level of the record; set "previous_id": '
+            + (json.dumps(latest) + " (the current state's id)" if latest else "null (there is no state yet)")
+            + (f"; it is nested inside {nested[0]!r}" if nested else "")
         )
     with file_lock(c.life / ".presence.lock"):
         previous = current(c)

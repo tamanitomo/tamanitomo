@@ -172,6 +172,15 @@ class PresenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "is 1601 characters; at most 1600"):
             presence.update(self.c, self.data(text="x" * 1601), self.now)
 
+    def test_a_missing_previous_id_names_the_id_to_copy(self):
+        first = presence.update(self.c, self.data(), self.now)["episode"]
+        record = self.data(location="kitchen", transition="walked to the kitchen")
+        del record["previous_id"]
+        record["state"] = {"previous_id": first["id"]}
+        ident = re.escape(first["id"])
+        with self.assertRaisesRegex(ValueError, "previous_id is missing at the top level.*" + ident + ".*nested inside 'state'"):
+            presence.update(self.c, record, self.now)
+
     def test_unknown_outfits_are_rejected_and_current_state_is_in_context(self):
         with self.assertRaisesRegex(ValueError, "wardrobe"):
             presence.update(self.c, self.data(outfit=["made-up"]), self.now)
