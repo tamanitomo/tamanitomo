@@ -668,10 +668,17 @@ def compile(
         parts["quality"] = merge_tags(
             data.get("quality_tags", ""), parts.get("quality", "")
         )
+    overrides = overrides or {}
+    # A scene asked for is a different moment from the recorded one. The recorded
+    # light, framing and mood describe where she was and what she was doing, so
+    # carrying them over put "the back steps at dawn" under "bathroom light softened
+    # by steam". What she is wearing still carries over; she has not changed.
+    requested = bool(str(overrides.get("scene") or "").strip())
     for key in ("scene", "wardrobe", "feeling", "lighting", "camera"):
+        if requested and key in ("feeling", "lighting", "camera"):
+            continue
         if not parts.get(key):
             parts[key] = recorded.get(key, "")
-    overrides = overrides or {}
     for k in PARTS:
         if k in overrides:
             parts[k] = str(overrides[k])

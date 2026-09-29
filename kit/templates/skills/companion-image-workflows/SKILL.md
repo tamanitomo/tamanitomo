@@ -6,11 +6,13 @@ description: Use the companion's saved, structured image workflows without chang
 
 Use the selected companion's saved Image Studio presets. Generate with:
 
-`{{PORTRAIT_CMD}} generate --category portrait --scene "the requested scene"`
+`{{PORTRAIT_CMD}} generate --category portrait --scene "where she is and what she is doing" --lighting "the light there" --camera "the framing"`
+
+Add `--wardrobe` for a change of clothes and `--feeling` for the mood. Each flag fills its own node.
 
 For an explicit named recipe add `--preset ID`. Follow image delivery permissions. A generated file is not automatically permission to send it.
 
-The prompt contract separates quality/model triggers, identity, wardrobe, scene, feeling, lighting and camera. Identity follows the appearance section of SOUL unless a recipe has a model-specific override. Change scene/outfit without rewriting identity. Leave unspecified fields to the companion's recorded presence. In ComfyUI, every named mapping goes to its own node input; only a workflow with a single `prompt` mapping receives the combined prompt. Hosted providers receive the same parts as a labelled brief. Do not copy another companion's face, private prompts, API keys or file paths into a new user's template.
+The prompt contract separates quality/model triggers, identity, wardrobe, scene, feeling, lighting and camera. Identity follows the appearance section of SOUL unless a recipe has a model-specific override. Change scene/outfit without rewriting identity. With `--scene`, lighting, camera and feeling come only from what you pass, never from the recorded moment, which may be somewhere else entirely; wardrobe defaults to what she is wearing now. In ComfyUI, every named mapping goes to its own node input; only a workflow with a single `prompt` mapping receives the combined prompt. Hosted providers receive the same parts as a labelled brief. Do not copy another companion's face, private prompts, API keys or file paths into a new user's template.
 
 The structured SDXL template uses positive text nodes 101–106, concatenations 111–115, negative 201, latent 301, sampler 302, decode 303 and save 304. Imported recipes may use different IDs: read their saved mappings instead of guessing. Every prompt branch must reach the sampler and final saved image.
 

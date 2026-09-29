@@ -432,6 +432,12 @@ def main():
     gp.add_argument("--category", default="portrait")
     gp.add_argument("--preset", default="")
     gp.add_argument("--scene")
+    # One flag per structured box, so a requested picture fills the same boxes a
+    # recorded one does instead of folding light and framing into the scene.
+    gp.add_argument("--wardrobe")
+    gp.add_argument("--lighting")
+    gp.add_argument("--camera")
+    gp.add_argument("--feeling")
     gp.add_argument(
         "--allow-nsfw",
         action="store_true",
@@ -458,7 +464,11 @@ def main():
     elif a.cmd == "generate":
         import companion_media as media
 
-        overrides = {"scene": a.scene} if a.scene else None
+        overrides = {
+            k: getattr(a, k)
+            for k in ("scene", "wardrobe", "lighting", "camera", "feeling")
+            if getattr(a, k)
+        } or None
         intimate = bool(getattr(a, "intimate", False))
         if a.recorded:
             overrides = recorded_overrides(c)
