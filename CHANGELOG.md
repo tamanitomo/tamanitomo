@@ -14,6 +14,10 @@
   a fact aside for review rather than dropping it.
 - The weekly hygiene job now merges duplicate facts, promotes core ones, and writes
   `facts-index.md` next to the ledger.
+- A fact that Hermes's USER.md or its overflow archive already says is no longer stored
+  in the ledger, matched within a sentence or two so a long entry cannot cover a short
+  statement by chance. Passing or unclear things (an illness, a bad week) are steered to
+  open loops instead of facts in the reflection prompts.
 - Fix the pulse/autonomy gate opening nearly every tick: the awake fingerprint no longer
   hashes ambient sensor files or re-authored prose in the day plan.
 

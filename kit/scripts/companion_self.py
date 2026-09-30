@@ -215,8 +215,13 @@ def record_fact(
     held_decision=None,
     weight="",
     confirm_distinct=False,
+    user_memory=None,
 ):
     """Append one fact.
+
+    With `user_memory` (the Companion), a statement that Hermes's USER.md or its
+    overflow archive already says is not stored: that file is where Hermes keeps
+    what it knows about the human, and a second copy here would only drift.
 
     A statement that says nearly the same thing as an active fact (see
     similar_facts) is not written: the answer is {"written": False,
@@ -240,6 +245,10 @@ def record_fact(
         raise ValueError(f"weight must be one of {WEIGHTS}")
     statement = _text(statement, 400, "statement")
     evidence = _text(evidence, 600, "evidence")
+    if user_memory is not None and not supersedes:
+        known = known_in_user_memory(user_memory, statement)
+        if known:
+            return {"written": False, "reason": "already in Hermes USER.md", **known}
     urls_only = re.sub(r"https?://\S+", "", evidence).strip()
     if not urls_only or urls_only in (";", ",", "-", ".", "|"):
         raise ValueError(
@@ -792,6 +801,61 @@ def _words(statement):
     }
 
 
+_USER_STORES = ("memories/USER.md", "memory-archive/USER-archive.md")
+_ARCHIVE_COMMENT = re.compile(r"<!--.*?-->", re.S)
+
+
+def user_memory_entries(c):
+    """(file, entry) for every entry in Hermes's USER.md and its overflow archive."""
+    out = []
+    for rel in _USER_STORES:
+        base = c.home if rel.startswith("memories") else c.soul_dir
+        path = pathlib.Path(base) / rel
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        text = _ARCHIVE_COMMENT.sub("", text).replace("\r\n", "\n")
+        out += [(path.name, e.strip()) for e in text.split("\n\xa7\n") if e.strip()]
+    return out
+
+
+def _windows(entry):
+    """Each sentence of an entry and each adjacent pair. Matching a whole paragraph
+    would let a long entry cover almost any short statement by chance."""
+    sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+|\n+", entry) if x.strip()]
+    yield from sentences
+    for one, two in zip(sentences, sentences[1:]):
+        yield one + " " + two
+
+
+def known_in_user_memory(c, statement, cover=0.8):
+    """The USER.md entry that already says `statement`, or None.
+
+    Matches within a sentence or two of an entry, since entries are paragraphs.
+    As conservative as similar_facts: a negation, number, ordinal, name or symbol
+    in the statement that the passage lacks means it is not the same fact, and a
+    statement too short to be specific never matches."""
+    if re.match(r"\s*[\w' -]{1,40} said:\s*[\"\u201c]", str(statement)):
+        return None  # a quoted remark is evidence, not a claim USER.md could already hold
+    ws = _words(statement)
+    if len(ws) < 4:
+        return None
+    names = _capitalised(statement)
+    symbols = _SYMBOLS.findall(statement)
+    for name, entry in user_memory_entries(c):
+        for passage in _windows(entry):
+            we = _words(passage)
+            if len(ws & we) / len(ws) < cover:
+                continue
+            if any(_DISTINCT.match(w) and w not in we for w in ws):
+                continue
+            if (ws & names) - we or any(sym not in passage for sym in symbols):
+                continue
+            return {"known_in": name, "entry": entry[:300]}
+    return None
+
+
 def _pair_similarity(a, b, threshold=0.6):
     """(score, differing words, contained) when word sets a and b look like one
     statement, else None. The one rule duplicate_facts reports and record_fact
@@ -1231,6 +1295,7 @@ def _apply(c, entry, now):
             c.human,
             weight=entry.get("weight", ""),
             confirm_distinct=bool(entry.get("confirm_distinct")),
+            user_memory=c,
         )
     if kind == "pref":
         return record_pref(
@@ -1373,6 +1438,7 @@ def main():
             c.human,
             weight=x.weight,
             confirm_distinct=x.confirm_distinct,
+            user_memory=c,
         )
     elif x.cmd == "weigh":
         out = weigh_fact(c.human_dir, x.id, x.weight, now, c.human)

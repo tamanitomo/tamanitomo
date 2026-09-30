@@ -396,7 +396,11 @@ def request_plan(
         "is NOT a standing instruction. moments are meaningful real exchanges. Ignore routine greetings, "
         "punctuation-only replies and routine task chatter. "
         "answers must answer the selected existing question. open_loops are real unfinished commitments, "
-        "not invented tasks. soul_append is empty for daily and checkin, and optional for weekly and monthly: "
+        "not invented tasks, and also anything passing or unclear that you would want to follow up on: "
+        f"if {c.human} is sick, injured, worried or in the middle of something that will pass, that is an open "
+        "loop, not a fact (title it as what to find out or check on, e.g. Ask how the baby is and what he has). "
+        "Something chronic or permanent is a fact; if you cannot tell which, it is an open loop. "
+        "A fact that Hermes memory already holds is not recorded again. soul_append is empty for daily and checkin, and optional for weekly and monthly: "
         "only a lasting insight about yourself, never a human fact or changes to locked identity. "
         "Do not force a change. The code will write the dated journal and ledgers. "
         "For checkin, reflection and soul_append are empty; record only something that would otherwise be lost."
@@ -707,6 +711,7 @@ def apply_plan(c, kind, day, plan, sources, now):
                                 source,
                                 human=c.human,
                                 statement_origin="model_paraphrase",
+                                user_memory=c,
                             ),
                             statement,
                             evidence,
@@ -727,6 +732,7 @@ def apply_plan(c, kind, day, plan, sources, now):
                             "stated",
                             source,
                             human=c.human,
+                            user_memory=c,
                         ),
                         f'{c.human} said: "{quote}"',
                         evidence,

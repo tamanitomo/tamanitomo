@@ -2024,3 +2024,67 @@ class FactsKnownTests(unittest.TestCase):
         index = slf.facts_index(self.c.human_dir, "Robin")
         self.assertIn("Core", index)
         self.assertIn("mother died", index)
+
+
+class UserMemoryDedupeTests(unittest.TestCase):
+    """A fact Hermes already keeps in USER.md (or its overflow archive) is not stored twice."""
+
+    def setUp(self):
+        self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.now = dt.datetime(2026, 9, 24, 12, 0, tzinfo=dt.timezone.utc)
+        self.c = make(self.tmp)
+        self.c.human_dir.mkdir(parents=True, exist_ok=True)
+        (self.c.home / "memories").mkdir(parents=True, exist_ok=True)
+        (self.c.home / "memories/USER.md").write_text(
+            "Robin bought the Framework Desktop specifically for its unified memory, "
+            "so he could run larger local models.\n§\nRobin has two cats named after rivers.",
+            encoding="utf-8",
+        )
+        archive = self.c.soul_dir / "memory-archive"
+        archive.mkdir(parents=True, exist_ok=True)
+        (archive / "USER-archive.md").write_text(
+            "<!-- archived 2026-09-01 from memories/USER.md -->\n"
+            "Robin's sister Alice lives in Raleigh and works nights.\n",
+            encoding="utf-8",
+        )
+
+    def record(self, statement, **kw):
+        return slf.record_fact(
+            self.c.human_dir, statement, "2026-09-23: said so", self.now,
+            "other", human="Robin", user_memory=self.c, **kw,
+        )
+
+    def test_a_fact_already_in_user_md_is_not_stored(self):
+        out = self.record("Robin bought the Framework Desktop for its unified memory.")
+        self.assertFalse(out["written"])
+        self.assertEqual(out["known_in"], "USER.md")
+        self.assertEqual(slf.facts(self.c.human_dir), [])
+
+    def test_a_fact_in_the_overflow_archive_is_not_stored(self):
+        out = self.record("Robin's sister Alice lives in Raleigh.")
+        self.assertFalse(out["written"])
+        self.assertEqual(out["known_in"], "USER-archive.md")
+
+    def test_new_facts_names_numbers_and_negations_still_go_through(self):
+        for s in (
+            "Robin keeps three tanks of tropical fish.",
+            "Robin's sister Beth lives in Raleigh.",
+            "Robin has three cats named after rivers.",
+            "Robin does not have two cats named after rivers.",
+        ):
+            self.assertTrue(self.record(s)["written"], s)
+
+    def test_a_correction_is_never_blocked(self):
+        old = self.record("Robin keeps three tanks of tropical fish.")["entry"]
+        fixed = self.record(
+            "Robin bought the Framework Desktop for its unified memory.",
+            supersedes=old["id"],
+        )
+        self.assertTrue(fixed["written"])
+
+    def test_without_user_memory_nothing_changes(self):
+        out = slf.record_fact(
+            self.c.human_dir, "Robin bought the Framework Desktop for its unified memory.",
+            "2026-09-23: said so", self.now, "other", human="Robin",
+        )
+        self.assertTrue(out["written"])
