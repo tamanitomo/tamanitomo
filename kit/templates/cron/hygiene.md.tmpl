@@ -33,7 +33,18 @@ MEMORY CHECK: Before adding compact memory, run `{{MEMORY_CMD}} archive --apply`
    Do not edit {{SOUL_DIR}}/ActiveContext.md: it is assembled from the state and this ledger by
    `{{ACTIVE_CMD}}`, and anything written there by hand is overwritten.
 
-7. Verify the continuity hook still answers:
+7. FACTS CONSOLIDATION. What you know about {{HUMAN}} is the heart of this, and it must stay complete,
+   not merely small. Run `{{SELF_CMD}} duplicate-facts`. For each pair that really is one fact worded
+   twice, record a single fuller statement with `{{SELF_CMD}} fact ... --supersedes <the older id>`
+   (the fuller wording, evidence from the quote that had more), and retract the leftover with
+   `{{SELF_CMD}} retract-fact`. A pair flagged as differing by a number, ordinal or negation is
+   probably two facts: leave both. Never merge two facts if either says something the merged one
+   would lose. Then read `{{SELF_CMD}} facts-index` and ask of each item: would forgetting this make
+   {{HUMAN}} feel unknown? A disability, illness, allergy, loss, family member, pet, job, or a
+   sensitive boundary should be core: `{{SELF_CMD}} weigh --id <id> --weight core`. Core facts are
+   always kept in view; do not mark trivia core. Finish with `{{SELF_CMD}} facts-index --write`.
+
+8. Verify the continuity hook still answers:
    `{{HOOK_TERMINAL_CMD}}` with `{}` supplied on standard input (or run `tamanitomo doctor`)
    It must print one JSON object. If it does not, report that as a blocker — the agent is running without continuity until it is fixed.
 

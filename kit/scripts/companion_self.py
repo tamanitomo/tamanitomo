@@ -51,6 +51,12 @@ CATEGORIES = (
     "logistics",
     "other",
 )
+# How much a fact matters to keep in view. A "core" fact is one whose absence breaks the
+# illusion of knowing someone (a wheelchair, an allergy, a partner's name, a loss): it is
+# rendered first and is never the one that gets squeezed out. Health facts are core unless
+# said otherwise; anything can be raised or lowered with `weigh`.
+WEIGHTS = ("core", "normal")
+CORE_CATEGORIES = ("health",)
 VALENCE = ("like", "dislike", "curious", "mixed")
 CONFIDENCE = ("stated", "observed", "inferred")
 MIN_USEFUL = 90
@@ -207,8 +213,16 @@ def record_fact(
     human="the human",
     statement_origin="recorded",
     held_decision=None,
+    weight="",
+    confirm_distinct=False,
 ):
     """Append one fact.
+
+    A statement that says nearly the same thing as an active fact (see
+    similar_facts) is not written: the answer is {"written": False,
+    "similar_to": [...]} naming what already exists. Nothing is lost by that --
+    re-record with `supersedes` set to refine or correct the existing fact, or with
+    `confirm_distinct=True` when it really is a separate fact.
 
     A statement equal (by canonical_statement) to an active fact is refused
     with `duplicate_of`, unless it is an explicit correction: a valid
@@ -222,6 +236,8 @@ def record_fact(
         raise ValueError(f"confidence must be one of {CONFIDENCE}")
     if statement_origin not in STATEMENT_ORIGINS:
         raise ValueError(f"statement_origin must be one of {STATEMENT_ORIGINS}")
+    if weight and weight not in WEIGHTS:
+        raise ValueError(f"weight must be one of {WEIGHTS}")
     statement = _text(statement, 400, "statement")
     evidence = _text(evidence, 600, "evidence")
     urls_only = re.sub(r"https?://\S+", "", evidence).strip()
@@ -251,6 +267,8 @@ def record_fact(
             else f"Recorded from stated or observed evidence about {human}; not imagined"
         ),
     }
+    if weight:
+        row["weight"] = weight
     if statement_origin == "model_paraphrase":
         row["statement_origin"] = statement_origin
         row["statement_check"] = PARAPHRASE_CHECK
@@ -278,6 +296,19 @@ def record_fact(
                     "written": False,
                     "reason": "fact already recorded",
                     "duplicate_of": f["id"],
+                }
+        if not confirm_distinct:
+            near = similar_facts(active, statement)
+            if near:
+                return {
+                    "written": False,
+                    "reason": "a similar fact is already recorded",
+                    "similar_to": near,
+                    "next": (
+                        "If this refines or corrects one of them, record it again with "
+                        "supersedes=<that id>. If it is a genuinely separate fact, record it "
+                        "again with confirm_distinct=true. If it adds nothing, leave it."
+                    ),
                 }
         return None
 
@@ -528,6 +559,7 @@ def decide_held(root, held_id, decision, now, human="the human", origin="owner")
                 row["source"],
                 human=human,
                 statement_origin="model_paraphrase",
+                confirm_distinct=True,
                 held_decision={
                     "held_id": held_id,
                     "op_id": op_id,
@@ -760,6 +792,60 @@ def _words(statement):
     }
 
 
+def _pair_similarity(a, b, threshold=0.6):
+    """(score, differing words, contained) when word sets a and b look like one
+    statement, else None. The one rule duplicate_facts reports and record_fact
+    enforces."""
+    if not a or not b:
+        return None
+    score = len(a & b) / len(a | b)
+    contained = a <= b or b <= a
+    if score < threshold and not (
+        contained and score >= 0.5 and min(len(a), len(b)) >= 4
+    ):
+        return None
+    return score, sorted(a ^ b), contained
+
+
+_SYMBOLS = re.compile(r"[+#%$&@=<>\u00b0/\u00d7\u2212]|(?<!\w)-(?=\d)")
+
+
+def _capitalised(*texts):
+    """Words written with a capital somewhere other than the start of the text: names."""
+    out = set()
+    for t in texts:
+        for m in re.finditer(r"(?<=[\w,;:'\"] )([A-Z][\w'-]*)", str(t or "")):
+            out.add(m.group(1).casefold().removesuffix("'s"))
+    return out
+
+
+def similar_facts(active, statement, threshold=0.65, limit=3):
+    """Active facts that probably say what `statement` says, best first.
+
+    Deliberately conservative, because a refused write is a lost memory: a pair that
+    differs by a number, an ordinal, a negation, a name, or a symbol ("C++"/"C") is
+    NOT similar here. "Sister Alice"/"sister Beth", "likes coffee"/"does not like
+    coffee" and "has two cats"/"has three cats" are different facts."""
+    words = _words(statement)
+    out = []
+    for f in active:
+        hit = _pair_similarity(words, _words(f.get("statement")), threshold)
+        if not hit:
+            continue
+        if any(_DISTINCT.match(w) for w in hit[1]):
+            continue
+        if _SYMBOLS.findall(statement) != _SYMBOLS.findall(f.get("statement") or ""):
+            continue
+        if set(hit[1]) & _capitalised(statement, f.get("statement")):
+            continue
+        out.append((hit[0], f))
+    out.sort(key=lambda t: -t[0])
+    return [
+        {"id": f["id"], "statement": f.get("statement"), "similarity": round(sc, 3)}
+        for sc, f in out[:limit]
+    ]
+
+
 def duplicate_facts(root, threshold=0.6):
     """Pairs of active facts that may say the same thing, for a person to review.
 
@@ -864,22 +950,101 @@ def _budget(items, limit, noun, how):
     return text
 
 
+def fact_weight(f):
+    return f.get("weight") or (
+        "core" if f.get("category") in CORE_CATEGORIES else "normal"
+    )
+
+
+def weigh_fact(root, fact_id, weight, now, human="the human"):
+    """Change how much a fact matters. Facts are never edited in place, so this is a
+    correction of the fact to itself: same words and evidence, new weight."""
+    if weight not in WEIGHTS:
+        raise ValueError(f"weight must be one of {WEIGHTS}")
+    old = next((f for f in facts(root) if f["id"] == fact_id), None)
+    if not old:
+        raise ValueError("fact_id must refer to an active fact")
+    if fact_weight(old) == weight:
+        return {"written": False, "reason": f"already {weight}", "fact_id": fact_id}
+    return record_fact(
+        root,
+        old["statement"],
+        old["evidence"],
+        now,
+        old["category"],
+        old.get("confidence", "stated"),
+        old.get("source", ""),
+        fact_id,
+        human,
+        old.get("statement_origin") or "recorded",
+        weight=weight,
+    )
+
+
+def ordered_facts(rows):
+    """Core first, then category order, newest first inside each. Stable passes: one
+    reverse=True over a tuple would also reverse the category index."""
+    order = {k: i for i, k in enumerate(CATEGORIES)}
+    rows = sorted(rows, key=lambda f: f.get("recorded_at", ""), reverse=True)
+    rows.sort(key=lambda f: order.get(f["category"], 99))
+    rows.sort(key=lambda f: fact_weight(f) != "core")
+    return rows
+
+
+def facts_index(root, human="the human"):
+    """A readable index of every active fact, grouped by category, core first. It is
+    what an agent (or a person) reads when the injected profile could not hold it all."""
+    rows = ordered_facts(facts(root))
+    lines = [
+        f"# What is known about {human}",
+        "",
+        f"{len(rows)} active facts. Regenerated by `companion_self.py facts-index --write`; "
+        "change facts with the ledger commands, not this file.",
+    ]
+    for label, group in (
+        ("Core (always kept in view)", [f for f in rows if fact_weight(f) == "core"]),
+        ("Everything else", [f for f in rows if fact_weight(f) != "core"]),
+    ):
+        if not group:
+            continue
+        lines += ["", f"## {label}"]
+        current = None
+        for f in group:
+            if f["category"] != current:
+                current = f["category"]
+                lines += ["", f"### {current}"]
+            lines.append(f"- {f['statement']}  `{f['id']}`")
+    return "\n".join(lines) + "\n"
+
+
+def write_facts_index(c):
+    path = pathlib.Path(c.human_dir) / "facts-index.md"
+    text = facts_index(c.human_dir, c.human)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+    return {"path": str(path), "facts": len(facts(c.human_dir))}
+
+
 def summary(c, budgets=None):
     b = budgets or c.budgets()
-    rows = facts(c.human_dir)
-    order = {k: i for i, k in enumerate(CATEGORIES)}
-    # Two stable passes: newest first within a category, categories in CATEGORIES order.
-    # One reverse=True over the tuple also reversed the category index, so "other" led.
-    rows.sort(key=lambda f: f["recorded_at"], reverse=True)
-    rows.sort(key=lambda f: order.get(f["category"], 99))
+    rows = ordered_facts(facts(c.human_dir))
+    # Everything, with its evidence, when the budget allows. When it does not, the bare
+    # statements, because knowing many facts beats knowing two of them well; the evidence
+    # stays in the ledger. Core facts lead either way, so they are the last thing cut.
+    core = lambda f: " (core)" if fact_weight(f) == "core" else ""
+    full = [
+        f"{f['category']} [{f['confidence']}]{core(f)}: {f['statement']} (evidence: {f['evidence']}; source: {f.get('source') or 'ledger'})"
+        for f in rows
+    ]
+    brief = [f"{f['category']}{core(f)}: {f['statement']}" for f in rows]
+    lines = full if sum(len(x) + 1 for x in full) <= b["facts"] else brief
     prof = _budget(
-        [
-            f"{f['category']} [{f['confidence']}]: {f['statement']} (evidence: {f['evidence']}; source: {f.get('source') or 'ledger'})"
-            for f in rows
-        ],
+        lines,
         b["facts"],
         "facts",
-        "companion_self.py profile",
+        "companion_self.py profile | facts-index",
     )
     prefs = _read(c.life / "preferences.jsonl", kind="companion_preference")
     pref = _budget(
@@ -1064,6 +1229,8 @@ def _apply(c, entry, now):
             entry.get("source", ""),
             entry.get("supersedes", ""),
             c.human,
+            weight=entry.get("weight", ""),
+            confirm_distinct=bool(entry.get("confirm_distinct")),
         )
     if kind == "pref":
         return record_pref(
@@ -1140,6 +1307,17 @@ def main():
     f.add_argument("--confidence", default="stated", choices=CONFIDENCE)
     f.add_argument("--source", default="")
     f.add_argument("--supersedes", default="")
+    f.add_argument("--weight", default="", choices=("",) + WEIGHTS)
+    f.add_argument(
+        "--confirm-distinct",
+        action="store_true",
+        help="record even though a similar fact exists (it is a separate fact)",
+    )
+    wg = s.add_parser("weigh", help="mark a fact core (always in view) or normal")
+    wg.add_argument("--id", required=True)
+    wg.add_argument("--weight", required=True, choices=WEIGHTS)
+    fi = s.add_parser("facts-index", help="every active fact, grouped, core first")
+    fi.add_argument("--write", action="store_true")
     rf = s.add_parser("retract-fact")
     rf.add_argument("--id", required=True)
     rf.add_argument("--reason", required=True)
@@ -1193,6 +1371,16 @@ def main():
             x.source,
             x.supersedes,
             c.human,
+            weight=x.weight,
+            confirm_distinct=x.confirm_distinct,
+        )
+    elif x.cmd == "weigh":
+        out = weigh_fact(c.human_dir, x.id, x.weight, now, c.human)
+    elif x.cmd == "facts-index":
+        out = (
+            write_facts_index(c)
+            if x.write
+            else {"index": facts_index(c.human_dir, c.human)}
         )
     elif x.cmd == "retract-fact":
         out = retract_fact(c.human_dir, x.id, x.reason, now)

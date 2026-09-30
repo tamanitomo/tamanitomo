@@ -52,6 +52,7 @@ def run(c, now=None, apply=False):
             for p, d, _ in reports
         ]
         result["prune"] = prune.prune(c, now=now, apply=True)
+        result["facts_index"] = slf.write_facts_index(c)
         if any(r["removed"] for r in prune.prune(c, now=now)):
             raise ValueError("Some expired working files could not be removed")
     else:

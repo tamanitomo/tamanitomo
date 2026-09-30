@@ -41,6 +41,8 @@ class BudgetTests(unittest.TestCase):
     def test_priority_is_respected_when_sections_compete(self):
         for ctx in BUDGET_WINDOWS:
             b = cc.Companion(context_tokens=ctx).budgets()
+            # The facts reserve sits outside the weighted pool on purpose.
+            b["facts"] -= cc.facts_reserve(ctx)
             present = [k for k in cc._PRIORITY if b[k]]
             vals = [b[k] for k in present]
             self.assertEqual(
@@ -160,7 +162,7 @@ class InjectionTests(unittest.TestCase):
         """25 recorded facts must never just fail to appear. On a roomy window
         they are trimmed with a count; on a window too small to carry them at all
         the section is named in the omissions line."""
-        for w in (4096, 8192, 32768):
+        for w in (4096, 8192):
             c = make(self.tmp, context_tokens=w)
             seed(c)
             out = ctx.build(c, {"extra": {"user_message": "hi"}})
@@ -1264,7 +1266,12 @@ class FactLedgerTests(unittest.TestCase):
             slf.record_fact(root, a, "2026-09-23: said so", self.now, human="Robin")
             self.assertTrue(
                 slf.record_fact(
-                    root, b, "2026-09-23: said so", self.now, human="Robin"
+                    root,
+                    b,
+                    "2026-09-23: said so",
+                    self.now,
+                    human="Robin",
+                    confirm_distinct=True,  # the exact-statement guard is what is under test
                 )["written"],
                 (a, b),
             )
@@ -1400,6 +1407,7 @@ class FactLedgerTests(unittest.TestCase):
         self.fact(
             "Robin has an older 4 GB GTX 1050 Ti available for the old office tower.",
             category="other",
+            confirm_distinct=True,
         )
         self.fact("Robin has a GTX 1050 Ti in the first spare PC.")
         self.fact("Robin has a GTX 1050 Ti in the second spare PC.")
@@ -1942,3 +1950,77 @@ def test_memory_snapshots_preserve_bom_newlines_and_utf8_exactly(tmp_path):
     assert second == {"snapshot": str(target), "written": False}
     assert target.stat().st_mtime_ns == unchanged_at
     assert target.read_bytes() == text.encode("utf-8")
+
+
+class FactsKnownTests(unittest.TestCase):
+    """The companion must know the person, not a sample of them."""
+
+    def setUp(self):
+        self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.now = dt.datetime(2026, 9, 24, 12, 0, tzinfo=dt.timezone.utc)
+        self.c = make(self.tmp, context_tokens=1_048_576)
+        self.c.human_dir.mkdir(parents=True, exist_ok=True)
+
+    def fact(self, statement, category="other", **kw):
+        return slf.record_fact(
+            self.c.human_dir, statement, "2026-09-23: said so", self.now,
+            category, human="Robin", **kw,
+        )
+
+    def test_a_similar_restatement_is_refused_with_the_way_forward(self):
+        first = self.fact("Robin keeps three tanks of tropical fish and feeds them each morning.")
+        again = self.fact("Robin keeps three tropical fish tanks and feeds the fish every morning.")
+        self.assertFalse(again["written"])
+        self.assertEqual(again["similar_to"][0]["id"], first["entry"]["id"])
+        self.assertIn("supersedes", again["next"])
+        self.assertEqual(len(slf.facts(self.c.human_dir)), 1)
+
+    def test_similar_can_be_refined_or_confirmed_distinct(self):
+        first = self.fact("Robin keeps three tanks of tropical fish and feeds them each morning.")
+        refined = self.fact(
+            "Robin keeps three tanks of tropical fish, feeds them each morning, and breeds guppies.",
+            supersedes=first["entry"]["id"],
+        )
+        self.assertTrue(refined["written"])
+        self.assertTrue(
+            self.fact(
+                "Robin keeps three tanks of tropical fish and feeds them every evening.",
+                confirm_distinct=True,
+            )["written"]
+        )
+
+    def test_names_numbers_and_negations_are_distinct_not_similar(self):
+        for s in (
+            "Robin's sister Alice lives in Raleigh.",
+            "Robin's sister Beth lives in Raleigh.",
+            "Robin has two cats named after rivers.",
+            "Robin has three cats named after rivers.",
+        ):
+            self.assertTrue(self.fact(s)["written"], s)
+
+    def test_every_fact_is_injected_on_a_large_window_and_core_leads(self):
+        self.fact("Robin uses a wheelchair.", category="health")
+        for i in range(60):
+            self.fact(f"Robin owns gadget number{i} named {'xyz'[i % 3]}{i}widget with extra lore about it.", confirm_distinct=True)
+        out = ctx.build(self.c, {"extra": {"user_message": "hi"}}, now=self.now)
+        self.assertIn("wheelchair", out)
+        self.assertEqual(out.count(" gadget number"), 60, "facts were dropped")
+        self.assertLess(out.index("wheelchair"), out.index("gadget number0"))
+
+    def test_core_survives_when_the_budget_cannot_hold_everything(self):
+        self.fact("Robin uses a wheelchair.", category="health")
+        for i in range(60):
+            self.fact(f"Robin owns gadget number{i} with a long story attached to it, page {i}.", confirm_distinct=True)
+        tight = slf.summary(self.c, {"facts": 600, "preferences": 100, "questions": 100})
+        self.assertIn("wheelchair", tight["human_profile"])
+        self.assertIn("more facts not shown", tight["human_profile"])
+
+    def test_weigh_promotes_and_index_lists_everything(self):
+        f = self.fact("Robin's mother died in 2019.", category="history")
+        self.assertEqual(slf.fact_weight(f["entry"]), "normal")
+        slf.weigh_fact(self.c.human_dir, f["entry"]["id"], "core", self.now, "Robin")
+        (active,) = slf.facts(self.c.human_dir)
+        self.assertEqual(slf.fact_weight(active), "core")
+        index = slf.facts_index(self.c.human_dir, "Robin")
+        self.assertIn("Core", index)
+        self.assertIn("mother died", index)

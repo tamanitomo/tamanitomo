@@ -619,6 +619,25 @@ def usable(plan, diagnostics):
     }
 
 
+def _held_if_similar(c, out, statement, evidence, now, category, source):
+    """A reflection cannot answer "is this a refinement or a separate fact?", and it has
+    no way to retry, so a fact the ledger found similar to one it holds is set aside for
+    a person to decide rather than dropped. Nothing is lost and nothing is duplicated."""
+    if out.get("written") or not out.get("similar_to"):
+        return out
+    seen = "; ".join(f'"{x["statement"]}"' for x in out["similar_to"])
+    return slf.hold_fact(
+        c.human_dir,
+        statement,
+        evidence,
+        now,
+        category,
+        source,
+        [f"may repeat what is already recorded: {seen}"],
+        c.human,
+    )
+
+
 def apply_plan(c, kind, day, plan, sources, now):
     results = []
 
@@ -676,28 +695,44 @@ def apply_plan(c, kind, day, plan, sources, now):
                             c.human,
                         )
                         if concerns
-                        else slf.record_fact(
-                            c.human_dir,
+                        else _held_if_similar(
+                            c,
+                            slf.record_fact(
+                                c.human_dir,
+                                statement,
+                                evidence,
+                                now,
+                                p["category"],
+                                "stated",
+                                source,
+                                human=c.human,
+                                statement_origin="model_paraphrase",
+                            ),
                             statement,
+                            evidence,
+                            now,
+                            p["category"],
+                            source,
+                        )
+                    )
+                else:
+                    out = _held_if_similar(
+                        c,
+                        slf.record_fact(
+                            c.human_dir,
+                            f'{c.human} said: "{quote}"',
                             evidence,
                             now,
                             p["category"],
                             "stated",
                             source,
                             human=c.human,
-                            statement_origin="model_paraphrase",
-                        )
-                    )
-                else:
-                    out = slf.record_fact(
-                        c.human_dir,
+                        ),
                         f'{c.human} said: "{quote}"',
                         evidence,
                         now,
                         p["category"],
-                        "stated",
                         source,
-                        human=c.human,
                     )
             elif key == "standing":
                 out = notes.add_standing(

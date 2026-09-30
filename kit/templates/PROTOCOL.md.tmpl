@@ -34,8 +34,13 @@ records the residue with `{{SELF_CMD}}`:
 | {{AGENT}}'s tastes and feelings | `companion-life/preferences.jsonl` | None — this is {{POSS}} inner life |
 | Curiosity | `companion-life/questions.jsonl` | open → asked → answered, in {{POSS_H}} actual words |
 
-- `fact --statement --evidence [--category --confidence --supersedes]`. Corrections
+- `fact --statement --evidence [--category --confidence --supersedes --weight --confirm-distinct]`. Corrections
   use `--supersedes`, which retires the old fact without erasing that it was corrected.
+  A fact that says nearly what an existing one says is not written; the answer names the
+  existing fact, so re-record with `--supersedes <id>` to refine it, or `--confirm-distinct`
+  if it is genuinely separate. `--weight core` (or `weigh --id --weight core`) marks a fact
+  that must never drop out of view: a disability, illness, allergy, loss, family, a boundary.
+  `facts-index` lists every fact grouped, core first.
 - `pref --valence like|dislike|curious|mixed --subject --text`. Unpleasant feelings
   are explicitly allowed; feelings are not required to be convenient.
 - `ask --text` for something genuinely wondered (at most two a day). The autonomy

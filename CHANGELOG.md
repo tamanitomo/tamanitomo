@@ -1,3 +1,22 @@
+## Unreleased
+
+- What is known about the human now gets its own room in every turn's context, sized from
+  the window (2%, up to 60,000 characters), instead of a 900-character slice that showed
+  two facts out of seventy-eight. When everything fits it is shown with its evidence;
+  when it does not, as bare statements, so many facts beat two well-documented ones.
+- Add fact weight. Core facts (health facts by default; anything via `weigh` or
+  `--weight core`) always lead the list and are the last to be cut.
+- Fix the profile listing every category backwards, which put `other` first and meant
+  `history` facts could never be shown.
+- A fact that says nearly what an active one says is no longer written: the answer names
+  the existing fact so it can be refined (`supersedes`) or confirmed separate. Different
+  names, numbers, negations and symbols are never treated as similar. Reflections set such
+  a fact aside for review rather than dropping it.
+- The weekly hygiene job now merges duplicate facts, promotes core ones, and writes
+  `facts-index.md` next to the ledger.
+- Fix the pulse/autonomy gate opening nearly every tick: the awake fingerprint no longer
+  hashes ambient sensor files or re-authored prose in the day plan.
+
 ## 3.6.1 — Connected accounts & routing, and a steadier Vault (2026-09-27)
 
 - Add a "Connected accounts & routing" settings panel: every reachable provider (API

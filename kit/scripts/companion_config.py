@@ -100,6 +100,13 @@ HERMES_CONTEXT_FILE_CEILING = 500_000
 INJECTION_FRACTION = 0.03
 INJECTION_MIN = 1_200
 INJECTION_MAX = 9_000
+# What is known about the human is the point of the product, so it does not compete with
+# the other sections for their share: it gets a reserve of its own on top of the cap, sized
+# from the window (2% of it, in characters, up to 60,000). A 9,000-character cap once left
+# room for two facts out of seventy-eight. The reserve counts toward injection_cap, so the
+# hook-output spill limit that follows injection_cap follows this too.
+FACTS_FRACTION = 0.02
+FACTS_RESERVE_MAX = 60_000
 # The vault map is sent once per session and then rides in the cached prefix, so
 # it may take a larger slice than the per-turn injection. Automatic sizing gives
 # it a tenth of the window, up to 25K tokens; a fixed setting may go higher.
@@ -178,6 +185,18 @@ def injection_cap(context_tokens: int) -> int:
         context_tokens * HERMES_CHARS_PER_TOKEN * INJECTION_FRACTION,
         INJECTION_MIN,
         INJECTION_MAX,
+    )
+
+
+def facts_reserve(context_tokens: int) -> int:
+    """Chars reserved, on top of injection_cap(), for what is known about the human.
+    None on a tiny window, where every section is already fighting for a fragment."""
+    if tier(context_tokens) == "tiny":
+        return 0
+    return _clamp(
+        context_tokens * HERMES_CHARS_PER_TOKEN * FACTS_FRACTION,
+        0,
+        FACTS_RESERVE_MAX,
     )
 
 
@@ -758,7 +777,7 @@ class Companion:
 
     @property
     def injection_cap(self) -> int:
-        return injection_cap(self.context_tokens)
+        return injection_cap(self.context_tokens) + facts_reserve(self.context_tokens)
 
     @property
     def compact(self) -> bool:
@@ -772,7 +791,8 @@ class Companion:
         90-character fragment of open loops helps nobody."""
         rules = 380 if self.compact else 1450
         tail = 260 if self.compact else 620
-        free = max(0, self.injection_cap - rules - tail)
+        reserve = facts_reserve(self.context_tokens)
+        free = max(0, self.injection_cap - reserve - rules - tail)
         keep = [
             k for i, k in enumerate(_PRIORITY) if (i + 1) * _MIN_USEFUL <= free
         ] or _PRIORITY[:1]
@@ -797,6 +817,7 @@ class Companion:
                 dropped = keep.pop()
                 over -= out[dropped]
                 out[dropped] = 0
+        out["facts"] += reserve
         out["rules"], out["tail"], out["total"] = rules, tail, self.injection_cap
         return out
 
