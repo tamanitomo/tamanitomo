@@ -37,7 +37,9 @@ in earlier episodes are preserved even when the wardrobe later changes.
 
 ## Every pulse and any real transition within the companion story
 
-Read state first. Use the file tool to write JSON to a unique `.inputs/` file, then run:
+The short form needs no file. Nothing changed: `{{PRESENCE_CMD}} continue --text "..."`. A real change: `{{PRESENCE_CMD}} transition --activity "..." --reason "..." --text "..."` plus `--location`, `--outfit id1,id2`, `--mood`, `--duration`, `--asleep yes` for only what changed. The previous id, outfit, wants and routine choice are filled in from your current state, and every rule below still applies.
+
+For care actions or new wardrobe items, read state first. Use the file tool to write JSON to a unique `.inputs/` file, then run:
 `{{PRESENCE_CMD}} update --file <absolute path>`
 
 ```json

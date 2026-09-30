@@ -1397,3 +1397,31 @@ class ReleaseManifestTests(unittest.TestCase):
         shipped = set(json.loads((ROOT / "release-files.json").read_text(encoding="utf-8")))
         linked = set(re.findall(r'(?:src|href)="/static/([^"?]+)"', page))
         self.assertEqual(sorted(f for f in linked if f"kit/app/static/{f}" not in shipped), [])
+
+
+class ShortFormSceneTests(AwakeFingerprintProseTests):
+    """`continue` and `transition` fill in everything a weak model gets wrong."""
+
+    def test_continue_needs_only_a_sentence(self):
+        later = self.now + dt.timedelta(minutes=16)
+        out = presence.continue_scene(self.c, "Still at the table, plate pushed aside.", now=later)
+        self.assertTrue(out["written"] is not False)
+        state = presence.current(self.c)["state"]
+        self.assertEqual(state["activity"], "eating lunch")
+        self.assertEqual([i["id"] for i in state["outfit"]], ["tee"])
+
+    def test_transition_fills_the_rest_and_clears_sleep(self):
+        bed = self.now + dt.timedelta(minutes=15)
+        presence.transition_scene(
+            self.c, "going to sleep", "Tired, brushed teeth and lay down.", "Lights off.",
+            location="bedroom", asleep=True, setting="private", now=bed,
+        )
+        self.assertTrue(presence.current(self.c)["state"]["asleep"])
+        morning = bed + dt.timedelta(hours=8)
+        presence.transition_scene(
+            self.c, "making coffee", "Woke up and went to the kitchen.", "Slow start.",
+            location="kitchen", now=morning,
+        )
+        state = presence.current(self.c)["state"]
+        self.assertFalse(state["asleep"], "getting up must end sleep without being told twice")
+        self.assertEqual(state["location"], "kitchen")
