@@ -1,23 +1,22 @@
-Tamanitomo 3.6.1: connected accounts you can actually see, and put to work in one step.
+Tamanitomo 3.6.2: a companion that actually knows you, and a steadier pulse.
 
-- **Connected accounts & routing.** A new settings panel shows every provider this
-  companion can reach — API key, OAuth sign-in, or reachable endpoint — next to the
-  primary model, tier status, and how many jobs follow it versus have their own
-  override. "Use everywhere" points the primary model, both tiers, and every shipped
-  job at one account in a single operation.
-- **OAuth sign-ins are visible immediately.** Hermes's own record of a Grok or ChatGPT
-  sign-in now shows up in the provider list right away, marked active, instead of
-  waiting on the model cache to notice. "Connect Grok" / "Connect ChatGPT" buttons use
-  the existing device-code flow as an alternative to the raw Hermes console.
-- **Connecting an account now offers to use it.** Right after signing in, choose
-  whether that account should generate this companion's images (with a style picker,
-  offered only when Hermes reports an image-capable provider for it) and then whether
-  it should provide voice (with a voice picker) — no more separate, undiscoverable
-  steps to actually put a freshly connected account to work.
-- **A steadier Vault.** Adds the Living Archive presentation and fixes date/datetime
-  properties not serializing correctly in the link index.
-- **More portable hosts.** Further process, file, and locking fixes for Windows and
-  macOS surfaced by the platform test matrix.
+- **She knows all of it, not two facts.** What is known about you now has its own room in
+  every turn's context, sized from the model's window, instead of a slice so small that
+  two facts out of seventy-eight got through (and often none). Facts that matter most,
+  such as health, lead the list and are the last to be cut. Fixed a bug that listed
+  categories backwards and made `history` facts unreachable.
+- **No more duplicate memories.** A fact is no longer stored if Hermes's own notes
+  (USER.md or its archive) or the ledger already say it. The nightly reflection now
+  reasons about each fact against everything known, judging by meaning: new, more proof of
+  an existing fact, a correction, or already known. Repeats are kept as extra evidence
+  under the fact instead of new rows. One-off events (what you ate, when you woke) stay in
+  the journal; lasting patterns become facts. Passing or unclear things, such as an
+  illness, become a follow-up rather than a fact.
+- **Weekly tidy-up.** The hygiene job merges leftover duplicates, promotes the facts that
+  would hurt to forget, and writes a readable facts index next to the ledger.
+- **A calmer pulse.** The pulse and autonomy loops no longer wake on nearly every tick
+  because ambient sensors and re-worded plans changed the fingerprint; they now run on
+  real transitions.
 
 ### Install or update
 
