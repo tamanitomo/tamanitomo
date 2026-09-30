@@ -1090,6 +1090,14 @@ class AwakeFingerprintProseTests(unittest.TestCase):
             len(seen), 1, "a reworded awake scene opened the pulse/autonomy gate"
         )
 
+    def test_ambient_and_next_prose_do_not_open_the_gate(self):
+        first = preread.fingerprint(self.c, self.now)
+        folder = self.c.soul_dir / "ambient"
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "weather.md").write_text("light rain, 14C", encoding="utf-8")
+        (folder / "weather.md").write_text("clearing, 16C", encoding="utf-8")
+        self.assertEqual(preread.fingerprint(self.c, self.now), first)
+
     def test_a_declared_transition_still_opens_the_gate(self):
         """The fix must not become a trap the agent can never leave (ISS-04B)."""
         first = preread.fingerprint(self.c, self.now)

@@ -232,16 +232,6 @@ def fingerprint(c, now=None):
         mark = state.get("started_at") or "static"
         return f"sleep {night.get('source')} until={night.get('until')} scene={_digest(mark)}\n"
     open_loops = companion_loops.loops(c)
-    ambient = []
-    folder = c.soul_dir / "ambient"
-    if folder.is_dir():
-        for path in sorted(folder.glob("*.md")):
-            try:
-                ambient.append(
-                    path.name + ":" + _digest(path.read_text(encoding="utf-8"))
-                )
-            except OSError:
-                continue
     # What is waiting NOW, from the fold. Counting raw rows counted every message ever
     # queued -- decisions are separate rows -- so the number only ever grew, and a
     # message that was sent or held back never changed the fingerprint.
@@ -271,15 +261,28 @@ def fingerprint(c, now=None):
         for item in state.get("commitments", [])
         if item["status"] == "planned"
     ]
+    commitment_marks = [
+        (
+            item["id"],
+            item["status"],
+            item["starts_at"],
+            item["ends_at"],
+            item["buffer_minutes"],
+        )
+        for item in state.get("commitments", [])
+    ]
+    # Ambient senses are deliberately not digested: the senses job rewrites them every 15
+    # minutes and weather moves on almost every read. The bucket line guarantees a periodic run.
     rows = [
         f"bucket {bucket}",
-        f'day {_digest(json.dumps(state.get("next"),sort_keys=True),json.dumps(state.get("commitments",[]),sort_keys=True),deadlines)}',
+        # Code-owned commitment fields only. `next` and each commitment's title/reason are prose
+        # the pulse rewrites every tick, so hashing them opened the gate on nearly every run.
+        f"day {_digest(commitment_marks,deadlines)}",
         f"missions {len(open_missions)} {_digest(*open_missions)}",
         # Only a real transition or confirmation change opens the awake gate;
         # rewording an activity or mood does not create a new event.
         f"scene {_digest(state.get('started_at') or 'static',state.get('confirmed',True))}",
         f'loops {len(open_loops)} {_digest(*[l["id"] for l in open_loops])}',
-        f"ambient {_digest(*ambient)}",
         f"queued {queued}",
     ]
     return "\n".join(rows) + "\n"

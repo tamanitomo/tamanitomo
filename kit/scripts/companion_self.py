@@ -868,9 +868,10 @@ def summary(c, budgets=None):
     b = budgets or c.budgets()
     rows = facts(c.human_dir)
     order = {k: i for i, k in enumerate(CATEGORIES)}
-    rows.sort(
-        key=lambda f: (order.get(f["category"], 99), f["recorded_at"]), reverse=True
-    )
+    # Two stable passes: newest first within a category, categories in CATEGORIES order.
+    # One reverse=True over the tuple also reversed the category index, so "other" led.
+    rows.sort(key=lambda f: f["recorded_at"], reverse=True)
+    rows.sort(key=lambda f: order.get(f["category"], 99))
     prof = _budget(
         [
             f"{f['category']} [{f['confidence']}]: {f['statement']} (evidence: {f['evidence']}; source: {f.get('source') or 'ledger'})"
