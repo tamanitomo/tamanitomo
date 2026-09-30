@@ -192,6 +192,9 @@ def day_ideas(c, now):
     return "\n".join(lines)
 
 
+STUCK_SLEEP_HOURS = 10
+
+
 def _digest(*parts):
     return hashlib.sha256("␟".join(str(p) for p in parts).encode("utf-8")).hexdigest()[
         :16
@@ -230,6 +233,18 @@ def fingerprint(c, now=None):
         # A declared night makes the mark stable by construction: the window was written
         # down before it began, so it does not move as the night wears on.
         mark = state.get("started_at") or "static"
+        # A scene that says "asleep" with no declared end is only ever ended by a run, and a run
+        # is exactly what this frozen fingerprint suppresses. One missed wake-up (a failed
+        # morning job, a model that could not satisfy the scene rules) then left her asleep for
+        # the rest of the day, every tick silently skipped. Past a night's length the gate opens
+        # once an hour, so something gets to decide whether she is still asleep.
+        if night.get("source") == "presence":
+            try:
+                slept = now - dt.datetime.fromisoformat(str(state.get("started_at")))
+            except (TypeError, ValueError):
+                slept = None
+            if slept is not None and slept >= dt.timedelta(hours=STUCK_SLEEP_HOURS):
+                mark += f"#overslept-{int(slept.total_seconds() // 3600)}"
         return f"sleep {night.get('source')} until={night.get('until')} scene={_digest(mark)}\n"
     open_loops = companion_loops.loops(c)
     # What is waiting NOW, from the fold. Counting raw rows counted every message ever

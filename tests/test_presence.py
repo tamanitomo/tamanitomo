@@ -1098,6 +1098,29 @@ class AwakeFingerprintProseTests(unittest.TestCase):
         (folder / "weather.md").write_text("clearing, 16C", encoding="utf-8")
         self.assertEqual(preread.fingerprint(self.c, self.now), first)
 
+    def test_a_sleep_with_no_declared_end_does_not_freeze_the_gate_forever(self):
+        """One missed wake-up must not leave her asleep all day with every tick suppressed."""
+        night = self.now + dt.timedelta(minutes=15)
+        presence.update(
+            self.c,
+            {
+                "previous_id": presence.current(self.c)["id"],
+                "outfit": ["tee"],
+                "location": "bedroom",
+                "activity": "sleeping",
+                "mood": "sleepy",
+                "text": "Asleep.",
+                "transition": "Bedtime.",
+                "activity_change": "transition",
+                "asleep": True,
+            },
+            night,
+        )
+        at = lambda hours: preread.fingerprint(self.c, night + dt.timedelta(hours=hours))
+        self.assertEqual(at(2), at(6), "a normal night stays quiet")
+        self.assertNotEqual(at(11), at(6), "past a night's length the gate must open")
+        self.assertNotEqual(at(12), at(11), "and keep reopening each hour")
+
     def test_a_declared_transition_still_opens_the_gate(self):
         """The fix must not become a trap the agent can never leave (ISS-04B)."""
         first = preread.fingerprint(self.c, self.now)
