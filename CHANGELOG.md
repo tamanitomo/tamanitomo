@@ -18,6 +18,11 @@
   in the ledger, matched within a sentence or two so a long entry cannot cover a short
   statement by chance. Passing or unclear things (an illness, a bad week) are steered to
   open loops instead of facts in the reflection prompts.
+- The reflection now reasons about each fact against everything known, including Hermes's
+  own USER.md notes: it says whether the fact is new, adds evidence to an existing fact,
+  replaces one, or is already known. A repeat is kept as another bullet of evidence under
+  the fact (newest five stored, two injected, all in the index) instead of a duplicate.
+  One-off events are steered to the journal rather than facts; lasting patterns are facts.
 - Fix the pulse/autonomy gate opening nearly every tick: the awake fingerprint no longer
   hashes ambient sensor files or re-authored prose in the day plan.
 

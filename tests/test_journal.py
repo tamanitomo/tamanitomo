@@ -930,6 +930,8 @@ class ReflectionTests(unittest.TestCase):
                 "quote_id": "1",
                 "category": "people",
                 "statement": "Alex's sister is Bee.",
+                "relation": "new",
+                "target_id": "",
             }
         ]
         reflection.validate(plan, "daily", source, [], "Alex")
@@ -995,6 +997,8 @@ class ReflectionTests(unittest.TestCase):
                     "quote_id": "1:0",
                     "category": "people",
                     "statement": "Alex's sister is Bee.",
+                "relation": "new",
+                "target_id": "",
                 }
             ]
             return (plan, {})

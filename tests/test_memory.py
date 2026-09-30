@@ -1028,7 +1028,9 @@ class FactQualityTests(unittest.TestCase):
 
     def plan(self, **facts):
         plan = empty()
-        plan["facts"] = [{"quote_id": "7", "category": "likes", **facts}]
+        plan["facts"] = [
+            {"quote_id": "7", "category": "likes", "relation": "new", "target_id": "", **facts}
+        ]
         return plan
 
     def converse(self, *quotes):
@@ -1065,7 +1067,7 @@ class FactQualityTests(unittest.TestCase):
         fact = reflection.schema("daily", self.source, [])["properties"]["facts"][
             "items"
         ]
-        self.assertEqual(set(fact["required"]), {"quote_id", "category", "statement"})
+        self.assertEqual(set(fact["required"]), {"quote_id", "category", "statement", "relation", "target_id"})
         with self.assertRaises(ValueError):
             reflection.validate(self.plan(), "daily", self.source, [], "Robin")
         for bad in ("", "   ", "x" * 401):
@@ -1576,8 +1578,8 @@ class HeldFactTests(unittest.TestCase):
     def plan(self):
         plan = empty()
         plan["facts"] = [
-            {"quote_id": "1", "category": "other", "statement": "Robin has 3 cats."},
-            {"quote_id": "2", "category": "likes", "statement": "Robin loves hiking."},
+            {"quote_id": "1", "category": "other", "statement": "Robin has 3 cats.", "relation": "new", "target_id": ""},
+            {"quote_id": "2", "category": "likes", "statement": "Robin loves hiking.", "relation": "new", "target_id": ""},
         ]
         return plan
 
@@ -2088,3 +2090,70 @@ class UserMemoryDedupeTests(unittest.TestCase):
             "2026-09-23: said so", self.now, "other", human="Robin",
         )
         self.assertTrue(out["written"])
+
+
+class FactRelationTests(unittest.TestCase):
+    """The reflection says how a fact relates to what is known; repeats become evidence bullets."""
+
+    def setUp(self):
+        FactQualityTests.setUp(self)
+        for i, quote in (("9", "I love pizza so much."), ("10", "Pizza again tonight, obviously."), ("11", "I bake sourdough on Sundays.")):
+            self.source[i] = {
+                "id": i, "role": "user", "content": quote,
+                "timestamp": self.now.timestamp(), "session_id": "chat",
+            }
+        self.first = slf.record_fact(
+            self.c.human_dir, "Robin loves pizza.", "2026-09-01: I love pizza",
+            self.now, "likes", human="Robin",
+        )["entry"]
+
+    def apply(self, **fact):
+        plan = empty()
+        plan["facts"] = [{"quote_id": "9", "category": "likes", "statement": "Robin loves pizza deeply.",
+                          "relation": "new", "target_id": "", **fact}]
+        reflection.validate(plan, "daily", self.source, [], "Robin")
+        return reflection.apply_plan(self.c, "daily", "2026-09-22", plan, self.source, self.now)
+
+    def test_adds_to_keeps_the_quote_as_a_bullet_not_a_second_fact(self):
+        self.apply(relation="adds_to", target_id=self.first["id"])
+        [fact] = slf.facts(self.c.human_dir)
+        self.assertEqual(len(fact["more_evidence"]), 1)
+        self.assertIn("love pizza so much", fact["more_evidence"][0])
+        self.assertIn("also:", slf.summary(self.c)["human_profile"])
+        self.assertIn("love pizza so much", slf.facts_index(self.c.human_dir))
+
+    def test_replaces_supersedes_and_keeps_the_old_bullets(self):
+        slf.add_evidence(self.c.human_dir, self.first["id"], "2026-09-05: pizza is life", self.now)
+        self.apply(relation="replaces", target_id=self.first["id"],
+                   statement="Robin adores pizza.")
+        [fact] = slf.facts(self.c.human_dir)
+        self.assertEqual(fact["statement"], "Robin adores pizza.")
+        self.assertEqual(fact["more_evidence"], ["2026-09-05: pizza is life"])
+
+    def test_known_stores_nothing(self):
+        self.apply(relation="known")
+        self.assertEqual(len(slf.facts(self.c.human_dir)), 1)
+
+    def test_a_target_that_is_not_there_costs_nothing(self):
+        self.apply(quote_id="11", relation="adds_to", target_id="fact-missing", statement="Robin bakes sourdough on Sundays.")
+        self.assertEqual(len(slf.facts(self.c.human_dir)), 2)
+
+    def test_a_near_verbatim_restatement_becomes_evidence_automatically(self):
+        self.apply(statement="Robin loves pizza!")
+        [fact] = slf.facts(self.c.human_dir)
+        self.assertEqual(len(fact["more_evidence"]), 1)
+
+    def test_the_same_evidence_is_not_added_twice_and_bullets_are_capped(self):
+        for i in range(8):
+            slf.add_evidence(self.c.human_dir, self.first["id"], f"2026-09-{i+2:02d}: more pizza {i}", self.now + dt.timedelta(minutes=i))
+        again = slf.add_evidence(self.c.human_dir, self.first["id"], "2026-09-09: more pizza 7", self.now)
+        self.assertFalse(again["written"])
+        [fact] = slf.facts(self.c.human_dir)
+        self.assertEqual(len(fact["more_evidence"]), slf.MAX_EXTRA_EVIDENCE)
+
+    def test_the_model_is_shown_hermes_memory(self):
+        (self.c.home / "memories").mkdir(parents=True, exist_ok=True)
+        (self.c.home / "memories/USER.md").write_text("Robin keeps bees.", encoding="utf-8")
+        data = reflection.context(self.c, "daily", self.now, self.now, "2026-09-22", [])
+        self.assertEqual(data["hermes_memory_about_human"], ["Robin keeps bees."])
+        self.assertEqual(data["existing_facts"][0]["statement"], "Robin loves pizza.")

@@ -47,8 +47,21 @@ BACKOFF = (dt.timedelta(minutes=15), dt.timedelta(hours=1))
 #   1  facts carried no statement
 #   2  facts carry a statement; a transcript-wrapper statement is a fatal error
 #   3  a transcript-wrapper statement is held for review with its siblings kept
-PLAN_CONTRACT = 3
-FACT_EXISTING_CHARS = 6000
+#   4  each fact says how it relates to what is known: new, adds_to, replaces or known
+PLAN_CONTRACT = 4
+# What the model is shown of what is already known, at most. Scaled down from the window
+# (10% and 8% of it, in characters) so a small local model is never overrun.
+FACT_EXISTING_CHARS = 30000
+HERMES_MEMORY_CHARS = 24000
+
+
+def _known_budgets(c):
+    window = int(getattr(c, "context_tokens", 0) or 0) * 4
+    return (
+        max(3000, min(FACT_EXISTING_CHARS, int(window * 0.10))),
+        max(2000, min(HERMES_MEMORY_CHARS, int(window * 0.08))),
+    )
+RELATIONS = ("new", "adds_to", "replaces", "known")
 
 
 def journal_period(c, target, start, end, limit=10000):
@@ -270,9 +283,18 @@ def context(c, kind, start, end, day, rows):
         "existing_questions": slf.questions(c.life),
         "human_name": c.human,
     }
-    known = slf.fact_statements(c.human_dir, FACT_EXISTING_CHARS)
+    fact_chars, memory_chars = _known_budgets(c)
+    known = slf.fact_statements(c.human_dir, fact_chars)
     out["existing_facts"] = known["facts"]
     out["existing_facts_note"] = known["note"]
+    # What Hermes itself keeps about the human. A fact already said there is "known".
+    memory, used = [], 0
+    for _, entry in reversed(slf.user_memory_entries(c)):
+        if used + len(entry) > memory_chars:
+            break
+        memory.append(entry)
+        used += len(entry)
+    out["hermes_memory_about_human"] = memory
     if kind == "daily":
         digest = []
         offset = 0
@@ -331,6 +353,8 @@ def schema(kind, sources, question_ids):
                     **evidence,
                     "category": {"type": "string", "enum": list(slf.CATEGORIES)},
                     "statement": text(400),
+                    "relation": {"type": "string", "enum": list(RELATIONS)},
+                    "target_id": text(80, True),
                 }
             ),
             allowed,
@@ -400,7 +424,15 @@ def request_plan(
         f"if {c.human} is sick, injured, worried or in the middle of something that will pass, that is an open "
         "loop, not a fact (title it as what to find out or check on, e.g. Ask how the baby is and what he has). "
         "Something chronic or permanent is a fact; if you cannot tell which, it is an open loop. "
-        "A fact that Hermes memory already holds is not recorded again. soul_append is empty for daily and checkin, and optional for weekly and monthly: "
+        "Reason about each fact against what is already known: existing_facts (with ids) and "
+        "hermes_memory_about_human (Hermes's own notes, no ids). Set relation to new (nothing known says this), "
+        "adds_to (it is a repeat or extra proof of an existing fact: set target_id to that fact's id, and the "
+        "quote is kept under it as another bullet of evidence), replaces (it corrects or refines an existing fact: "
+        "target_id is that fact's id), or known (Hermes memory already says it: target_id empty, nothing is stored). "
+        "Judge by meaning, not wording: I love pizza and can't live without pizza are one fact. target_id is empty "
+        "for new and known. One-off events are not facts: ate a hot dog, woke at 5:30, went for a walk belong to the "
+        "journal. Only record an event when it shows a lasting pattern (usually up by 5:30, often skips lunch) or a "
+        "milestone. soul_append is empty for daily and checkin, and optional for weekly and monthly: "
         "only a lasting insight about yourself, never a human fact or changes to locked identity. "
         "Do not force a change. The code will write the dated journal and ledgers. "
         "For checkin, reflection and soul_append are empty; record only something that would otherwise be lost."
@@ -561,7 +593,9 @@ def validate(
     for key in ("facts", "standing", "moments", "answers", "open_loops"):
         for p in plan[key]:
             allowed = {"quote_id"} | (
-                {"category"} | (set() if legacy else {"statement"})
+                {"category"}
+                | (set() if legacy else {"statement"})
+                | ({"relation", "target_id"} if contract >= 4 else set())
                 if key == "facts"
                 else (
                     {"question_id"}
@@ -576,6 +610,9 @@ def validate(
                 raise ValueError("human evidence must select a trusted user quote")
             if key == "facts" and p["category"] not in slf.CATEGORIES:
                 raise ValueError("invalid category")
+            if key == "facts" and contract >= 4:
+                if p["relation"] not in RELATIONS or not isinstance(p["target_id"], str):
+                    raise ValueError("invalid fact relation")
             if key == "facts" and not legacy:
                 text(p["statement"], 400)
                 if _transcript_wrapper(p["statement"], human):
@@ -623,12 +660,20 @@ def usable(plan, diagnostics):
     }
 
 
+ATTACH_SIMILARITY = 0.8
+
+
 def _held_if_similar(c, out, statement, evidence, now, category, source):
     """A reflection cannot answer "is this a refinement or a separate fact?", and it has
     no way to retry, so a fact the ledger found similar to one it holds is set aside for
     a person to decide rather than dropped. Nothing is lost and nothing is duplicated."""
     if out.get("written") or not out.get("similar_to"):
         return out
+    best = out["similar_to"][0]
+    if best["similarity"] >= ATTACH_SIMILARITY:
+        # Nearly the same words: this is the fact again. Keep the quote under it.
+        added = slf.add_evidence(c.human_dir, best["id"], evidence, now)
+        return {**added, "evidence_added_to": best["id"]}
     seen = "; ".join(f'"{x["statement"]}"' for x in out["similar_to"])
     return slf.hold_fact(
         c.human_dir,
@@ -682,7 +727,16 @@ def apply_plan(c, kind, day, plan, sources, now):
                 # The statement is the readable memory; the quote is why it may be remembered.
                 # A written statement is the model's words, so it is screened against the
                 # quote and held for a person when it obviously says something else.
-                if "statement" in p:
+                relation = p.get("relation", "new")
+                target = (p.get("target_id") or "").strip()
+                active_ids = {f["id"] for f in slf.facts(c.human_dir)}
+                if relation in ("adds_to", "replaces") and target not in active_ids:
+                    relation = "new"  # a target that is not there must not cost the fact
+                if relation == "known":
+                    out = {"written": False, "reason": "already in Hermes memory"}
+                elif relation == "adds_to":
+                    out = slf.add_evidence(c.human_dir, target, evidence, now)
+                elif "statement" in p:
                     statement = p["statement"].strip()
                     concerns = p.get("_hold", []) + slf.paraphrase_concerns(
                         statement, quote, (c.human, c.agent)
@@ -712,6 +766,7 @@ def apply_plan(c, kind, day, plan, sources, now):
                                 human=c.human,
                                 statement_origin="model_paraphrase",
                                 user_memory=c,
+                                supersedes=target if relation == "replaces" else "",
                             ),
                             statement,
                             evidence,

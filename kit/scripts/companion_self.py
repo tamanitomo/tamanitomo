@@ -57,6 +57,9 @@ CATEGORIES = (
 # said otherwise; anything can be raised or lowered with `weigh`.
 WEIGHTS = ("core", "normal")
 CORE_CATEGORIES = ("health",)
+# Stored evidence bullets kept per fact (newest); the injected profile shows fewer.
+MAX_EXTRA_EVIDENCE = 5
+INJECTED_EXTRA_EVIDENCE = 2
 VALENCE = ("like", "dislike", "curious", "mixed")
 CONFIDENCE = ("stated", "observed", "inferred")
 MIN_USEFUL = 90
@@ -728,7 +731,26 @@ def facts(root, category=None):
         ):
             continue
         seen[r["id"]] = r
-    rows = list(seen.values())
+    # Repeats of a fact are extra evidence for it, not extra facts. Newest kept.
+    # Evidence given for a fact that was later refined belongs to its successor.
+    successor = {r["supersedes"]: r["id"] for r in rows if r.get("supersedes")}
+    more = {}
+    for r in history:
+        if r.get("kind") != "human_fact_evidence":
+            continue
+        fid = r.get("fact_id")
+        for _ in range(20):
+            if fid in seen or fid not in successor:
+                break
+            fid = successor[fid]
+        if fid in seen:
+            more.setdefault(fid, []).append(r)
+    rows = []
+    for fid, row in seen.items():
+        extra = sorted(more.get(fid, []), key=lambda e: e.get("recorded_at", ""))
+        if extra:
+            row = {**row, "more_evidence": [e["evidence"] for e in extra][-MAX_EXTRA_EVIDENCE:]}
+        rows.append(row)
     return [r for r in rows if r["category"] == category] if category else rows
 
 
@@ -1014,6 +1036,32 @@ def _budget(items, limit, noun, how):
     return text
 
 
+def add_evidence(root, fact_id, evidence, now):
+    """Another time the human showed a fact is true. It is kept as a bullet under the
+    fact, so a repeat strengthens what is known instead of duplicating it."""
+    evidence = _text(evidence, 600, "evidence")
+    if not re.sub(r"https?://\S+", "", evidence).strip(" ;,-.|"):
+        raise ValueError("evidence cannot be only web URLs")
+    path = pathlib.Path(root) / "facts.jsonl"
+    row = {
+        "id": _mkid("factev", fact_id, evidence),
+        "kind": "human_fact_evidence",
+        "fact_id": fact_id,
+        "evidence": evidence,
+        "recorded_at": now.isoformat(),
+    }
+
+    def guard():
+        target = next((f for f in facts(root) if f["id"] == fact_id), None)
+        if not target:
+            raise ValueError("fact_id must refer to an active fact")
+        if evidence == target.get("evidence") or evidence in target.get("more_evidence", ()):
+            return {"written": False, "reason": "that evidence is already recorded"}
+        return None
+
+    return _append(path, row, guard=guard)
+
+
 def fact_weight(f):
     return f.get("weight") or (
         "core" if f.get("category") in CORE_CATEGORIES else "normal"
@@ -1078,6 +1126,9 @@ def facts_index(root, human="the human"):
                 current = f["category"]
                 lines += ["", f"### {current}"]
             lines.append(f"- {f['statement']}  `{f['id']}`")
+            for e in [f.get("evidence")] + list(f.get("more_evidence", ())):
+                if e:
+                    lines.append(f"    - {e}")
     return "\n".join(lines) + "\n"
 
 
@@ -1098,8 +1149,13 @@ def summary(c, budgets=None):
     # statements, because knowing many facts beats knowing two of them well; the evidence
     # stays in the ledger. Core facts lead either way, so they are the last thing cut.
     core = lambda f: " (core)" if fact_weight(f) == "core" else ""
+    also = lambda f: (
+        "; also: " + "; ".join(f["more_evidence"][-INJECTED_EXTRA_EVIDENCE:])
+        if f.get("more_evidence")
+        else ""
+    )
     full = [
-        f"{f['category']} [{f['confidence']}]{core(f)}: {f['statement']} (evidence: {f['evidence']}; source: {f.get('source') or 'ledger'})"
+        f"{f['category']} [{f['confidence']}]{core(f)}: {f['statement']} (evidence: {f['evidence']}{also(f)}; source: {f.get('source') or 'ledger'})"
         for f in rows
     ]
     brief = [f"{f['category']}{core(f)}: {f['statement']}" for f in rows]
@@ -1255,7 +1311,7 @@ def soul_init(c, anchor=None, backups=None):
 
 
 # ---- batch input ---------------------------------------------------------
-LEDGER_KINDS = ("fact", "retract_fact", "pref", "ask", "resolve", "soul")
+LEDGER_KINDS = ("fact", "fact_evidence", "retract_fact", "pref", "ask", "resolve", "soul")
 
 
 def _entries(data):
@@ -1282,6 +1338,8 @@ def _apply(c, entry, now):
         raise ValueError(f"kind must be one of {LEDGER_KINDS}")
     if kind == "retract_fact":
         return retract_fact(c.human_dir, entry.get("id", ""), entry.get("reason"), now)
+    if kind == "fact_evidence":
+        return add_evidence(c.human_dir, entry.get("id", ""), entry.get("evidence"), now)
     if kind == "fact":
         return record_fact(
             c.human_dir,
@@ -1378,6 +1436,9 @@ def main():
         action="store_true",
         help="record even though a similar fact exists (it is a separate fact)",
     )
+    ae = s.add_parser("add-evidence", help="another quote or observation for a known fact")
+    ae.add_argument("--id", required=True)
+    ae.add_argument("--evidence", required=True)
     wg = s.add_parser("weigh", help="mark a fact core (always in view) or normal")
     wg.add_argument("--id", required=True)
     wg.add_argument("--weight", required=True, choices=WEIGHTS)
@@ -1440,6 +1501,8 @@ def main():
             confirm_distinct=x.confirm_distinct,
             user_memory=c,
         )
+    elif x.cmd == "add-evidence":
+        out = add_evidence(c.human_dir, x.id, x.evidence, now)
     elif x.cmd == "weigh":
         out = weigh_fact(c.human_dir, x.id, x.weight, now, c.human)
     elif x.cmd == "facts-index":
