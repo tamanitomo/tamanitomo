@@ -1100,7 +1100,7 @@ class AwakeFingerprintProseTests(unittest.TestCase):
 
     def test_a_sleep_with_no_declared_end_does_not_freeze_the_gate_forever(self):
         """One missed wake-up must not leave her asleep all day with every tick suppressed."""
-        night = self.now + dt.timedelta(minutes=15)
+        night = self.now + dt.timedelta(hours=11, minutes=30)  # 23:30, inside quiet hours
         presence.update(
             self.c,
             {
@@ -1120,6 +1120,22 @@ class AwakeFingerprintProseTests(unittest.TestCase):
         self.assertEqual(at(2), at(6), "a normal night stays quiet")
         self.assertNotEqual(at(11), at(6), "past a night's length the gate must open")
         self.assertNotEqual(at(12), at(11), "and keep reopening each hour")
+
+    def test_a_flag_left_on_through_the_afternoon_is_looked_at_within_hours(self):
+        nap = self.now + dt.timedelta(minutes=15)  # 12:15, outside quiet hours
+        presence.update(
+            self.c,
+            {
+                "previous_id": presence.current(self.c)["id"],
+                "outfit": ["tee"], "location": "bedroom", "activity": "napping",
+                "mood": "sleepy", "text": "Nap.", "transition": "Lay down.",
+                "activity_change": "transition", "asleep": True, "setting": "private",
+            },
+            nap,
+        )
+        at = lambda hours: preread.fingerprint(self.c, nap + dt.timedelta(hours=hours))
+        self.assertEqual(at(1), at(2), "a nap is left alone")
+        self.assertNotEqual(at(4), at(3), "but a daytime sleep flag does not freeze the gate")
 
     def test_a_declared_transition_still_opens_the_gate(self):
         """The fix must not become a trap the agent can never leave (ISS-04B)."""
