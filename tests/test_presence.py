@@ -1425,3 +1425,30 @@ class ShortFormSceneTests(AwakeFingerprintProseTests):
         state = presence.current(self.c)["state"]
         self.assertFalse(state["asleep"], "getting up must end sleep without being told twice")
         self.assertEqual(state["location"], "kitchen")
+
+    def test_a_record_that_changes_activity_ends_sleep_unless_it_says_otherwise(self):
+        bed = self.now + dt.timedelta(minutes=15)
+        presence.transition_scene(
+            self.c, "going to sleep", "Lay down.", "Lights off.",
+            location="bedroom", asleep=True, setting="private", now=bed,
+        )
+        up = bed + dt.timedelta(hours=8)
+        presence.update(
+            self.c,
+            {
+                "previous_id": presence.current(self.c)["id"],
+                "outfit": ["tee"], "location": "kitchen",
+                "activity": "making coffee", "mood": "groggy", "text": "Up.",
+                "transition": "Woke and went downstairs.", "activity_change": "transition",
+                "setting": "private",
+            },
+            up,
+        )
+        self.assertFalse(presence.current(self.c)["state"]["asleep"])
+
+    def test_continue_can_correct_a_wrong_sleep_flag(self):
+        presence.current(self.c)
+        out = presence.continue_scene(
+            self.c, "Already up and about.", asleep=False, now=self.now + dt.timedelta(minutes=16)
+        )
+        self.assertFalse(presence.current(self.c)["state"].get("asleep", False))

@@ -602,7 +602,12 @@ def update(c, data, now=None, dry_run=False):
         if "asleep" in data:
             state["asleep"] = bool(data["asleep"])
         elif previous and "asleep" in previous["state"]:
-            state["asleep"] = bool(previous["state"]["asleep"])
+            # Sleep persists across ticks that change nothing. A record that moves her to a
+            # different activity and does not say she is still asleep has ended it: the flag
+            # left on under "cooking breakfast" kept every overnight gate shut for hours.
+            state["asleep"] = bool(previous["state"]["asleep"]) and (
+                state["activity"] == previous["state"].get("activity")
+            )
         # Whether this is a moment she would not want photographed. Like `asleep`, a
         # field she sets rather than something a later reader infers from the words.
         # It does NOT carry forward: privacy is about this moment, and a bath that
@@ -796,12 +801,14 @@ def _routine_choice(c, now, rec, anchor="", decision="", reason=""):
     )
 
 
-def continue_scene(c, text_, mood="", now=None):
+def continue_scene(c, text_, mood="", asleep=None, now=None):
     """Nothing has changed: the same scene, one short continuation."""
     now = now or dt.datetime.now(ZoneInfo(c.timezone))
     rec = _carried_record(c)
     if mood:
         rec["mood"] = mood
+    if asleep is not None:
+        rec["asleep"] = asleep
     rec.update({"text": text_, "activity_change": "continue"})
     choice = _routine_choice(c, now, rec)
     if choice:
@@ -1014,6 +1021,7 @@ def main():
     )
     ct.add_argument("--text", required=True)
     ct.add_argument("--mood", default="")
+    ct.add_argument("--asleep", choices=("yes", "no"), help="say it if the record has the wrong answer")
     tr = sub.add_parser(
         "transition",
         help="a real change; name only what changed, code fills the rest",
@@ -1041,7 +1049,10 @@ def main():
     elif args.action == "advance":
         out = advance(c)
     elif args.action == "continue":
-        out = continue_scene(c, args.text, args.mood)
+        out = continue_scene(
+            c, args.text, args.mood,
+            None if args.asleep is None else args.asleep == "yes",
+        )
     elif args.action == "transition":
         out = transition_scene(
             c, args.activity, args.reason, args.text, args.location,
