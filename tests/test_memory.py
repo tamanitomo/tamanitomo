@@ -2157,3 +2157,17 @@ class FactRelationTests(unittest.TestCase):
         data = reflection.context(self.c, "daily", self.now, self.now, "2026-09-22", [])
         self.assertEqual(data["hermes_memory_about_human"], ["Robin keeps bees."])
         self.assertEqual(data["existing_facts"][0]["statement"], "Robin loves pizza.")
+
+
+class CronInjectionTests(FactsKnownTests):
+    """Scheduled loops get a lean prefix; a conversation gets everything known."""
+
+    def test_cron_gets_less_than_chat_and_still_leads_with_core(self):
+        self.fact("Robin uses a wheelchair.", category="health")
+        for i in range(60):
+            self.fact(f"Robin owns gadget number{i} with a long story attached to it, page {i}.", confirm_distinct=True)
+        chat = ctx.build(self.c, {"extra": {"user_message": "hi", "platform": "telegram"}}, now=self.now)
+        cron = ctx.build(self.c, {"extra": {"user_message": "hi", "platform": "cron"}}, now=self.now)
+        self.assertLess(len(cron), len(chat))
+        self.assertIn("wheelchair", cron)
+        self.assertEqual(chat.count(" gadget number"), 60)
