@@ -2171,3 +2171,18 @@ class CronInjectionTests(FactsKnownTests):
         self.assertLess(len(cron), len(chat))
         self.assertIn("wheelchair", cron)
         self.assertEqual(chat.count(" gadget number"), 60)
+
+
+class PrereadLoopsTests(unittest.TestCase):
+    def test_clip_loops_keeps_whole_loops_callbacks_first_and_counts_the_rest(self):
+        import companion_active as active
+
+        due = "## [CARING CALLBACKS READY TO RAISE]\nCall the dentist.\n\n"
+        loops = "".join(f"### Loop {i}\n" + "x" * 300 + "\n- status: open\n\n" for i in range(30))
+        out = active.clip_loops(due + loops, 1500)
+        self.assertIn("CARING CALLBACKS", out)
+        self.assertIn("### Loop 0", out)
+        self.assertNotIn("### Loop 29", out)
+        self.assertRegex(out, r"\+\d+ more open loops")
+        self.assertLess(len(out), 1700)
+        self.assertEqual(active.clip_loops(due + loops, None), due + loops)

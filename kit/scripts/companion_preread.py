@@ -50,7 +50,9 @@ def preread(c, now=None):
         " read; do not spend tool calls fetching it again. Read a source only to go deeper.]",
         "",
     ]
-    out.append(companion_active.build(c, now).strip())
+    # A scheduled run needs the callbacks that are due and a few current loops, not the whole
+    # ledger with every note: that was a third of a small model's prompt, every tick.
+    out.append(companion_active.build(c, now, loops_chars=LOOPS_CHARS).strip())
     out.append("")
     import companion_journal
 
@@ -192,6 +194,7 @@ def day_ideas(c, now):
     return "\n".join(lines)
 
 
+LOOPS_CHARS = 4000
 STUCK_SLEEP_HOURS = 10
 DAYTIME_SLEEP_HOURS = 3
 
