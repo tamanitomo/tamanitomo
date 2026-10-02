@@ -298,12 +298,6 @@ def for_prompt(c, payload) -> str:
     history = extra.get("conversation_history") if isinstance(extra, dict) else None
     if in_history(history):
         return ""
-    if isinstance(extra, dict) and extra.get("platform") == "cron":
-        # Scheduled loops name the files they work on. They get the top of the map, not
-        # all of it: a full vault map was a quarter of every pulse's prompt.
-        import dataclasses
-
-        c = dataclasses.replace(c, vault_index_tokens=min(c.vault_index_tokens, 2000) if c.vault_index_tokens > 0 else 2000)
     text = build(c)
     return BEGIN + "\n" + text + "\n" + END if text else ""
 

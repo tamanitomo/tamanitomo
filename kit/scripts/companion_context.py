@@ -273,12 +273,6 @@ def build(c, payload=None, now=None, maintenance_notice=""):
         msg = ""
     platform = extra.get("platform") if isinstance(extra.get("platform"), str) else ""
     first_turn = bool(extra.get("is_first_turn"))
-    if platform == "cron":
-        # A scheduled loop does not need everything known about the human: that reserve is for
-        # a conversation, and on a small local model a 25,000-character prefix per tick is
-        # most of what made the loops fail. Core facts still lead, inside the ordinary share.
-        reserve = cc.facts_reserve(c.context_tokens)
-        b = {**b, "facts": b["facts"] - reserve, "total": b["total"] - reserve}
     rules = (COMPACT_RULES if c.compact else FULL_RULES).format(
         agent=c.agent, human=c.human
     )
