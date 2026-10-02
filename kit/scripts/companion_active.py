@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
-import re
 import pathlib
 import sys
 from zoneinfo import ZoneInfo
@@ -226,29 +225,7 @@ def recent_photo(c):
         return ""
 
 
-def clip_loops(text, limit):
-    """Whole loops only: callbacks that are due come first and survive, the rest are counted."""
-    if limit is None or len(text) <= limit:
-        return text
-    blocks = re.split(r"(?m)^(?=### )", text)
-    head, loops = blocks[0], blocks[1:]
-    kept, used = [], len(head)
-    for block in loops:
-        if used + len(block) > limit and kept:
-            break
-        kept.append(block)
-        used += len(block)
-    hidden = len(loops) - len(kept)
-    note = (
-        f"\n[+{hidden} more open loops not shown here, nothing lost: read them with "
-        "companion_loops.py list]\n"
-        if hidden
-        else ""
-    )
-    return (head + "".join(kept)).rstrip("\n") + note
-
-
-def build(c, now=None, loops_chars=None):
+def build(c, now=None):
     now = now or dt.datetime.now(_tz(c))
     feelings = ""
     if c.bars:
@@ -266,10 +243,7 @@ def build(c, now=None, loops_chars=None):
         ("Today’s intended plan & laid-out clothes", intended_plan(c, now)),
         ("Recent conversation & commitments", recent_conversation(c, now)),
         ("Contextual feelings", feelings),
-        (
-            "Active open loops & caring callbacks",
-            clip_loops(open_loops(c, now), loops_chars),
-        ),
+        ("Active open loops & caring callbacks", open_loops(c, now)),
         ("Asked for", waiting_missions(c, now)),
         ("The thread", thread(c)),
         ("Ambient", ambient(c)),
