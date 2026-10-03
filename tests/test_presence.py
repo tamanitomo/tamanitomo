@@ -1098,6 +1098,45 @@ class AwakeFingerprintProseTests(unittest.TestCase):
         (folder / "weather.md").write_text("clearing, 16C", encoding="utf-8")
         self.assertEqual(preread.fingerprint(self.c, self.now), first)
 
+    def test_a_sleep_with_no_declared_end_does_not_freeze_the_gate_forever(self):
+        """One missed wake-up must not leave her asleep all day with every tick suppressed."""
+        night = self.now + dt.timedelta(hours=11, minutes=30)  # 23:30, inside quiet hours
+        presence.update(
+            self.c,
+            {
+                "previous_id": presence.current(self.c)["id"],
+                "outfit": ["tee"],
+                "location": "bedroom",
+                "activity": "sleeping",
+                "mood": "sleepy",
+                "text": "Asleep.",
+                "transition": "Bedtime.",
+                "activity_change": "transition",
+                "asleep": True,
+            },
+            night,
+        )
+        at = lambda hours: preread.fingerprint(self.c, night + dt.timedelta(hours=hours))
+        self.assertEqual(at(2), at(6), "a normal night stays quiet")
+        self.assertNotEqual(at(11), at(6), "past a night's length the gate must open")
+        self.assertNotEqual(at(12), at(11), "and keep reopening each hour")
+
+    def test_a_flag_left_on_through_the_afternoon_is_looked_at_within_hours(self):
+        nap = self.now + dt.timedelta(minutes=15)  # 12:15, outside quiet hours
+        presence.update(
+            self.c,
+            {
+                "previous_id": presence.current(self.c)["id"],
+                "outfit": ["tee"], "location": "bedroom", "activity": "napping",
+                "mood": "sleepy", "text": "Nap.", "transition": "Lay down.",
+                "activity_change": "transition", "asleep": True, "setting": "private",
+            },
+            nap,
+        )
+        at = lambda hours: preread.fingerprint(self.c, nap + dt.timedelta(hours=hours))
+        self.assertEqual(at(1), at(2), "a nap is left alone")
+        self.assertNotEqual(at(4), at(3), "but a daytime sleep flag does not freeze the gate")
+
     def test_a_declared_transition_still_opens_the_gate(self):
         """The fix must not become a trap the agent can never leave (ISS-04B)."""
         first = preread.fingerprint(self.c, self.now)
@@ -1374,3 +1413,58 @@ class ReleaseManifestTests(unittest.TestCase):
         shipped = set(json.loads((ROOT / "release-files.json").read_text(encoding="utf-8")))
         linked = set(re.findall(r'(?:src|href)="/static/([^"?]+)"', page))
         self.assertEqual(sorted(f for f in linked if f"kit/app/static/{f}" not in shipped), [])
+
+
+class ShortFormSceneTests(AwakeFingerprintProseTests):
+    """`continue` and `transition` fill in everything a weak model gets wrong."""
+
+    def test_continue_needs_only_a_sentence(self):
+        later = self.now + dt.timedelta(minutes=16)
+        out = presence.continue_scene(self.c, "Still at the table, plate pushed aside.", now=later)
+        self.assertTrue(out["written"] is not False)
+        state = presence.current(self.c)["state"]
+        self.assertEqual(state["activity"], "eating lunch")
+        self.assertEqual([i["id"] for i in state["outfit"]], ["tee"])
+
+    def test_transition_fills_the_rest_and_clears_sleep(self):
+        bed = self.now + dt.timedelta(minutes=15)
+        presence.transition_scene(
+            self.c, "going to sleep", "Tired, brushed teeth and lay down.", "Lights off.",
+            location="bedroom", asleep=True, setting="private", now=bed,
+        )
+        self.assertTrue(presence.current(self.c)["state"]["asleep"])
+        morning = bed + dt.timedelta(hours=8)
+        presence.transition_scene(
+            self.c, "making coffee", "Woke up and went to the kitchen.", "Slow start.",
+            location="kitchen", now=morning,
+        )
+        state = presence.current(self.c)["state"]
+        self.assertFalse(state["asleep"], "getting up must end sleep without being told twice")
+        self.assertEqual(state["location"], "kitchen")
+
+    def test_a_record_that_changes_activity_ends_sleep_unless_it_says_otherwise(self):
+        bed = self.now + dt.timedelta(minutes=15)
+        presence.transition_scene(
+            self.c, "going to sleep", "Lay down.", "Lights off.",
+            location="bedroom", asleep=True, setting="private", now=bed,
+        )
+        up = bed + dt.timedelta(hours=8)
+        presence.update(
+            self.c,
+            {
+                "previous_id": presence.current(self.c)["id"],
+                "outfit": ["tee"], "location": "kitchen",
+                "activity": "making coffee", "mood": "groggy", "text": "Up.",
+                "transition": "Woke and went downstairs.", "activity_change": "transition",
+                "setting": "private",
+            },
+            up,
+        )
+        self.assertFalse(presence.current(self.c)["state"]["asleep"])
+
+    def test_continue_can_correct_a_wrong_sleep_flag(self):
+        presence.current(self.c)
+        out = presence.continue_scene(
+            self.c, "Already up and about.", asleep=False, now=self.now + dt.timedelta(minutes=16)
+        )
+        self.assertFalse(presence.current(self.c)["state"].get("asleep", False))

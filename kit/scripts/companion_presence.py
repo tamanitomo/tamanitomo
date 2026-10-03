@@ -602,7 +602,12 @@ def update(c, data, now=None, dry_run=False):
         if "asleep" in data:
             state["asleep"] = bool(data["asleep"])
         elif previous and "asleep" in previous["state"]:
-            state["asleep"] = bool(previous["state"]["asleep"])
+            # Sleep persists across ticks that change nothing. A record that moves her to a
+            # different activity and does not say she is still asleep has ended it: the flag
+            # left on under "cooking breakfast" kept every overnight gate shut for hours.
+            state["asleep"] = bool(previous["state"]["asleep"]) and (
+                state["activity"] == previous["state"].get("activity")
+            )
         # Whether this is a moment she would not want photographed. Like `asleep`, a
         # field she sets rather than something a later reader infers from the words.
         # It does NOT carry forward: privacy is about this moment, and a bath that
@@ -727,6 +732,121 @@ def update(c, data, now=None, dry_run=False):
 
 
 # ---- keeping the present honest without a model --------------------------
+_VISUAL_KEYS = ("pose", "hands", "gaze", "framing", "props", "expression", "lighting")
+
+
+def _carried_record(c):
+    """The scene as it stands, as an `update` record: everything a model has to get right
+    and keeps getting wrong (the previous id, every outfit id, the wants list, the day
+    plan). A continuation or a transition changes a few fields of this; the rest is code."""
+    cur = current(c)
+    if not cur:
+        raise ValueError(
+            "there is no recorded scene yet; write the first one with `update --file`"
+        )
+    st = cur["state"]
+    rec = {
+        "previous_id": cur["id"],
+        "outfit": [item["id"] for item in st.get("outfit", [])],
+        "location": st["location"],
+        "activity": st["activity"],
+        "mood": st["mood"],
+        "wants": list(st.get("wants", [])),
+        "private_stance": st.get("private_stance", ""),
+    }
+    if st.get("setting"):
+        rec["setting"] = st["setting"]
+    for key in ("duration_minutes", "next"):
+        if st.get(key) is not None:
+            rec[key] = st[key]
+    # The picture direction is carried only when it is whole; a partial one is rejected as
+    # an invalid record, and a scene that never had one simply goes without.
+    visual = st.get("visual")
+    if isinstance(visual, dict) and all(
+        isinstance(visual.get(k), str) and visual[k] for k in _VISUAL_KEYS
+    ):
+        rec["visual"] = {k: visual[k] for k in _VISUAL_KEYS}
+    return rec
+
+
+def _routine_choice(c, now, rec, anchor="", decision="", reason=""):
+    """The routine_choice the lifestyle rules demand, or none when they are off. With an
+    active anchor the answer has to be the model's (it is a real decision), so asking for
+    it is an error that names the ids; with none, the only valid answer is "free"."""
+    import companion_lifestyle
+
+    if not companion_lifestyle.enabled(c):
+        return None
+    from companion_life import routine
+
+    active = routine(c.life, now.astimezone(ZoneInfo(c.timezone)), c.agent)[
+        "active_suggestions"
+    ]
+    if not active:
+        return {"anchor": "free", "decision": "free", "reason": reason or f"continuing {rec['activity']}"}
+    ids = [a["id"] for a in active]
+    if anchor and anchor in ids and decision in ("follow", "defer"):
+        return {"anchor": anchor, "decision": decision, "reason": reason or rec["activity"]}
+    if not anchor and not decision:
+        # Staying where she is while an anchor is open is a deferral, and saying so is honest.
+        return {
+            "anchor": ids[0],
+            "decision": "defer",
+            "reason": reason or f"still in the middle of {rec['activity']}",
+        }
+    raise ValueError(
+        "a routine anchor is active: pass --anchor one of "
+        + ", ".join(ids)
+        + " and --decision follow or defer"
+    )
+
+
+def continue_scene(c, text_, mood="", asleep=None, now=None):
+    """Nothing has changed: the same scene, one short continuation."""
+    now = now or dt.datetime.now(ZoneInfo(c.timezone))
+    rec = _carried_record(c)
+    if mood:
+        rec["mood"] = mood
+    if asleep is not None:
+        rec["asleep"] = asleep
+    rec.update({"text": text_, "activity_change": "continue"})
+    choice = _routine_choice(c, now, rec)
+    if choice:
+        rec["routine_choice"] = choice
+    return update(c, rec, now)
+
+
+def transition_scene(
+    c, activity, reason, text_, location="", outfit=None, mood="", duration=None,
+    asleep=None, anchor="", decision="", setting="", now=None,
+):
+    """A real change. Only what changed is named; `update` still applies every rule."""
+    now = now or dt.datetime.now(ZoneInfo(c.timezone))
+    rec = _carried_record(c)
+    rec.update({"activity": activity, "text": text_, "transition": reason,
+                "activity_change": "transition"})
+    # The old plan is about the old activity; a real transition starts a new one.
+    rec.pop("next", None)
+    rec.pop("duration_minutes", None)
+    if location:
+        rec["location"] = location
+    if outfit is not None:
+        rec["outfit"] = outfit
+    if mood:
+        rec["mood"] = mood
+    if duration:
+        rec["duration_minutes"] = int(duration)
+    # A transition ends sleep unless it says it is going to sleep. The flag carries forward,
+    # and a scene that reads "cooking" but still says asleep keeps every overnight gate shut.
+    rec["asleep"] = bool(asleep)
+    if setting:
+        rec["setting"] = setting
+    choice = _routine_choice(c, now, rec, anchor, decision, reason)
+    if choice:
+        rec["routine_choice"] = choice
+    return update(c, rec, now)
+
+
 def last_confirmed(c):
     """The newest state a model actually looked at."""
     for row in events(c):
@@ -895,6 +1015,28 @@ def main():
     sub.add_parser("show")
     sub.add_parser("emotive")
     sub.add_parser("advance")
+    ct = sub.add_parser(
+        "continue",
+        help="nothing changed: the same scene, one short continuation (code fills the rest)",
+    )
+    ct.add_argument("--text", required=True)
+    ct.add_argument("--mood", default="")
+    ct.add_argument("--asleep", choices=("yes", "no"), help="say it if the record has the wrong answer")
+    tr = sub.add_parser(
+        "transition",
+        help="a real change; name only what changed, code fills the rest",
+    )
+    tr.add_argument("--activity", required=True)
+    tr.add_argument("--reason", required=True, help="why and how she got from there to here")
+    tr.add_argument("--text", required=True)
+    tr.add_argument("--location", default="")
+    tr.add_argument("--outfit", default="", help="comma-separated wardrobe ids; omit to keep the outfit")
+    tr.add_argument("--mood", default="")
+    tr.add_argument("--duration", type=int)
+    tr.add_argument("--asleep", choices=("yes", "no"))
+    tr.add_argument("--setting", choices=SETTINGS)
+    tr.add_argument("--anchor", default="")
+    tr.add_argument("--decision", choices=("", "follow", "defer"), default="")
     for name in ("update", "wardrobe"):
         p = sub.add_parser(name)
         p.add_argument("--file", type=pathlib.Path, required=True)
@@ -906,6 +1048,19 @@ def main():
         out = {"written": str(write_emotive(c))}
     elif args.action == "advance":
         out = advance(c)
+    elif args.action == "continue":
+        out = continue_scene(
+            c, args.text, args.mood,
+            None if args.asleep is None else args.asleep == "yes",
+        )
+    elif args.action == "transition":
+        out = transition_scene(
+            c, args.activity, args.reason, args.text, args.location,
+            [x.strip() for x in args.outfit.split(",") if x.strip()] if args.outfit else None,
+            args.mood, args.duration,
+            None if args.asleep is None else args.asleep == "yes",
+            args.anchor, args.decision, args.setting,
+        )
     else:
         data = json.loads(args.file.read_text(encoding="utf-8"))
         out = update(c, data) if args.action == "update" else update_wardrobe(c, data)
