@@ -23,7 +23,6 @@ import argparse
 import datetime as dt
 import json
 import pathlib
-import sqlite3
 import sys
 from zoneinfo import ZoneInfo
 
@@ -64,48 +63,23 @@ def quiet_length(start, end):
 
 def human_messages(c, now, days=LOOKBACK_DAYS):
     """When the human wrote, over the lookback window. Their own profile only."""
-    db = c.home / "state.db"
-    if not db.exists():
-        return []
-    con = None
-    try:
-        resolved = db.resolve()
-        if c.is_root and resolved.is_relative_to(
-            (c.hermes_root / "profiles").resolve()
-        ):
+    import companion_transcript as transcript
+
+    since = (now - dt.timedelta(days=days)).timestamp()
+
+    def read(view):
+        if view is None:
             return []
-        if c.is_root:
-            scope = "lower(coalesce(s.profile_name,'')) IN ('','default')"
-            params = ()
-        else:
-            scope = "lower(coalesce(s.profile_name,'')) IN ('','default',?)"
-            params = (c.profile.lower(),)
-        since = (now - dt.timedelta(days=days)).timestamp()
-        con = sqlite3.connect(resolved.as_uri() + "?mode=ro", uri=True, timeout=1)
-        con.execute("PRAGMA query_only=ON")
-        rows = list(
-            con.execute(
-                f"""SELECT m.timestamp FROM messages m JOIN sessions s ON s.id=m.session_id
-            WHERE m.role='user' AND {scope} AND m.timestamp>=?""",
-                params + (since,),
-            )
-        )
-    except (sqlite3.Error, OSError):
-        return []
-    finally:
-        if con:
-            con.close()
-    out = []
-    for (stamp,) in rows:
-        try:
-            out.append(
-                dt.datetime.fromtimestamp(float(stamp), dt.timezone.utc).astimezone(
-                    _tz(c)
-                )
-            )
-        except (TypeError, ValueError, OverflowError):
-            continue
-    return out
+        return [
+            dt.datetime.fromtimestamp(r.occurred_at, dt.timezone.utc).astimezone(_tz(c))
+            for r in view.forward(since, 0, now.timestamp())
+            if r.speaker == "owner"
+        ]
+
+    try:
+        return transcript.owner_evidence(c, read)
+    except transcript.SourceUnavailable:
+        return []  # No trustworthy evidence means no schedule drift.
 
 
 def evidence(c, now, messages=None):

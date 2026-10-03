@@ -681,10 +681,10 @@ if [[ "$SYS_ARCH" == "aarch64" || "$SYS_ARCH" == "arm64" ]]; then
     done
   fi
 
-  # 3. Remote download from GitHub wheelhouse branch
+  # 3. Remote download from the immutable GitHub wheelhouse tag
   if [[ $(find "$WHEELS_DIR" -maxdepth 1 -name "*.whl" 2>/dev/null | wc -l) -lt 10 ]]; then
-    WHEEL_URL="https://raw.githubusercontent.com/tamanitomo/tamanitomo/refs/heads/wheelhouse-aarch64/companion-wheels-aarch64.tar.gz"
-    WHEEL_URL_ALT="https://github.com/tamanitomo/tamanitomo/raw/refs/heads/wheelhouse-aarch64/companion-wheels-aarch64.tar.gz"
+    WHEEL_URL="https://raw.githubusercontent.com/tamanitomo/tamanitomo/refs/tags/wheelhouse-aarch64/companion-wheels-aarch64.tar.gz"
+    WHEEL_URL_ALT="https://github.com/tamanitomo/tamanitomo/raw/refs/tags/wheelhouse-aarch64/companion-wheels-aarch64.tar.gz"
     CURL_AUTH=()
     if [[ -n "$GITHUB_TOKEN" ]]; then
       CURL_AUTH=(-H "Authorization: token $GITHUB_TOKEN")

@@ -887,9 +887,7 @@ def detect_context_tokens(
     cache = {}
     for root in (hermes_root, home):
         try:
-            data = (
-                _read_parsed(root / "context_length_cache.yaml", yaml_load) or {}
-            )
+            data = _read_parsed(root / "context_length_cache.yaml", yaml_load) or {}
             cache.update(data.get("context_lengths") or {})
         except (OSError, Exception):
             continue

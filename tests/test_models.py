@@ -149,7 +149,7 @@ def test_http_timeout_uses_configured_fallback(companion):
     assert len(calls) == 2
 
 
-def test_configured_order_deduplicates_and_finishes_locally(companion):
+def test_configured_order_deduplicates_without_reordering_local_routes(companion):
     companion.models = {
         "chat": {"provider": "openrouter", "model": "primary"},
         "fallbacks": [{"provider": "deepseek", "model": "old"}],
@@ -168,8 +168,8 @@ def test_configured_order_deduplicates_and_finishes_locally(companion):
         encoding="utf-8",
     )
     routes = inference.configured_routes(companion)
-    assert [row["model"] for row in routes] == ["primary", "secondary", "qwen", "small"]
-    assert routes[2]["base_url"] == "http://127.0.0.1:11434/v1"
+    assert [row["model"] for row in routes] == ["primary", "qwen", "secondary", "small"]
+    assert routes[1]["base_url"] == "http://127.0.0.1:11434/v1"
     assert routes[3]["base_url"] == "http://127.0.0.1:1234/v1"
 
 
@@ -810,7 +810,8 @@ def test_use_everywhere_points_primary_at_the_connected_account_immediately(
     assert "base_url" not in saved["model"]
     # Tiers are cleared so loops/reflection follow the new primary instead of
     # quietly staying pinned to whatever they had before.
-    assert cc.load(home).models == {}
+    assert not any(cc.load(home).models.get(t) for t in ("chat", "loops", "reflection"))
+    assert cc.load(home).models["fallbacks"] == saved["fallback_providers"]
 
 
 def test_use_everywhere_rejects_a_missing_model(probe_workspace):

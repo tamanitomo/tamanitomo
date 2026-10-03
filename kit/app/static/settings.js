@@ -712,7 +712,7 @@ const settingsPanels=[
 
   <h3 class="section-subheading">Model usage · last 30 recorded days</h3>
   ${cost.available
-    ?`<table><thead><tr><th>Day</th><th>Input</th><th>Output</th><th>Runs</th></tr></thead><tbody>${cost.days.slice().reverse().map(d=>`<tr><td>${esc(d.day)}</td><td>${d.input.toLocaleString()}</td><td>${d.output.toLocaleString()}</td><td>${d.runs}</td></tr>`).join('')}</tbody></table>`
+    ?`<table><thead><tr><th>Day</th><th>Input</th><th>Output</th><th>Runs</th></tr></thead><tbody>${cost.days.slice().reverse().map(d=>`<tr><td>${esc(d.day)}</td><td>${d.input==null?'Unknown':d.input.toLocaleString()}</td><td>${d.output==null?'Unknown':d.output.toLocaleString()}</td><td>${d.runs}</td></tr>`).join('')}</tbody></table>`
     :'<p class="dim">Nothing recorded yet.</p>'}`;
   host.querySelector('#diag-activity').onclick=showGatewayActivity;
  }},
@@ -940,6 +940,7 @@ async function renderModelsOverview(host){
   </td></tr>`).join('')}
   </tbody></table>`:'<p class="dim">No provider has been reached yet. Add an API key or sign in below.</p>'}
 
+  ${rows.some(r=>r.provider==='openai-codex'&&r.ready)?'<div class="actions"><button type="button" class="act" id="codex-companion-preset">Configure ChatGPT throughout</button></div><p class="dim small">Luna without reasoning for frequent life updates; Sol for conversation and reflection. Keeps your ordered fallbacks. Individual jobs remain editable.</p>':''}
   <h3 class="section-subheading">What is running where</h3>
   <dl class="fact-list">
     <div><dt>Primary</dt><dd>${primaryProvider?esc(primaryProvider)+(primaryModel?' / '+esc(primaryModel):''):'<span class="dim">Not set</span>'}</dd></div>
@@ -975,6 +976,11 @@ async function renderModelsOverview(host){
       };
     };
   }
+  const codexPreset=host.querySelector('#codex-companion-preset');
+  if(codexPreset)codexPreset.onclick=async()=>{
+    try{await action('/models/codex-preset',{});renderModelsOverview(host);}
+    catch(error){notice(error.message);}
+  };
   const jump=host.querySelector('#overview-jump-jobs');
   if(jump)jump.onclick=()=>openSettings(null,'jobs');
 }
@@ -1306,7 +1312,7 @@ async function renderJobsPanel(host){
             <div><dt>Next run</dt><dd>${j.enabled?esc(when(j.next_run_at)):'Paused'}</dd></div>
             <div><dt>Last run</dt><dd>${j.last_run_at?esc(when(j.last_run_at)):'Never'}</dd></div>
             <div><dt>Prompt size</dt><dd>${j.no_agent?'—':Number(j.prompt_chars||0).toLocaleString()+' characters sent each run'}</dd></div>
-            ${j.no_agent?'<div><dt>Model tokens</dt><dd>None · script only</dd></div>':[['Last run','last_run'],['Last hour','hour'],['Last 24 hours','day'],['Last 7 days','week']].map(([label,key])=>`<div><dt>${label} tokens</dt><dd>${tokens(usage.jobs?.[j.id]?.[key])}</dd></div>`).join('')}
+            ${j.no_agent?'<div><dt>Model tokens</dt><dd>None · script only</dd></div>':[['Last run','last_run'],['Last hour','hour'],['Last 24 hours','day'],['Last 7 days','week']].map(([label,key])=>`<div><dt>${label} tokens</dt><dd>${tokens(usage.jobs?.[j.id]?.[key])}<span class="dim small"> · input ${tokens(usage.jobs?.[j.id]?.breakdown?.[key]?.input)} / output ${tokens(usage.jobs?.[j.id]?.breakdown?.[key]?.output)}</span></dd></div>`).join('')}
             <div><dt>Delivers to</dt><dd>${esc(j.deliver||'—')}</dd></div>
             ${j.sends?`<div><dt>Sends</dt><dd>${esc(j.sends)}</dd></div>`:''}
             ${j.second_call?`<div><dt>Also calls</dt><dd>${esc(j.second_call.model)} via ${esc(j.second_call.provider)}${j.second_call.reasoning_effort?' · '+esc(j.second_call.reasoning_effort)+' reasoning':''}<br><small class="dim">${esc(j.second_call.why)} Set by <code>${esc(j.second_call.setting)}</code>, not by the model chosen below.${j.second_call.reasoning_reported===false?' This provider does not report how much it thought, so the effort is sent but cannot be confirmed.':''}</small></dd></div>`:''}

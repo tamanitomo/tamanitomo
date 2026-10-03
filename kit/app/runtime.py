@@ -104,6 +104,7 @@ def _chat_fallbacks(companion):
         credential,
         is_local,
         read_config,
+        normalize,
     )
 
     # Chat's primary is initialized by Hermes from its own model configuration.
@@ -111,7 +112,14 @@ def _chat_fallbacks(companion):
     model = config.get("model") if isinstance(config.get("model"), dict) else {}
     primary = {**model, "model": model.get("default") or model.get("model") or ""}
     chain = []
-    for route in configured_routes(companion, primary=primary, tier="chat")[1:]:
+    identity = lambda r: (
+        r.get("provider"),
+        r.get("model"),
+        str(r.get("base_url") or "").rstrip("/"),
+    )
+    for route in configured_routes(companion, primary=primary, tier="chat"):
+        if identity(route) == identity(normalize(primary)):
+            continue
         entry = {
             key: value
             for key, value in route.items()
@@ -856,11 +864,20 @@ def job_usage(c, jobs, now=None):
             continue
         run = runs.setdefault(
             root["id"],
-            {"job": match[1], "at": root["started_at"], "tokens": 0, "recorded": False},
+            {
+                "job": match[1],
+                "at": root["started_at"],
+                "tokens": 0,
+                "input": 0,
+                "output": 0,
+                "recorded": False,
+            },
         )
         tokens = max(0, int(row.get("input_tokens") or 0)) + max(
             0, int(row.get("output_tokens") or 0)
         )
+        run["input"] += max(0, int(row.get("input_tokens") or 0))
+        run["output"] += max(0, int(row.get("output_tokens") or 0))
         run["tokens"] += tokens
         run["recorded"] |= tokens > 0 or bool(row.get("api_call_count"))
     totals = {}
@@ -881,6 +898,23 @@ def job_usage(c, jobs, now=None):
                 if window and all(r["recorded"] for r in window)
                 else None
             )
+        total["breakdown"] = {}
+        for label, seconds in (
+            ("last_run", None),
+            ("hour", 3600),
+            ("day", 86400),
+            ("week", 7 * 86400),
+        ):
+            window = (
+                own[:1]
+                if seconds is None
+                else [r for r in own if r["at"] >= now - seconds]
+            )
+            known = bool(window) and all(r["recorded"] for r in window)
+            total["breakdown"][label] = {
+                axis: sum(r[axis] for r in window) if known else None
+                for axis in ("input", "output")
+            }
         totals[str(job["id"])] = total
     return {
         "available": True,

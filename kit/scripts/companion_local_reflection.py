@@ -61,6 +61,8 @@ def _known_budgets(c):
         max(3000, min(FACT_EXISTING_CHARS, int(window * 0.10))),
         max(2000, min(HERMES_MEMORY_CHARS, int(window * 0.08))),
     )
+
+
 RELATIONS = ("new", "adds_to", "replaces", "known")
 
 
@@ -611,7 +613,9 @@ def validate(
             if key == "facts" and p["category"] not in slf.CATEGORIES:
                 raise ValueError("invalid category")
             if key == "facts" and contract >= 4:
-                if p["relation"] not in RELATIONS or not isinstance(p["target_id"], str):
+                if p["relation"] not in RELATIONS or not isinstance(
+                    p["target_id"], str
+                ):
                     raise ValueError("invalid fact relation")
             if key == "facts" and not legacy:
                 text(p["statement"], 400)
@@ -666,7 +670,8 @@ ATTACH_SIMILARITY = 0.8
 def _held_if_similar(c, out, statement, evidence, now, category, source):
     """A reflection cannot answer "is this a refinement or a separate fact?", and it has
     no way to retry, so a fact the ledger found similar to one it holds is set aside for
-    a person to decide rather than dropped. Nothing is lost and nothing is duplicated."""
+    a person to decide rather than dropped. Nothing is lost and nothing is duplicated.
+    """
     if out.get("written") or not out.get("similar_to"):
         return out
     best = out["similar_to"][0]
@@ -731,7 +736,9 @@ def apply_plan(c, kind, day, plan, sources, now):
                 target = (p.get("target_id") or "").strip()
                 active_ids = {f["id"] for f in slf.facts(c.human_dir)}
                 if relation in ("adds_to", "replaces") and target not in active_ids:
-                    relation = "new"  # a target that is not there must not cost the fact
+                    relation = (
+                        "new"  # a target that is not there must not cost the fact
+                    )
                 if relation == "known":
                     out = {"written": False, "reason": "already in Hermes memory"}
                 elif relation == "adds_to":

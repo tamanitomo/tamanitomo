@@ -436,7 +436,11 @@ def update(c, data, now=None, dry_run=False):
         ]
         raise ValueError(
             'previous_id is missing at the top level of the record; set "previous_id": '
-            + (json.dumps(latest) + " (the current state's id)" if latest else "null (there is no state yet)")
+            + (
+                json.dumps(latest) + " (the current state's id)"
+                if latest
+                else "null (there is no state yet)"
+            )
             + (f"; it is nested inside {nested[0]!r}" if nested else "")
         )
     with file_lock(c.life / ".presence.lock"):
@@ -485,7 +489,8 @@ def update(c, data, now=None, dry_run=False):
                 )
                 + (
                     '; the key is "outfit", not "clothes"'
-                    if "clothes" in data or any("clothes" in (data.get(k) or {}) for k in nested)
+                    if "clothes" in data
+                    or any("clothes" in (data.get(k) or {}) for k in nested)
                     else ""
                 )
             )
@@ -619,7 +624,7 @@ def update(c, data, now=None, dry_run=False):
             state["private"] = bool(data["private"])
         if setting in SETTINGS:
             state["setting"] = setting
-        narrative = text(data.get("text"), "episode text (key \"text\")", 1600)
+        narrative = text(data.get("text"), 'episode text (key "text")', 1600)
         import companion_day
 
         parent = previous
@@ -738,7 +743,8 @@ _VISUAL_KEYS = ("pose", "hands", "gaze", "framing", "props", "expression", "ligh
 def _carried_record(c):
     """The scene as it stands, as an `update` record: everything a model has to get right
     and keeps getting wrong (the previous id, every outfit id, the wants list, the day
-    plan). A continuation or a transition changes a few fields of this; the rest is code."""
+    plan). A continuation or a transition changes a few fields of this; the rest is code.
+    """
     cur = current(c)
     if not cur:
         raise ValueError(
@@ -756,6 +762,8 @@ def _carried_record(c):
     }
     if st.get("setting"):
         rec["setting"] = st["setting"]
+    if "private" in st:
+        rec["private"] = st["private"]
     for key in ("duration_minutes", "next"):
         if st.get(key) is not None:
             rec[key] = st[key]
@@ -783,10 +791,18 @@ def _routine_choice(c, now, rec, anchor="", decision="", reason=""):
         "active_suggestions"
     ]
     if not active:
-        return {"anchor": "free", "decision": "free", "reason": reason or f"continuing {rec['activity']}"}
+        return {
+            "anchor": "free",
+            "decision": "free",
+            "reason": reason or f"continuing {rec['activity']}",
+        }
     ids = [a["id"] for a in active]
     if anchor and anchor in ids and decision in ("follow", "defer"):
-        return {"anchor": anchor, "decision": decision, "reason": reason or rec["activity"]}
+        return {
+            "anchor": anchor,
+            "decision": decision,
+            "reason": reason or rec["activity"],
+        }
     if not anchor and not decision:
         # Staying where she is while an anchor is open is a deferral, and saying so is honest.
         return {
@@ -817,17 +833,36 @@ def continue_scene(c, text_, mood="", asleep=None, now=None):
 
 
 def transition_scene(
-    c, activity, reason, text_, location="", outfit=None, mood="", duration=None,
-    asleep=None, anchor="", decision="", setting="", now=None,
+    c,
+    activity,
+    reason,
+    text_,
+    location="",
+    outfit=None,
+    mood="",
+    duration=None,
+    asleep=None,
+    anchor="",
+    decision="",
+    setting="",
+    now=None,
 ):
     """A real change. Only what changed is named; `update` still applies every rule."""
     now = now or dt.datetime.now(ZoneInfo(c.timezone))
     rec = _carried_record(c)
-    rec.update({"activity": activity, "text": text_, "transition": reason,
-                "activity_change": "transition"})
+    rec.update(
+        {
+            "activity": activity,
+            "text": text_,
+            "transition": reason,
+            "activity_change": "transition",
+        }
+    )
     # The old plan is about the old activity; a real transition starts a new one.
     rec.pop("next", None)
     rec.pop("duration_minutes", None)
+    rec.pop("visual", None)
+    rec.pop("private", None)
     if location:
         rec["location"] = location
     if outfit is not None:
@@ -1021,16 +1056,26 @@ def main():
     )
     ct.add_argument("--text", required=True)
     ct.add_argument("--mood", default="")
-    ct.add_argument("--asleep", choices=("yes", "no"), help="say it if the record has the wrong answer")
+    ct.add_argument(
+        "--asleep",
+        choices=("yes", "no"),
+        help="say it if the record has the wrong answer",
+    )
     tr = sub.add_parser(
         "transition",
         help="a real change; name only what changed, code fills the rest",
     )
     tr.add_argument("--activity", required=True)
-    tr.add_argument("--reason", required=True, help="why and how she got from there to here")
+    tr.add_argument(
+        "--reason", required=True, help="why and how she got from there to here"
+    )
     tr.add_argument("--text", required=True)
     tr.add_argument("--location", default="")
-    tr.add_argument("--outfit", default="", help="comma-separated wardrobe ids; omit to keep the outfit")
+    tr.add_argument(
+        "--outfit",
+        default="",
+        help="comma-separated wardrobe ids; omit to keep the outfit",
+    )
     tr.add_argument("--mood", default="")
     tr.add_argument("--duration", type=int)
     tr.add_argument("--asleep", choices=("yes", "no"))
@@ -1050,16 +1095,29 @@ def main():
         out = advance(c)
     elif args.action == "continue":
         out = continue_scene(
-            c, args.text, args.mood,
+            c,
+            args.text,
+            args.mood,
             None if args.asleep is None else args.asleep == "yes",
         )
     elif args.action == "transition":
         out = transition_scene(
-            c, args.activity, args.reason, args.text, args.location,
-            [x.strip() for x in args.outfit.split(",") if x.strip()] if args.outfit else None,
-            args.mood, args.duration,
+            c,
+            args.activity,
+            args.reason,
+            args.text,
+            args.location,
+            (
+                [x.strip() for x in args.outfit.split(",") if x.strip()]
+                if args.outfit
+                else None
+            ),
+            args.mood,
+            args.duration,
             None if args.asleep is None else args.asleep == "yes",
-            args.anchor, args.decision, args.setting,
+            args.anchor,
+            args.decision,
+            args.setting,
         )
     else:
         data = json.loads(args.file.read_text(encoding="utf-8"))

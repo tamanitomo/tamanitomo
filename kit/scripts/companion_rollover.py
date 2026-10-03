@@ -88,7 +88,7 @@ def _db(c):
     )
 
 
-def chain_tip(con, session_id):
+def chain_tip(con, session_id, scope="1=1", params=()):
     """The newest session a compression chain has moved to, and every open link."""
     open_links = []
     current = session_id
@@ -96,24 +96,27 @@ def chain_tip(con, session_id):
     while current and current not in seen:
         seen.add(current)
         row = con.execute(
-            "select end_reason from sessions where id=?", (current,)
+            f"select end_reason from sessions where id=? AND {scope}",
+            (current, *params),
         ).fetchone()
-        if row and row[0] is None:
+        if row is None:
+            break
+        if row[0] is None:
             open_links.append(current)
         child = con.execute(
-            "select id from sessions where parent_session_id=? order by started_at desc limit 1",
-            (current,),
+            f"select id from sessions where parent_session_id=? AND {scope} order by started_at desc limit 1",
+            (current, *params),
         ).fetchone()
         current = child[0] if child else None
     return open_links
 
 
-def last_human(con, platforms=CHAT_PLATFORMS):
+def last_human(con, platforms=CHAT_PLATFORMS, scope="1=1", params=()):
     marks = ",".join("?" * len(platforms))
     row = con.execute(
         f"""select max(m.timestamp) from messages m join sessions s on s.id=m.session_id
-        where m.role='user' and lower(coalesce(s.source,'')) in ({marks})""",
-        platforms,
+        where m.role='user' and lower(coalesce(s.source,'')) in ({marks}) AND {scope.replace("profile_name", "s.profile_name")}""",
+        (*platforms, *params),
     ).fetchone()
     return float(row[0]) if row and row[0] else None
 
@@ -189,13 +192,20 @@ def run(c, now=None, apply=True, ender=None):
     if not mapped:
         return {"rolled": False, "reason": "no chat session to roll over"}
     try:
-        con = _db(c)
-        try:
-            last = last_human(con)
-            targets = {key: chain_tip(con, sid) for key, sid in mapped.items()}
-        finally:
-            con.close()
-    except sqlite3.Error as exc:
+        kit_root = str(pathlib.Path(__file__).resolve().parents[2])
+        if kit_root not in sys.path:
+            sys.path.append(kit_root)
+        from kit.app.runtime import session_db
+
+        with session_db(c) as state:
+            if state is None:
+                return {"rolled": False, "reason": "no session store"}
+            con, columns, scope, params = state
+            last = last_human(con, scope=scope, params=params)
+            targets = {
+                key: chain_tip(con, sid, scope, params) for key, sid in mapped.items()
+            }
+    except (sqlite3.Error, ValueError) as exc:
         return {"rolled": False, "reason": f"state.db unreadable: {exc}"}
     if last and now.timestamp() - last < QUIET_MINUTES * 60:
         return {

@@ -494,7 +494,7 @@ async function renderHermesInto(host){
       b.onclick=async()=>{
         b.disabled=true;b.textContent='Applying…';
         try{
-          const r=await post('/inference/apply-preset',{id:b.dataset.presetId});
+          const r=await action('/inference/apply-preset',{id:b.dataset.presetId});
           notice(r.note||'Preset applied.');
           renderHermesInto(host);
         }catch(err){

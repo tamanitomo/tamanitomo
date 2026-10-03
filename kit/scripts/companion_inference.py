@@ -2,7 +2,7 @@
 
 Only configured routes participate. Temporary transport failures advance to the
 next route once; invalid requests and credentials remain visible for correction.
-Configured local models run last, without inventing a model or a cloud account.
+Configured routes keep their exact order, without inventing a cloud account.
 """
 
 from __future__ import annotations
@@ -147,8 +147,8 @@ def is_local(route):
     )
 
 
-def configured_routes(c, primary=None, tier="chat"):
-    """Primary, configured secondary providers, then configured local endpoints.
+def configured_routes(c, primary=None, tier="chat", refresh_free=True):
+    """Primary, then the configured routes in the order the user chose.
 
     Native Hermes fallbacks are authoritative when that key exists, including an
     explicitly empty chain. The companion's saved chain is used otherwise.
@@ -165,7 +165,13 @@ def configured_routes(c, primary=None, tier="chat"):
         native = (
             {
                 key: default[key]
-                for key in ("api_key", "api_mode", "api_key_env", "key_env")
+                for key in (
+                    "api_key",
+                    "api_mode",
+                    "api_key_env",
+                    "key_env",
+                    "reasoning_effort",
+                )
                 if key in default
             }
             if same_provider and same_endpoint
@@ -199,13 +205,16 @@ def configured_routes(c, primary=None, tier="chat"):
             "custom" if row.get("base_url") else first["provider"]
         )
         candidates.append(normalize(row, provider))
-    candidates.sort(key=is_local)
     routes, seen = [], set()
     for route in [first, *candidates]:
         identity = (route["provider"], route["model"], route["base_url"].rstrip("/"))
         if identity not in seen:
             seen.add(identity)
             routes.append(route)
+    if refresh_free:
+        from companion_free_models import expand
+
+        routes = [normalize(r) for r in expand(routes, c.home)]
     return routes
 
 

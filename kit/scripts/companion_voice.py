@@ -31,9 +31,7 @@ def read_config(c):
     import yaml
 
     try:
-        return (
-            cc.yaml_load((c.home / "config.yaml").read_text(encoding="utf-8")) or {}
-        )
+        return cc.yaml_load((c.home / "config.yaml").read_text(encoding="utf-8")) or {}
     except (OSError, ValueError):
         return {}
 

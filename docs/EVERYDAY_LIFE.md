@@ -68,3 +68,32 @@ elapsed estimate triggers reconsideration guidance rather than invented completi
 
 These checks validate record consistency. They do not establish physical events or
 guarantee that a model will follow a varied routine over multiple days.
+
+
+## Independent life and continuity
+
+Pulse, autonomy, morning and wind-down maintain one continuing fictional life.
+The companion can stay occupied with a project or recurring fictional friends
+when the human returns, and respond warmly without dropping every commitment.
+Human absence is ordinary, not abandonment or a reason to wait for a message.
+
+Suggestions are invitations with varied activity tags; repeating an enjoyed hobby
+is allowed. The pre-read includes the companion's own retained interests and
+progress notes as well as rotating ideas and recurring people with their IDs.
+`companion_life.py add-idea --title "same title" --note "progress; next step"`
+updates an ongoing idea. The work window invites creating, practicing, developing
+projects and researching specific questions instead of defaulting to reading.
+
+Fictional episodes never prove real outings, actual tool use or facts about the
+human. Research needs returned sources; creations need saved artifacts. Daily
+contact checks and quiet-hours learning use the same trusted, profile-scoped
+owner transcripts as memory, excluding cron prompts and unknown participants.
+Unsupported transcript sources remain unknown rather than being guessed.
+
+Sleep flags without a declared end periodically reopen the pulse gate to recover
+from a missed wake-up. A real activity transition clears sleep unless explicitly
+marked asleep. Continuing a private scene preserves its camera privacy.
+
+Existing authored routines are retained. Repair can refresh untouched shipped
+prompts while preserving edited prompts; inspect its report for custom text that
+needs a manual reconciliation. Updating source does not rewrite live life history.

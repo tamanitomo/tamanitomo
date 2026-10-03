@@ -97,7 +97,9 @@ def _store_version(db):
 def _query_rows(con, scope, params):
     columns = {row[1] for row in con.execute("PRAGMA table_info(messages)")}
     visible = (
-        "AND (m.active=1 OR m.compacted=1)" if {"active", "compacted"} <= columns else ""
+        "AND (m.active=1 OR m.compacted=1)"
+        if {"active", "compacted"} <= columns
+        else ""
     )
     query = f"""
         SELECT m.role,m.content,m.timestamp FROM messages m JOIN sessions s ON s.id=m.session_id
@@ -151,9 +153,7 @@ def read(c, now=None, tail=4):
         if cached and cached[0] == version:
             rows, human_rows, agent_rows = cached[1]
         else:
-            con = sqlite3.connect(
-                resolved.as_uri() + "?mode=ro", uri=True, timeout=1
-            )
+            con = sqlite3.connect(resolved.as_uri() + "?mode=ro", uri=True, timeout=1)
             con.execute("PRAGMA query_only=ON")
             rows, human_rows, agent_rows = _query_rows(con, scope, params)
             if len(_recent_rows) > 32:

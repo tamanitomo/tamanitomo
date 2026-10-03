@@ -125,7 +125,9 @@ def write_caps(c, values=None):
     from companion_platform import atomic_write as _atomic
 
     path = pathlib.Path(c.home) / "config.yaml"
-    cfg = (cc.yaml_load(path.read_text(encoding="utf-8")) or {}) if path.exists() else {}
+    cfg = (
+        (cc.yaml_load(path.read_text(encoding="utf-8")) or {}) if path.exists() else {}
+    )
     if not isinstance(cfg, dict):
         raise ValueError("Hermes config must be a mapping")
     values = values or recommend_caps(c)["caps"]

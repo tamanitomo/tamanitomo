@@ -4,7 +4,7 @@ name: Tests
 # a version being published. A red run still means something to look at.
 on:
   push:
-    branches: ['**']
+    branches: [main, beta]
   pull_request:
 permissions:
   contents: read

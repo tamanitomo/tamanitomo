@@ -16,8 +16,11 @@ jobs:
         with:
           node-version: '22'
       - run: python -m pip install -r requirements.txt
-      - name: Validate release version
-        run: test "$GITHUB_REF_NAME" = "v$(cat VERSION)"
+      - name: Validate release version and branch
+        run: |
+          test "$GITHUB_REF_NAME" = "v$(cat VERSION)"
+          git fetch origin main --no-tags
+          git merge-base --is-ancestor HEAD origin/main
       - name: Run tests
         run: |
           set -o pipefail

@@ -435,7 +435,9 @@ def detail(c, paths):
     for _, record in timeline.records(c):
         if record.get("status") != "saved":
             continue
-        variants = [v.get("filename") for v in record.get("variants", []) if isinstance(v, dict)]
+        variants = [
+            v.get("filename") for v in record.get("variants", []) if isinstance(v, dict)
+        ]
         if names & {record.get("filename"), *variants}:
             out["prompts"] = record.get("prompts") or out["prompts"]
             out["active_prompt_type"] = (

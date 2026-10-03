@@ -6,7 +6,8 @@ Hermes holds the result in its own config: the first route is `model`, and the
 rest, in order, are `fallback_providers`. Chat, the gateway and every scheduled
 job read that fallback list, so it is the one place that has to be right.
 
-Jobs follow the chain by being pinned to its first route. An unpinned job
+The installed companion routing adapter explicitly grants kit jobs their fallback
+chain on Hermes versions that isolate pinned jobs. Jobs follow the chain by being pinned to its first route. An unpinned job
 cannot follow it: Hermes's drift guard skips an unpinned run once the default
 has moved away from the job's creation snapshot. A pinned job never counts as
 drift, and still gets the fallback list when its model fails.
@@ -49,7 +50,11 @@ def clean_route(row) -> dict:
         from urllib.parse import urlsplit
 
         parts = urlsplit(url)
-        if parts.scheme not in ("http", "https") or not parts.hostname or parts.username:
+        if (
+            parts.scheme not in ("http", "https")
+            or not parts.hostname
+            or parts.username
+        ):
             raise ValueError("Use an HTTP(S) endpoint without embedded credentials")
         out["base_url"] = url
     return out
@@ -159,7 +164,9 @@ def job_state(job: dict, primary: dict) -> str:
 def same_route(a: dict, b: dict) -> bool:
     """Same provider and model; an endpoint left empty means that provider's own."""
     ours, theirs = identity(a), identity(b)
-    return ours[:2] == theirs[:2] and (not ours[2] or not theirs[2] or ours[2] == theirs[2])
+    return ours[:2] == theirs[:2] and (
+        not ours[2] or not theirs[2] or ours[2] == theirs[2]
+    )
 
 
 # ------------------------------------------------ the OpenRouter free cascade
@@ -174,20 +181,9 @@ _NOT_FOR_CHAT = ("safety", "guard", "embed", "moderation")
 
 def pick_free_models(listed: list, preferred: list, count: int = FREE_BACKUPS) -> list:
     """Free, tool-capable chat models from OpenRouter's /models data."""
-    usable = [
-        m
-        for m in listed
-        if isinstance(m, dict)
-        and str(m.get("id", "")).endswith(":free")
-        and "tools" in (m.get("supported_parameters") or [])
-        and not any(word in m["id"] for word in _NOT_FOR_CHAT)
-    ]
-    ids = {m["id"] for m in usable}
-    picks = [model for model in preferred if model in ids]
-    for m in sorted(usable, key=lambda m: -(m.get("context_length") or 0)):
-        if m["id"] not in picks:
-            picks.append(m["id"])
-    return picks[:count]
+    from companion_free_models import pick
+
+    return pick(listed, preferred, count)
 
 
 def is_free_route(route: dict) -> bool:

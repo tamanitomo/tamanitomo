@@ -198,7 +198,7 @@ def chain_bundles(refresh=False):
 
     known = [row["model"] for row in _FREE_PRESET["fallbacks"]]
     listed = openrouter_listing(refresh)
-    picks = mc.pick_free_models(listed, known) if listed else known
+    picks = mc.pick_free_models(listed, known) if listed is not None else known
     return {
         "openrouter-free": {
             "name": "OpenRouter free cascade",
@@ -209,7 +209,7 @@ def chain_bundles(refresh=False):
                 *({"provider": "openrouter", "model": m} for m in picks),
             ],
             "continues": mc.is_free_route,
-            "listed": {m.get("id") for m in listed} if listed else None,
+            "listed": {m.get("id") for m in listed} if listed is not None else None,
             "checked_at": _openrouter_listing["at"] or None,
         }
     }
@@ -378,6 +378,13 @@ def read_auth_accounts(hermes_root):
         data = json.loads((hermes_root / "auth.json").read_text(encoding="utf-8"))
     except Exception:
         return {"active": active, "providers": providers}
+    if not isinstance(data, dict):
+        return {"active": active, "providers": providers}
+    stored = data.get("providers")
+    if isinstance(stored, dict):
+        providers.update(
+            str(k).lower() for k, v in stored.items() if k and isinstance(v, dict) and v
+        )
     raw_active = data.get("active_provider")
     if isinstance(raw_active, str) and raw_active:
         active = raw_active.lower()
@@ -1859,39 +1866,18 @@ def register(app, select, load, operations):
         preset = next((p for p in INFERENCE_PRESETS if p["id"] == preset_id), None)
         if not preset:
             raise ValueError("Unknown inference preset")
-        rt, p, h = context()
-        c = cc.load(h)
         primary = dict(preset["primary"])
         fallbacks = [dict(f) for f in preset["fallbacks"]]
-
-        def mutate(cfg):
-            old = cfg.get("model") if isinstance(cfg.get("model"), dict) else {}
-            cfg["model"] = {
-                "default": primary["model"],
-                "provider": primary["provider"],
-            }
-            if "base_url" in primary:
-                cfg["model"]["base_url"] = primary["base_url"]
-            else:
-                cfg["model"].pop("base_url", None)
-            cfg["fallback_providers"] = fallbacks
-
-        save_config(h, mutate)
-        for tier in ("chat", "loops", "reflection"):
-            c.models[tier] = {
-                "provider": primary["provider"],
-                "model": primary["model"],
-                "reasoning_effort": "none",
-            }
-        c.models["fallbacks"] = fallbacks
-        c.save()
-        return {
-            "applied": True,
-            "preset": preset["name"],
-            "primary": primary,
-            "fallbacks": fallbacks,
-            "note": f"Applied {preset['name']}. Primary and fallback cascade saved to config.",
-        }
+        if preset_id == "openrouter_free":
+            routes = chain_bundles(refresh=True)["openrouter-free"]["routes"]
+            primary, fallbacks = routes[0], routes[1:]
+        elif any(f["model"] == "openrouter/free" for f in fallbacks):
+            free = chain_bundles(refresh=True)["openrouter-free"]["routes"]
+            index = next(
+                i for i, f in enumerate(fallbacks) if f["model"] == "openrouter/free"
+            )
+            fallbacks = fallbacks[:index] + free
+        return use_everywhere({**primary, "fallbacks": fallbacks})
 
     @app.get("/api/providers")
     def providers():
@@ -2023,6 +2009,11 @@ def register(app, select, load, operations):
         except Exception:
             pass
         auth = read_auth_accounts(c.hermes_root)
+        local_auth = read_auth_accounts(h)
+        auth = {
+            "providers": auth["providers"] | local_auth["providers"],
+            "active": local_auth["active"] or auth["active"],
+        }
 
         rows, seen = {}, set()
 
@@ -2166,7 +2157,17 @@ def register(app, select, load, operations):
         def mutate(cfg):
             if model is not None:
                 old = cfg.get("model") if isinstance(cfg.get("model"), dict) else {}
-                cfg["model"] = {**old, **model}
+                from .model_chain import PROVIDER_BOUND_KEYS
+
+                changed = old.get("provider") != model.get(
+                    "provider", old.get("provider")
+                ) or old.get("base_url", "") != model.get("base_url", "")
+                kept = {
+                    k: v
+                    for k, v in old.items()
+                    if not changed or k not in PROVIDER_BOUND_KEYS
+                }
+                cfg["model"] = {**kept, **model}
                 if "base_url" not in model:
                     cfg["model"].pop("base_url", None)
             if chain is not None:
@@ -2661,7 +2662,71 @@ def register(app, select, load, operations):
         row = {"provider": provider, "model": model}
         if payload.get("base_url"):
             row["base_url"] = payload["base_url"]
-        save_environment({"model": row, "tiers": {}})
+        from . import model_chain as mc
+        from companion_routing import codex_tiers, install
+
+        rt, p, h = context()
+        tiers = {}
+        if payload.get("workload_preset") == "codex":
+            c = cc.load(h)
+            auth = (
+                read_auth_accounts(c.hermes_root)["providers"]
+                | read_auth_accounts(h)["providers"]
+            )
+            if "openai-codex" not in auth:
+                raise ValueError(
+                    "Sign in to ChatGPT before applying its companion preset"
+                )
+            tiers = codex_tiers()
+        import companion_inference as inference
+
+        config = inference.read_config(cc.load(h))
+        fallbacks = payload.get("fallbacks", config.get("fallback_providers", []))
+        if not isinstance(fallbacks, list):
+            raise ValueError("Fallbacks must be an ordered list")
+        cleaned = [mc.clean_route(r) for r in fallbacks]
+        # Existing native routes may own credentials/adapters; a provider switch
+        # must preserve those internally instead of silently stripping them.
+        routes = [
+            mc.clean_route(row),
+            *(cleaned if "fallbacks" in payload else fallbacks),
+        ]
+        if len(routes) > mc.MAX_ROUTES:
+            raise ValueError("Choose at most eight fallback models")
+
+        def configure(cfg):
+            mc.write_chain(cfg, routes)
+            if tiers:
+                agent = cfg.setdefault("agent", {})
+                agent["reasoning_effort"] = tiers["chat"]["reasoning_effort"]
+                # Explicit per-model settings otherwise outrank the chat preset.
+                overrides = agent.setdefault("reasoning_overrides", {})
+                overrides[tiers["chat"]["model"]] = tiers["chat"]["reasoning_effort"]
+
+        save_config(h, configure)
+        c = cc.load(h)
+        companion_fallbacks = [
+            {
+                k: v
+                for k, v in r.items()
+                if k
+                in (
+                    "provider",
+                    "model",
+                    "base_url",
+                    "reasoning_effort",
+                    "api_key_env",
+                    "key_env",
+                )
+            }
+            for r in routes[1:]
+        ]
+        c.models = {
+            **tiers,
+            **({"fallbacks": companion_fallbacks} if companion_fallbacks else {}),
+        }
+        c.save()
+        install(c)
 
         def action(rt, p, h, report):
             report(f"Applying {provider} to every companion job")
@@ -2677,6 +2742,12 @@ def register(app, select, load, operations):
             return result
 
         return op(f"Use {provider} everywhere", action)
+
+    @app.post("/api/models/codex-preset")
+    def codex_preset():
+        from companion_routing import codex_tiers
+
+        return use_everywhere({**codex_tiers()["chat"], "workload_preset": "codex"})
 
     @app.get("/api/models/chain")
     def model_chain_read(refresh: bool = False):
@@ -2712,7 +2783,9 @@ def register(app, select, load, operations):
             "retired": [
                 r["model"]
                 for r in routes
-                if listed is not None and mc.is_free_route(r) and r["model"] not in listed
+                if listed is not None
+                and mc.is_free_route(r)
+                and r["model"] not in listed
             ],
             "routes": routes,
             "jobs": jobs,
@@ -2776,6 +2849,9 @@ def register(app, select, load, operations):
                 c.models = {"fallbacks": routes[1:]}
                 c.__post_init__()
                 c.save()
+                from companion_routing import install
+
+                install(c)
             moved, failed = [], []
             for row in rows:
                 ident, name = row.get("id"), row.get("name") or row.get("id")

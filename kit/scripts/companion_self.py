@@ -749,7 +749,10 @@ def facts(root, category=None):
     for fid, row in seen.items():
         extra = sorted(more.get(fid, []), key=lambda e: e.get("recorded_at", ""))
         if extra:
-            row = {**row, "more_evidence": [e["evidence"] for e in extra][-MAX_EXTRA_EVIDENCE:]}
+            row = {
+                **row,
+                "more_evidence": [e["evidence"] for e in extra][-MAX_EXTRA_EVIDENCE:],
+            }
         rows.append(row)
     return [r for r in rows if r["category"] == category] if category else rows
 
@@ -859,7 +862,9 @@ def known_in_user_memory(c, statement, cover=0.8):
     in the statement that the passage lacks means it is not the same fact, and a
     statement too short to be specific never matches."""
     if re.match(r"\s*[\w' -]{1,40} said:\s*[\"\u201c]", str(statement)):
-        return None  # a quoted remark is evidence, not a claim USER.md could already hold
+        return (
+            None  # a quoted remark is evidence, not a claim USER.md could already hold
+        )
     ws = _words(statement)
     if len(ws) < 4:
         return None
@@ -1055,7 +1060,9 @@ def add_evidence(root, fact_id, evidence, now):
         target = next((f for f in facts(root) if f["id"] == fact_id), None)
         if not target:
             raise ValueError("fact_id must refer to an active fact")
-        if evidence == target.get("evidence") or evidence in target.get("more_evidence", ()):
+        if evidence == target.get("evidence") or evidence in target.get(
+            "more_evidence", ()
+        ):
             return {"written": False, "reason": "that evidence is already recorded"}
         return None
 
@@ -1105,7 +1112,8 @@ def ordered_facts(rows):
 
 def facts_index(root, human="the human"):
     """A readable index of every active fact, grouped by category, core first. It is
-    what an agent (or a person) reads when the injected profile could not hold it all."""
+    what an agent (or a person) reads when the injected profile could not hold it all.
+    """
     rows = ordered_facts(facts(root))
     lines = [
         f"# What is known about {human}",
@@ -1311,7 +1319,15 @@ def soul_init(c, anchor=None, backups=None):
 
 
 # ---- batch input ---------------------------------------------------------
-LEDGER_KINDS = ("fact", "fact_evidence", "retract_fact", "pref", "ask", "resolve", "soul")
+LEDGER_KINDS = (
+    "fact",
+    "fact_evidence",
+    "retract_fact",
+    "pref",
+    "ask",
+    "resolve",
+    "soul",
+)
 
 
 def _entries(data):
@@ -1339,7 +1355,9 @@ def _apply(c, entry, now):
     if kind == "retract_fact":
         return retract_fact(c.human_dir, entry.get("id", ""), entry.get("reason"), now)
     if kind == "fact_evidence":
-        return add_evidence(c.human_dir, entry.get("id", ""), entry.get("evidence"), now)
+        return add_evidence(
+            c.human_dir, entry.get("id", ""), entry.get("evidence"), now
+        )
     if kind == "fact":
         return record_fact(
             c.human_dir,
@@ -1436,7 +1454,9 @@ def main():
         action="store_true",
         help="record even though a similar fact exists (it is a separate fact)",
     )
-    ae = s.add_parser("add-evidence", help="another quote or observation for a known fact")
+    ae = s.add_parser(
+        "add-evidence", help="another quote or observation for a known fact"
+    )
     ae.add_argument("--id", required=True)
     ae.add_argument("--evidence", required=True)
     wg = s.add_parser("weigh", help="mark a fact core (always in view) or normal")

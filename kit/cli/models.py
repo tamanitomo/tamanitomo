@@ -287,13 +287,57 @@ def apply_job_models(c, run=None):
         spec["name"].replace("{{AGENT}}", c.agent): spec
         for spec in load_manifest(c)["jobs"]
     }
+    from companion_routing import install, job_route
+
+    install(c)
     updated = []
     with cp.file_lock(c.home / ".companion-jobs.lock"):
         for job in _read_jobs(c.home / "cron/jobs.json")["jobs"]:
             spec = specs.get(job.get("name"))
             if not spec or spec.get("no_agent"):
                 continue
-            pick = c.tier_model(spec.get("tier", "chat"))
+            pick = job_route(c, spec)
+            migration = []
+            if job.get("no_agent") and str(job.get("script") or "").startswith(
+                "companion-local-"
+            ):
+                if "--agent" not in help_text:
+                    raise ValueError(
+                        "Update Hermes to migrate legacy model workers; no manual config edit is needed"
+                    )
+                import companion_render as cr
+                from .common import mapping, T
+                from .scaffold import write_preread_script
+
+                prompt = cr.render(
+                    (T / "cron" / spec["file"]).read_text(encoding="utf-8"),
+                    mapping(c, {}),
+                )
+                backup = (
+                    c.home / "cron/prompt-backups" / (job["id"] + "-before-routing.md")
+                )
+                backup.parent.mkdir(parents=True, exist_ok=True)
+                if not backup.exists():
+                    cp.atomic_write(backup, job.get("prompt", ""))
+                migration = [
+                    "--agent",
+                    "--prompt",
+                    prompt,
+                    "--script",
+                    (
+                        write_preread_script(c, spec, "preread").name
+                        if spec.get("preread")
+                        else ""
+                    ),
+                    "--monitor-script",
+                    (
+                        write_preread_script(c, spec, "fingerprint").name
+                        if spec.get("monitor")
+                        else ""
+                    ),
+                ]
+                if spec.get("continuity"):
+                    migration += ["--continuity"]
             try:
                 run(
                     [
@@ -307,6 +351,7 @@ def apply_job_models(c, run=None):
                         "--reasoning-effort",
                         pick.get("reasoning_effort", ""),
                     ]
+                    + migration
                     + (
                         ["--base-url", pick.get("base_url", "")]
                         if "--base-url" in help_text

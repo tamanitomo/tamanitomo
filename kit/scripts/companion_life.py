@@ -522,7 +522,14 @@ def suggest(root, day=None, count=6, now=None):
             roll -= weight
             if roll <= 0:
                 break
-        picks.append(pool.pop(index)[0])
+        selected = pool.pop(index)[0]
+        picks.append(selected)
+        # Diversify invitations within a day without banning a loved hobby.
+        tags = set(selected.get("tags") or [])
+        pool = [
+            (idea, weight * (0.4 if tags.intersection(idea.get("tags") or []) else 1.0))
+            for idea, weight in pool
+        ]
     return {
         "day": day.isoformat(),
         "season": season,
@@ -936,7 +943,6 @@ def contact(c, day=None):
     held to rather than a judgement it has to make.
     """
     import datetime as dt
-    import sqlite3
 
     tz = _tz(c)
     day = str(day or "") or dt.datetime.now(tz).date().isoformat()
@@ -956,32 +962,35 @@ def contact(c, day=None):
     if not path.is_file():
         out["verdict"] = "unknown: no session record on this host"
         return out
+    import companion_transcript as transcript
+
+    start = dt.datetime.combine(target, dt.time(), tzinfo=tz)
+    end = start + dt.timedelta(days=1)
+
+    def read(view):
+        if view is None:
+            return None
+        seen = set()
+        for record in view.forward(
+            start.timestamp(), 0, end.timestamp(), end_inclusive=False
+        ):
+            if record.speaker != "owner" or record.source_session in seen:
+                continue
+            seen.add(record.source_session)
+            source = record.source_kind
+            out["sources"][source] = out["sources"].get(source, 0) + 1
+        return len(seen)
+
     try:
-        con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-        rows = con.execute("select source,started_at,title from sessions").fetchall()
-    except sqlite3.Error as exc:
+        count = transcript.owner_evidence(c, read)
+    except transcript.SourceUnavailable as exc:
         out["verdict"] = f"unknown: session record unreadable ({exc})"
         return out
-    finally:
-        try:
-            con.close()
-        except Exception:
-            pass
-    for source, started, title in rows:
-        if not started:
-            continue
-        try:
-            when = dt.datetime.fromtimestamp(float(started), tz)
-        except (TypeError, ValueError, OSError):
-            continue
-        if when.date() != target:
-            continue
-        key = str(source or "unknown")
-        out["sources"][key] = out["sources"].get(key, 0) + 1
-        if key in HUMAN_SOURCES:
-            out["human_sessions"] += 1
-            if title:
-                out["titles"].append(f'{when.strftime("%H:%M")} {title}'[:120])
+    if count is None:
+        out["verdict"] = "unknown: no session record on this host"
+        return out
+    out["human_sessions"] = count
+
     if out["human_sessions"]:
         out["verdict"] = "contact recorded"
     out["titles"] = out["titles"][:20]

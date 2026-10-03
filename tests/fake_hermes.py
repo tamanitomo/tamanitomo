@@ -52,16 +52,23 @@ elif args[:2] == ["cron", "create"]:
         }
     )
     path.write_text(json.dumps(data), encoding="utf-8")
+elif args[:3] == ["cron", "edit", "--help"]:
+    print("--model --provider --base-url --reasoning-effort --agent")
 elif args[:2] == ["cron", "edit"]:
     path = home / "cron/jobs.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     job = next(j for j in data["jobs"] if j["id"] == args[2])
+    if "--agent" in args:
+        job["no_agent"] = False
+    for flag, key in (("--script", "script"), ("--monitor-script", "monitor_script")):
+        if flag in args:
+            job[key] = args[args.index(flag) + 1]
     if "--prompt" in args:
         job["prompt"] = args[args.index("--prompt") + 1]
     if "--schedule" in args:
         job["schedule"]["expr"] = args[args.index("--schedule") + 1]
     # Like Hermes: an empty value clears that pin.
-    for flag, key in (("--model", "model"), ("--provider", "provider")):
+    for flag, key in (("--model", "model"), ("--provider", "provider"), ("--reasoning-effort", "reasoning_effort"), ("--base-url", "base_url")):
         if flag in args:
             job[key] = args[args.index(flag) + 1].strip() or None
     path.write_text(json.dumps(data), encoding="utf-8")

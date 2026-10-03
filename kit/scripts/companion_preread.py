@@ -148,6 +148,7 @@ def day_ideas(c, now):
         )
         ideas = life.suggest(c.life, now.date(), 5, now).get("suggestions", [])
         people = [p for p in life.people_due(c.life, now.date(), 3) if p.get("due")]
+        own = life.interests(c.life)["added"][-5:]
     except Exception:
         return ""
     try:
@@ -156,7 +157,7 @@ def day_ideas(c, now):
         shopping = companion_lifestyle.shopping_offer(c, now)
     except Exception:
         shopping = ""
-    if not ideas and not people and not shopping:
+    if not ideas and not people and not shopping and not own:
         return ""
     lines = [
         "[Ideas for today — invitations, not a schedule. Take one that appeals, combine two, or do "
@@ -177,6 +178,14 @@ def day_ideas(c, now):
             f"- {idea['id']}: {idea['title']}"
             + (f" ({', '.join(str(b) for b in bits)})" if bits else "")
         )
+    if own:
+        lines.append(
+            "Your continuing interests — keep or revise a next step, not a new hobby every tick:"
+        )
+        for idea in own:
+            lines.append(
+                f"- {idea['id']}: {idea.get('title', '')} — {idea.get('note', '')}"
+            )
     if shopping:
         lines.append(shopping)
     if people:
@@ -184,6 +193,7 @@ def day_ideas(c, now):
             "People you have not seen in a while: "
             + ", ".join(
                 p.get("name", "someone")
+                + f" [id={p.get('id', '')}]"
                 + (f" ({p['relation']})" if p.get("relation") else "")
                 for p in people
             )

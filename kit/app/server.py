@@ -1541,12 +1541,28 @@ def build(home=None, token="", state_dir=None):
                     row = json.loads(line)
                 except ValueError:
                     continue
-                day = str(row.get("timestamp") or row.get("at") or "")[:10]
+                if not isinstance(row, dict):
+                    continue
+                day = str(row.get("timestamp") or row.get("at") or row.get("ts") or "")[
+                    :10
+                ]
                 if not day:
                     continue
                 bucket = by_day.setdefault(day, {"input": 0, "output": 0, "runs": 0})
-                bucket["input"] += int(row.get("input_tokens") or 0)
-                bucket["output"] += int(row.get("output_tokens") or 0)
+                for axis, keys in (
+                    ("input", ("input_tokens", "prompt_tokens")),
+                    ("output", ("output_tokens", "completion_tokens")),
+                ):
+                    value = next((row[k] for k in keys if row.get(k) is not None), None)
+                    try:
+                        value = max(0, int(value)) if value is not None else None
+                    except (ValueError, TypeError):
+                        value = None
+                    bucket[axis] = (
+                        bucket[axis] + value
+                        if bucket[axis] is not None and value is not None
+                        else None
+                    )
                 bucket["runs"] += 1
         except OSError:
             pass

@@ -170,7 +170,9 @@ def _create_job_via_hermes(
     if not script:
         # A tier the user chose beats the profile default; the profile default
         # beats nothing. The kit never invents a model name.
-        pick = c.tier_model(spec.get("tier", "")) if spec.get("tier") else {}
+        from companion_routing import job_route
+
+        pick = job_route(c, spec)
         chosen = pick.get("model") or (
             model.get("default") if isinstance(model, dict) else None
         )
@@ -301,6 +303,9 @@ def write_job_script(c, spec):
 
 
 def install_jobs(c, m, report):
+    from companion_routing import install
+
+    install(c)
     write(
         c.life / "PRESENCE.md",
         cr.render_template("PRESENCE.md.tmpl", m),

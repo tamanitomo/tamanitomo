@@ -1,3 +1,16 @@
+## Unreleased — beta consolidation and automatic companion life
+
+- Consolidate development on `beta`, stable releases on `main`, and the website on
+  `gh-pages`; retain Android wheel downloads through an immutable tag.
+- Recover sleep-gate and presence-transition fixes, including private-scene continuity.
+- Add a signed-in ChatGPT workload preset; update existing cron jobs and migrate
+  legacy provider-pinned script workers. Keep ordered primary/fallback/final routes,
+  with a Hermes adapter for pinned cron jobs and live free-model bundle refresh.
+- Continue independent projects, interests and fictional friendships during human
+  absence. Vary suggestions and preserve project notes; avoid automatic plan abandonment.
+- Count trusted owner messages for daily contact and quiet-hours learning. Recognize
+  native cron usage logs and show input/output separately without a spending cap.
+
 ## 3.6.2 — Facts she can actually use, and a calmer pulse (2026-09-30)
 
 - What is known about the human now gets its own room in every turn's context, sized from
