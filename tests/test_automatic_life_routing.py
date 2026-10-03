@@ -231,3 +231,28 @@ def test_rollover_never_ends_a_sibling_profile_session(tmp_path):
         result=rollover.run(c, now=dt.datetime(2026,10,2,tzinfo=dt.timezone.utc), ender=lambda c,ids:ended.extend(ids))
     assert result['rolled']
     assert ended == ['ours']
+
+
+def test_rollover_uses_store_launcher_when_no_venv_python(tmp_path):
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    import companion_rollover as rollover
+
+    c = SimpleNamespace(home=tmp_path)
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        if '--print-runtime-command' in command:
+            assert command[command.index('--module') + 1] == 'runpy'
+            assert command[command.index('--') + 1] == 'rollover'
+            return SimpleNamespace(returncode=0, stdout=json.dumps(
+                ['store-python', '-I', '-c', 'import runpy; runpy.run_module("runpy", run_name="__main__")', 'rollover']))
+        assert 'sys.path.insert' in command[3]
+        assert kwargs['env']['HERMES_HOME'] == str(tmp_path)
+        return SimpleNamespace(returncode=0)
+
+    with patch.object(rollover, 'hermes_python', return_value=None), patch.object(rollover.subprocess, 'run', side_effect=run):
+        rollover.end_sessions(c, ['fake-session'])
+    assert len(calls) == 2

@@ -11,6 +11,8 @@
 - Count trusted owner messages for daily contact and quiet-hours learning. Recognize
   native cron usage logs and show input/output separately without a spending cap.
 
+- Support Hermes store-managed launchers when resetting morning conversations.
+
 ## 3.6.2 — Facts she can actually use, and a calmer pulse (2026-09-30)
 
 - What is known about the human now gets its own room in every turn's context, sized from

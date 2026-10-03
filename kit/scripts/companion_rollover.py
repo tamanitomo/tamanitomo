@@ -28,6 +28,7 @@ import os
 import pathlib
 import sqlite3
 import subprocess
+import tempfile
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -157,27 +158,63 @@ def hermes_python():
 
 def end_sessions(c, ids, python=None):
     python = python or hermes_python()
-    if not python:
-        raise ValueError("cannot find the Python that Hermes runs")
     script = (
         "import sys,pathlib\nfrom hermes_state import SessionDB\n"
         "db=SessionDB(pathlib.Path(sys.argv[1]))\n"
         "for sid in sys.argv[3:]:db.end_session(sid,sys.argv[2])\n"
     )
-    r = subprocess.run(
-        [
-            python,
-            "-c",
-            script,
-            str(pathlib.Path(c.home / "state.db").resolve()),
-            END_REASON,
-            *ids,
-        ],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        env={**os.environ, "HERMES_HOME": str(c.home)},
-    )
+    args = [str(pathlib.Path(c.home / "state.db").resolve()), END_REASON, *ids]
+    env = {**os.environ, "HERMES_HOME": str(c.home)}
+    with tempfile.TemporaryDirectory(prefix="companion-rollover-") as folder:
+        if python:
+            command = [python, "-c", script, *args]
+        else:
+            # Store-managed Hermes bootstraps its dependency generation through
+            # the launcher; invoking its bare Python loses those dependencies.
+            from companion_platform import hermes_command
+
+            path = pathlib.Path(folder) / "rollover.py"
+            path.write_text(script, encoding="utf-8")
+            probe = subprocess.run(
+                [
+                    *hermes_command(),
+                    "--print-runtime-command",
+                    "--module",
+                    "runpy",
+                    "--",
+                    path.stem,
+                    *args,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=env,
+            )
+            try:
+                command = json.loads(probe.stdout) if probe.returncode == 0 else None
+            except (ValueError, TypeError):
+                command = None
+            if (
+                not isinstance(command, list)
+                or not command
+                or not all(isinstance(part, str) for part in command)
+            ):
+                raise ValueError("cannot find the Python that Hermes runs")
+            # runpy's CLI accepts a module name, not a filesystem path. Keep
+            # this private temporary module available in the isolated runtime.
+            if "-c" not in command:
+                raise ValueError("unsupported Hermes runtime command")
+            index = command.index("-c") + 1
+            command[index] = (
+                f"import sys; sys.path.insert(0, {folder!r}); " + command[index]
+            )
+        r = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=env,
+        )
     if r.returncode:
         raise ValueError(
             "Hermes could not end the session: " + (r.stderr or "").strip()[-200:]
