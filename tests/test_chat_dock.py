@@ -730,7 +730,7 @@ class WorkspaceAssetPerformanceTests(WorkspaceFixture):
 
 
 def test_home_does_not_wait_for_update_server_or_request_unused_history():
-    source = (ROOT / "kit/app/static/product.js").read_text()
+    source = (ROOT / "kit/app/static/product.js").read_text(encoding="utf-8")
     handler = source.split("workspaceHandlers.now=async()=>{", 1)[1].split(
         "\nlet selectedJournal=", 1
     )[0]
@@ -761,7 +761,7 @@ workspaceHandlers.now().then(()=>{
 
 
 def test_api_coalesces_concurrent_reads_but_refreshes_after_completion_and_writes():
-    html = (ROOT / "kit/app/static/index.html").read_text()
+    html = (ROOT / "kit/app/static/index.html").read_text(encoding="utf-8")
     source = html.split("const pendingReads=new Map();", 1)[1].split(
         "async function requestApi", 1
     )[0]

@@ -107,3 +107,11 @@ installation requires the normal gateway restart to load the plugin. Existing
 custom prompts and routines are not silently rewritten.
 
 Several files also received Black-only formatting needed by the existing CI gate.
+
+
+The first CI pass also exposed Windows failures in existing tests: two source
+reads used the Windows default encoding, SQLite test fixtures left connections
+open, and the asset digest cache trusted same-size rapid-write timestamps that
+are not sufficient on Windows. Fixtures now close connections explicitly and
+read UTF-8; Windows asset versions hash their actual bytes. These corrections
+were made before completing the beta handoff.

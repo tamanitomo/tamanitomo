@@ -1,3 +1,4 @@
+from contextlib import closing
 """Presence, wardrobe tokens, settings, portable host probes, and launchers."""
 
 import contextlib
@@ -1212,7 +1213,7 @@ class ClosenessCountsOnlyThePersonTests(unittest.TestCase):
         self.now = dt.datetime(2026, 9, 20, 18, tzinfo=dt.timezone.utc)
         import sqlite3
 
-        with sqlite3.connect(self.c.home / "state.db") as db:
+        with closing(sqlite3.connect(self.c.home / "state.db")) as db, db:
             db.executescript(
                 "CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, profile_name TEXT);"
                 "CREATE TABLE messages (session_id TEXT, role TEXT, content TEXT, timestamp REAL);"
@@ -1221,7 +1222,7 @@ class ClosenessCountsOnlyThePersonTests(unittest.TestCase):
     def say(self, source, text, when):
         import sqlite3
 
-        with sqlite3.connect(self.c.home / "state.db") as db:
+        with closing(sqlite3.connect(self.c.home / "state.db")) as db, db:
             db.execute(
                 "INSERT OR IGNORE INTO sessions VALUES (?, ?, 'nova')", (source, source)
             )

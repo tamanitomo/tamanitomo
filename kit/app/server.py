@@ -37,7 +37,10 @@ def _asset_digest(path, mtime_ns, ctime_ns, size):
 
 def asset_version(path):
     stat = path.stat()
-    return _asset_digest(path, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
+    # Windows ctime is creation time, and rapid same-size writes can retain
+    # mtime as well. That tuple cannot prove content identity on Windows.
+    digest = _asset_digest.__wrapped__ if os.name == "nt" else _asset_digest
+    return digest(path, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
 
 
 def _json_safe(value):
