@@ -7,9 +7,10 @@ python -m pip install -r requirements.txt
 python -m pytest -q
 ```
 
-The seven collected suites cover presence/settings/platform behavior, evidence
-memory, outbox limits, vault files, journals/photos, floating chat, and model
-routing/probes. Fixtures use temporary homes and vaults; tests never operate on a
+The collected suites cover presence/settings/platform behavior, evidence
+memory, outbox limits, vault files, journals/photos, floating chat, model
+routing/probes, and the signals that must never invent anything (music, seasons,
+missing-you, learned quiet hours, unknown meters). Fixtures use temporary homes and vaults; tests never operate on a
 live companion. `tests/support.py` contains fixture helpers, not additional tests.
 No legacy suites are hidden behind collection exclusions.
 

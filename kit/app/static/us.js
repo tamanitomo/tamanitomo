@@ -427,6 +427,7 @@ function relationshipDetails(relationship,feelings,standing,companionName){
     intimacy&&pace?['Pace',esc(pace)]:null,
     feelings?['Temperament',esc(feelings.personality||'—')]:null,
     feelings?.mood?['Mood',esc(feelings.mood)+(feelings.mood_at?` · ${esc(ago(feelings.mood_at))}`:'')]:null,
+    feelings?.learned_rhythm?['Usually quiet',`${esc(feelings.learned_rhythm.start)}–${esc(feelings.learned_rhythm.end)} · learned from when you write, so it is not counted as time apart`]:null,
     intimacy?['Boundary violations',String(intimacy.violations_count|0)]:null,
   ].filter(Boolean);
   return `${standing.length?`<p class="dim small us-standing-line">${standing.length} standing ${standing.length===1?'preference or boundary is':'preferences or boundaries are'} being kept.

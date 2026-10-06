@@ -24,6 +24,7 @@ import companion_preread as preread
 import companion_day as day
 import companion_lifestyle as lifestyle
 import companion_life
+import companion_sensors
 import companion_worker_model as worker
 
 
@@ -283,14 +284,19 @@ def pulse(
         # The end of a day is the only moment anything looks past it. Without this
         # she has a rhythm and no intentions: the same seven anchors every day,
         # and nothing she did today shaping tomorrow.
+        tomorrow = now.date() + dt.timedelta(days=1)
         offered = companion_life.suggest(
-            c.life, (now.date() + dt.timedelta(days=1)), 6, now
+            c.life,
+            tomorrow,
+            6,
+            now,
+            season=companion_sensors.season_for(c, tomorrow),
         )
         if offered["suggestions"]:
             user += (
                 "\nIDEAS FOR TOMORROW ("
-                + offered["season"]
-                + (", a weekend" if offered.get("weekend") else ", a weekday")
+                + (offered["season"] + ", " if offered["season"] else "")
+                + ("a weekend" if offered.get("weekend") else "a weekday")
                 + ") — invitations, weighted away from what you have done lately:\n"
                 + "\n".join(
                     f"  {x['id']}: {x['title']}"

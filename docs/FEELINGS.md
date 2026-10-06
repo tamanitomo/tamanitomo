@@ -8,7 +8,9 @@ The existing recorded mood, wants, and private stance remain the companion's aut
 
 Routines use the companion's configured timezone. Choose the weekdays on which a routine **starts**. A 23:00–08:00 routine runs through the following morning. Overlapping routines count once; elapsed time is calculated in UTC across daylight-saving changes.
 
-A sleep routine and regular Saturday commitments reduce unexplained time apart. Quiet hours do not automatically become sleep: quiet hours control delivery, while expected routines describe the human's availability. No routines are invented by default.
+A sleep routine and regular Saturday commitments reduce unexplained time apart. Quiet hours do not automatically become sleep: quiet hours control delivery, while expected routines describe the human's availability. No routines are typed in for you, and none are invented: with enough history the app also learns when you are usually quiet from when your messages actually arrived (`companion_rhythm.py`). It looks at timestamps only, over the last 28 days, needs at least 10 days with messages and 40 messages, takes the longest stretch of 5–12 hours in which you almost never write, and counts it as an expected absence labelled "Usually quiet (learned from your messages)". It never claims you are asleep. Routines you enter are kept alongside it, the learned window is shown under Us → How things work between you, and the `learn_rhythm` feelings setting (default on) turns it off.
+
+Missing you has one measure: `longing` in the feelings state, computed from time outside expected routines. The older raw-hours "feeling the gap" bar was removed because it counted a night's sleep as distance.
 
 A returning message preserves the preceding gap briefly, so writing “hello” does not erase the context before the companion can greet you. A continuing conversation then uses its current gap. The model receives the difference between actual elapsed time and time within expected routines. A schedule is an expectation, not live knowledge that someone is asleep or busy. Routine evaluation is bounded to the most recent 366 days for exceptionally long gaps.
 

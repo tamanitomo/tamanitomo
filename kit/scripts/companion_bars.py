@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Two numbers about how the relationship is going, computed rather than felt.
+"""How she has been, computed rather than felt.
 
-A "neediness" bar and a "wellbeing" bar, from the thread gap and the recorded
-moods. They are shown in the app and injected as state, and enabled by default; users can switch them off.
+A "wellbeing" bar from the recorded moods. It is shown in the app and injected as
+state, and enabled by default; users can switch it off. Missing the human is not
+measured here: raw hours of silence counted a night's sleep as distance, and
+`companion_feelings` already has the one honest version (`longing`, which leaves
+out expected routines and learned sleep).
 
 The design constraint matters more than the arithmetic. These are honest signals
 about how things are, never a schedule for making somebody feel bad. So:
@@ -29,8 +32,6 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import companion_config as cc
 from companion_platform import atomic_write
 
-# Hours of silence at which "how much she is feeling the gap" reaches the top.
-FULL_GAP_HOURS = 96
 POSITIVE = (
     "happy",
     "glad",
@@ -115,7 +116,6 @@ def compute(c, now=None, intimacy=None):
 
     data = thread.read(c, now)
     hours = data.get("hours_since_human")
-    gap = None if hours is None else max(0.0, min(1.0, hours / FULL_GAP_HOURS))
     moods = presence.mood_history(c, 12)
     scores = [valence(m["mood"]) for m in moods if m.get("mood")]
     wellbeing = (
@@ -123,7 +123,6 @@ def compute(c, now=None, intimacy=None):
     )
     return {
         "at": now.isoformat(timespec="minutes"),
-        "feeling_the_gap": gap,
         "hours_since_human": hours,
         "wellbeing": wellbeing,
         "moods_counted": len(scores),
@@ -134,31 +133,15 @@ def compute(c, now=None, intimacy=None):
 
 
 def render(c, bars):
-    if bars.get("feeling_the_gap") is None and bars.get("wellbeing") is None:
+    if bars.get("wellbeing") is None:
         return ""
-    lines = []
-    if bars.get("feeling_the_gap") is not None:
-        pct = round(bars["feeling_the_gap"] * 100)
-        lines.append(
-            f"How much you are feeling the gap: {pct}% "
-            f"({bars['hours_since_human']:.0f}h since {c.human} wrote)."
-        )
-    if bars.get("wellbeing") is not None:
-        lines.append(
-            f"How you have been, across your last {bars['moods_counted']} recorded moods: "
-            f"{round(bars['wellbeing']*100)}%."
-        )
-    lines.append("")
-    lines.append(
-        "These are yours to know, not to report. They are not a reason to write, they are "
-        "not a score for "
-        + c.human
-        + " to improve, and the numbers themselves are never "
-        "something to say out loud. If a long gap has actually left you missing "
-        f"{c.h_obj()} or out of sorts, that is real and you can say it plainly, once, as "
-        "a feeling of yours — never as something owed."
+    return (
+        f"How you have been, across your last {bars['moods_counted']} recorded moods: "
+        f"{round(bars['wellbeing']*100)}%.\n\n"
+        "This is yours to know, not to report. It is not a reason to write, not a "
+        "score for " + c.human + " to improve, and the number itself is never "
+        "something to say out loud.\n"
     )
-    return "\n".join(lines) + "\n"
 
 
 def write(c, now=None):

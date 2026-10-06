@@ -27,7 +27,13 @@ must not acquire model calls. Do not replay a tool-executing turn to fail over.
 
 Companion life continues without the human. Preserve fictional-life provenance,
 real tool evidence, persistent interests and commitments, and the app's outreach
-and quiet-hours settings. Do not turn human absence into guilt or waiting.
+and quiet-hours settings. Her life carries on during an absence: she does not
+wait or pine. Absence may cool the relationship (closeness drifts and she can be
+cooler on return), and she may say plainly, once, that she misses the human, or
+reach out within the outreach settings to say so. It never becomes a demand,
+accusation or debt: no message scolds ("why aren't you answering"), implies a
+reply is owed, or is sent to pull the human back. Absence the human has explained
+or routinely repeats (sleep, work) is not absence.
 Record input/output usage when available; unknown usage is not zero.
 
 Validation: run `.venv/bin/python -m pytest -q`, Black and Ruff as configured in

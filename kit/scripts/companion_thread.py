@@ -94,18 +94,59 @@ def _store_version(db):
     return tuple(out)
 
 
-def _query_rows(con, scope, params):
+def _store_scope(c):
+    """((resolved db, SQL scope, params), None), or (None, why not).
+
+    The one place that decides which conversations belong to this companion. A
+    shared store must never let one companion read another's messages, so every
+    reader goes through here rather than re-deriving the scope.
+    """
+    db = c.home / "state.db"
+    if not db.exists():
+        return None, "no session database yet"
+    try:
+        resolved = db.resolve()
+        if c.is_root and resolved.is_relative_to(
+            (c.hermes_root / "profiles").resolve()
+        ):
+            return None, "the root store redirects into a named profile"
+    except OSError as exc:
+        return None, f"session database unreadable: {exc}"
+    if c.is_root:
+        return (
+            resolved,
+            "lower(coalesce(s.profile_name,'')) IN ('','default')",
+            (),
+        ), None
+    if _shares_store(c, resolved):
+        return (
+            resolved,
+            "lower(coalesce(s.profile_name,''))=?",
+            (c.profile.lower(),),
+        ), None
+    return (
+        resolved,
+        "lower(coalesce(s.profile_name,'')) IN ('','default',?)",
+        (c.profile.lower(),),
+    ), None
+
+
+def _message_query(con, scope):
     columns = {row[1] for row in con.execute("PRAGMA table_info(messages)")}
     visible = (
         "AND (m.active=1 OR m.compacted=1)"
         if {"active", "compacted"} <= columns
         else ""
     )
-    query = f"""
+    return f"""
         SELECT m.role,m.content,m.timestamp FROM messages m JOIN sessions s ON s.id=m.session_id
         WHERE m.role IN ('user','assistant') AND {scope} {visible}
           AND coalesce(m._compressed_summary,0)=0 AND coalesce(m.content,'')<>''
           AND s.source IN ('telegram','cli','desktop','tui','discord')"""
+
+
+def _query_rows(con, scope, params):
+    query = _message_query(con, scope)
     rows = list(con.execute(query + " ORDER BY m.timestamp DESC LIMIT 60", params))
     # A run of assistant messages must not hide the last actual human contact.
     human_rows = list(
@@ -122,29 +163,66 @@ def _query_rows(con, scope, params):
     return rows, human_rows, agent_rows
 
 
+_human_cache: dict = {}
+
+
+def human_times(c, now=None, days=28, limit=6000):
+    """When the human wrote over the last `days`, as aware datetimes. [] if unknowable.
+
+    Timestamps only: no message text leaves the database through here.
+    """
+    now = now or dt.datetime.now(_tz(c))
+    found, _why = _store_scope(c)
+    if found is None:
+        return []
+    resolved, scope, params = found
+    key = (str(resolved), scope, params, days, now.date().isoformat())
+    version = _store_version(resolved)
+    cached = _human_cache.get(key)
+    if cached and cached[0] == version:
+        return list(cached[1])
+    since = (now - dt.timedelta(days=days)).timestamp()
+    con = None
+    try:
+        con = sqlite3.connect(resolved.as_uri() + "?mode=ro", uri=True, timeout=1)
+        con.execute("PRAGMA query_only=ON")
+        query = _message_query(con, scope) + " AND m.role='user' AND m.timestamp>=?"
+        raw = list(
+            con.execute(
+                query + " ORDER BY m.timestamp DESC LIMIT ?", (*params, since, limit)
+            )
+        )
+    except (sqlite3.Error, OSError):
+        return []
+    finally:
+        if con:
+            con.close()
+    stamps = []
+    for _role, _text, value in raw:
+        try:
+            stamps.append(
+                dt.datetime.fromtimestamp(float(value), dt.timezone.utc).astimezone(
+                    _tz(c)
+                )
+            )
+        except (TypeError, ValueError, OverflowError):
+            continue
+    if len(_human_cache) > 32:
+        _human_cache.clear()
+    _human_cache[key] = (version, stamps)
+    return list(stamps)
+
+
 def read(c, now=None, tail=4):
     """Last message each way, the gap, and a short tail. Never any other agent's."""
     now = now or dt.datetime.now(_tz(c))
-    db = c.home / "state.db"
     out = {"checked_at": now.isoformat(timespec="minutes"), "available": False}
-    if not db.exists():
-        return {**out, "reason": "no session database yet"}
+    found, why = _store_scope(c)
+    if found is None:
+        return {**out, "reason": why}
+    resolved, scope, params = found
     con = None
     try:
-        resolved = db.resolve()
-        if c.is_root and resolved.is_relative_to(
-            (c.hermes_root / "profiles").resolve()
-        ):
-            return {**out, "reason": "the root store redirects into a named profile"}
-        if c.is_root:
-            scope = "lower(coalesce(s.profile_name,'')) IN ('','default')"
-            params = ()
-        elif _shares_store(c, resolved):
-            scope = "lower(coalesce(s.profile_name,''))=?"
-            params = (c.profile.lower(),)
-        else:
-            scope = "lower(coalesce(s.profile_name,'')) IN ('','default',?)"
-            params = (c.profile.lower(),)
         # One Home render reads the thread seven times over; the rows only
         # change when Hermes writes, which touches the database or its WAL.
         version = _store_version(resolved)

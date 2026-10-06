@@ -18,13 +18,16 @@ and a row in REGISTRY; nothing else in the kit needs to know it exists.
 from __future__ import annotations
 import argparse
 import datetime as dt
+import functools
 import json
 import math
 import pathlib
+import re
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+import zoneinfo
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -68,7 +71,12 @@ def weather(c, now):
             f"Today {today['mintempC']}–{today['maxtempC']}°C. "
             f"Sunrise {today['astronomy'][0]['sunrise']}, sunset {today['astronomy'][0]['sunset']}."
         )
+        try:
+            latitude = float(data["nearest_area"][0]["latitude"])
+        except (KeyError, IndexError, TypeError, ValueError):
+            latitude = None
         extra = {
+            "latitude": latitude,
             "sunrise": today["astronomy"][0]["sunrise"],
             "sunset": today["astronomy"][0]["sunset"],
             "temp_c": current["temp_C"],
@@ -94,6 +102,67 @@ SEASONS_NORTH = (
     "autumn",
     "winter",
 )
+SEASONS_SOUTH = SEASONS_NORTH[6:] + SEASONS_NORTH[:6]
+# Close enough to the equator that "winter" and "summer" are not the honest words.
+TROPICS = 15.0
+_ZONE_ROW = re.compile(r"([+-])(\d{2})(\d{2})(\d{2})?[+-]\d")
+
+
+@functools.lru_cache(maxsize=64)
+def zone_latitude(zone):
+    """Latitude of an IANA zone's reference city, from zone.tab. None if it cannot say.
+
+    Every zone carries its coordinates, so nothing here is a hand-kept list of
+    which countries are in the south.
+    """
+    tables = []
+    try:
+        import importlib.resources as resources
+
+        tables.append(
+            (resources.files("tzdata.zoneinfo") / "zone.tab").read_text("utf-8")
+        )
+    except (ImportError, OSError, ModuleNotFoundError):
+        pass
+    for root in zoneinfo.TZPATH:
+        try:
+            tables.append((pathlib.Path(root) / "zone.tab").read_text("utf-8"))
+        except OSError:
+            pass
+    for text in tables:
+        for line in text.splitlines():
+            columns = line.split("\t")
+            if line.startswith("#") or len(columns) < 3 or columns[2] != zone:
+                continue
+            found = _ZONE_ROW.match(columns[1])
+            if found:
+                sign, deg, minutes, seconds = found.groups()
+                value = int(deg) + int(minutes) / 60 + int(seconds or 0) / 3600
+                return -value if sign == "-" else value
+    return None
+
+
+def hemisphere(c):
+    """ "north", "south", or None when we cannot say. Weather's latitude first, her zone second."""
+    lat = None
+    try:
+        data = json.loads((c.soul_dir / "ambient/weather.json").read_text("utf-8"))
+        lat = float(data["latitude"])
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    if lat is None:
+        lat = zone_latitude(getattr(c, "timezone", "") or "")
+    if lat is None or abs(lat) < TROPICS:
+        return None
+    return "south" if lat < 0 else "north"
+
+
+def season_for(c, when):
+    """The season where she lives, or None. An unknown hemisphere is not a claim."""
+    side = hemisphere(c)
+    if side is None:
+        return None
+    return (SEASONS_SOUTH if side == "south" else SEASONS_NORTH)[when.month - 1]
 
 
 def moon_phase(when):
@@ -116,9 +185,10 @@ def moon_phase(when):
 
 def daylight(c, now):
     """No network at all: the season, the moon, and how long the day is."""
-    season = SEASONS_NORTH[now.month - 1]
+    season = season_for(c, now)
     lines = [
-        f"It is {now.strftime('%A')} {now.day} {now.strftime('%B')}, in {season}.",
+        f"It is {now.strftime('%A')} {now.day} {now.strftime('%B')}"
+        + (f", in {season}." if season else "."),
         f"The moon is {moon_phase(now)}.",
     ]
     sun = c.soul_dir / "ambient/weather.json"
@@ -384,22 +454,8 @@ def _spotify_get(url: str, token: str):
         return None
 
 
-def _ambient_listening_mood(now):
-    hour = now.hour
-    if 23 <= hour or hour < 7:
-        return "Late night quiet: soft ambient, low-fi drift, deep rest."
-    elif 7 <= hour < 12:
-        return "Morning air: quiet acoustic, warm instrumental coffee vibes."
-    elif 12 <= hour < 17:
-        return "Afternoon flow: focused downtempo, atmospheric synth."
-    elif 17 <= hour < 21:
-        return "Evening unwind: mellow jazz, vinyl warmth, melodic indie."
-    else:
-        return "Nightfall: contemplative ambient, gentle piano."
-
-
 def music(c, now):
-    """What the human is listening to on Spotify, or shared ambient room music."""
+    """What the human is listening to on Spotify. Nothing, if Spotify cannot say."""
     st = _spotify_state(c)
     if st:
         token = _spotify_token(c, st)
@@ -443,9 +499,10 @@ def music(c, now):
                     }
             except Exception:
                 pass
-    mood = _ambient_listening_mood(now)
-    text = f"- Ambient listening vibe: {mood}"
-    return text, {"source": "ambient_mood", "mood": mood}
+    # Not connected, signed out, or nothing played: say nothing, and take back the
+    # legacy copy so a stale "is playing" line cannot outlive the connection.
+    (c.soul_dir / "context-music.md").unlink(missing_ok=True)
+    return None, "Spotify is not connected, or has nothing to report"
 
 
 REGISTRY = {
@@ -458,8 +515,9 @@ REGISTRY = {
     "daylight": {
         "fn": "daylight",
         "needs": None,
-        "blurb": "The season, the moon, and the length of the day. "
-        "Computed, no network, always available.",
+        "blurb": "The season where she lives, the moon, and the length of the day. "
+        "Computed, no network. Says nothing about the season near the equator or when "
+        "it cannot tell which hemisphere she is in.",
     },
     "dates": {
         "fn": "dates",
@@ -487,8 +545,8 @@ REGISTRY = {
     },
     "music": {
         "fn": "music",
-        "needs": "Spotify auth or ambient mood",
-        "blurb": "What the human is playing on Spotify, or the ambient listening mood for the room.",
+        "needs": "Spotify auth",
+        "blurb": "What the human is playing on Spotify. Silent when Spotify is not connected.",
     },
 }
 

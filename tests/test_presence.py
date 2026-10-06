@@ -1180,7 +1180,7 @@ def test_presence_and_daylight_dates_use_portable_unpadded_days(tmp_path):
             return super().strftime(format)
 
     now = PortableDateTime(2026, 9, 1, 14, 5, tzinfo=dt.timezone.utc)
-    companion = SimpleNamespace(agent="Nova", timezone="UTC", soul_dir=tmp_path)
+    companion = SimpleNamespace(agent="Nova", timezone="Atlantic/Reykjavik", soul_dir=tmp_path)
     state = {"recorded_at": now.isoformat(), "state": {"mood": "content"}}
     with (
         patch.object(dt, "datetime", PortableDateTime),

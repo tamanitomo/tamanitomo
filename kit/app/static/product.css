@@ -3114,3 +3114,4 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
   dialog:not(.photo-viewer) { max-height: calc(100dvh - 24px); }
   .dialog-body { max-height: calc(100dvh - 100px); }
 }
+.hero-meter-item.is-unknown .hero-meter-pct,.hero-meter-item.is-unknown .hero-meter-label{opacity:.55}

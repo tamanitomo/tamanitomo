@@ -141,12 +141,19 @@ def day_ideas(c, now):
     """
     try:
         import companion_life as life
+        import companion_sensors as sensors
         from companion_platform import terminal_python_command
 
         cmd = terminal_python_command(
             pathlib.Path(__file__).with_name("companion_life.py"), "--home", c.home
         )
-        ideas = life.suggest(c.life, now.date(), 5, now).get("suggestions", [])
+        ideas = life.suggest(
+            c.life,
+            now.date(),
+            5,
+            now,
+            season=sensors.season_for(c, now),
+        ).get("suggestions", [])
         people = [p for p in life.people_due(c.life, now.date(), 3) if p.get("due")]
         own = life.interests(c.life)["added"][-5:]
     except Exception:

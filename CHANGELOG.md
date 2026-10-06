@@ -12,6 +12,16 @@
   native cron usage logs and show input/output separately without a spending cap.
 
 - Support Hermes store-managed launchers when resetting morning conversations.
+- Stop inventing signals. With Spotify unconnected the music sensor is silent (it no longer
+  makes up a listening mood from the hour, and removes its stale legacy file); the season
+  follows her hemisphere from weather latitude or her timezone's coordinates, and is omitted
+  near the equator or when unknown; Home shows an unknown meter as a dash, not a resting number.
+- One missing-you measure. The raw-hours "feeling the gap" bar is gone; missing you is the
+  feelings `longing`, which excludes expected routines. Her usual quiet hours are now learned
+  from when messages actually arrive (timestamps only, 28 days, needs 10 active days), so a
+  night's sleep is not distance. Entered routines are kept; `learn_rhythm` turns it off.
+- AGENTS.md: absence may cool the relationship and she may say she misses the human, but never
+  as a demand, accusation or debt.
 
 ## 3.6.2 — Facts she can actually use, and a calmer pulse (2026-09-30)
 

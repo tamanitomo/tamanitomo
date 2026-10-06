@@ -26,7 +26,12 @@ PROFILES = {
     "expressive": {"sensitivity": 1.3, "recovery_days": 14, "trust": 0.65},
     "guarded": {"sensitivity": 1.0, "recovery_days": 30, "trust": 0.5},
 }
-DEFAULTS = {"personality": "steady", "connection_hours": 48, "absence_windows": []}
+DEFAULTS = {
+    "personality": "steady",
+    "connection_hours": 48,
+    "absence_windows": [],
+    "learn_rhythm": True,
+}
 
 
 def _text(value, label, limit=500):
@@ -94,10 +99,14 @@ def validate_settings(data):
                 "end": row["end"],
             }
         )
+    learn = data.get("learn_rhythm", True)
+    if not isinstance(learn, bool):
+        raise ValueError("learn_rhythm must be true or false")
     return {
         "personality": personality,
         "connection_hours": hours,
         "absence_windows": cleaned,
+        "learn_rhythm": learn,
     }
 
 
@@ -289,6 +298,17 @@ def compute(c, now=None):
     config = settings(c)["settings"]
     profile = PROFILES[config["personality"]]
     thread = companion_thread.read(c, now)
+    # Entered windows always count. When there is enough history, the hours the human
+    # is almost never writing count too, so sleep is not mistaken for distance.
+    rhythm = {"windows": [], "evidence": None}
+    if config["learn_rhythm"]:
+        import companion_rhythm
+
+        rhythm = companion_rhythm.learned(c, now)
+    config = {
+        **config,
+        "absence_windows": config["absence_windows"] + rhythm["windows"],
+    }
     away = absence(c, thread.get("last_from_human"), now, config)
     arrival = None
     last = thread.get("last_from_human")
@@ -373,6 +393,7 @@ def compute(c, now=None):
             "longing": None if longing is None else clamp(longing),
         },
         "absence": away,
+        "learned_rhythm": rhythm["evidence"],
         "recent_return": arrival,
         "reasons": reasons[-5:],
         "experiences": history[-30:],

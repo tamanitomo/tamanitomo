@@ -723,31 +723,35 @@ function renderHeroMetersContent(emotions,bars){
   const meters=emotions?.state?.meters||bars?.feelings?.meters||{};
   // Home is a glance and Us is the page, so they keep different
   // treatments — but they must not describe the same meter in different words.
-  // The labels and the explanations come from one place; the colour, the glow
-  // and the resting value are the hero's own.
+  // The labels and the explanations come from one place; the colour and the glow
+  // are the hero's own. A meter with no value is unknown, not a resting number:
+  // an empty bar and a dash say "not known yet" where 80% would claim a measurement.
   const look={
-    warmth:{color:'linear-gradient(90deg,#f43f5e,#fb923c)',glow:'rgba(244,63,94,0.4)',defaultVal:0.8},
-    trust:{color:'linear-gradient(90deg,#0ea5e9,#10b981)',glow:'rgba(14,165,233,0.4)',defaultVal:0.75},
-    hurt:{color:'linear-gradient(90deg,#ef4444,#f87171)',glow:'rgba(239,68,68,0.4)',defaultVal:0.0},
-    irritation:{color:'linear-gradient(90deg,#eab308,#f59e0b)',glow:'rgba(234,179,8,0.4)',defaultVal:0.0},
-    longing:{color:'linear-gradient(90deg,#8b5cf6,#d946ef)',glow:'rgba(139,92,246,0.4)',defaultVal:0.0},
+    warmth:{color:'linear-gradient(90deg,#f43f5e,#fb923c)',glow:'rgba(244,63,94,0.4)'},
+    trust:{color:'linear-gradient(90deg,#0ea5e9,#10b981)',glow:'rgba(14,165,233,0.4)'},
+    hurt:{color:'linear-gradient(90deg,#ef4444,#f87171)',glow:'rgba(239,68,68,0.4)'},
+    irritation:{color:'linear-gradient(90deg,#eab308,#f59e0b)',glow:'rgba(234,179,8,0.4)'},
+    longing:{color:'linear-gradient(90deg,#8b5cf6,#d946ef)',glow:'rgba(139,92,246,0.4)'},
   };
-  const config=FEELING_METERS.map(([key,label,icon,desc])=>({key,label,icon,desc,...(look[key]||{defaultVal:0})}));
+  const config=FEELING_METERS.map(([key,label,icon,desc])=>({key,label,icon,desc,...(look[key]||{})}));
   return config.map(m=>{
-    const raw=meters[m.key]!=null?meters[m.key]:m.defaultVal;
-    const pct=Math.round(Math.max(0,Math.min(1,raw))*100);
+    const raw=meters[m.key];
+    const known=typeof raw==='number'&&isFinite(raw);
+    const pct=known?Math.round(Math.max(0,Math.min(1,raw))*100):0;
+    const shown=known?`${pct}%`:'—';
+    const aria=known?`${m.label} meter: ${pct}%`:`${m.label} meter: not known yet`;
     return `
-      <div class="hero-meter-item" title="${esc(m.label)}: ${pct}% · ${esc(m.desc)}" tabindex="0" aria-label="${esc(m.label)} meter: ${pct}%">
+      <div class="hero-meter-item${known?'':' is-unknown'}" title="${esc(m.label)}: ${known?shown:'not known yet'} · ${esc(m.desc)}" tabindex="0" aria-label="${esc(aria)}">
         <div class="hero-meter-label-row">
           <span class="hero-meter-label"><span class="meter-icon">${m.icon}</span> <span class="meter-name">${m.label}</span></span>
-          <span class="hero-meter-pct">${pct}%</span>
+          <span class="hero-meter-pct">${shown}</span>
         </div>
         <div class="hero-meter-bar-track">
           <div class="hero-meter-bar-fill" style="width:${pct}%;background:${m.color};box-shadow:0 0 8px ${m.glow}"></div>
         </div>
         <div class="hero-meter-tooltip" role="tooltip">
-          <div class="hero-meter-tooltip-title"><span>${m.icon} ${esc(m.label)}</span> <span class="hero-meter-tooltip-val">${pct}%</span></div>
-          <div class="hero-meter-tooltip-desc">${esc(m.desc)}</div>
+          <div class="hero-meter-tooltip-title"><span>${m.icon} ${esc(m.label)}</span> <span class="hero-meter-tooltip-val">${shown}</span></div>
+          <div class="hero-meter-tooltip-desc">${known?esc(m.desc):'Not known yet — '+esc(m.desc)}</div>
         </div>
       </div>`;
   }).join('');

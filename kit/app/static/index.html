@@ -365,7 +365,7 @@ async function renderNow(){
       <ul class="dim" style="margin-top:12px">${moods.slice(-5).reverse().map(m=>`<li>${esc(m.mood)}</li>`).join('')}</ul>
     </div>
     ${d.bars?`<div class="card"><h2>How it is going</h2>
-      <p>Feeling the gap <strong>${Math.round((d.bars.feeling_the_gap||0)*100)}%</strong>${d.bars.wellbeing!=null?` · Wellbeing <strong>${Math.round(d.bars.wellbeing*100)}%</strong>`:''}</p>
+      <p>${(()=>{const l=d.bars.feelings&&d.bars.feelings.meters&&d.bars.feelings.meters.longing;return `Missing you <strong>${l==null?'—':Math.round(l*100)+'%'}</strong>`+(d.bars.wellbeing!=null?` · Wellbeing <strong>${Math.round(d.bars.wellbeing*100)}%</strong>`:'');})()}</p>
       <p class="dim">Computed from how long it has been and what she has recorded feeling. She sees these; nothing tells her to mention them.</p></div>`:''}
     <div class="card"><h2>The thread</h2>
       ${d.thread&&d.thread.available

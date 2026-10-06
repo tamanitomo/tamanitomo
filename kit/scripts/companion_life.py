@@ -456,7 +456,7 @@ def season_of(day):
     }[day.month]
 
 
-def suggest(root, day=None, count=6, now=None):
+def suggest(root, day=None, count=6, now=None, season=""):
     """A few ideas for a given day, weighted away from what she has just done.
 
     Deterministic for a given companion and date, so the evening's suggestions do
@@ -475,7 +475,10 @@ def suggest(root, day=None, count=6, now=None):
             continue
         if row["id"] not in last_done or chosen_on > last_done[row["id"]]:
             last_done[row["id"]] = chosen_on
-    season = season_of(day)
+    # "" means the caller did not say; None means it asked and the answer is "unknown"
+    # (near the equator, or no way to tell the hemisphere), which weights no idea by season.
+    if season == "":
+        season = season_of(day)
     weekend = day.weekday() >= 5
     scored = []
     for idea in palette(root):
@@ -493,7 +496,7 @@ def suggest(root, day=None, count=6, now=None):
             if age < RECENT_DAYS:
                 weight *= max(0.02, age / RECENT_DAYS)
         wants = idea.get("season", "any")
-        if wants not in ("any", season):
+        if season is not None and wants not in ("any", season):
             weight *= 0.25
         # A day out needs a day to put it in.
         if float(idea.get("hours", 2)) >= 5 and not weekend:
@@ -1169,7 +1172,16 @@ def main():
     elif a.cmd == "drop-person":
         out = drop_person(root, a.person)
     elif a.cmd == "suggest":
-        out = suggest(root, a.day, max(1, min(20, a.count)), now)
+        import companion_sensors
+
+        day = dt.date.fromisoformat(a.day) if a.day else now.date()
+        out = suggest(
+            root,
+            day,
+            max(1, min(20, a.count)),
+            now,
+            season=companion_sensors.season_for(c, day),
+        )
     elif a.cmd == "add-idea":
         out = add_idea(
             root,
