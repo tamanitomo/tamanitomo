@@ -717,6 +717,27 @@ def build(c, payload=None, now=None, maintenance_notice=""):
             )
         )
 
+    try:
+        import companion_story
+
+        story_parts, story_suppressed = companion_story.chat_parts(
+            c, b.get("relationship", 0), c.compact
+        )
+        parts.extend(story_parts)
+        suppressed |= story_suppressed
+    except (OSError, ValueError, KeyError, ImportError):
+        pass
+
+    if c.bars:
+        try:
+            import companion_rhythm
+
+            noticed = companion_rhythm.render(c, now, replying=bool(msg))
+            if noticed:
+                parts.append((4, clip(noticed, 900)))
+        except (OSError, ValueError, KeyError, TypeError, ImportError):
+            pass
+
     if RECALL_TRIGGER.search(msg):
         try:
             ev = search(c, msg, limit=3, seconds=0.75)

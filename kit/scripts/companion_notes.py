@@ -34,6 +34,7 @@ import companion_self as slf
 # Relationship entries are typed so the render can group them; the types are the
 # shapes a shared history actually takes.
 MOMENT_KINDS = ("milestone", "nickname", "joke", "ritual", "first", "note")
+RECURS = ("weekly", "monthly", "yearly")
 STATUSES = ("active", "retired")
 
 
@@ -128,6 +129,24 @@ def add_moment(c, entry, now):
         "status": "active",
         "recorded_at": now.isoformat(),
     }
+    # Where it came from, and (for a tradition) how often it comes round and when
+    # it began, so "third year making these" is counted instead of remembered.
+    evidence = _text(entry.get("evidence"), 300, "evidence", required=False)
+    if evidence:
+        row["evidence"] = evidence
+    recurs = entry.get("recurs")
+    if recurs:
+        if kind != "ritual" or recurs not in RECURS:
+            raise ValueError(f"recurs applies to a ritual and must be one of {RECURS}")
+        try:
+            row["first_on"] = dt.date.fromisoformat(
+                str(entry.get("first_on"))
+            ).isoformat()
+        except ValueError:
+            raise ValueError(
+                "a recurring ritual needs first_on, the date it began (YYYY-MM-DD)"
+            )
+        row["recurs"] = recurs
     return slf._append(moments_path(c), row)
 
 
@@ -214,6 +233,11 @@ def render_relationship(c, limit=2000):
                 "- "
                 + row["text"]
                 + (f" ({row['happened_on']})" if row.get("happened_on") else "")
+                + (
+                    f" ({row['recurs']}, since {row['first_on']})"
+                    if row.get("recurs")
+                    else ""
+                )
             )
     text = "\n".join(out)
     return (
@@ -280,6 +304,18 @@ def main():
     s = p.add_subparsers(dest="cmd", required=True)
     b = s.add_parser("add", help="add or retire entries from one JSON file")
     b.add_argument("--file", type=pathlib.Path, required=True)
+    mo = s.add_parser(
+        "moment",
+        help="record one thing that became yours: a joke, a name, a ritual, a first",
+    )
+    mo.add_argument("--moment", choices=MOMENT_KINDS, required=True)
+    mo.add_argument("--text", required=True)
+    mo.add_argument(
+        "--evidence", default="", help="the words or the occasion it came from"
+    )
+    mo.add_argument("--happened-on", default="")
+    mo.add_argument("--recurs", choices=RECURS, help="a ritual that comes round")
+    mo.add_argument("--first-on", default="", help="when it began, YYYY-MM-DD")
     st = s.add_parser("standing")
     st.add_argument("--status", choices=list(STATUSES) + ["all"], default="active")
     rl = s.add_parser("relationship")
@@ -291,6 +327,19 @@ def main():
     now = dt.datetime.now(_tz(c))
     if a.cmd == "add":
         out = batch(c, a.file, now)
+    elif a.cmd == "moment":
+        out = add_moment(
+            c,
+            {
+                "moment": a.moment,
+                "text": a.text,
+                "evidence": a.evidence,
+                "happened_on": a.happened_on,
+                "recurs": a.recurs,
+                "first_on": a.first_on,
+            },
+            now,
+        )
     elif a.cmd == "standing":
         out = {"standing": standing(c, None if a.status == "all" else a.status)}
     elif a.cmd == "relationship":

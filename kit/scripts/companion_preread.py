@@ -52,6 +52,12 @@ def preread(c, now=None):
     ]
     out.append(companion_active.build(c, now).strip())
     out.append("")
+    import companion_story
+
+    places_block = companion_story.scheduled(c)
+    if places_block:
+        out.append(places_block)
+        out.append("")
     import companion_journal
 
     recent = companion_journal.tail(c, "autonomy", 3000)

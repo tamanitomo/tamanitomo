@@ -109,11 +109,11 @@ _ZONE_ROW = re.compile(r"([+-])(\d{2})(\d{2})(\d{2})?[+-]\d")
 
 
 @functools.lru_cache(maxsize=64)
-def zone_latitude(zone):
-    """Latitude of an IANA zone's reference city, from zone.tab. None if it cannot say.
+def zone_row(zone):
+    """(ISO country code, latitude) of an IANA zone's reference city, from zone.tab.
 
-    Every zone carries its coordinates, so nothing here is a hand-kept list of
-    which countries are in the south.
+    (None, None) when it cannot say. Every zone carries its coordinates, so nothing
+    here is a hand-kept list of which countries are in the south.
     """
     tables = []
     try:
@@ -138,8 +138,12 @@ def zone_latitude(zone):
             if found:
                 sign, deg, minutes, seconds = found.groups()
                 value = int(deg) + int(minutes) / 60 + int(seconds or 0) / 3600
-                return -value if sign == "-" else value
-    return None
+                return columns[0], (-value if sign == "-" else value)
+    return None, None
+
+
+def zone_latitude(zone):
+    return zone_row(zone)[1]
 
 
 def hemisphere(c):
@@ -505,6 +509,87 @@ def music(c, now):
     return None, "Spotify is not connected, or has nothing to report"
 
 
+# ---- the dates two people keep -------------------------------------------
+def together(c, now):
+    """First conversation, anniversaries, day counts, birthday, traditions: all counted."""
+    import companion_together
+
+    text, facts = companion_together.render(c, now)
+    if not text:
+        return None, facts
+    return text, facts
+
+
+# ---- public holidays -----------------------------------------------------
+HOLIDAY_API = "https://date.nager.at/api/v3/PublicHolidays/{year}/{country}"
+HOLIDAY_LOOKAHEAD_DAYS = 7
+
+
+def _holidays_for(c, country, year):
+    """A year of a country's public holidays, kept on disk so one fetch lasts the year."""
+    cache = c.home / "state" / f"holidays-{country}-{year}.json"
+    try:
+        return json.loads(cache.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        pass
+    try:
+        rows = json.loads(_get(HOLIDAY_API.format(year=year, country=country)))
+    except (urllib.error.URLError, OSError, ValueError, TimeoutError):
+        return None
+    kept = [
+        {"date": r["date"], "name": r.get("localName") or r.get("name")}
+        for r in rows
+        if isinstance(r, dict) and r.get("global", True) and r.get("date")
+    ]
+    if not kept:
+        return None
+    try:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write(cache, json.dumps(kept, ensure_ascii=False))
+    except OSError:
+        pass
+    return kept
+
+
+def holidays(c, now):
+    """Public holidays in the next week where she lives. Only the country and year leave."""
+    country, _lat = zone_row(getattr(c, "timezone", "") or "")
+    if not country:
+        return None, "her timezone does not say which country she is in"
+    today = now.date()
+    end = today + dt.timedelta(days=HOLIDAY_LOOKAHEAD_DAYS)
+    rows = []
+    for year in sorted({today.year, end.year}):
+        found = _holidays_for(c, country, year)
+        if found is None:
+            return (
+                None,
+                f"no holiday list for {country} {year} (offline, or not published)",
+            )
+        rows += found
+    coming = []
+    for row in rows:
+        try:
+            when = dt.date.fromisoformat(row["date"])
+        except (ValueError, KeyError):
+            continue
+        if today <= when <= end:
+            delta = (when - today).days
+            word = (
+                "today"
+                if not delta
+                else "tomorrow" if delta == 1 else f"in {delta} days"
+            )
+            coming.append((when, f"- {row['name']} — {word} ({when.isoformat()})"))
+    if not coming:
+        return None, "no public holiday in the next seven days"
+    coming.sort()
+    return "Public holidays:\n" + "\n".join(t for _, t in coming), {
+        "country": country,
+        "count": len(coming),
+    }
+
+
 REGISTRY = {
     "weather": {
         "fn": "weather",
@@ -536,6 +621,19 @@ REGISTRY = {
         "needs": "dated lines in dates.md",
         "blurb": 'How long things have been true — "married 13 years" — counted from the date rather than '
         "remembered as a number that goes quietly wrong.",
+    },
+    "together": {
+        "fn": "together",
+        "needs": None,
+        "blurb": "How long you have known each other, counted from the first conversation: "
+        "monthly anniversaries, 100 days, a year, your birthday once you have told her, and "
+        "traditions as they come round. Computed; nothing to write down.",
+    },
+    "holidays": {
+        "fn": "holidays",
+        "needs": "a country (from your timezone)",
+        "blurb": "Public holidays where she lives, a week ahead. Looks up the country and "
+        "year only, once, and keeps the answer.",
     },
     "thread": {
         "fn": "thread",

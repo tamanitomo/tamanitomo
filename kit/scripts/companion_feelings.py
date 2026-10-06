@@ -288,6 +288,63 @@ def absence(c, since, now, config):
     }
 
 
+# Warmth and trust move on their own, slowly, from how the two of you actually are:
+# ordinary days of talking, and things she was asked to do and did. No model reads the
+# conversation for this; it counts days. Both are small and capped, so they colour the
+# recorded experiences and never replace them.
+CONTACT_HUMAN_MESSAGES = 3
+WARMTH_PER_DAY = 0.02
+WARMTH_CAP = 0.2
+TRUST_PER_DAY = 0.004
+TRUST_CAP = 0.12
+TRUST_PER_KEPT_ASK = 0.01
+TRUST_KEPT_CAP = 0.06
+
+
+def passive(c, now, profile, unresolved):
+    """Slow drift from days of real two-way conversation and kept requests.
+
+    A day counts when the human wrote at least three times and she answered. Warmth
+    is recent (it fades on the temperament's own recovery time); trust is the whole
+    history and does not fade. While a rupture sits unrepaired trust does not build
+    and warmth builds at half rate: time alone does not mend what was hurt.
+    """
+    import companion_thread
+
+    days = companion_thread.contact_days(c, now)
+    counted = {
+        day: counts
+        for day, counts in days.items()
+        if counts[0] >= CONTACT_HUMAN_MESSAGES and counts[1] >= 1
+    }
+    try:
+        today = now.astimezone(ZoneInfo(c.timezone or "UTC")).date()
+    except Exception:
+        today = now.astimezone(UTC).date()
+    warmth = sum(
+        WARMTH_PER_DAY
+        * math.exp(-max(0, (today - day).days) / profile["recovery_days"])
+        for day in counted
+    )
+    trust = TRUST_PER_DAY * len(counted)
+    try:
+        import companion_missions
+
+        kept = len(companion_missions.missions(c, "done", now))
+    except (OSError, ValueError, ImportError):
+        kept = 0
+    trust += min(TRUST_KEPT_CAP, TRUST_PER_KEPT_ASK * kept)
+    warmth = min(WARMTH_CAP, warmth) * (0.5 if unresolved else 1)
+    trust = 0.0 if unresolved else min(TRUST_CAP + TRUST_KEPT_CAP, trust)
+    return {
+        "warmth": round(warmth, 4),
+        "trust": round(trust, 4),
+        "contact_days": len(counted),
+        "kept_requests": kept,
+        "paused_by_unrepaired_rupture": bool(unresolved),
+    }
+
+
 def compute(c, now=None):
     import companion_thread
     import companion_presence
@@ -372,6 +429,13 @@ def compute(c, now=None):
             )
         trust = max(0, min(1, trust))
         warmth = max(0, min(1, warmth))
+    try:
+        slow = passive(c, now, profile, any(row["repair"] < 0.5 for row in reasons))
+    except (OSError, ValueError, TypeError):
+        slow = None
+    if slow:
+        warmth = max(0, min(1, warmth + slow["warmth"]))
+        trust = max(0, min(1, trust + slow["trust"]))
     if gap is not None:
         irritation += (
             max(0, gap - config["connection_hours"]) * 0.003 * profile["sensitivity"]
@@ -393,6 +457,7 @@ def compute(c, now=None):
             "longing": None if longing is None else clamp(longing),
         },
         "absence": away,
+        "slow_change": slow,
         "learned_rhythm": rhythm["evidence"],
         "recent_return": arrival,
         "reasons": reasons[-5:],

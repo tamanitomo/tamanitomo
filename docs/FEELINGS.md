@@ -33,6 +33,10 @@ Every experience needs supporting words or context. Silence alone cannot establi
 
 The companion receives a command to record supported experiences during chat. Successful execution is required before it claims to have saved one. Existing shared-history notes and private stance remain in context; they are not automatically reclassified into new rupture records.
 
+## Slow change
+
+Warmth and trust also move on their own, slowly, from how the two of you actually are. A day counts when you wrote at least three times and she answered. Each such day adds 0.02 to warmth, fading on the temperament's own recovery time and capped at +0.20, and 0.004 to trust, summed over the whole history, never fading, capped at +0.12. Each request she was asked to do and finished (a mission marked done) adds 0.01 trust, up to +0.06. While a rupture is unrepaired, trust does not build and warmth builds at half rate: time alone does not mend what was hurt. The state includes a `slow_change` block with the counts so the numbers can be explained. Nothing here reads message text.
+
 ## Files and behavior
 
 Each companion keeps `feelings-settings.json` and the append-only `relationship-feelings.jsonl` in its own life directory. They are not moved into the shared human-facts directory. Settings use revision checks; repeated experience IDs are idempotent and conflicting content is rejected. The screen initially shows 30 experiences. Load older experiences to browse earlier records and make them available as repair or correction targets. Older records remain in the ledger and still affect the calculation.

@@ -21,6 +21,7 @@ import argparse
 import datetime as dt
 import json
 import pathlib
+import re
 import sqlite3
 import sys
 from zoneinfo import ZoneInfo
@@ -131,15 +132,15 @@ def _store_scope(c):
     ), None
 
 
-def _message_query(con, scope):
-    columns = {row[1] for row in con.execute("PRAGMA table_info(messages)")}
+def _message_query(con, scope, columns="m.role,m.content,m.timestamp"):
+    present = {row[1] for row in con.execute("PRAGMA table_info(messages)")}
     visible = (
         "AND (m.active=1 OR m.compacted=1)"
-        if {"active", "compacted"} <= columns
+        if {"active", "compacted"} <= present
         else ""
     )
     return f"""
-        SELECT m.role,m.content,m.timestamp FROM messages m JOIN sessions s ON s.id=m.session_id
+        SELECT {columns} FROM messages m JOIN sessions s ON s.id=m.session_id
         WHERE m.role IN ('user','assistant') AND {scope} {visible}
           AND coalesce(m._compressed_summary,0)=0 AND coalesce(m.content,'')<>''
           AND s.source IN ('telegram','cli','desktop','tui','discord')"""
@@ -163,54 +164,167 @@ def _query_rows(con, scope, params):
     return rows, human_rows, agent_rows
 
 
-_human_cache: dict = {}
+_activity_cache: dict = {}
 
 
-def human_times(c, now=None, days=28, limit=6000):
-    """When the human wrote over the last `days`, as aware datetimes. [] if unknowable.
+def _connect(resolved):
+    con = sqlite3.connect(resolved.as_uri() + "?mode=ro", uri=True, timeout=1)
+    con.execute("PRAGMA query_only=ON")
+    return con
 
-    Timestamps only: no message text leaves the database through here.
+
+def _cached(key, version, make):
+    cached = _activity_cache.get(key)
+    if cached and cached[0] == version:
+        return cached[1]
+    value = make()
+    if len(_activity_cache) > 48:
+        _activity_cache.clear()
+    _activity_cache[key] = (version, value)
+    return value
+
+
+def activity(c, now=None, days=60, limit=40000):
+    """(role, local time, characters) for each message over the last `days`, newest first.
+
+    The length is counted inside the database: no message text leaves it through
+    here, only when and how much. [] when the history is unknowable.
     """
     now = now or dt.datetime.now(_tz(c))
     found, _why = _store_scope(c)
     if found is None:
         return []
     resolved, scope, params = found
-    key = (str(resolved), scope, params, days, now.date().isoformat())
-    version = _store_version(resolved)
-    cached = _human_cache.get(key)
-    if cached and cached[0] == version:
-        return list(cached[1])
-    since = (now - dt.timedelta(days=days)).timestamp()
-    con = None
-    try:
-        con = sqlite3.connect(resolved.as_uri() + "?mode=ro", uri=True, timeout=1)
-        con.execute("PRAGMA query_only=ON")
-        query = _message_query(con, scope) + " AND m.role='user' AND m.timestamp>=?"
-        raw = list(
-            con.execute(
-                query + " ORDER BY m.timestamp DESC LIMIT ?", (*params, since, limit)
-            )
-        )
-    except (sqlite3.Error, OSError):
-        return []
-    finally:
-        if con:
-            con.close()
-    stamps = []
-    for _role, _text, value in raw:
+    key = ("activity", str(resolved), scope, params, days, now.date().isoformat())
+
+    def make():
+        since = (now - dt.timedelta(days=days)).timestamp()
+        con = None
         try:
-            stamps.append(
-                dt.datetime.fromtimestamp(float(value), dt.timezone.utc).astimezone(
-                    _tz(c)
+            con = _connect(resolved)
+            query = _message_query(con, scope, "m.role,m.timestamp,length(m.content)")
+            raw = list(
+                con.execute(
+                    query + " AND m.timestamp>=? ORDER BY m.timestamp DESC LIMIT ?",
+                    (*params, since, limit),
                 )
             )
-        except (TypeError, ValueError, OverflowError):
-            continue
-    if len(_human_cache) > 32:
-        _human_cache.clear()
-    _human_cache[key] = (version, stamps)
-    return list(stamps)
+        except (sqlite3.Error, OSError):
+            return []
+        finally:
+            if con:
+                con.close()
+        out = []
+        for role, value, length in raw:
+            try:
+                stamp = dt.datetime.fromtimestamp(
+                    float(value), dt.timezone.utc
+                ).astimezone(_tz(c))
+            except (TypeError, ValueError, OverflowError):
+                continue
+            out.append((role, stamp, int(length or 0)))
+        return out
+
+    return list(_cached(key, _store_version(resolved), make))
+
+
+def human_times(c, now=None, days=28):
+    """When the human wrote over the last `days`, as aware datetimes. [] if unknowable."""
+    now = now or dt.datetime.now(_tz(c))
+    since = now - dt.timedelta(days=days)
+    return [
+        stamp
+        for role, stamp, _n in activity(c, now, max(days, 60))
+        if role == "user" and stamp >= since
+    ]
+
+
+def contact_days(c, now=None):
+    """{local date: (messages from the human, messages from her)} over the whole history.
+
+    Counted by the database a day at a time, so a long history costs a few
+    hundred small rows. The day is cut at the current UTC offset, which can put a
+    message near midnight on the wrong side of a daylight-saving change for a few
+    weeks; for a slow, summed measure that does not matter.
+    """
+    now = now or dt.datetime.now(_tz(c))
+    found, _why = _store_scope(c)
+    if found is None:
+        return {}
+    resolved, scope, params = found
+    offset = int(now.utcoffset().total_seconds()) if now.utcoffset() else 0
+    key = ("days", str(resolved), scope, params, offset)
+
+    def make():
+        con = None
+        try:
+            con = _connect(resolved)
+            query = _message_query(
+                con,
+                scope,
+                "m.role,CAST((m.timestamp+?)/86400 AS INTEGER) AS d,COUNT(*)",
+            )
+            raw = list(con.execute(query + " GROUP BY m.role,d", (offset, *params)))
+        except (sqlite3.Error, OSError):
+            return {}
+        finally:
+            if con:
+                con.close()
+        days = {}
+        for role, index, count in raw:
+            day = dt.date(1970, 1, 1) + dt.timedelta(days=int(index))
+            mine, hers = days.get(day, (0, 0))
+            days[day] = (mine + count, hers) if role == "user" else (mine, hers + count)
+        return days
+
+    return dict(_cached(key, _store_version(resolved), make))
+
+
+def first_contact(c, now=None):
+    """When the first message of any kind was written, or None."""
+    now = now or dt.datetime.now(_tz(c))
+    found, _why = _store_scope(c)
+    if found is None:
+        return None
+    resolved, scope, params = found
+    key = ("first", str(resolved), scope, params)
+
+    def make():
+        con = None
+        try:
+            con = _connect(resolved)
+            row = con.execute(
+                _message_query(con, scope, "MIN(m.timestamp)"), params
+            ).fetchone()
+        except (sqlite3.Error, OSError):
+            return None
+        finally:
+            if con:
+                con.close()
+        try:
+            return dt.datetime.fromtimestamp(float(row[0]), dt.timezone.utc)
+        except (TypeError, ValueError, OverflowError, IndexError):
+            return None
+
+    value = _cached(key, _store_version(resolved), make)
+    return value.astimezone(_tz(c)) if value else None
+
+
+_QUESTION_END = re.compile(r"\?[\s\"'”’)\]*_~`]*(?:[^\w\s]{0,3}\s*)?$")
+
+
+def last_question(text):
+    """The final question she asked, when her message ends on one; otherwise "".
+
+    A message that ends on a question is waiting for an answer. One that asks
+    something in the middle and carries on has moved past it.
+    """
+    text = (text or "").strip()
+    if not text or not _QUESTION_END.search(text):
+        return ""
+    end = text.rfind("?")
+    start = max(text.rfind(mark, 0, end) for mark in (".", "!", "\n")) + 1
+    return text[start : end + 1].strip()[:160]
 
 
 def read(c, now=None, tail=4):
@@ -266,6 +380,7 @@ def read(c, now=None, tail=4):
             "who": ("them" if role == "user" else "you"),
             "at": (stamp(t).isoformat(timespec="minutes") if stamp(t) else ""),
             "text": (text or "")[:200],
+            "asks": last_question(text) if role != "user" else "",
         }
         for role, text, t in reversed(rows[:tail])
     ]

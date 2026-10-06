@@ -22,6 +22,17 @@
   night's sleep is not distance. Entered routines are kept; `learn_rhythm` turns it off.
 - AGENTS.md: absence may cool the relationship and she may say she misses the human, but never
   as a demand, accusation or debt.
+- Her story and what she can notice (see docs/STORY.md). New `together` sense: the first
+  conversation, monthly and day anniversaries, your birthday once told, and recurring traditions
+  counted ("the 3rd time"), with no dates file to keep. New `holidays` sense (country from her
+  timezone, looked up once, off until switched on). Chat context carries counted observations
+  (late nights, much shorter messages than usual, a question left hanging), stated without moods.
+- She keeps her own history straight: `companion_canon.py` refuses to contradict what she has
+  already said about her past unless she revises or adds knowingly; `companion_places.py` gives her
+  home a floor plan and records other places the first time she describes them (readable copy in
+  `places.md`). Relationship moments gain evidence and recurrence.
+- Warmth and trust now move slowly from days of real two-way conversation and kept requests,
+  small and capped, and paused while a rupture is unrepaired.
 
 ## 3.6.2 — Facts she can actually use, and a calmer pulse (2026-09-30)
 

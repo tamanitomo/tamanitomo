@@ -279,7 +279,7 @@ const settingsPanels=[
   </div>
   <div class="sensor-grid">
     ${Object.entries(s.available_sensors).map(([k,blurb])=>
-      toggleRow('sensor-'+k,({dates:'Important dates',care:'Follow-ups',durations:'Milestones',thread:'Conversation rhythm',daylight:'Daylight',weather:'Weather',music:'Music'})[k]||k,({weather:'Local conditions, updated hourly.',daylight:'Seasons, moon and daylight.',dates:'Upcoming birthdays and anniversaries.',care:'Things worth checking in about.',durations:'Time since important dates.',thread:'Time since your last conversation.',music:'Spotify playback or room mood.'})[k]||blurb,s.sensors.includes(k),`data-sensor="${esc(k)}"`)).join('')}
+      toggleRow('sensor-'+k,({dates:'Important dates',care:'Follow-ups',durations:'Milestones',together:'Your story together',holidays:'Holidays',thread:'Conversation rhythm',daylight:'Daylight',weather:'Weather',music:'Music'})[k]||k,({weather:'Local conditions, updated hourly.',daylight:'Seasons, moon and daylight.',dates:'Upcoming birthdays and anniversaries.',care:'Things worth checking in about.',durations:'Time since important dates.',together:'Anniversaries and day counts from your first conversation.',holidays:'Public holidays where you live, looked up once.',thread:'Time since your last conversation.',music:'Spotify playback, when connected.'})[k]||blurb,s.sensors.includes(k),`data-sensor="${esc(k)}"`)).join('')}
   </div>
   ${settingsFooter('Save')}`;
   wireToggles(host);
