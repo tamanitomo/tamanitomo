@@ -267,7 +267,7 @@ def test_install_selects_the_companion_context_engine_unless_another_was_chosen(
     routing.install(c)
     cfg = yaml.safe_load((c.home / 'config.yaml').read_text())
     assert cfg['context']['engine'] == 'tamanitomo-context'
-    assert cfg['plugins']['enabled'] == ['other', 'tamanitomo-routing', 'tamanitomo-context']
+    assert cfg['plugins']['enabled'] == ['other', 'tamanitomo-routing', 'tamanitomo-context', 'tamanitomo-reader']
     plugin = c.home / 'plugins/tamanitomo-context'
     assert json.loads((plugin / 'companion.json').read_text()) == {'agent': 'Nova'}
     assert (plugin / 'snapshot.py').read_text() == (

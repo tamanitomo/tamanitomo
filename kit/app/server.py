@@ -832,8 +832,11 @@ def build(home=None, token="", state_dir=None):
         import companion_integrity
         import companion_intimacy
 
+        from companion_routing import reader_status
+
         integrity = companion_integrity.verify_integrity(c)
         intimacy = companion_intimacy.compute(c)
+        reader = reader_status(c)
         return {
             "quiet_start": c.quiet_start,
             "quiet_end": c.quiet_end,
@@ -855,6 +858,9 @@ def build(home=None, token="", state_dir=None):
             "relationship_progression": c.relationship_progression,
             "relationship_pace": c.relationship_pace,
             "peer_interaction": c.peer_interaction,
+            "conversation_handoff": c.conversation_handoff,
+            "local_web_reader": reader["local"],
+            "web_reader_other": reader["other"],
             "image_style": c.image_style,
             "image_styles": {k: v["label"] for k, v in render.load_styles().items()},
             "explicit": c.explicit,
@@ -885,6 +891,8 @@ def build(home=None, token="", state_dir=None):
         "relationship_progression",
         "relationship_pace",
         "peer_interaction",
+        "conversation_handoff",
+        "local_web_reader",
         "image_style",
         "explicit",
         "adult_images",
@@ -950,6 +958,15 @@ def build(home=None, token="", state_dir=None):
         if "remote_pin" in payload:
             save_access_pin(initial.hermes_root, c.remote_pin)
         result = {"saved": sorted(payload)}
+        if "local_web_reader" in payload:
+            from companion_routing import set_reader
+
+            if set_reader(c, c.local_web_reader):
+                result["restart_gateway"] = True
+                result["note"] = (
+                    "Saved. Restart the gateway once (Settings → Installation & gateway) "
+                    "so it can read pages on this machine."
+                )
         runtime, _ = select()
         operation = synchronize(app, runtime, old, c)
         if operation:

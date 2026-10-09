@@ -65,7 +65,7 @@ function wireSave(host,collect,note='Saved'){
     try{
       const result=await collect();
       if(result&&result.operation){const row=await followOperation(result.operation);if(row.status!=='complete')throw Error(row.error||'Saved, but job synchronization failed.');}
-      status.textContent=note;
+      status.textContent=(result&&result.note)||note;
       clearEditorDirty(editorScope(host));
     }catch(error){
       status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;
@@ -257,8 +257,8 @@ const settingsPanels=[
  }},
 
 {id:'awareness',title:'Awareness',
- blurb:'Where you live, and what they can passively sense',
- keywords:'sensors location weather realism ambient context senses awareness',
+ blurb:'Where you live, what they sense, and what carries between conversations',
+ keywords:'sensors location weather realism ambient context senses awareness conversation handoff channels telegram reset web pages reader privacy',
  async render(host){
   const s=await api('/settings');
   const on=Object.keys(s.available_sensors).filter(k=>s.sensors.includes(k)).length;
@@ -271,6 +271,16 @@ const settingsPanels=[
         <input id="loc" value="${esc(s.location)}" placeholder="Raleigh, NC" style="max-width:300px">
       </div>
     </div>
+  </div>
+
+  <div class="section-heading" style="margin-top:20px">
+    <h3 class="section-subheading">Conversations and reading</h3>
+  </div>
+  <div class="sensor-grid">
+    ${toggleRow('conversation-handoff','Pick up where you left off','The last few messages from your other conversations (another channel, or before the morning fresh start) come along, so a new conversation keeps the thread.',s.conversation_handoff)}
+    ${toggleRow('local-web-reader','Read web pages on this machine',s.local_web_reader||!s.web_reader_other
+      ?'Pages are fetched from their own site and read here. No reading service sees what is read, and a failed read is never passed to one.'
+      :`Pages are read by ${s.web_reader_other}, chosen in Hermes. Switch on to read them here instead.`,s.local_web_reader)}
   </div>
 
   <div class="section-heading" style="margin-top:20px">
@@ -290,9 +300,16 @@ const settingsPanels=[
     pill.className='pill '+(live?'status-good':'status-warn');
   };
   for(const box of host.querySelectorAll('[data-sensor]'))box.addEventListener('change',recount);
-  wireSave(host,()=>saveSettings({
-    location:host.querySelector('#loc').value,
-    sensors:[...host.querySelectorAll('[data-sensor]')].filter(x=>x.checked).map(x=>x.dataset.sensor)}));
+  wireSave(host,()=>{
+    const payload={
+      location:host.querySelector('#loc').value,
+      conversation_handoff:host.querySelector('#conversation-handoff').checked,
+      sensors:[...host.querySelectorAll('[data-sensor]')].filter(x=>x.checked).map(x=>x.dataset.sensor)};
+    // Sent only when switched, so saving a location never overrides a reader chosen in Hermes.
+    const reader=host.querySelector('#local-web-reader').checked;
+    if(reader!==s.local_web_reader)payload.local_web_reader=reader;
+    return saveSettings(payload);
+  });
  }},
 
 {id:'photos',title:'Photo sessions',
@@ -1066,7 +1083,7 @@ async function renderModelPlan(host){
         if(after){
           after.innerHTML=`<div class="chain-result"><p><strong>${esc(r.note||'Applied.')}</strong></p>
             ${(r.failed||[]).length?`<p class="warn small">${r.failed.map(esc).join('<br>')}</p>`:''}
-            ${r.restart_gateway?`<p class="dim small">Restart the gateway once to switch on leaner conversation context for Telegram.</p>
+            ${r.restart_gateway?`<p class="dim small">Restart the gateway once so it loads the kit's updated Hermes plugins (leaner conversation context, reading web pages on this machine).</p>
               <div class="actions"><button type="button" class="quiet" data-restart-gateway>Restart the gateway now</button></div>`:''}</div>`;
           after.querySelector('[data-restart-gateway]')?.addEventListener('click',async ev=>{
             ev.currentTarget.disabled=true;

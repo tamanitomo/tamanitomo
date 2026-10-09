@@ -64,6 +64,18 @@ lifecycle. It preserves transcripts and flags reflection work; the later
 reflection is a separate inference job. Profile type and optional settings
 control which jobs are installed.
 
+A conversation that starts fresh each morning starts empty, and every channel
+(Telegram, the app, a terminal) is its own conversation. So each turn's
+continuity block also quotes the newest owner-verified messages from the
+human's other conversations: another channel, or the same one before the
+morning's fresh start. Selection is deterministic and uses no model
+(`companion_context.cross_channel_handoff` over the read-only
+`companion_transcript` reader): the last 36 hours, at most twelve messages,
+within a reserve sized from the window (`companion_config.conversation_reserve`,
+up to 4,000 characters) that sits on top of the other sections rather than
+displacing them. Settings → Awareness → *Pick up where you left off* switches
+it off (`conversation_handoff`).
+
 These jobs need no language-model completion. They can maintain records and
 enforce policy during provider outages without paying for an agent turn that
 only checks a clock or moves a file. They still depend on the files, devices,
@@ -77,3 +89,22 @@ the transcript; the browser keeps a draft, a session reference and the current
 operation ID for reconnecting. Checking an interrupted operation does not
 resubmit the message. Profile scope is captured for each request so a late
 response cannot write into another companion's view or draft.
+
+## Reading web pages
+
+Hermes's `web_extract` hands a page to a reading service (Firecrawl, Tavily,
+Exa, Parallel) or, with none configured, to an anonymous free tier. The kit
+installs a `tamanitomo-reader` Hermes plugin that fetches the page from its own
+site and turns it into Markdown on the host (`kit/scripts/companion_reader.py`,
+standard library plus Hermes's HTTP client). `companion_routing.install` names
+it as the profile's `web.extract_backend` unless another reader was chosen, and
+sets `web.keyless_rescue: false` so a failed read is not passed to the free
+tier either. The provider reports itself unavailable to Hermes's automatic
+detection, so it can never be picked for search. Hermes's own checks stay in
+front of it: URLs carrying secrets are refused, private addresses are blocked
+before the fetch and again at connect time (redirects included, through
+`create_ssrf_safe_async_client`), website policy applies, and Hermes caches
+and trims the result. Pages that only exist after their scripts run come back
+with a pointer to the browser tool, which also runs locally. Settings →
+Awareness → *Read web pages on this machine* (`local_web_reader`) switches it
+on or off; a newly installed plugin loads when the gateway restarts.
