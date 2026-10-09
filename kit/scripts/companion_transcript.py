@@ -16,6 +16,11 @@ import sys
 import time
 
 LOCAL_SOURCES = ("cli", "desktop", "tui")
+# Every source session_kind can accept. Rows from anything else are always dropped,
+# so they are not read at all: scheduled runs are nineteen sessions in twenty, and
+# paging through them 200 rows at a time to find the conversation made the chat
+# feed take most of a second on every load.
+OWNER_SOURCES = LOCAL_SOURCES + ("telegram",)
 BINDING_FILE = ".tamanitomo-chat-owner.json"
 
 
@@ -227,9 +232,10 @@ class Transcript:
             fields.append(
                 f"{('m.' + name) if name in self.message_columns else 'NULL'} AS {name}"
             )
+        sources = ",".join(f"'{name}'" for name in OWNER_SOURCES)
         return (
             f"SELECT {','.join(fields)} FROM messages m JOIN sessions s ON s.id=m.session_id "
-            f"WHERE {self.scope}"
+            f"WHERE {self.scope} AND s.source IN ({sources})"
         )
 
     def _record(self, row):

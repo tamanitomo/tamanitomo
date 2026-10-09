@@ -34,6 +34,35 @@
 - Warmth and trust now move slowly from days of real two-way conversation and kept requests,
   small and capped, and paused while a rupture is unrepaired.
 
+- One model plan for every companion: Settings → AI models → Models replaces Overview,
+  Models & fallbacks, the ready-made presets, the per-tier form and the jobs page's
+  "move every job" card. Conversation, everyday routines, reflection and fallbacks are
+  set once and applied to the companions ticked: Hermes's primary and fallbacks, the
+  companion's tiers, every routine's pin, and anything (helper tasks such as vision,
+  delegated tasks, the cron default, your own jobs) still pointing at an account the
+  plan no longer uses. Hermes reads the model on every message, so it lands on the next
+  one. Each companion's status says what is off the plan and why.
+- Conversations send only the newest continuity snapshot. Hermes replayed every turn's
+  snapshot, so in a ten-turn evening three quarters of each request was stale copies;
+  the kit now installs a context engine (Hermes's own compressor plus that one change)
+  for every companion. Stored history is untouched.
+- The chat feed reads only conversation sources instead of paging through scheduled
+  runs (0.6 s to 0.02 s per load), and the model page no longer waits up to ten seconds
+  for OpenRouter's model list: it answers from the saved list and refreshes behind it.
+- Presence: a second real update in the same quarter hour lands (the id now includes
+  the state it builds on, so retries still repeat it); a collision names the id to build
+  on; a teleport error says what changed and that `transition` explains it, and a
+  top-level `reason` counts as the transition; `continue --delay-reason` carries an
+  overrunning activity without hand-writing the record.
+- Ledgers keep what they are given: an empty batch is "nothing to record", an unknown
+  fact category is filed under its obvious match or `other` (with a note), and an
+  unknown moment type is kept as a note.
+- Scheduled prompts tell the model to run kit commands directly: a scheduled run cannot
+  approve `python -c`, `bash -c` or heredoc wrappers, which cost one companion most of
+  its pulses in a day, and JSON goes to a fresh file each run.
+- The health watch no longer reports a stale state while the pulse or autonomy loop is
+  healthy and simply had nothing new to record.
+
 ## 3.6.2 — Facts she can actually use, and a calmer pulse (2026-09-30)
 
 - What is known about the human now gets its own room in every turn's context, sized from

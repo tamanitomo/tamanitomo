@@ -187,3 +187,36 @@
 .chain-result p{margin:0 0 6px}
 .chain-result p:last-child,.chain-result .actions{margin-bottom:0}
 .chain-result strong{color:var(--ink)}
+
+/* ------------------------------------------------------------- model plan */
+.plan-companions{list-style:none;margin:10px 0 16px;padding:0;display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.plan-companion{margin:0;padding:12px 14px;border:1px solid var(--edge);border-radius:var(--r-md);
+  background:var(--surface-2);display:flex;flex-direction:column;gap:4px;min-width:0}
+.plan-companion-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.plan-companion small{line-height:1.4;overflow-wrap:anywhere}
+.plan-off summary{cursor:pointer;color:var(--ink-2)}
+.plan-off ul{margin:6px 0 4px;padding-left:18px}
+.plan-off li{margin:3px 0;overflow-wrap:anywhere}
+.plan-off p{margin:0}
+.plan-presets{margin:0 0 6px;align-items:center}
+.plan-tier{padding:16px 0 14px;border-top:1px solid var(--edge)}
+.plan-card>.plan-presets+.plan-tier,.plan-card>.plan-tier:first-child{border-top:0;padding-top:6px}
+.plan-tier-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+#settings .plan-tier-head .switch-container{margin:0;width:auto;flex:none}
+.plan-tier-head h3{margin:0;font-size:15px}
+.plan-tier>p{margin:4px 0 12px}
+.plan-route{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) minmax(0,.7fr);gap:12px;align-items:start}
+#settings .plan-route label{margin:0;display:flex;flex-direction:column;gap:6px}
+.plan-model{display:flex;flex-direction:column;gap:6px;min-width:0}
+.plan-route .plan-url{grid-column:1/-1}
+.plan-card .chain-step:first-child{border-color:var(--edge);background:var(--surface-2)}
+.plan-card .chain-step:first-child .chain-rank{background:var(--surface-3);color:var(--ink)}
+.plan-footer{flex-wrap:wrap;gap:14px}
+.plan-who{border:0;margin:0;padding:0;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.plan-who legend{float:left;margin:0 4px 0 0;color:var(--ink-2);font-weight:600}
+.plan-who .check{display:inline-flex;align-items:center;gap:6px;margin:0;font-weight:500}
+.plan-who .check input{width:auto}
+@media(max-width:760px){
+  .plan-route{grid-template-columns:1fr}
+}

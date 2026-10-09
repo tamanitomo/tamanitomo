@@ -1,0 +1,3 @@
+name: tamanitomo-context
+version: 1.0.0
+description: Hermes's own compressor, sending only the newest companion continuity snapshot with each request

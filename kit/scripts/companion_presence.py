@@ -419,6 +419,19 @@ def check(c, data, now=None):
     return update(c, data, now, dry_run=True)
 
 
+def transition_text(data):
+    """How she got from the last state to this one.
+
+    The short form takes it as `transition --reason`, so a model writing the full
+    record reaches for "reason" too. A top-level "reason" means nothing else in a
+    state record, so it is read as the transition rather than refused as a teleport.
+    """
+    value = data.get("transition")
+    if not (isinstance(value, str) and value.strip()):
+        value = data.get("reason")
+    return value.strip() if isinstance(value, str) else ""
+
+
 def update(c, data, now=None, dry_run=False):
     now = now or dt.datetime.now(ZoneInfo(c.timezone))
     if now.tzinfo is None:
@@ -447,9 +460,18 @@ def update(c, data, now=None, dry_run=False):
         previous = current(c)
         utc = now.astimezone(dt.timezone.utc)
         slot = utc.replace(minute=utc.minute // 15 * 15, second=0, microsecond=0)
+        # The id is the quarter hour AND the state it was built on. The quarter hour
+        # alone made a retry idempotent, but it also refused every second real write
+        # in the same quarter hour: the autonomy loop recorded at :35 and the pulse at
+        # :37 was told "this tick is already recorded" although it had read that very
+        # state and was building on it. A retry still repeats both halves, so it still
+        # lands on the same id; two writers racing from the same parent still collide.
         ident = (
             data.get("id")
-            or "state-" + hashlib.sha256(slot.isoformat().encode()).hexdigest()[:20]
+            or "state-"
+            + hashlib.sha256(
+                (slot.isoformat() + "|" + str(data["previous_id"])).encode()
+            ).hexdigest()[:20]
         )
         closet = {item["id"]: item for item in wardrobe(c)["items"]}
         import companion_lifestyle
@@ -591,7 +613,7 @@ def update(c, data, now=None, dry_run=False):
             # carries across a gap between conversations instead of resetting.
             "private_stance": str(data.get("private_stance") or "").strip()[:300],
             "care": [text(item, "care event", 160) for item in care],
-            "transition": str(data.get("transition") or "").strip(),
+            "transition": transition_text(data),
             # A model looked at this and said it was so. The script advancer
             # below writes False, and the hook says so rather than presenting
             # an unwatched hour as a confirmed present.
@@ -678,15 +700,17 @@ def update(c, data, now=None, dry_run=False):
             state["care_actions"] = data.get("care_actions", [])
             state["wardrobe_additions"] = data.get("wardrobe_additions", [])
         if previous and previous["id"] == ident:
-            if "lifestyle" not in previous["state"] and (
-                data.get("care_actions") or data.get("wardrobe_additions")
-            ):
+            if (
+                "lifestyle" not in previous["state"]
+                and (data.get("care_actions") or data.get("wardrobe_additions"))
+            ) or (previous["state"] != state or previous["text"] != narrative):
+                # Two writers started from the same state in the same quarter hour,
+                # and the other one landed first. Name the id to build on: "use a
+                # distinct id" sent a pulse inventing ids until it ran out of turns.
                 raise ValueError(
-                    "This tick is already recorded; use a distinct id for a real later transition"
-                )
-            if previous["state"] != state or previous["text"] != narrative:
-                raise ValueError(
-                    "This tick is already recorded; use a distinct id for a real later transition"
+                    "This moment is already recorded: another update landed first from the "
+                    f'same starting state (id "{ident}"). Read the current state; if something '
+                    f'has really changed since, write again with "previous_id": "{ident}".'
                 )
             return {"written": False, "episode": previous}
         companion_day.validate_plan(data, state, now)
@@ -698,14 +722,28 @@ def update(c, data, now=None, dry_run=False):
             before = previous["state"]
             if now < dt.datetime.fromisoformat(previous["recorded_at"]):
                 raise ValueError("Cannot move state backward in time")
-            changed = (
-                before["outfit"] != state["outfit"]
-                or before["location"] != state["location"]
-                or before["activity"] != state["activity"]
-            )
+            changed = [
+                f'{name} "{was}" -> "{now_}"'
+                for name, was, now_ in (
+                    (
+                        "outfit",
+                        ",".join(i["id"] for i in before["outfit"]),
+                        ",".join(i["id"] for i in state["outfit"]),
+                    ),
+                    ("location", before["location"], state["location"]),
+                    ("activity", before["activity"], state["activity"]),
+                )
+                if was != now_
+            ]
             if changed and not state["transition"]:
+                # Say what changed and which field explains it. The bare rule left a
+                # model rewording the activity, adding "reason" in the wrong place
+                # and retrying until the tick was lost.
                 raise ValueError(
-                    "Explain the outfit, location or activity transition; do not teleport"
+                    "Explain the transition; do not teleport: "
+                    + "; ".join(changed)
+                    + '. Add a top-level "transition" saying how you got from one to the '
+                    "other. If nothing really changed, repeat the previous values word for word."
                 )
         # Everything above is validation; this is the only line that writes.
         if dry_run:
@@ -817,14 +855,21 @@ def _routine_choice(c, now, rec, anchor="", decision="", reason=""):
     )
 
 
-def continue_scene(c, text_, mood="", asleep=None, now=None):
-    """Nothing has changed: the same scene, one short continuation."""
+def continue_scene(c, text_, mood="", asleep=None, now=None, delay_reason=""):
+    """Nothing has changed: the same scene, one short continuation.
+
+    An activity that has run past its planned length needs a `delay_reason` to
+    carry on; without a way to give one here, an overrunning dinner forced the
+    model out of the short form and into hand-writing the whole record.
+    """
     now = now or dt.datetime.now(ZoneInfo(c.timezone))
     rec = _carried_record(c)
     if mood:
         rec["mood"] = mood
     if asleep is not None:
         rec["asleep"] = asleep
+    if delay_reason:
+        rec["delay_reason"] = delay_reason
     rec.update({"text": text_, "activity_change": "continue"})
     choice = _routine_choice(c, now, rec)
     if choice:
@@ -1061,6 +1106,11 @@ def main():
         choices=("yes", "no"),
         help="say it if the record has the wrong answer",
     )
+    ct.add_argument(
+        "--delay-reason",
+        default="",
+        help="why the activity is running past its planned length",
+    )
     tr = sub.add_parser(
         "transition",
         help="a real change; name only what changed, code fills the rest",
@@ -1099,6 +1149,7 @@ def main():
             args.text,
             args.mood,
             None if args.asleep is None else args.asleep == "yes",
+            delay_reason=args.delay_reason,
         )
     elif args.action == "transition":
         out = transition_scene(

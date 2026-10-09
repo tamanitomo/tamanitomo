@@ -336,7 +336,7 @@ function oauthFailed(container,message){
 const OAUTH_STATUS=(label)=>`<p class="small"><span class="pill status-good">Connected</span> ${esc(label)} is signed in.</p>`;
 function oauthDone(container,label,note){
   container.innerHTML=`${note?`<p class="dim small">${esc(note)}</p>`:''}${OAUTH_STATUS(label)}<button type="button" class="quiet" id="oauth-connect-use">Use it for chat everywhere →</button>`;
-  $('oauth-connect-use').onclick=()=>openSettings(null,'models-overview');
+  $('oauth-connect-use').onclick=()=>openSettings(null,'models');
 }
 function oauthOfferVoice(container,provider,label,note){
   const voiceProvider=provider==='xai-oauth'?'xai':provider==='openai-codex'?'openai':null;
@@ -403,16 +403,9 @@ async function renderHermesInto(host){
   <div class="actions">${!d.runtime.available?'<button class="act" id="env-install">Install Hermes</button>':'<button class="quiet" id="check-version">Check version</button><button class="quiet" id="update-hermes">Update Hermes</button>'}
   ${known&&!known.installed?'<button class="act" id="adopt-companion">Adopt as a companion</button>':''}</div><p class="dim small">The vault lives outside Hermes’s code checkout. Updates are handled by Hermes; run Health checks afterwards.</p></div>
   <div class="card" data-hermes-card="stack"><h2>Local companion stack</h2><p>Install a local conversation model on the Hermes host, then choose image and voice engines for this companion.</p><div class="actions"><button class="act" id="open-local-models">Local models</button><button class="quiet" id="env-stack-images">Image studio</button><button class="quiet" id="env-stack-voice">Voice studio</button></div></div>
-  ${d.runtime.available?`<div class="card" data-hermes-card="presets"><h2>Model presets</h2><p class="dim small">Choose a primary model and fallback chain.</p><div id="inference-presets" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:10px"></div></div>
-  <div class="card" data-hermes-card="models"><h2>Models and fallbacks</h2><p class="dim small">Choose a model available to your account. A configured model is not yet a tested response.</p><datalist id="provider-ids"></datalist>
-  <form id="models-form"><div class="form-grid"><label>Primary provider<input id="primary-provider" list="provider-ids" value="${esc(d.model.provider)}" placeholder="openrouter"></label><label>Primary model<input id="primary-model" value="${esc(d.model.default)}" placeholder="provider/model-name" required></label><label class="wide">Custom base URL (optional)<input id="primary-url" type="url" value="${esc(d.model.base_url)}" placeholder="http://localhost:11434/v1"></label></div>
-  <details><summary>Fallback providers</summary><p class="dim small">Hermes tries this chain when the primary is unavailable. No provider chain can cover a complete network outage.</p><div id="fallbacks"></div><button class="quiet" id="add-fallback" type="button">Add a fallback</button></details>
-  <h3>Background jobs</h3>${['loops','reflection'].map(t=>`<details class="model-tier" ${d.tiers[t]?.model?'':'open'}><summary><strong>${t==='loops'?'Loops':'Reflection'}</strong><span class="dim" data-tier-summary="${t}">${esc(d.tiers[t]?.model||'Primary model')}</span></summary><div class="form-grid"><label>Provider<input id="tier-${t}-provider" value="${esc(d.tiers[t]?.provider||'')}"></label><label>Model<input id="tier-${t}-model" value="${esc(d.tiers[t]?.model||'')}"></label><label>Base URL<input id="tier-${t}-url" value="${esc(d.tiers[t]?.base_url||'')}"></label><label>Reasoning<select id="tier-${t}-effort">${options([['','Hermes default'],['none','None'],['low','Low'],['medium','Medium'],['high','High']],d.tiers[t]?.reasoning_effort||'')}</select></label></div></details>`).join('')}
-
-  <div class="actions"><button class="act">Save models</button><button class="quiet" id="test-model" type="button">Test saved model</button><button class="quiet" id="apply-models" type="button">Apply job models</button></div></form><p class="dim small">${esc(d.restart_note)}</p></div>
-  <div class="card" data-hermes-card="accounts"><h2>Accounts and credentials</h2><p class="dim">Sign in through Hermes or add an API key. Saved keys stay hidden.</p>
+  ${d.runtime.available?`  <div class="card" data-hermes-card="accounts"><h2>Accounts and credentials</h2><p class="dim">Sign in through Hermes or add an API key. Saved keys stay hidden.</p>
   <h3 class="section-subheading">Sign in with a subscription</h3>
-  <p class="dim small">Connecting an account only makes it reachable — it does not move the primary model or any job onto it. After connecting, use <strong>Settings → AI models → Overview</strong> to put it to work.</p>
+  <p class="dim small">Connecting an account only makes it reachable — it does not move the primary model or any job onto it. After connecting, use <strong>Settings → AI models → Models</strong> to put it to work.</p>
   <div class="actions"><button type="button" class="quiet" data-oauth-connect="xai-oauth" data-oauth-label="xAI Grok">Connect Grok (SuperGrok / X Premium+)</button><button type="button" class="quiet" data-oauth-connect="openai-codex" data-oauth-label="ChatGPT">Connect ChatGPT (Plus/Pro)</button></div>
   <div id="oauth-connect-panel"></div>
   <h3 class="section-subheading">API key</h3>
@@ -436,17 +429,6 @@ async function renderHermesInto(host){
   if($('update-hermes'))$('update-hermes').onclick=()=>{if(confirm('Let Hermes update this installation? Active gateway workers may need a restart afterwards.'))return action('/maintenance/update');};
   if($('adopt-companion'))$('adopt-companion').onclick=()=>onboarding(true);
   if(!d.runtime.available)return;
-  wireAvailableModel($('primary-provider'),$('primary-model'),$('primary-url'),{primary:true});
-  for(const t of ['loops','reflection'])wireAvailableModel($('tier-'+t+'-provider'),$('tier-'+t+'-model'),$('tier-'+t+'-url'));
-  d.fallbacks.forEach(addFallback);
-  $('add-fallback').onclick=()=>{if($('fallbacks').children.length<8)addFallback({});};
-  $('models-form').onsubmit=async e=>{
-    e.preventDefault();const fallbacks=[...$('fallbacks').children].map(row=>({provider:row.querySelector('.fallback-provider').value,model:row.querySelector('.fallback-model').value,...(row.querySelector('.fallback-url')?.value?{base_url:row.querySelector('.fallback-url').value}:{})}));
-    const tiers={};for(const t of ['loops','reflection']){const model=$('tier-'+t+'-model').value,provider=$('tier-'+t+'-provider').value,reasoning_effort=$('tier-'+t+'-effort').value;const base_url=$('tier-'+t+'-url').value;if(provider&&!model)throw Error('Choose a model for '+t+' or follow the primary provider.');if(model||reasoning_effort)tiers[t]={model,provider,reasoning_effort,...(base_url?{base_url}:{})};}
-    const model={provider:$('primary-provider').value,model:$('primary-model').value};if($('primary-url').value)model.base_url=$('primary-url').value;
-    await post('/environment',{model,fallbacks,tiers});clearEditorDirty('settings-main-hermes-models');for(const t of ['loops','reflection']){const summary=document.querySelector('[data-tier-summary="'+t+'"]');summary.textContent=$('tier-'+t+'-model').value||'Primary model';summary.closest('details').open=false;}notice('Model settings saved. Apply job models, then restart the gateway to reload persistent workers.');
-  };
-  bindAction('test-model','/models/probe');bindAction('apply-models','/jobs/apply-models');
   bindAction('repair-companion','/maintenance/repair');bindAction('activate-routine','/maintenance/activate');bindAction('pause-routine','/maintenance/pause');bindAction('doctor-companion','/maintenance/doctor');
   $('credentials-form').onsubmit=async e=>{e.preventDefault();await post('/credentials',{name:$('credential-name').value,value:$('credential-value').value});$('credential-value').value='';notice('Credential saved. It will not be shown again.');};
   for(const b of host.querySelectorAll('[data-oauth-connect]'))b.onclick=()=>wireOAuthConnect($('oauth-connect-panel'),b.dataset.oauthConnect,b.dataset.oauthLabel);
@@ -466,46 +448,12 @@ async function renderHermesInto(host){
     $('config-value-form').onsubmit=async e=>{e.preventDefault();const key=$('setting-select').value==='__custom__'?$('config-key').value:$('setting-select').value;const list=$('setting-value').querySelector('[data-tag-field]');let value=list?readTags(list):$('config-value').value;const previous=entries.find(([k])=>k===key)?.[1];if(!list&&typeof previous!=='string'){try{value=JSON.parse(value);}catch{}}await action('/config',{key,value});const entry=entries.find(([k])=>k===key);if(entry)entry[1]=value;else entries.push([key,value]);clearEditorDirty(editorScope($('setting-value')));};
   };
   // Catalog discovery runs separately so a slow Hermes import doesn't block the workspace.
-  api('/providers').then(p=>{if(!host.isConnected||!$('provider-ids'))return;providerRows=p.providers;$('provider-ids').innerHTML=p.providers.map(x=>`<option value="${esc(x.slug)}">${esc(x.label)}</option>`).join('');
+  api('/providers').then(p=>{if(!host.isConnected||!$('credential-name'))return;providerRows=p.providers;
     const keys=new Map();for(const row of p.providers)for(const key of row.api_key_env_vars||[])keys.set(key,row.label+' · '+key);
     for(const key of ['TELEGRAM_BOT_TOKEN','TELEGRAM_ALLOWED_USERS','DISCORD_BOT_TOKEN','DISCORD_ALLOWED_USERS'])keys.set(key,key);
     $('credential-name').innerHTML=options([...keys],'');$('credential-status').textContent=p.providers.filter(p=>p.credential_configured).map(p=>p.label+' configured').join(' · ')||'No API key detected. OAuth accounts can be managed through Provider sign-in.';
   }).catch(e=>{if($('credential-status'))$('credential-status').textContent=e.message;});
-  api('/inference/presets').then(res=>{
-    const c=$('inference-presets');
-    if(!c||!host.isConnected||!res.presets)return;
-    c.innerHTML=res.presets.map(p=>`
-      <div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:color-mix(in srgb,var(--ink) 2%,transparent);display:flex;flex-direction:column;justify-content:space-between">
-        <div>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-            <strong>${esc(p.name)}</strong>
-            <span class="pill ${p.ready?'status-good':'status-warn'}" style="font-size:10px">${p.ready?'Key ready':'Key needed'}</span>
-          </div>
-          <p class="small dim" style="margin-bottom:8px">${esc(p.description)}</p>
-          <div class="small dim" style="margin-bottom:8px;font-family:monospace;font-size:11px">
-            Primary: <strong>${esc(p.primary.model)}</strong><br>
-            Fallbacks: ${p.fallbacks.map(f=>esc(f.model.split('/').pop())).join(' → ')}
-          </div>
-        </div>
-        <button class="act small apply-preset-btn" data-preset-id="${esc(p.id)}" type="button" style="margin-top:8px">Apply Preset</button>
-      </div>
-    `).join('');
-    for(const b of c.querySelectorAll('.apply-preset-btn')){
-      b.onclick=async()=>{
-        b.disabled=true;b.textContent='Applying…';
-        try{
-          const r=await action('/inference/apply-preset',{id:b.dataset.presetId});
-          notice(r.note||'Preset applied.');
-          renderHermesInto(host);
-        }catch(err){
-          b.disabled=false;b.textContent='Apply Preset';
-          notice('Failed to apply preset: '+err.message);
-        }
-      };
-    }
-  }).catch(()=>{});
 }
-function addFallback(row){const el=document.createElement('div');el.className='row';el.style.marginBottom='10px';el.innerHTML=`<label>Provider<input class="fallback-provider" list="provider-ids" value="${esc(row.provider||'')}"></label><label>Model<input class="fallback-model" value="${esc(row.model||'')}" required></label><label>Base URL<input class="fallback-url" type="url" value="${esc(row.base_url||'')}"></label><button class="quiet" type="button" style="flex:0 0 auto;align-self:center">Remove</button>`;el.querySelector('button').onclick=()=>el.remove();$('fallbacks').append(el);wireAvailableModel(el.querySelector('.fallback-provider'),el.querySelector('.fallback-model'),el.querySelector('.fallback-url'));}
 let consoleId=null,consolePoll=null;
 async function openConsole(which){
   const d=await post('/terminal',{action:which});consoleId=d.id;sessionStorage.setItem('console-'+INSTALLATION+'-'+PROFILE,d.id);

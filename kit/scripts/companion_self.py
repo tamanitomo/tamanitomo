@@ -55,6 +55,41 @@ CATEGORIES = (
 # illusion of knowing someone (a wheelchair, an allergy, a partner's name, a loss): it is
 # rendered first and is never the one that gets squeezed out. Health facts are core unless
 # said otherwise; anything can be raised or lowered with `weigh`.
+# Names a model reaches for that already mean one of the categories above. Anything
+# else lands in "other" rather than costing the fact: a check-in that wrote
+# "household" or "infrastructure" used to lose the whole entry to a validation error
+# it never retried, which is exactly the detail the check-in exists to keep.
+CATEGORY_ALIASES = {
+    "like": "likes",
+    "preference": "likes",
+    "preferences": "likes",
+    "favorite": "likes",
+    "favorites": "likes",
+    "favourites": "likes",
+    "dislike": "dislikes",
+    "person": "people",
+    "family": "people",
+    "friends": "people",
+    "relationships": "people",
+    "place": "places",
+    "location": "places",
+    "home": "places",
+    "job": "work",
+    "career": "work",
+    "employment": "work",
+    "education": "school",
+    "study": "school",
+    "studies": "school",
+    "medical": "health",
+    "wellbeing": "health",
+    "fitness": "health",
+    "background": "history",
+    "past": "history",
+    "biography": "history",
+    "schedule": "logistics",
+    "plans": "logistics",
+    "routine": "logistics",
+}
 WEIGHTS = ("core", "normal")
 CORE_CATEGORIES = ("health",)
 # Stored evidence bullets kept per fact (newest); the injected profile shows fewer.
@@ -1338,11 +1373,26 @@ def _entries(data):
         raise ValueError(
             'batch file must hold a list of entries, or {"entries": [...]}'
         )
-    if not data:
-        raise ValueError("batch file holds no entries")
+    # An empty batch is the honest answer to "nothing durable happened", which the
+    # check-in is told is normal; refusing it left the check-in reporting a failure.
     if len(data) > 200:
         raise ValueError("batch file holds more than 200 entries; split it")
     return data
+
+
+def fact_category(value):
+    """(category, note): a known category, an obvious synonym of one, or "other".
+
+    The note says what happened so the model learns the names without the fact
+    being lost to the lesson."""
+    name = str(value or "other").strip().lower().replace(" ", "_")
+    if name in CATEGORIES:
+        return name, ""
+    known = CATEGORY_ALIASES.get(name) or CATEGORY_ALIASES.get(name.rstrip("s"))
+    landed = known or "other"
+    return landed, (
+        f"category {value!r} is not one of {', '.join(CATEGORIES)}; recorded under {landed!r}"
+    )
 
 
 def _apply(c, entry, now):
@@ -1359,12 +1409,13 @@ def _apply(c, entry, now):
             c.human_dir, entry.get("id", ""), entry.get("evidence"), now
         )
     if kind == "fact":
-        return record_fact(
+        category, note = fact_category(entry.get("category", "other"))
+        out = record_fact(
             c.human_dir,
             entry.get("statement"),
             entry.get("evidence"),
             now,
-            entry.get("category", "other"),
+            category,
             entry.get("confidence", "stated"),
             entry.get("source", ""),
             entry.get("supersedes", ""),
@@ -1373,6 +1424,7 @@ def _apply(c, entry, now):
             confirm_distinct=bool(entry.get("confirm_distinct")),
             user_memory=c,
         )
+        return {**out, "note": note} if note else out
     if kind == "pref":
         return record_pref(
             c.life,
@@ -1432,8 +1484,16 @@ def ledger_batch(c, path, now):
                 "ok": True,
                 "id": (out.get("entry") or {}).get("id") if "entry" in out else None,
                 "written": out.get("written", True),
+                **({"note": out["note"]} if out.get("note") else {}),
             }
         )
+    if not entries:
+        return {
+            "applied": 0,
+            "failed_at": None,
+            "results": [],
+            "note": "Nothing to record.",
+        }
     return {"applied": len(results), "failed_at": None, "results": results}
 
 

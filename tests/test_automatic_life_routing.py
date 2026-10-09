@@ -256,3 +256,50 @@ def test_rollover_uses_store_launcher_when_no_venv_python(tmp_path):
     with patch.object(rollover, 'hermes_python', return_value=None), patch.object(rollover.subprocess, 'run', side_effect=run):
         rollover.end_sessions(c, ['fake-session'])
     assert len(calls) == 2
+
+
+def test_install_selects_the_companion_context_engine_unless_another_was_chosen(tmp_path):
+    c = cc.Companion(hermes_root=tmp_path / 'home', vault=tmp_path / 'vault', agent='Nova')
+    c.home.mkdir(parents=True)
+    (c.home / 'config.yaml').write_text(yaml.safe_dump({
+        'context': {'engine': 'companion-local'},
+        'plugins': {'enabled': ['companion-local-context', 'other']}}))
+    routing.install(c)
+    cfg = yaml.safe_load((c.home / 'config.yaml').read_text())
+    assert cfg['context']['engine'] == 'tamanitomo-context'
+    assert cfg['plugins']['enabled'] == ['other', 'tamanitomo-routing', 'tamanitomo-context']
+    plugin = c.home / 'plugins/tamanitomo-context'
+    assert json.loads((plugin / 'companion.json').read_text()) == {'agent': 'Nova'}
+    assert (plugin / 'snapshot.py').read_text() == (
+        Path(__file__).resolve().parents[1] / 'kit/scripts/companion_local_context.py').read_text()
+    # An engine somebody chose is theirs.
+    (c.home / 'config.yaml').write_text(yaml.safe_dump({'context': {'engine': 'lcm'}}))
+    routing.install(c)
+    assert yaml.safe_load((c.home / 'config.yaml').read_text())['context']['engine'] == 'lcm'
+
+
+def test_the_context_engine_sends_only_the_newest_snapshot(monkeypatch):
+    import sys
+    import types
+    import companion_local_context as local
+
+    fake = types.ModuleType('agent.context_compressor')
+
+    class ContextCompressor:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    fake.ContextCompressor = ContextCompressor
+    monkeypatch.setitem(sys.modules, 'agent', types.ModuleType('agent'))
+    monkeypatch.setitem(sys.modules, 'agent.context_compressor', fake)
+    engine = local.make_engine({'compression': {}, 'model': {}}, 'Nova', name='tamanitomo-context')
+    assert engine.name == 'tamanitomo-context'
+
+    def snapshot(n):
+        return local.BEGIN + f'\n[Nova — continuity]\nstate {n}\n' + local.END
+
+    stored = [{'role': 'user', 'content': f'hi {i}', 'api_content': f'hi {i}\n\n' + snapshot(i)}
+              for i in range(3)]
+    request = [{'role': 'user', 'content': row['api_content']} for row in stored]
+    sent = engine.select_context(request, conversation_messages=stored)
+    assert [m['content'] for m in sent] == ['hi 0', 'hi 1', request[2]['content']]

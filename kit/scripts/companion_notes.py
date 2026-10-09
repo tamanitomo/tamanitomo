@@ -113,9 +113,17 @@ def standing(c, status="active"):
 
 # ---- the relationship ----------------------------------------------------
 def add_moment(c, entry, now):
-    kind = entry.get("moment", "note")
+    # A moment with a type the render does not group is still a moment: refusing it
+    # cost the check-in the very thing it was keeping. It is kept as a plain note
+    # and the result says so.
+    kind = str(entry.get("moment") or "note").strip().lower()
+    note = ""
     if kind not in MOMENT_KINDS:
-        raise ValueError(f"moment must be one of {MOMENT_KINDS}")
+        note = (
+            f"moment {entry.get('moment')!r} is not one of {', '.join(MOMENT_KINDS)}; "
+            "recorded as a note"
+        )
+        kind = "note"
     text = _text(entry.get("text"), 500, "text")
     row = {
         "id": entry.get("id")
@@ -147,7 +155,8 @@ def add_moment(c, entry, now):
                 "a recurring ritual needs first_on, the date it began (YYYY-MM-DD)"
             )
         row["recurs"] = recurs
-    return slf._append(moments_path(c), row)
+    out = slf._append(moments_path(c), row)
+    return {**out, "note": note} if note else out
 
 
 def retire_moment(c, ident, reason, now):
@@ -253,8 +262,16 @@ def batch(c, path, now):
     data = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
     if isinstance(data, dict):
         data = data.get("entries")
-    if not isinstance(data, list) or not data:
+    if not isinstance(data, list):
         raise ValueError("file must hold a list of entries")
+    if not data:
+        # Nothing worth keeping is a normal outcome, not an error.
+        return {
+            "applied": 0,
+            "failed_at": None,
+            "results": [],
+            "note": "Nothing to record.",
+        }
     if len(data) > 50:
         raise ValueError("at most 50 entries at once")
     results = []
@@ -291,6 +308,7 @@ def batch(c, path, now):
                 "ok": True,
                 "id": out["entry"]["id"],
                 "written": out["written"],
+                **({"note": out["note"]} if out.get("note") else {}),
             }
         )
     return {"applied": len(results), "failed_at": None, "results": results}

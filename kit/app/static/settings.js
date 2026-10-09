@@ -728,20 +728,10 @@ const settingsPanels=[
   host.append(androidHostingTips());
  }},
 
-{id:'models-overview',title:'Overview',
- blurb:'Which accounts are connected, and what is using each one',
- keywords:'grok chatgpt openai oauth signed in account connected routing primary provider active use everywhere',
- render:renderModelsOverview},
-
-{id:'hermes-models',bare:true,title:'Models & fallbacks',
- blurb:'Which model answers, and what answers when it cannot',
- keywords:'model provider fallback openrouter free cascade grok chatgpt ollama base url presets reasoning chain failing jobs pinned',
- async render(host){
-  host.innerHTML='<div class="panel-bare" data-chain><p class="dim" role="status">Loading…</p></div><div class="panel-bare" data-hermes-extras></div>';
-  await renderModelChain(host.querySelector('[data-chain]'));
-  await hermesCards();
-  if(host.isConnected)placeHermesCards(host.querySelector('[data-hermes-extras]'),['models','presets'],{foldAll:true});
- }},
+{id:'models',title:'Models',
+ blurb:'Which models your companions run on, and what answers when one cannot',
+ keywords:'model provider primary fallback openrouter free cascade grok chatgpt oauth ollama local reasoning tiers routines reflection conversation use everywhere apply all companions chain preset luna sol',
+ render:renderModelPlan},
 
 {id:'hermes-accounts',bare:true,title:'Sign-ins & API keys',
  blurb:'Connect subscription accounts and store API keys',
@@ -854,145 +844,22 @@ function wireModelPicker(root,{provider,baseUrl,value,onChange,defaultLabel="Fol
   return {read,reload:()=>load(false)};
 }
 
-// One provider-aware editor for the primary model and background tiers.
+// Whether a provider is reached at an address the person has to give.
 function providerNeedsURL(provider,existing=''){const name=String(provider).toLowerCase();return name!=='openai-codex'&&name!=='mistral'&&(Boolean(existing)||['custom','ollama','lmstudio','lm-studio','vllm','local'].includes(name));}
-async function wireAvailableModel(providerField,modelField,urlField,{primary=false}={}){
-  const data=await knownProviders();
-  if(!providerField.isConnected)return;
-  const currentProvider=providerField.value;
-  const choices=new Map(data.providers.map(p=>[p.provider,p.provider==='openai-codex'?'ChatGPT':p.provider==='mistral'?'Mistral AI':p.label]));
-  if(currentProvider&&!choices.has(currentProvider))choices.set(currentProvider,currentProvider);
-  choices.set('custom','Custom / local server');
-  const select=document.createElement('select');
-  for(const attribute of providerField.attributes)if(!['list','type','value','placeholder'].includes(attribute.name))select.setAttribute(attribute.name,attribute.value);
-  select.innerHTML=options([['',primary?'Choose a provider':'Follow primary provider'],...choices],currentProvider);
-  providerField.replaceWith(select);
-  modelField.type='hidden';
-  modelField.insertAdjacentHTML('afterend',modelPickerHTML(modelField.id||'available-model',modelField.value));
-  const picker=modelField.nextElementSibling;
-  const refresh=()=>{
-    if(urlField){urlField.closest('label').hidden=!providerNeedsURL(select.value,urlField.value);if(!providerNeedsURL(select.value,urlField.value))urlField.value='';}
-    return wireModelPicker(picker,{provider:()=>select.value||(primary?'':$('primary-provider')?.value||''),baseUrl:()=>urlField?.value||(!select.value&&!primary?$('primary-url')?.value||'':''),value:modelField.value,
-      defaultLabel:primary||select.value?'Choose a model':'Follow primary model',onChange:value=>{modelField.value=value;}});
-  };
-  select.onchange=()=>{modelField.value='';if(urlField)urlField.value='';refresh();};
-  if(urlField)urlField.onchange=()=>refresh();
-  if(!primary)for(const id of ['primary-provider','primary-url'])$(id)?.addEventListener('change',()=>{if(!select.value){modelField.value='';refresh();}});
-  refresh();
-}
 
-/* ---------------------------------------------------- models overview panel
-   The question the three cards below never answered on their own: an account
-   being connected — an API key saved, or an OAuth sign-in Hermes itself
-   recorded — is not the same as anything actually calling it. This reads the
-   same discovery the model editor uses, plus Hermes's own auth.json, and adds
-   the one action that was missing: point everything at an account in one
-   step instead of editing the primary model, each tier, and every job by hand. */
-const KIND_LABELS={oauth:'Signed in',api_key:'API key saved',reachable:'Reachable',profile:'Current primary',custom:'Custom endpoint'};
-async function renderModelsOverview(host){
-  host.innerHTML='<p class="dim" role="status">Loading…</p>';
-  let providers,env,jobsData;
-  try{
-    [providers,env,jobsData]=await Promise.all([
-      api('/models/providers'),
-      api('/environment'),
-      api('/jobs').catch(()=>({jobs:[]})),
-    ]);
-  }catch(error){
-    host.innerHTML=`<p class="bad">${esc(error.message)}</p>`;
-    return;
-  }
-  const primaryProvider=env.model.provider||'';
-  const primaryModel=env.model.default||'';
-  const modelJobs=(jobsData.jobs||[]).filter(j=>!j.no_agent);
-  const overrides=new Map();
-  for(const j of modelJobs){
-    if(!j.provider)continue;
-    overrides.set(j.provider,(overrides.get(j.provider)||0)+1);
-  }
-  const followingPrimary=modelJobs.length-[...overrides.values()].reduce((a,b)=>a+b,0);
-  const tierLine=t=>{
-    const tier=env.tiers?.[t];
-    return tier?.model
-      ?`${t==='loops'?'Loops':'Reflection'}: <strong>${esc(tier.provider||primaryProvider||'?')} / ${esc(tier.model)}</strong>`
-      :`${t==='loops'?'Loops':'Reflection'}: <span class="dim">follows the primary model</span>`;
-  };
-  const rows=(providers.providers||[]).filter(r=>r.provider||r.base_url);
-  const active=providers.active_provider?rows.find(r=>r.provider===providers.active_provider):null;
-  const mismatch=active&&active.provider!==primaryProvider;
-  const isPrimaryRow=r=>r.provider===primaryProvider&&(r.base_url||'')===(env.model.base_url||'');
-
-  host.innerHTML=`
-  <p class="dim">What this companion actually knows how to reach, and what is using it right now. Connecting an account — even signing in with OAuth — never moves anything on its own; use “Use everywhere” to point everything at it.</p>
-  ${mismatch?`<div class="notice-strip"><p><strong>You’re signed in to ${esc(active.label)}, but nothing is using it yet.</strong></p>
-    <p class="dim small">The primary model is still <code>${esc(primaryProvider||'unset')}${primaryModel?' / '+esc(primaryModel):''}</code>${modelJobs.length?`, and ${followingPrimary} of ${modelJobs.length} job(s) follow it`:''}. Pick a model for ${esc(active.label)} below and apply it.</p></div>`:''}
-  ${rows.length?`<table style="width:100%"><tbody>
-  ${rows.map(r=>`<tr>
-    <td><strong>${esc(r.label)}</strong>${r.active?' <span class="pill status-good">Active sign-in</span>':''}${isPrimaryRow(r)?' <span class="pill">Primary</span>':''}</td>
-    <td><span class="pill ${r.ready?'status-good':'status-warn'}">${esc(KIND_LABELS[r.kind]||r.kind||'Known')}</span></td>
-    <td class="dim small">${r.models?r.models+' model'+(r.models===1?'':'s')+' known':'No models listed yet'}</td>
-    <td>${isPrimaryRow(r)?'<span class="dim small">Already primary</span>':`<button type="button" class="quiet" data-use-everywhere="${esc(r.key)}">Use everywhere…</button>`}</td>
-  </tr>
-  <tr class="use-everywhere-row" data-use-everywhere-row="${esc(r.key)}" hidden><td colspan="4" style="padding-top:0">
-    ${modelPickerHTML('use-everywhere-'+esc(r.key),'')}
-    <div class="actions" style="margin-top:6px"><button type="button" class="act small" data-confirm-use="${esc(r.key)}">Apply everywhere</button>
-    <span class="dim small" data-use-everywhere-status="${esc(r.key)}"></span></div>
-  </td></tr>`).join('')}
-  </tbody></table>`:'<p class="dim">No provider has been reached yet. Add an API key or sign in below.</p>'}
-
-  ${rows.some(r=>r.provider==='openai-codex'&&r.ready)?'<div class="actions"><button type="button" class="act" id="codex-companion-preset">Configure ChatGPT throughout</button></div><p class="dim small">Luna without reasoning for frequent life updates; Sol for conversation and reflection. Keeps your ordered fallbacks. Individual jobs remain editable.</p>':''}
-  <h3 class="section-subheading">What is running where</h3>
-  <dl class="fact-list">
-    <div><dt>Primary</dt><dd>${primaryProvider?esc(primaryProvider)+(primaryModel?' / '+esc(primaryModel):''):'<span class="dim">Not set</span>'}</dd></div>
-    <div><dt>Tiers</dt><dd>${tierLine('loops')}<br>${tierLine('reflection')}</dd></div>
-    <div><dt>Jobs</dt><dd>${modelJobs.length
-      ?`${followingPrimary} of ${modelJobs.length} model-backed job${modelJobs.length===1?'':'s'} follow the primary model.`+
-        (overrides.size?' Their own override: '+[...overrides].map(([p,n])=>`${esc(p)} (${n})`).join(', ')+'.':'')
-      :'<span class="dim">No model-backed jobs installed yet.</span>'}
-      <button type="button" class="link-button small" id="overview-jump-jobs">Edit per-job routing →</button></dd></div>
-  </dl>`;
-
-  for(const button of host.querySelectorAll('[data-use-everywhere]')){
-    button.onclick=()=>{
-      const row=host.querySelector(`[data-use-everywhere-row="${CSS.escape(button.dataset.useEverywhere)}"]`);
-      row.hidden=!row.hidden;
-      if(row.hidden||row.dataset.wired)return;
-      row.dataset.wired='1';
-      const account=rows.find(r=>r.key===button.dataset.useEverywhere);
-      const picker=row.querySelector('[data-model-picker]');
-      const control=wireModelPicker(picker,{provider:()=>account.provider,baseUrl:()=>account.base_url||'',value:'',defaultLabel:'Choose a model'});
-      row.querySelector('[data-confirm-use]').onclick=async()=>{
-        const model=control.read().trim();
-        const status=row.querySelector('[data-use-everywhere-status]');
-        if(!model){status.innerHTML='<span class="bad">Choose a model first.</span>';return;}
-        status.textContent='';
-        try{
-          await action('/models/use-everywhere',{provider:account.provider,model,...(account.base_url?{base_url:account.base_url}:{})});
-          notice(account.label+' is now used everywhere.');
-          renderModelsOverview(host);
-          const jobsSection=document.getElementById('settings-section-jobs');
-          if(jobsSection)renderJobsPanel(jobsSection);
-        }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
-      };
-    };
-  }
-  const codexPreset=host.querySelector('#codex-companion-preset');
-  if(codexPreset)codexPreset.onclick=async()=>{
-    try{await action('/models/codex-preset',{});renderModelsOverview(host);}
-    catch(error){notice(error.message);}
-  };
-  const jump=host.querySelector('#overview-jump-jobs');
-  if(jump)jump.onclick=()=>openSettings(null,'jobs');
-}
-
-/* ---------------------------------------------------------- model chain
-   One ordered list answers for everything: chat, Telegram, the companion's
-   routines and your own scheduled jobs. The first model answers; when it is
-   busy or fails, the next one does. Jobs are kept pinned to the first model,
-   which is what lets Hermes run them and still fall back. */
+/* ------------------------------------------------------------- model plan
+   One plan for every companion: who answers a conversation, what the everyday
+   routines and the reflections run on, and what answers when the first cannot.
+   A model used to live in five places with a screen each -- Hermes's primary and
+   fallbacks, the companion's tiers, every job's pin, Hermes's helper tasks and the
+   cron default -- and each companion was changed on its own, so the pages
+   disagreed with each other and "use it everywhere" meant doing it twice. This
+   form writes all of them for the companions ticked, and moves anything still
+   pointing at an account the plan no longer uses. Hermes reads the model on every
+   message, so a change lands on the next one without restarting anything. */
 const ACCOUNT_NAMES={'openai-codex':'ChatGPT (signed in)','xai-oauth':'Grok (signed in)',
   'openrouter':'OpenRouter','anthropic':'Anthropic','deepseek':'DeepSeek','mistral':'Mistral AI',
-  'opencode-free':'OpenCode Free','ollama':'Ollama (local)'};
+  'opencode-free':'OpenCode Free','ollama':'Ollama (local)','custom':'Custom / local server'};
 function chainAccounts(data){
   const seen=new Map();
   for(const p of data.providers||[]){
@@ -1004,152 +871,214 @@ function chainAccounts(data){
   }
   return [...seen.values()];
 }
-const chainRole=i=>i===0?'Answers first':`Fallback ${i}`;
 const accountName=provider=>(ACCOUNT_NAMES[provider]||provider||'').replace(' (signed in)','');
 const plural=(n,word)=>`${n} ${word}${n===1?'':'s'}`;
+const PLAN_TIERS=[
+  ['chat','Conversation','Telegram, this app and photos: the model your companion talks to you with.'],
+  ['loops','Everyday routines','Life pulse, check-ins, mornings and wind-downs. They run every few minutes, so a quick model keeps life moving.'],
+  ['reflection','Reflection','Daily journal, weekly and monthly reflection, autonomy windows. A few runs a week, worth your strongest model.'],
+];
+const PLAN_EFFORTS=[['','Hermes default'],['none','None'],['low','Low'],['medium','Medium'],['high','High']];
+const routeText=r=>r&&r.model?`${accountName(r.provider)} · ${r.model}${r.reasoning_effort?` · ${r.reasoning_effort==='none'?'no':r.reasoning_effort} reasoning`:''}`:'';
+const planKey=plan=>JSON.stringify([plan.chat,plan.loops||null,plan.reflection||null,plan.links||[]]);
 
-async function renderModelChain(host,{refresh=false}={}){
-  const [data,accounts]=await Promise.all([api('/models/chain'+(refresh?'?refresh=1':'')),knownProviders().then(chainAccounts)]);
+function planStatusHTML(row){
+  if(row.error)return `<li class="plan-companion"><strong>${esc(row.name)}</strong> <span class="bad small">${esc(row.error)}</span></li>`;
+  const r=row.routines,plan=row.plan;
+  const helpers=row.helpers.filter(h=>h.stranded);
+  const own=row.own_jobs.filter(j=>j.stranded);
+  const problems=r.off.length+helpers.length+own.length;
+  return `<li class="plan-companion">
+    <div class="plan-companion-head"><strong>${esc(row.name)}</strong>
+      <span class="pill ${problems?'status-warn':'status-good'}">${problems?plural(problems,'thing')+' off the plan':'All on the plan'}</span></div>
+    <small class="dim">${esc(routeText(plan.chat)||'No model set')}${plan.loops?` · routines ${esc(plan.loops.model)}`:''}${plan.reflection?` · reflection ${esc(plan.reflection.model)}`:''}</small>
+    <small class="dim">${r.total?`${r.on_plan} of ${plural(r.total,'routine')} on this plan.`:'No routines installed.'}</small>
+    ${problems?`<details class="plan-off"><summary class="small">What is off the plan</summary><ul class="small">
+      ${r.off.map(j=>`<li>${esc(j.name)}: ${esc(routeText(j)||'no model of its own')}, expected ${esc(routeText({provider:j.expected_provider,model:j.expected_model})||'the profile default')}</li>`).join('')}
+      ${helpers.map(h=>`<li>Hermes ${esc(h.label)}: ${esc(h.base_url||accountName(h.provider))}${h.model?' · '+esc(h.model):''} — an account this plan does not use</li>`).join('')}
+      ${own.map(j=>`<li>Your job “${esc(j.name)}”: ${esc(routeText(j))} — an account this plan does not use</li>`).join('')}
+    </ul><p class="dim small">Applying the plan moves all of these.</p></details>`:''}
+  </li>`;
+}
+
+async function renderModelPlan(host){
+  host.innerHTML='<p class="dim" role="status">Loading…</p>';
+  let data,accounts;
+  try{[data,accounts]=await Promise.all([api('/models/plan'),knownProviders().then(chainAccounts)]);}
+  catch(error){host.innerHTML=`<p class="bad">${esc(error.message)}</p>`;return;}
   if(!host.isConnected)return;
-  let links=data.links.map(l=>({...l}));
+  const companions=data.companions.filter(c=>c.plan);
   const bundles=Object.fromEntries(data.bundles.map(b=>[b.id,b]));
+  const mine=companions.find(c=>c.selected)||companions[0];
+  if(!mine){host.innerHTML='<p class="dim">No companion is installed yet.</p>';return;}
+  // The form starts from this companion's plan; a tier equal to the conversation
+  // model reads as "same as conversation".
+  let form={chat:{...mine.plan.chat},loops:mine.plan.loops?{...mine.plan.loops}:null,
+    reflection:mine.plan.reflection?{...mine.plan.reflection}:null,links:(mine.plan.links||[]).map(l=>({...l}))};
   const pickers=new Map();
-
-  const card=document.createElement('div');card.className='card chain-card';
-  const jobsCard=document.createElement('div');jobsCard.className='card';
-  host.replaceChildren(card,jobsCard);
-
-  // An empty endpoint means the provider's own, so Grok with its URL spelled
-  // out is still the signed-in Grok account.
-  const sameAccount=(a,link)=>a.provider===link.provider&&(a.base_url===(link.base_url||'')||!a.base_url||!link.base_url);
-  const accountOptions=link=>{
-    const match=accounts.find(a=>a.provider===link.provider&&a.base_url===(link.base_url||''))||accounts.find(a=>sameAccount(a,link));
-    const list=match||!link.provider?accounts:[{provider:link.provider,base_url:link.base_url||'',label:link.provider},...accounts];
-    const chosen=match||list[0];
-    return `<option value="">Choose an account</option>`+list.map(a=>
-      `<option value="${esc(a.provider+'|'+a.base_url)}"${link.provider&&a===chosen?' selected':''}>${esc(a.label)}</option>`).join('');
+  const accountOptions=(row,{follow=false}={})=>{
+    const match=accounts.find(a=>a.provider===row?.provider&&a.base_url===(row?.base_url||''))
+      ||accounts.find(a=>a.provider===row?.provider);
+    const list=match||!row?.provider?accounts:[{provider:row.provider,base_url:row.base_url||'',label:accountName(row.provider)},...accounts];
+    return (follow?'':`<option value="">Choose an account</option>`)+list.map(a=>
+      `<option value="${esc(a.provider+'|'+a.base_url)}"${row?.provider&&(a===match||(!match&&a.provider===row.provider))?' selected':''}>${esc(a.label)}</option>`).join('')
+      +(list.some(a=>a.provider==='custom')?'':`<option value="custom|">Custom / local server…</option>`);
   };
-  const stepHTML=(link,i)=>{
+  const routeFields=(key,row)=>`
+    <div class="plan-route" data-route="${key}">
+      <label>Account<select data-account>${accountOptions(row)}</select></label>
+      <div class="plan-model"><span class="chain-model-label">Model</span>${modelPickerHTML('plan-'+key,row?.model||'')}</div>
+      <label>Reasoning<select data-effort>${options(PLAN_EFFORTS,row?.reasoning_effort||'')}</select></label>
+      <label class="plan-url" ${row?.provider==='custom'||row?.base_url?'':'hidden'}>Endpoint<input data-url value="${esc(row?.base_url||'')}" placeholder="http://localhost:11434/v1"></label>
+    </div>`;
+  const tierHTML=([key,title,blurb])=>{
+    const row=key==='chat'?form.chat:form[key];
+    const follows=key!=='chat'&&!row;
+    return `<section class="plan-tier" data-tier="${key}">
+      <div class="plan-tier-head"><h3>${esc(title)}</h3>
+        ${key==='chat'?'':`<label class="switch-container compact-toggle"><input type="checkbox" data-follow ${follows?'checked':''}><span class="switch-slider" aria-hidden="true"></span><span class="switch-label">Same as conversation</span></label>`}</div>
+      <p class="dim small">${esc(blurb)}</p>
+      ${follows?'':routeFields(key,row)}
+    </section>`;
+  };
+  const linkHTML=(link,i)=>{
     const moves=`<div class="chain-moves">
       <button type="button" class="icon-button" data-move="-1" aria-label="Move up"${i===0?' disabled':''}>${icon('chevron_left')}</button>
-      <button type="button" class="icon-button" data-move="1" aria-label="Move down"${i===links.length-1?' disabled':''}>${icon('chevron_right')}</button>
-      <button type="button" class="icon-button" data-remove aria-label="Remove"${links.length===1?' disabled':''}>${icon('close')}</button></div>`;
+      <button type="button" class="icon-button" data-move="1" aria-label="Move down"${i===form.links.length-1?' disabled':''}>${icon('chevron_right')}</button>
+      <button type="button" class="icon-button" data-remove aria-label="Remove">${icon('close')}</button></div>`;
     if(link.bundle){
       const b=bundles[link.bundle]||{name:link.bundle,models:[]};
-      return `<li class="chain-step is-bundle" data-step="${i}"><span class="chain-rank">${i+1}</span>
-        <div class="chain-body"><p class="chain-role">${chainRole(i)}</p><strong>${esc(b.name)}</strong>
-        <small class="dim">${esc(b.models.join(' → '))}</small>
-        <small class="dim">${b.live?`Picked from OpenRouter’s current free models${b.checked_at?' · checked '+esc(when(new Date(b.checked_at*1000).toISOString())):''}.`:'OpenRouter could not be reached; these are the last known free models.'}
-          <button type="button" class="link-button" data-refresh-free>Check again</button></small>
-        ${b.ready===false?'<small class="warn">Needs an OpenRouter API key under Sign-ins &amp; API keys.</small>':''}</div>${moves}</li>`;
+      return `<li class="chain-step is-bundle" data-link="${i}"><span class="chain-rank">${i+1}</span>
+        <div class="chain-body"><strong>${esc(b.name)}</strong><small class="dim">${esc((b.models||[]).join(' → '))}</small></div>${moves}</li>`;
     }
-    return `<li class="chain-step" data-step="${i}"><span class="chain-rank">${i+1}</span>
-      <div class="chain-body"><p class="chain-role">${chainRole(i)}</p>
-        <div class="chain-fields">
-          <label>Account<select data-chain-account>${accountOptions(link)}</select></label>
-          <div class="chain-model"><span class="chain-model-label">Model</span>${modelPickerHTML('chain-'+i,link.model)}</div>
-        </div></div>${moves}</li>`;
+    return `<li class="chain-step" data-link="${i}"><span class="chain-rank">${i+1}</span>
+      <div class="chain-body">${routeFields('link-'+i,link)}</div>${moves}</li>`;
   };
-  const collect=()=>links.map((link,i)=>link.bundle?{bundle:link.bundle}
-    :{provider:link.provider,model:(pickers.get(i)?.read()||link.model||'').trim(),...(link.base_url?{base_url:link.base_url}:{})});
-  const offChain=data.jobs.filter(j=>j.state!=='follows');
+  // Read a route block back from the page; the picker remembers what was typed.
+  const readRoute=key=>{
+    const box=host.querySelector(`[data-route="${CSS.escape(key)}"]`);
+    if(!box)return null;
+    const [provider,base]=(box.querySelector('[data-account]').value||'|').split('|');
+    const url=box.querySelector('[data-url]')?.value.trim()||base||'';
+    const model=(pickers.get(key)?.read()||'').trim();
+    const effort=box.querySelector('[data-effort]')?.value||'';
+    return {provider,model,...(url?{base_url:url}:{}),...(effort?{reasoning_effort:effort}:{})};
+  };
+  const collect=()=>{
+    if(host.querySelector('[data-route="chat"]'))form.chat=readRoute('chat');
+    for(const key of ['loops','reflection']){
+      const follow=host.querySelector(`[data-tier="${key}"] [data-follow]`);
+      if(follow)form[key]=follow.checked?null:(readRoute(key)||form[key]);
+    }
+    form.links=form.links.map((l,i)=>l.bundle?l:(readRoute('link-'+i)||l));
+    return form;
+  };
+  const wireRoute=(key,row)=>{
+    const box=host.querySelector(`[data-route="${CSS.escape(key)}"]`);
+    if(!box)return;
+    const account=box.querySelector('[data-account]'),urlRow=box.querySelector('.plan-url'),url=box.querySelector('[data-url]');
+    const current=()=>(account.value||'|').split('|');
+    const picker=wireModelPicker(box.querySelector('[data-model-picker]'),{
+      provider:()=>current()[0],baseUrl:()=>url.value.trim()||current()[1]||'',value:row?.model||'',defaultLabel:'Choose a model'});
+    pickers.set(key,picker);
+    account.onchange=()=>{
+      const [provider,base]=current();
+      urlRow.hidden=provider!=='custom'&&!base;url.value=base||'';
+      box.querySelector('[data-model-custom]').value='';picker.reload();
+    };
+    url.onchange=()=>picker.reload();
+  };
 
   const paint=()=>{
-    // Keep what was typed before redrawing the steps.
-    links=collect().map((l,i)=>({...links[i],...l}));
     pickers.clear();
-    const hasFree=links.some(l=>l.bundle==='openrouter-free');
-    card.innerHTML=`
-      <p class="set-hint">Chat, Telegram, your companion’s routines and your own scheduled jobs all ask these in order. When one is busy or fails, the next one answers.</p>
-      <ol class="chain-steps">${links.map(stepHTML).join('')}</ol>
-      <div class="actions">
-        <button type="button" class="quiet" data-add>+ Add a fallback</button>
-        ${hasFree?'':`<button type="button" class="quiet" data-add-free>+ Add ${esc(bundles['openrouter-free']?.name||'free cascade')}</button>`}
-      </div>
-      ${data.retired.length?`<p class="small warn">${esc(data.retired.join(', '))} ${data.retired.length===1?'is':'are'} no longer free on OpenRouter. Use the chain again to replace ${data.retired.length===1?'it':'them'} with current free models.</p>`:''}
-      ${Object.keys(data.tier_overrides).length?`<p class="small warn">${Object.entries(data.tier_overrides).map(([t,m])=>`${esc(t[0].toUpperCase()+t.slice(1))} is set to ${esc(m.model)}`).join('; ')} instead of this chain. Using the chain clears that.</p>`:''}
-      <div class="panel-footer">
-        <button type="button" class="act" data-apply>Use this chain for everything</button>
-        <label class="switch-container compact-toggle"><input type="checkbox" data-move-jobs checked><span class="switch-slider" aria-hidden="true"></span><span class="switch-label">Move all ${data.jobs.length} scheduled job${data.jobs.length===1?'':'s'} too</span></label>
-        <span class="dim small" data-chain-status role="status"></span>
-      </div>
-      <div data-chain-after></div>`;
-    card.querySelectorAll('.chain-step').forEach(step=>{
-      const i=Number(step.dataset.step),link=links[i];
-      step.querySelector('[data-move]')&&step.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>{
-        const j=i+Number(b.dataset.move);links=collect().map((l,k)=>({...links[k],...l}));
-        [links[i],links[j]]=[links[j],links[i]];paint();});
-      step.querySelector('[data-remove]').onclick=()=>{links=collect().map((l,k)=>({...links[k],...l}));links.splice(i,1);paint();};
-      if(link.bundle)return;
-      const account=step.querySelector('[data-chain-account]');
-      const picker=wireModelPicker(step.querySelector('[data-model-picker]'),{
-        provider:()=>link.provider,baseUrl:()=>link.base_url||'',value:link.model,defaultLabel:'Choose a model'});
-      pickers.set(i,picker);
-      account.onchange=()=>{
-        const [provider,base_url]=account.value.split('|');
-        link.provider=provider;link.base_url=base_url||'';link.model='';
-        step.querySelector('[data-model-custom]').value='';picker.reload();
-      };
-    });
-    card.querySelector('[data-refresh-free]')?.addEventListener('click',async e=>{
-      e.currentTarget.disabled=true;e.currentTarget.textContent='Checking…';
-      await renderModelChain(host,{refresh:true});});
-    card.querySelector('[data-add]').onclick=()=>{links=collect().map((l,k)=>({...links[k],...l}));links.push({provider:'',model:''});paint();};
-    card.querySelector('[data-add-free]')?.addEventListener('click',()=>{links=collect().map((l,k)=>({...links[k],...l}));links.push({bundle:'openrouter-free'});paint();});
-    card.querySelector('[data-apply]').onclick=async e=>{
-      const button=e.currentTarget,status=card.querySelector('[data-chain-status]');
-      const chain=collect();
-      const missing=chain.findIndex(l=>!l.bundle&&(!l.provider||!l.model));
-      if(missing>=0){status.innerHTML=`<span class="bad">Step ${missing+1} needs an account and a model.</span>`;return;}
-      button.disabled=true;status.textContent='Saving…';
+    const ticked=new Set([...host.querySelectorAll('[data-plan-profile]:checked')].map(b=>b.value));
+    const chosen=ticked.size?ticked:new Set(companions.map(c=>c.profile));
+    const differ=!data.same&&companions.length>1;
+    host.innerHTML=`
+      <p class="set-hint">One plan for your companions: who answers a conversation, what their everyday routines and reflections run on, and what to fall back to. It reaches everything that uses a model, and takes effect from the next message.</p>
+      <ul class="plan-companions">${data.companions.map(planStatusHTML).join('')}</ul>
+      ${differ?'<p class="small warn">Your companions are not on the same plan. Applying this one to both makes them match.</p>':''}
+      <div class="card plan-card">
+        ${(data.presets||[]).length||differ?`<div class="chip-row plan-presets"><span class="dim small">Start from</span>
+          ${(data.presets||[]).map(p=>`<button type="button" class="chip-button" data-preset="${esc(p.id)}" title="${esc(p.description)}">${esc(p.label)}</button>`).join('')}
+          ${differ?companions.map(c=>`<button type="button" class="chip-button" data-copy="${esc(c.profile)}">${esc(c.name)}’s current plan</button>`).join(''):''}</div>`:''}
+        ${PLAN_TIERS.map(tierHTML).join('')}
+        <section class="plan-tier">
+          <div class="plan-tier-head"><h3>When it cannot answer</h3></div>
+          <p class="dim small">Tried in order when the model above is busy, rate-limited or down. Every conversation and routine uses the same list.</p>
+          ${form.links.length?`<ol class="chain-steps">${form.links.map(linkHTML).join('')}</ol>`:'<p class="dim small">No fallbacks: if the model above fails, that reply or routine waits for the next try.</p>'}
+          <div class="actions"><button type="button" class="quiet" data-add-link>+ Add a fallback</button>
+            ${form.links.some(l=>l.bundle==='openrouter-free')||!bundles['openrouter-free']?'':`<button type="button" class="quiet" data-add-free>+ Add ${esc(bundles['openrouter-free'].name)}</button>`}</div>
+        </section>
+        <div class="panel-footer plan-footer">
+          ${companions.length>1?`<fieldset class="plan-who"><legend class="small">Apply to</legend>${companions.map(c=>`<label class="check"><input type="checkbox" data-plan-profile value="${esc(c.profile)}" ${chosen.has(c.profile)?'checked':''}> ${esc(c.name)}</label>`).join('')}</fieldset>`:''}
+          <button type="button" class="act" data-apply>Apply</button>
+          <span class="dim small" data-plan-status role="status"></span>
+        </div>
+        <div data-plan-after></div>
+      </div>`;
+    wireRoute('chat',form.chat);
+    for(const key of ['loops','reflection'])if(form[key])wireRoute(key,form[key]);
+    form.links.forEach((l,i)=>{if(!l.bundle)wireRoute('link-'+i,l);});
+    const applyLabel=()=>{
+      const names=companions.filter(c=>host.querySelector(`[data-plan-profile][value="${CSS.escape(c.profile)}"]`)?.checked??true).map(c=>c.name);
+      host.querySelector('[data-apply]').textContent=names.length?`Apply to ${names.length>1?names.slice(0,-1).join(', ')+' and '+names.at(-1):names[0]}`:'Choose a companion';
+      host.querySelector('[data-apply]').disabled=!names.length;
+    };
+    host.querySelectorAll('[data-plan-profile]').forEach(b=>b.onchange=applyLabel);applyLabel();
+    host.querySelectorAll('[data-follow]').forEach(box=>box.onchange=()=>{
+      collect();const key=box.closest('[data-tier]').dataset.tier;
+      form[key]=box.checked?null:{...form.chat};paint();});
+    host.querySelectorAll('[data-link] [data-move]').forEach(b=>b.onclick=()=>{
+      collect();const i=Number(b.closest('[data-link]').dataset.link),j=i+Number(b.dataset.move);
+      [form.links[i],form.links[j]]=[form.links[j],form.links[i]];paint();});
+    host.querySelectorAll('[data-link] [data-remove]').forEach(b=>b.onclick=()=>{
+      collect();form.links.splice(Number(b.closest('[data-link]').dataset.link),1);paint();});
+    host.querySelector('[data-add-link]').onclick=()=>{collect();form.links.push({provider:'',model:''});paint();};
+    host.querySelector('[data-add-free]')?.addEventListener('click',()=>{collect();form.links.push({bundle:'openrouter-free'});paint();});
+    host.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{
+      const p=data.presets.find(x=>x.id===b.dataset.preset).plan;
+      form={chat:{...p.chat},loops:p.loops?{...p.loops}:null,reflection:p.reflection?{...p.reflection}:null,links:(p.links||[]).map(l=>({...l}))};
+      paint();host.querySelector('[data-plan-status]').textContent=`${b.textContent} filled in. Nothing changes until you apply it.`;});
+    host.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{
+      const p=companions.find(c=>c.profile===b.dataset.copy).plan;
+      form={chat:{...p.chat},loops:p.loops?{...p.loops}:null,reflection:p.reflection?{...p.reflection}:null,links:(p.links||[]).map(l=>({...l}))};
+      paint();});
+    host.querySelector('[data-apply]').onclick=async e=>{
+      const button=e.currentTarget,status=host.querySelector('[data-plan-status]');
+      const plan=collect();
+      const missing=[['Conversation',plan.chat],['Everyday routines',plan.loops],['Reflection',plan.reflection]]
+        .find(([,r])=>r&&(!r.provider||!r.model));
+      if(missing){status.innerHTML=`<span class="bad">${esc(missing[0])} needs an account and a model.</span>`;return;}
+      const badLink=plan.links.findIndex(l=>!l.bundle&&(!l.provider||!l.model));
+      if(badLink>=0){status.innerHTML=`<span class="bad">Fallback ${badLink+1} needs an account and a model.</span>`;return;}
+      const profiles=companions.filter(c=>host.querySelector(`[data-plan-profile][value="${CSS.escape(c.profile)}"]`)?.checked??true).map(c=>c.profile);
+      button.disabled=true;status.textContent='Applying…';
       try{
-        const moveJobs=card.querySelector('[data-move-jobs]').checked;
-        const done=await action('/models/chain',{links:chain,jobs:moveJobs?'all':'none'});
+        // The callback stops the workspace redrawing the whole page on completion,
+        // which would throw away the result shown below.
+        const done=await action('/models/plan',{chat:plan.chat,loops:plan.loops,reflection:plan.reflection,
+          fallbacks:plan.links.map(l=>l.bundle?{bundle:l.bundle}:{provider:l.provider,model:l.model,...(l.base_url?{base_url:l.base_url}:{})}),profiles},()=>{});
         clearEditorDirty(editorScope(host));
-        await renderModelChain(host);
-        const r=done.result||{},first=(r.routes||[])[0];
-        showChainResult(host.querySelector('[data-chain-after]'),{...r,note:first
-          ?`${accountName(first.provider)} · ${first.model} answers first, with ${plural((r.routes.length-1),'fallback')} behind it.`
-            +((r.moved||[]).length?` ${plural(r.moved.length,'job')} moved onto it.`:'')
-          :r.note});
+        const r=done.result||{};
+        await renderModelPlan(host);
+        const after=host.querySelector('[data-plan-after]');
+        if(after){
+          after.innerHTML=`<div class="chain-result"><p><strong>${esc(r.note||'Applied.')}</strong></p>
+            ${(r.failed||[]).length?`<p class="warn small">${r.failed.map(esc).join('<br>')}</p>`:''}
+            ${r.restart_gateway?`<p class="dim small">Restart the gateway once to switch on leaner conversation context for Telegram.</p>
+              <div class="actions"><button type="button" class="quiet" data-restart-gateway>Restart the gateway now</button></div>`:''}</div>`;
+          after.querySelector('[data-restart-gateway]')?.addEventListener('click',async ev=>{
+            ev.currentTarget.disabled=true;
+            const restart=ev.currentTarget;
+            try{await action('/gateway/restart-root',{affects_all_profiles:true,root_restarted:false},()=>{});restart.textContent='Gateway restarted';}
+            catch(error){after.insertAdjacentHTML('beforeend',`<p class="bad small">${esc(error.message)}</p>`);}
+          });
+        }
       }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;button.disabled=false;}
     };
   };
-
-  const paintJobs=()=>{
-    const total=data.jobs.length,on=total-offChain.length;
-    jobsCard.innerHTML=`<h2>Scheduled jobs</h2>
-      <p><span class="pill ${offChain.length?'status-warn':'status-good'}">${on} of ${total} on this chain</span></p>
-      ${offChain.length?`<p class="set-hint">These run on something else. A job pinned to another model still falls back through the chain when that model fails; put it back to use the chain’s first model.</p>
-      <ul class="chain-jobs">${offChain.map(j=>`<li>
-        <div><strong>${esc(j.name)}</strong>
-          <small class="dim">${j.state==='unpinned'?'Not pinned: Hermes skips it if the default model changes':`Pinned to ${esc(accountName(j.provider))} · ${esc(j.model)}`}${j.enabled?'':' · paused'}</small>
-          ${j.last_status==='error'&&j.last_error?`<small class="warn">Last run failed: ${esc(j.last_error)}</small>`:''}</div>
-        <button type="button" class="quiet" data-job="${esc(j.id)}">Use the chain</button></li>`).join('')}</ul>
-      ${offChain.length>1?`<div class="actions"><button type="button" class="quiet" data-all-jobs>Put all ${offChain.length} on the chain</button></div>`:''}`
-      :'<p class="dim small">Every model-backed job uses the chain’s first model, and falls back through the rest.</p>'}
-      <p class="dim small" data-jobs-status role="status"></p>`;
-    const run=async(ids,button)=>{
-      button.disabled=true;const status=jobsCard.querySelector('[data-jobs-status]');status.textContent='Moving…';
-      try{await action('/models/chain',{links:data.links.map(l=>l.bundle?{bundle:l.bundle}:l),jobs:ids});clearEditorDirty(editorScope(host));await renderModelChain(host);}
-      catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;button.disabled=false;}
-    };
-    jobsCard.querySelectorAll('[data-job]').forEach(b=>b.onclick=()=>run([b.dataset.job],b));
-    jobsCard.querySelector('[data-all-jobs]')?.addEventListener('click',e=>run(offChain.map(j=>j.id),e.currentTarget));
-  };
-  paint();paintJobs();
-}
-function showChainResult(host,result){
-  if(!host)return;
-  host.innerHTML=`<div class="chain-result"><p><strong>${esc(result.note||'Saved.')}</strong></p>
-    ${(result.failed||[]).length?`<p class="warn small">${result.failed.map(esc).join('<br>')}</p>`:''}
-    ${result.restart_gateway?`<p class="dim small">Telegram and other gateway chats read the chain when the gateway starts.</p>
-    <div class="actions"><button type="button" class="quiet" data-restart-gateway>Restart the gateway now</button></div>`:''}</div>`;
-  host.querySelector('[data-restart-gateway]')?.addEventListener('click',async e=>{
-    e.currentTarget.disabled=true;
-    try{await action('/gateway/restart',{});e.currentTarget.textContent='Gateway restarted';}
-    catch(error){host.insertAdjacentHTML('beforeend',`<p class="bad small">${esc(error.message)}</p>`);}
-  });
+  paint();
 }
 
 /* ------------------------------------------------------------- jobs panel
@@ -1237,7 +1166,7 @@ async function renderJobsPanel(host){
   <div class="settings-toolbar">
     <div class="actions">
       <button class="quiet" id="jobs-pause">Pause model jobs</button><button class="quiet" id="jobs-activate">Enable model jobs</button><button class="quiet" id="jobs-history">Run history</button>
-      <button class="quiet" id="jobs-apply-models">Apply job models</button>
+      <button class="quiet" id="jobs-model-plan">Models for all jobs…</button>
       <button class="quiet" id="jobs-repair">Install / repair</button>
     </div>
   </div>
@@ -1254,25 +1183,8 @@ async function renderJobsPanel(host){
   ${noModel?`<p class="dim small">${noModel} model-backed job${noModel===1?' has':'s have'} no model of their own and follow the profile default.</p>`:''}
   ${sensitiveSummary(jobs,data)}
   ${jobTimelineHtml(jobs,data.timezone)}
-  <details class="card routing-card" id="job-routing">
-    <summary><strong>Move every job to another provider</strong>
-      <small class="dim">Model, provider and endpoint together, across all ${jobs.filter(j=>!j.no_agent).length} model-backed jobs</small></summary>
-    <div class="routing-body">
-      <div class="chip-row" id="routing-presets"><span class="dim small">Finding your providers…</span></div>
-      <p class="dim small" id="routing-hint">Pick a provider, then adjust anything below before applying.</p>
-      <div class="form-grid">
-        <label>Provider<select id="routing-provider"><option value="">Follow primary provider</option></select></label>
-        <label>Model${modelPickerHTML('routing','')}
-          <input type="hidden" id="routing-model"></label>
-        <label class="wide">Endpoint<input id="routing-base-url" placeholder="Leave empty unless the provider needs a specific address">
-          <small class="dim">Address of your local server or custom gateway.</small></label>
-      </div>
-      <div class="panel-footer">
-        <button class="act" id="routing-apply">Apply to all model-backed jobs</button>
-        <span class="dim small" id="routing-status" role="status"></span>
-      </div>
-    </div>
-  </details>
+  <div class="notice-strip"><p><strong>Which model each kind of routine runs on is set in one place.</strong></p>
+    <p class="dim small">Models sets conversation, everyday routines and reflection for every companion together, and moves any job still pointing at an account you no longer use. Change a single job below only when it should differ. <button type="button" class="link-button small" id="jobs-open-plan">Open Models →</button></p></div>
   <div class="filters">
     <label>Find a job<input id="job-search" type="search" placeholder="Photo, journal, backup…"></label>
     <label>State<select id="job-filter">
@@ -1433,56 +1345,6 @@ async function renderJobsPanel(host){
       catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;b.disabled=false;}
     };
   };
-  /* The switcher's own picker, rebuilt whenever the provider or endpoint moves
-     under it — those two decide which catalogue the model list comes from. */
-  const routingPicker=host.querySelector('#job-routing [data-model-picker]');
-  const routingModel=host.querySelector('#routing-model');
-  const buildRoutingPicker=()=>{const endpoint=host.querySelector('#routing-base-url');endpoint.closest('label').hidden=!providerNeedsURL(host.querySelector('#routing-provider').value,endpoint.value);if(endpoint.closest('label').hidden)endpoint.value='';return wireModelPicker(routingPicker,{
-    provider:()=>host.querySelector('#routing-provider').value.trim(),
-    baseUrl:()=>host.querySelector('#routing-base-url').value.trim(),
-    value:routingModel.value,
-    onChange:v=>{routingModel.value=v;}});};
-  buildRoutingPicker();
-  for(const id of ['#routing-provider','#routing-base-url'])
-    host.querySelector(id).addEventListener('change',()=>{if(id==='#routing-provider'){routingModel.value='';host.querySelector('#routing-base-url').value='';}buildRoutingPicker();});
-
-  /* A chip per reachable provider, plus a way back to the profile default.
-     Choosing one sets the provider and endpoint and reloads the model list;
-     nothing is sent until Apply. */
-  knownProviders().then(d=>{
-    if(!host.isConnected)return;
-    const strip=host.querySelector('#routing-presets');
-    const choices=new Map(d.providers.map(r=>[r.provider,r.provider==='openai-codex'?'ChatGPT':r.provider==='mistral'?'Mistral AI':r.label]));choices.set('custom','Custom / local server');
-    host.querySelector('#routing-provider').innerHTML=options([['','Follow primary provider'],...choices],'');
-    const rows=[...d.providers.map(r=>({...r,preset:false})),
-                {key:'__default__',label:'Follow the profile',provider:'',base_url:'',models:0,preset:true}];
-    strip.innerHTML=rows.map(r=>`<button type="button" class="chip" data-choice="${esc(r.key)}">${esc(r.label)}${r.models?` <span class="dim">${r.models}</span>`:''}</button>`).join('');
-    for(const b of strip.children)b.onclick=()=>{
-      const row=rows.find(x=>x.key===b.dataset.choice);
-      host.querySelector('#routing-provider').value=row.provider||'';
-      host.querySelector('#routing-base-url').value=row.base_url||'';
-      routingModel.value='';
-      routingPicker.querySelector('[data-model-custom]').value='';
-      buildRoutingPicker();
-      host.querySelector('#routing-hint').textContent=row.preset
-        ? 'Clears all three, so jobs follow whatever the profile default is.'
-        : `${row.label} — ${row.models} model${row.models===1?'':'s'} known. Pick one below, or leave the model empty to follow the profile default.`;
-      for(const other of strip.children)other.setAttribute('aria-pressed',String(other===b));
-    };
-  });
-  host.querySelector('#routing-apply').onclick=async()=>{
-    const status=host.querySelector('#routing-status');
-    const count=jobs.filter(j=>!j.no_agent).length;
-    if(!confirm(`Move all ${count} model-backed job(s) in this profile onto this provider?`))return;
-    status.textContent='Moving…';
-    try{
-      await action('/jobs/routing',{
-        provider:host.querySelector('#routing-provider').value.trim(),
-        model:routingModel.value.trim(),
-        base_url:host.querySelector('#routing-base-url').value.trim()});
-      openSettings(null,'jobs');
-    }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
-  };
   host.querySelector('#job-search').oninput=draw;
   host.querySelector('#job-filter').onchange=draw;
   for(const b of host.querySelectorAll('[data-filter]'))
@@ -1490,7 +1352,7 @@ async function renderJobsPanel(host){
   bindAction('jobs-history','/jobs/history');
   bindAction('jobs-pause','/maintenance/pause',{},()=>openSettings(null,'jobs'));
   bindAction('jobs-activate','/maintenance/activate',{},()=>openSettings(null,'jobs'));
-  bindAction('jobs-apply-models','/jobs/apply-models');
+  for(const id of ['#jobs-model-plan','#jobs-open-plan'])host.querySelector(id).onclick=()=>openSettings(null,'models');
   bindAction('jobs-repair','/maintenance/repair');
   draw();
 
@@ -1602,7 +1464,7 @@ const SETTINGS_NAV=[
     {route:'identity',title:'Identity',blurb:'Name, personality, appearance and story'},
     'contact','rhythm','awareness','relationship']],
   ['AI models',[
-    'models-overview','hermes-models','hermes-accounts','jobs',
+    'models','hermes-accounts','jobs',
     {route:'local-models',title:'Local models',blurb:'Run models on this machine with Ollama'}]],
   ['Images & voice',[
     'connect-images','photos','connect-voice',

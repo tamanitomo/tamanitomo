@@ -112,6 +112,69 @@ class PresenceTests(unittest.TestCase):
         )
         self.assertEqual(second["episode"]["state"]["care"], ["brushed teeth"])
 
+    def test_a_second_real_write_in_the_same_quarter_hour_lands(self):
+        # The autonomy loop records at :35 and the pulse at :37 builds on it.
+        first = presence.update(self.c, self.data(), self.now)["episode"]
+        second = presence.update(
+            self.c,
+            self.data(previous_id=first["id"], text="Still reading, a chapter on."),
+            self.now + dt.timedelta(minutes=2),
+        )
+        self.assertNotEqual(second["episode"]["id"], first["id"])
+        self.assertEqual(presence.current(self.c)["id"], second["episode"]["id"])
+        # ...and a retry of that second write is still a no-op, not a third record.
+        again = presence.update(
+            self.c,
+            self.data(previous_id=first["id"], text="Still reading, a chapter on."),
+            self.now + dt.timedelta(minutes=3),
+        )
+        self.assertFalse(again["written"])
+        self.assertEqual(len(list(presence.events(self.c))), 2)
+
+    def test_two_writers_from_one_state_collide_and_are_told_what_to_build_on(self):
+        first = presence.update(self.c, self.data(), self.now)["episode"]
+        landed = presence.update(
+            self.c,
+            self.data(previous_id=first["id"], text="Turned a page."),
+            self.now + dt.timedelta(minutes=1),
+        )["episode"]
+        with self.assertRaises(ValueError) as caught:
+            presence.update(
+                self.c,
+                self.data(previous_id=first["id"], text="Something else entirely."),
+                self.now + dt.timedelta(minutes=2),
+            )
+        self.assertIn(f'"previous_id": "{landed["id"]}"', str(caught.exception))
+
+    def test_a_top_level_reason_explains_the_transition(self):
+        first = presence.update(self.c, self.data(), self.now)["episode"]
+        out = presence.update(
+            self.c,
+            self.data(
+                previous_id=first["id"],
+                activity="sleeping",
+                reason="Put the book down and turned the lamp off.",
+            ),
+            self.now + dt.timedelta(minutes=15),
+        )
+        self.assertEqual(
+            out["episode"]["state"]["transition"],
+            "Put the book down and turned the lamp off.",
+        )
+
+    def test_a_teleport_is_told_what_changed_and_which_field_explains_it(self):
+        first = presence.update(self.c, self.data(), self.now)["episode"]
+        with self.assertRaises(ValueError) as caught:
+            presence.update(
+                self.c,
+                self.data(previous_id=first["id"], activity="reading in bed"),
+                self.now + dt.timedelta(minutes=15),
+            )
+        message = str(caught.exception)
+        self.assertIn('activity "reading" -> "reading in bed"', message)
+        self.assertIn('"transition"', message)
+        self.assertNotIn("location", message.split(".")[0])
+
     def test_stale_update_cannot_overwrite_newer_chat_transition(self):
         first = presence.update(self.c, self.data(), self.now)["episode"]
         presence.update(
@@ -1462,6 +1525,26 @@ class ShortFormSceneTests(AwakeFingerprintProseTests):
             up,
         )
         self.assertFalse(presence.current(self.c)["state"]["asleep"])
+
+    def test_continue_can_say_why_an_activity_is_running_long(self):
+        # The overrun rule belongs to the everyday-life rules, which are opt-in.
+        (self.c.life / "routine.json").write_text(
+            json.dumps({"kind": "imagined_routine", "lifestyle": {"enabled": True}}),
+            encoding="utf-8",
+        )
+        presence.transition_scene(
+            self.c, "cooking dinner", "Lunch done, started dinner early.", "Onions first.",
+            duration=30, now=self.now + dt.timedelta(minutes=15),
+        )
+        late = self.now + dt.timedelta(minutes=75)
+        with self.assertRaisesRegex(ValueError, "--delay-reason"):
+            presence.continue_scene(self.c, "Still stirring.", now=late)
+        presence.continue_scene(
+            self.c, "Still stirring.", now=late,
+            delay_reason="The sauce needs another twenty minutes to reduce.",
+        )
+        state = presence.current(self.c)["state"]
+        self.assertEqual(state["activity"], "cooking dinner")
 
     def test_continue_can_correct_a_wrong_sleep_flag(self):
         presence.current(self.c)
