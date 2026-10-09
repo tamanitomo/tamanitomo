@@ -167,37 +167,80 @@ INFERENCE_PRESETS = [
 
 # Named groups of models that can stand as one step of the model chain.
 _FREE_PRESET = next(p for p in INFERENCE_PRESETS if p["id"] == "openrouter_free")
-_openrouter_listing = {"at": 0.0, "data": None}
+_openrouter_listing = {"at": 0.0, "data": None, "refreshing": False}
+_openrouter_lock = threading.Lock()
 
 
-def openrouter_listing(refresh=False):
-    """OpenRouter's public model list, kept six hours; the last good one if unreachable."""
+def _fetch_openrouter_listing():
     import urllib.request
 
-    now = time.time()
-    fresh = now - _openrouter_listing["at"] < 6 * 3600
-    if _openrouter_listing["data"] is not None and fresh and not refresh:
-        return _openrouter_listing["data"]
+    # OpenRouter's edge stalls Python's default user agent.
+    request = urllib.request.Request(
+        "https://openrouter.ai/api/v1/models",
+        headers={"User-Agent": "tamanitomo"},
+    )
+    with urllib.request.urlopen(request, timeout=10) as reply:
+        return json.loads(reply.read().decode("utf-8")).get("data") or []
+
+
+def _refresh_openrouter_listing():
     try:
-        # OpenRouter's edge stalls Python's default user agent.
-        request = urllib.request.Request(
-            "https://openrouter.ai/api/v1/models",
-            headers={"User-Agent": "tamanitomo"},
-        )
-        with urllib.request.urlopen(request, timeout=10) as reply:
-            data = json.loads(reply.read().decode("utf-8")).get("data") or []
+        data = _fetch_openrouter_listing()
     except Exception:
-        return _openrouter_listing["data"]
-    _openrouter_listing.update(at=now, data=data)
+        data = None
+    with _openrouter_lock:
+        if data is not None:
+            _openrouter_listing.update(at=time.time(), data=data)
+        _openrouter_listing["refreshing"] = False
+
+
+def openrouter_listing(refresh=False, home=None):
+    """OpenRouter's public model list, kept six hours; the last good one if unreachable.
+
+    Only an explicit refresh waits for OpenRouter. Otherwise a stale or missing list
+    is answered from what is already known -- this process, or the copy the workers
+    keep in the profile -- and refreshed in the background. Fetching inline made the
+    model settings page take ten seconds to open whenever OpenRouter was slow, and
+    every time the app had restarted.
+    """
+    now = time.time()
+    if refresh:
+        try:
+            data = _fetch_openrouter_listing()
+        except Exception:
+            return _openrouter_listing["data"]
+        with _openrouter_lock:
+            _openrouter_listing.update(at=now, data=data)
+        return data
+    with _openrouter_lock:
+        data = _openrouter_listing["data"]
+        if data is None and home is not None:
+            try:
+                saved = json.loads(
+                    (Path(home) / "companion-free-models.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                if isinstance(saved.get("data"), list):
+                    data = saved["data"]
+                    _openrouter_listing.update(
+                        at=float(saved.get("checked_at") or 0), data=data
+                    )
+            except (OSError, ValueError, TypeError, AttributeError):
+                pass
+        stale = now - _openrouter_listing["at"] >= 6 * 3600
+        if stale and not _openrouter_listing["refreshing"]:
+            _openrouter_listing["refreshing"] = True
+            threading.Thread(target=_refresh_openrouter_listing, daemon=True).start()
     return data
 
 
-def chain_bundles(refresh=False):
+def chain_bundles(refresh=False, home=None):
     """The bundles a chain step can be, with the free cascade picked live."""
     from . import model_chain as mc
 
     known = [row["model"] for row in _FREE_PRESET["fallbacks"]]
-    listed = openrouter_listing(refresh)
+    listed = openrouter_listing(refresh, home)
     picks = mc.pick_free_models(listed, known) if listed is not None else known
     return {
         "openrouter-free": {
@@ -2757,7 +2800,7 @@ def register(app, select, load, operations):
         from . import model_chain as mc
 
         rt, p, h = context()
-        bundles = chain_bundles(refresh)
+        bundles = chain_bundles(refresh, h)
         routes = mc.current_routes(config(h))
         primary = routes[0] if routes else {}
         listed = bundles["openrouter-free"]["listed"]
@@ -2897,6 +2940,328 @@ def register(app, select, load, operations):
             }
 
         return op("Use this model chain", action)
+
+    def _plan_targets(rt):
+        """Every installed companion in this installation: (profile id, name, home)."""
+        from kit.cli.roster import discover
+
+        rows = []
+        for name, home in discover(rt.root):
+            if home.is_symlink() or not (home / cc.CONFIG_NAME).exists():
+                continue
+            label = None
+            label_path = home / "companion-display-name.json"
+            try:
+                if label_path.is_file() and not label_path.is_symlink():
+                    label = json.loads(label_path.read_text(encoding="utf-8")).get(
+                        "name"
+                    )
+            except (OSError, ValueError, AttributeError):
+                label = None
+            rows.append((name or "default", label, home))
+        return rows
+
+    @app.get("/api/models/plan")
+    def model_plan_read():
+        """What every companion runs on, and what still points somewhere else."""
+        from kit.cli.common import T, _read_jobs
+        from companion_routing import job_route
+        from . import model_chain as mc
+        from . import model_plan as mp
+
+        rt, selected, h = context()
+        bundles = chain_bundles(False, h)
+        companions = []
+        for profile, label, home in _plan_targets(rt):
+            try:
+                c = cc.load(home)
+                cfg = config(home)
+                plan = mp.plan_of(c, cfg, bundles)
+                where = mp.accounts(mc.current_routes(cfg) + mp.plan_routes(plan))
+                specs = [
+                    s
+                    for s in json.loads(
+                        (T / "cron/manifest.json").read_text(encoding="utf-8")
+                    )["jobs"]
+                    if not s.get("no_agent")
+                ]
+                expected = {}
+                for spec in specs:
+                    try:
+                        expected[spec["name"].replace("{{AGENT}}", c.agent)] = (
+                            job_route(c, spec)
+                        )
+                    except (ValueError, OSError, KeyError, IndexError):
+                        pass
+                routines, own = mp.survey_jobs(
+                    _read_jobs(home / "cron/jobs.json")["jobs"],
+                    {s["name"].replace("{{AGENT}}", c.agent) for s in specs},
+                    expected,
+                    where,
+                )
+                companions.append(
+                    {
+                        "profile": profile,
+                        "name": label or c.agent,
+                        "selected": profile == (selected or "default"),
+                        "plan": plan,
+                        "routines": routines,
+                        "own_jobs": own,
+                        "helpers": [
+                            {**row, "stranded": mp.stranded(row, where)}
+                            for row in mp.helpers(cfg)
+                        ],
+                        "context_engine": str(
+                            (cfg.get("context") or {}).get("engine") or "compressor"
+                        ),
+                    }
+                )
+            except (ValueError, OSError) as exc:
+                companions.append(
+                    {
+                        "profile": profile,
+                        "name": label or profile,
+                        "selected": profile == (selected or "default"),
+                        "error": hr.redact(str(exc))[:300],
+                    }
+                )
+        plans = [
+            json.dumps(row["plan"], sort_keys=True)
+            for row in companions
+            if "plan" in row
+        ]
+        from companion_gateway import _env_values
+        from companion_routing import codex_tiers
+
+        signed_in = (
+            read_auth_accounts(rt.root)["providers"]
+            | read_auth_accounts(h)["providers"]
+        )
+        values = _env_values(h)
+        free_ready = all(
+            values.get(k) or os.environ.get(k) for k in _FREE_PRESET["requires_env"]
+        )
+        presets = []
+        if "openai-codex" in signed_in:
+            tiers = codex_tiers()
+            presets.append(
+                {
+                    "id": "chatgpt",
+                    "label": "ChatGPT",
+                    "description": "Sol for conversation and reflection, Luna without "
+                    "reasoning for the frequent routines, the free cascade behind them.",
+                    "plan": {
+                        "chat": tiers["chat"],
+                        "loops": tiers["loops"],
+                        "reflection": tiers["reflection"],
+                        "links": [{"bundle": "openrouter-free"}] if free_ready else [],
+                    },
+                }
+            )
+        if free_ready:
+            presets.append(
+                {
+                    "id": "free",
+                    "label": "Free models",
+                    "description": "OpenRouter's free router for everything, with the "
+                    "free models it lists right now behind it.",
+                    "plan": {
+                        "chat": dict(_FREE_PRESET["primary"]),
+                        "loops": None,
+                        "reflection": None,
+                        "links": [{"bundle": "openrouter-free"}],
+                    },
+                }
+            )
+        return {
+            "companions": companions,
+            "presets": presets,
+            "same": len(set(plans)) <= 1,
+            "bundles": [
+                {
+                    "id": key,
+                    "name": b["name"],
+                    "description": b["description"],
+                    "models": [r["model"] for r in b["routes"]],
+                    "live": b["listed"] is not None,
+                }
+                for key, b in bundles.items()
+            ],
+            "max_routes": 9,
+        }
+
+    @app.post("/api/models/plan")
+    def model_plan_apply(payload: dict):
+        """Put one plan on the chosen companions, and everything that serves them.
+
+        Per companion: Hermes's primary and fallbacks, the reasoning for chat, the
+        companion's tiers, every routine's pin (through the same tier rules a fresh
+        install uses), and any helper, delegation or job still pointing at an
+        account the plan no longer uses. The gateway reads the model on every
+        message, so nothing needs restarting for the change to land.
+        """
+        from kit.cli.common import T, _read_jobs
+        from kit.cli.models import apply_job_models
+        from companion_routing import install, job_route
+        from . import model_chain as mc
+        from . import model_plan as mp
+
+        rt, selected, h = context()
+        if not isinstance(payload.get("chat"), dict):
+            raise ValueError("Choose a model for conversation")
+        chat = mp.clean_tier(payload["chat"], "conversation")
+        loops = mp.clean_tier(payload.get("loops"), "everyday routines")
+        reflection = mp.clean_tier(payload.get("reflection"), "reflection")
+        fallbacks = payload.get("fallbacks") or []
+        if not isinstance(fallbacks, list):
+            raise ValueError("Fallbacks must be an ordered list")
+        routes = mc.flatten(
+            [{k: v for k, v in chat.items() if k != "reasoning_effort"}, *fallbacks],
+            chain_bundles(False, h),
+        )
+        plan = {
+            "chat": {
+                **routes[0],
+                **(
+                    {"reasoning_effort": chat["reasoning_effort"]}
+                    if chat.get("reasoning_effort")
+                    else {}
+                ),
+            },
+            "loops": loops,
+            "reflection": reflection,
+        }
+        wanted = payload.get("profiles")
+        known = {profile: (label, home) for profile, label, home in _plan_targets(rt)}
+        if not isinstance(wanted, list) or not wanted:
+            raise ValueError("Choose at least one companion")
+        unknown = [p for p in wanted if p not in known]
+        if unknown:
+            raise ValueError("Unknown companion: " + ", ".join(map(str, unknown)))
+
+        def action(rt, p, h, report):
+            done, failed, restart = [], [], False
+            for profile in wanted:
+                label, home = known[profile]
+                c = cc.load(home)
+                name = label or c.agent
+                report(f"Applying the plan to {name}")
+                try:
+                    moved = []
+                    save_config(
+                        home, lambda cfg: moved.extend(mp.write(cfg, plan, routes))
+                    )
+                    c.models = mp.tiers(plan, routes)
+                    c.__post_init__()
+                    c.save()
+                    engine = home / "plugins/tamanitomo-context/companion.json"
+                    fresh_engine = not engine.exists()
+                    install(c)
+                    restart = restart or (
+                        fresh_engine
+                        and (config(home).get("context") or {}).get("engine")
+                        == "tamanitomo-context"
+                    )
+                    report(f"Re-pinning {name}'s routines")
+                    pinned = apply_job_models(
+                        c, run=lambda a, home=home: rt.run(a, home=home)
+                    )["updated"]
+                    where = mp.accounts(routes + mp.plan_routes(plan))
+                    specs = {
+                        spec["name"].replace("{{AGENT}}", c.agent): spec
+                        for spec in json.loads(
+                            (T / "cron/manifest.json").read_text(encoding="utf-8")
+                        )["jobs"]
+                        if not spec.get("no_agent")
+                    }
+                    # Anything the kit did not just re-pin -- your own jobs, and kit
+                    # jobs for a feature that is switched off -- moves only when it
+                    # points at an account the plan no longer uses: a kit job to its
+                    # own tier, anything else to the background route.
+                    for job in _read_jobs(home / "cron/jobs.json")["jobs"]:
+                        if (
+                            job.get("no_agent")
+                            or job.get("name") in pinned
+                            or not job.get("provider")
+                            or not mp.stranded(job, where)
+                        ):
+                            continue
+                        spec = specs.get(job.get("name"))
+                        target = job_route(c, spec) if spec else mp.background(plan)
+                        result = rt.run(
+                            [
+                                "cron",
+                                "edit",
+                                job["id"],
+                                "--model",
+                                target["model"],
+                                "--provider",
+                                target["provider"],
+                            ]
+                            + (
+                                ["--reasoning-effort", target["reasoning_effort"]]
+                                if spec and target.get("reasoning_effort")
+                                else []
+                            ),
+                            home=home,
+                            check=False,
+                        )
+                        if result.returncode:
+                            failed.append(
+                                f"{name} · {job.get('name')}: "
+                                + hr.redact(result.stderr or result.stdout)[-160:]
+                            )
+                            continue
+                        if (job.get("base_url") or "") != target.get("base_url", ""):
+                            _write_job_base_url(
+                                home, job["id"], target.get("base_url", "")
+                            )
+                        moved.append(job.get("name") or job["id"])
+                    done.append({"name": name, "routines": len(pinned), "moved": moved})
+                except (ValueError, OSError) as exc:
+                    failed.append(f"{name}: {hr.redact(str(exc))[:300]}")
+            first = routes[0]
+            names = [row["name"] for row in done]
+            account = OAUTH_PROVIDER_LABELS.get(first["provider"], first["provider"])
+            account = account.replace(" (signed in)", "")
+            note = (
+                (
+                    " and ".join([", ".join(names[:-1]), names[-1]])
+                    if len(names) > 1
+                    else names[0]
+                )
+                + f" now answer with {account} · {first['model']}"
+                if names
+                else "Nothing was changed"
+            )
+            if loops:
+                note += f"; everyday routines run on {loops['model']}"
+            if reflection:
+                note += f"; reflection on {reflection['model']}"
+            note += "."
+            pins = sum(row["routines"] for row in done)
+            if pins:
+                note += f" {pins} routine{'s' if pins != 1 else ''} re-pinned."
+            moved = [
+                f"{row['name']}: " + ", ".join(row["moved"])
+                for row in done
+                if row["moved"]
+            ]
+            if moved:
+                note += (
+                    " Moved off accounts the plan no longer uses — "
+                    + "; ".join(moved)
+                    + "."
+                )
+            return {
+                "note": note,
+                "done": done,
+                "failed": failed,
+                "routes": routes,
+                "restart_gateway": restart,
+            }
+
+        return op("Apply the model plan", action)
 
     @app.post("/api/jobs/history")
     def job_history():

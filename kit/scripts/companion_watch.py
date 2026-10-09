@@ -96,7 +96,7 @@ def check_jobs(c, found):
     return out
 
 
-def check_state(c, now):
+def check_state(c, now, found=None):
     # Nothing is expected to run while the schedule is paused by choice, so
     # saying the present is stale would be reporting the user's own decision
     # back to them as a fault.
@@ -120,9 +120,37 @@ def check_state(c, now):
         now - dt.datetime.fromisoformat(anchor["recorded_at"]).astimezone(now.tzinfo)
     ).total_seconds() / 3600
     if hours > STATE_UNCONFIRMED_HOURS:
+        # A monitor-backed model job may intentionally suppress an agent run
+        # when its fingerprint is unchanged. That is healthy no-change, not a
+        # stale model. Alert only when the jobs that can refresh the state show
+        # an actual failure or have themselves stopped running.
+        jobs = found if found is not None else _jobs(c)
+        refresh_names = (
+            f"{c.agent} companion pulse",
+            f"{c.agent} autonomy loop",
+        )
+        healthy_refresh = False
+        for name in refresh_names:
+            job = jobs.get(name)
+            if not job or not job.get("enabled") or job.get("last_status") != "ok":
+                continue
+            stamp = job.get("last_run_at")
+            if not stamp:
+                continue
+            try:
+                age = (
+                    now - dt.datetime.fromisoformat(stamp).astimezone(now.tzinfo)
+                ).total_seconds() / 3600
+            except (TypeError, ValueError):
+                continue
+            if age <= 1:
+                healthy_refresh = True
+                break
+        if healthy_refresh:
+            return []
         return [
             f"the present has not been confirmed by a model for {hours:.0f} hours "
-            f'(last at {anchor["recorded_at"][:16]}) — the loops are probably failing'
+            f'(last at {anchor["recorded_at"][:16]}) and no healthy refresh loop ran recently'
         ]
     return []
 
@@ -218,7 +246,7 @@ def problems(c, now=None):
     out = []
     for check in (
         lambda: check_jobs(c, found),
-        lambda: check_state(c, now),
+        lambda: check_state(c, now, found),
         lambda: check_files(c),
         lambda: check_hook(c),
         lambda: check_memory(c),

@@ -541,7 +541,6 @@ class LedgerTests(unittest.TestCase):
         path = self.tmp / "reflection.json"
         for body in (
             '{"entries": {}}',
-            "[]",
             '[{"kind":"gossip"}]',
             '["not an object"]',
         ):
@@ -550,6 +549,67 @@ class LedgerTests(unittest.TestCase):
                 r = slf.ledger_batch(self.c, path, self.now)
                 if r["failed_at"] is not None:
                     raise ValueError(r["results"][-1]["error"])
+
+    def test_an_empty_batch_is_nothing_to_record_not_a_failure(self):
+        path = self.tmp / "reflection.json"
+        for body in ("[]", '{"entries": []}'):
+            path.write_text(body, encoding="utf-8")
+            r = slf.ledger_batch(self.c, path, self.now)
+            self.assertEqual((r["applied"], r["failed_at"]), (0, None))
+
+    def test_an_unknown_category_keeps_the_fact_and_says_where_it_went(self):
+        path = self.tmp / "reflection.json"
+        path.write_text(
+            json.dumps(
+                [
+                    {
+                        "kind": "fact",
+                        "category": "household",
+                        "statement": "Robin does the laundry on Sundays.",
+                        "evidence": "said so on 2026-10-06",
+                    },
+                    {
+                        "kind": "fact",
+                        "category": "Job",
+                        "statement": "Robin starts a new shift pattern next week.",
+                        "evidence": "said so on 2026-10-06",
+                    },
+                ]
+            ),
+            encoding="utf-8",
+        )
+        r = slf.ledger_batch(self.c, path, self.now)
+        self.assertEqual((r["applied"], r["failed_at"]), (2, None))
+        self.assertIn("'household'", r["results"][0]["note"])
+        by_statement = {f["statement"]: f["category"] for f in slf.facts(self.c.human_dir)}
+        self.assertEqual(by_statement["Robin does the laundry on Sundays."], "other")
+        self.assertEqual(
+            by_statement["Robin starts a new shift pattern next week."], "work"
+        )
+
+    def test_a_moment_of_an_unknown_kind_is_kept_as_a_note(self):
+        import companion_notes as notes
+
+        path = self.tmp / "moments.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "entries": [
+                        {
+                            "kind": "moment",
+                            "moment": "session-end reflection",
+                            "text": "We laughed about the umbrella again.",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        r = notes.batch(self.c, path, self.now)
+        self.assertEqual((r["applied"], r["failed_at"]), (1, None))
+        self.assertIn("recorded as a note", r["results"][0]["note"])
+        path.write_text("[]", encoding="utf-8")
+        self.assertEqual(notes.batch(self.c, path, self.now)["failed_at"], None)
 
     def test_corrupt_lines_are_skipped(self):
         slf.record_fact(self.c.human_dir, "likes rain", "said so", self.now)

@@ -307,6 +307,7 @@ def mapping_for(
         # Late in the night, so the fresh session is waiting by morning.
         "ROLLOVER_CRON": cron_at(c.quiet_end, offset=-90),
         "VOICE_RULE": VOICE_RULE,
+        "COMMANDS_RULE": COMMANDS_RULE,
         "WINDOW_CRON": cron_times(c.autonomy_windows),
         "WINDOW_TIMES": (
             ", ".join(c.autonomy_windows) if c.autonomy_windows else "none scheduled"
@@ -408,6 +409,21 @@ VOICE_RULE = (
     "someone good at their job would. Never bring up your own inner workings — memory files, jobs, "
     'prompts, pre-reads, presence records, logs, models, what is or is not "recorded" — unless '
     "{{HUMAN}} has asked you to work on them."
+)
+
+# Shared by every job that runs commands. A scheduled run has nobody to approve a
+# command Hermes flags as unsafe, and Hermes flags `python -c`, `bash -c` and heredocs
+# whatever they contain -- so a model that wrapped a kit command in one to tidy its
+# output lost the tick (most of one companion's pulse failures in a day). Writing
+# JSON to the same scratch file every run tripped a second guard: write_file refuses
+# to overwrite a file this run has not read.
+COMMANDS_RULE = (
+    "COMMANDS: Run each command above directly in the terminal, exactly as written. Never wrap "
+    "one in `python -c`, `python - <<`, `bash -c` or any other heredoc or inline script: a "
+    "scheduled run has nobody to approve those, so they are blocked and the run is lost. The "
+    "commands print JSON; read it from their output. To hand one a JSON file, create it with "
+    "write_file under a new name that includes the current time (for example "
+    "`presence-0937.json`), never reusing an earlier file, then pass its absolute path."
 )
 
 LOCAL_BEGIN = "<!-- COMPANION-LOCAL-NOTES:BEGIN -->"

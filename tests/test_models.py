@@ -1188,3 +1188,161 @@ class ModelChainApiTests(WorkspaceFixture):
         self.assertEqual(row["status"], "complete", row)
         self.assertEqual(self.jobs()["b"]["model"], "grok-4.6")
         self.assertEqual((self.c.home / "config.yaml").read_text(encoding="utf-8"), before)
+
+
+def test_the_model_page_never_waits_on_openrouter_unless_asked(tmp_path):
+    from kit.app import manage
+
+    (tmp_path / "companion-free-models.json").write_text(
+        json.dumps({"ok": True, "checked_at": 1, "data": [{"id": "saved:free"}]})
+    )
+    started = []
+    fetched = []
+    with patch.dict(
+        manage._openrouter_listing, {"at": 0.0, "data": None, "refreshing": False}
+    ), patch.object(
+        manage, "_fetch_openrouter_listing", side_effect=lambda: fetched.append(1) or []
+    ), patch.object(
+        manage.threading, "Thread", side_effect=lambda **kw: types.SimpleNamespace(
+            start=lambda: started.append(kw["target"])
+        )
+    ):
+        # A cold app answers from the copy the workers keep, and refreshes behind it.
+        assert manage.openrouter_listing(home=tmp_path) == [{"id": "saved:free"}]
+        assert fetched == [] and len(started) == 1
+        # One refresh at a time.
+        manage.openrouter_listing(home=tmp_path)
+        assert len(started) == 1
+        # "Check again" is a person asking, so it waits for the answer.
+        assert manage.openrouter_listing(refresh=True) == []
+        assert fetched == [1]
+
+
+class ModelPlanApiTests(WorkspaceFixture):
+    """One plan, applied to every companion and everything that serves them."""
+
+    def setUp(self):
+        super().setUp()
+        from kit.app import manage
+
+        listing = patch.object(manage, "openrouter_listing", return_value=FREE_LISTING)
+        listing.start()
+        self.addCleanup(listing.stop)
+        specs = json.loads(
+            (Path(__file__).resolve().parents[1] / "kit/templates/cron/manifest.json").read_text()
+        )["jobs"]
+        for comp, provider, model in (
+            (self.c, "xai-oauth", "grok-4.6"),
+            (self.other, "custom", "local-model"),
+        ):
+            (comp.home / "config.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "model": {"provider": provider, "default": model},
+                        "auxiliary": {
+                            "vision": {
+                                "provider": "custom",
+                                "model": "local-model",
+                                "base_url": "http://127.0.0.1:11434/v1",
+                                "api_key": "local",
+                                "extra_body": {"id_slot": 1, "max_tokens": 2048},
+                            },
+                            "compression": {"provider": "auto", "model": ""},
+                        },
+                        "cron": {"model": "local-model", "model_provider": "custom"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            jobs = [
+                {
+                    "id": f"{comp.profile}-{s['key']}",
+                    "name": s["name"].replace("{{AGENT}}", comp.agent),
+                    "no_agent": bool(s.get("no_agent")),
+                    "provider": provider,
+                    "model": model,
+                    "enabled": True,
+                }
+                for s in specs
+            ]
+            jobs.append({"id": f"{comp.profile}-mine", "name": "My scanner",
+                         "provider": "xai-oauth", "model": "grok-4.6", "enabled": True})
+            jobs.append({"id": f"{comp.profile}-kept", "name": "My digest",
+                         "provider": "openai-codex", "model": "gpt-5.4-mini", "enabled": True})
+            (comp.home / "cron").mkdir(exist_ok=True)
+            (comp.home / "cron/jobs.json").write_text(json.dumps({"jobs": jobs}), encoding="utf-8")
+
+    def jobs(self, comp):
+        return {j["id"]: j for j in json.loads((comp.home / "cron/jobs.json").read_text())["jobs"]}
+
+    def test_the_plan_shows_every_companion_and_what_points_elsewhere(self):
+        body = self.get("/api/models/plan").json()
+        by = {row["profile"]: row for row in body["companions"]}
+        self.assertEqual(set(by), {"nova", "rowan"})
+        self.assertFalse(body["same"])
+        self.assertTrue(by["nova"]["selected"])
+        self.assertEqual(by["nova"]["plan"]["chat"]["model"], "grok-4.6")
+        vision = next(h for h in by["nova"]["helpers"] if h["key"] == "auxiliary.vision")
+        self.assertTrue(vision["stranded"])
+        self.assertEqual([h["key"] for h in by["nova"]["helpers"]], ["auxiliary.vision", "cron"])
+
+    def test_one_plan_moves_both_companions_and_everything_left_behind(self):
+        row = self.wait(
+            self.post(
+                "/api/models/plan",
+                {
+                    "chat": {"provider": "openai-codex", "model": "gpt-5.6-sol", "reasoning_effort": "none"},
+                    "loops": {"provider": "openai-codex", "model": "gpt-5.6-luna", "reasoning_effort": "none"},
+                    "reflection": None,
+                    "fallbacks": [{"bundle": "openrouter-free"}],
+                    "profiles": ["nova", "rowan"],
+                },
+            )
+        )
+        self.assertEqual(row["status"], "complete", row)
+        self.assertEqual(row["result"]["failed"], [])
+        for comp in (self.c, self.other):
+            cfg = yaml.safe_load((comp.home / "config.yaml").read_text(encoding="utf-8"))
+            self.assertEqual(
+                (cfg["model"]["provider"], cfg["model"]["default"]), ("openai-codex", "gpt-5.6-sol")
+            )
+            self.assertEqual(cfg["fallback_providers"][0]["model"], "openrouter/free")
+            self.assertEqual(cfg["agent"]["reasoning_effort"], "none")
+            # The helper pinned to a server the plan does not use follows the main model again,
+            # without the local server's request extras.
+            self.assertEqual(cfg["auxiliary"]["vision"]["provider"], "auto")
+            self.assertNotIn("base_url", cfg["auxiliary"]["vision"])
+            self.assertEqual(cfg["auxiliary"]["vision"]["extra_body"], {"max_tokens": 2048})
+            self.assertEqual(
+                (cfg["cron"]["model_provider"], cfg["cron"]["model"]), ("openai-codex", "gpt-5.6-luna")
+            )
+            self.assertEqual(cfg["context"]["engine"], "tamanitomo-context")
+            saved = cc.load(comp.home).models
+            self.assertEqual(saved["loops"]["model"], "gpt-5.6-luna")
+            self.assertNotIn("reflection", saved)
+            jobs = self.jobs(comp)
+            pulse = jobs[f"{comp.profile}-pulse"]
+            self.assertEqual((pulse["provider"], pulse["model"]), ("openai-codex", "gpt-5.6-luna"))
+            daily = jobs[f"{comp.profile}-daily"]
+            self.assertEqual((daily["provider"], daily["model"]), ("openai-codex", "gpt-5.6-sol"))
+            # Your own job on an account the plan left is moved; one on an account it uses is yours.
+            self.assertEqual(jobs[f"{comp.profile}-mine"]["model"], "gpt-5.6-luna")
+            self.assertEqual(jobs[f"{comp.profile}-kept"]["model"], "gpt-5.4-mini")
+        body = self.get("/api/models/plan").json()
+        self.assertTrue(body["same"])
+        for comp in body["companions"]:
+            self.assertEqual(comp["routines"]["on_plan"], comp["routines"]["total"])
+            self.assertFalse(any(h["stranded"] for h in comp["helpers"]))
+
+    def test_a_plan_can_be_put_on_one_companion_only(self):
+        row = self.wait(
+            self.post(
+                "/api/models/plan",
+                {"chat": {"provider": "openai-codex", "model": "gpt-5.6-sol"}, "profiles": ["rowan"]},
+            )
+        )
+        self.assertEqual(row["status"], "complete", row)
+        nova = yaml.safe_load((self.c.home / "config.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(nova["model"]["default"], "grok-4.6")
+        with self.assertRaisesRegex(AssertionError, "400"):
+            self.wait(self.post("/api/models/plan", {"chat": {"provider": "x", "model": "y"}, "profiles": []}))

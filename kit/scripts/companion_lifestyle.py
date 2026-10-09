@@ -245,7 +245,9 @@ def evolve(c, data, outfit, previous, closet, now):
             and not data.get("delay_reason", "").strip()
         ):
             raise ValueError(
-                "ACTIVITY OVERDUE: start the next activity, or give an explicit delay_reason; extending duration_minutes alone is not a transition"
+                "ACTIVITY OVERDUE: start the next activity, or give an explicit delay_reason "
+                "(the continue short form takes --delay-reason); extending duration_minutes "
+                "alone is not a transition"
             )
     if still_bathing:
         dur = data.get("duration_minutes")

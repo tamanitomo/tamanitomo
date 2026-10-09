@@ -76,14 +76,18 @@ def select_messages(request_messages, conversation_messages, agent):
     return out
 
 
-def make_engine(config, agent_name):
-    """Reuse Hermes's compressor; only add the documented select_context seam."""
+def make_engine(config, agent_name, name="companion-local"):
+    """Reuse Hermes's compressor; only add the documented select_context seam.
+
+    `name` is what `context.engine` selects. "companion-local" is the name the
+    first hand-installed copy used; the kit's plugin registers its own."""
+    engine_name = name
     from agent.context_compressor import ContextCompressor
 
     class CompanionLocalContext(ContextCompressor):
         @property
         def name(self):
-            return "companion-local"
+            return engine_name
 
         def __init__(self, cfg):
             self._initial_config = copy.deepcopy(cfg)
