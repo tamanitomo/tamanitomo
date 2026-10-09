@@ -1,17 +1,5 @@
-## Unreleased — beta consolidation and automatic companion life
+## Unreleased — her story, what she can notice, and an honest sense of missing you
 
-- Consolidate development on `beta`, stable releases on `main`, and the website on
-  `gh-pages`; retain Android wheel downloads through an immutable tag.
-- Recover sleep-gate and presence-transition fixes, including private-scene continuity.
-- Add a signed-in ChatGPT workload preset; update existing cron jobs and migrate
-  legacy provider-pinned script workers. Keep ordered primary/fallback/final routes,
-  with a Hermes adapter for pinned cron jobs and live free-model bundle refresh.
-- Continue independent projects, interests and fictional friendships during human
-  absence. Vary suggestions and preserve project notes; avoid automatic plan abandonment.
-- Count trusted owner messages for daily contact and quiet-hours learning. Recognize
-  native cron usage logs and show input/output separately without a spending cap.
-
-- Support Hermes store-managed launchers when resetting morning conversations.
 - Stop inventing signals. With Spotify unconnected the music sensor is silent (it no longer
   makes up a listening mood from the hour, and removes its stale legacy file); the season
   follows her hemisphere from weather latitude or her timezone's coordinates, and is omitted
@@ -33,6 +21,32 @@
   `places.md`). Relationship moments gain evidence and recurrence.
 - Warmth and trust now move slowly from days of real two-way conversation and kept requests,
   small and capped, and paused while a rupture is unrepaired.
+
+## 3.6.3 — One model plan, steadier routines, and a companion who keeps the thread (2026-10-09)
+
+- Pick up where you left off: each turn now quotes the last few messages from the
+  human's other conversations (another channel, or the same one before the morning's
+  fresh start), from the last 36 hours, in a reserve of its own so no other section is
+  pushed out. It was a development switch; it is now on by default under Settings →
+  Awareness.
+- Read web pages on this machine: a kit plugin fetches pages from their own sites and
+  turns them into Markdown locally, so no reading service sees what a companion reads.
+  It becomes a profile's page reader unless another was chosen, and a failed read is no
+  longer passed to Hermes's free online tier. Settings → Awareness switches it; a newly
+  installed plugin loads when the gateway restarts.
+
+- Consolidate development on `beta`, stable releases on `main`, and the website on
+  `gh-pages`; retain Android wheel downloads through an immutable tag.
+- Recover sleep-gate and presence-transition fixes, including private-scene continuity.
+- Add a signed-in ChatGPT workload preset; update existing cron jobs and migrate
+  legacy provider-pinned script workers. Keep ordered primary/fallback/final routes,
+  with a Hermes adapter for pinned cron jobs and live free-model bundle refresh.
+- Continue independent projects, interests and fictional friendships during human
+  absence. Vary suggestions and preserve project notes; avoid automatic plan abandonment.
+- Count trusted owner messages for daily contact and quiet-hours learning. Recognize
+  native cron usage logs and show input/output separately without a spending cap.
+
+- Support Hermes store-managed launchers when resetting morning conversations.
 
 - One model plan for every companion: Settings → AI models → Models replaces Overview,
   Models & fallbacks, the ready-made presets, the per-tier form and the jobs page's

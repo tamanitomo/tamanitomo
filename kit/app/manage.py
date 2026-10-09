@@ -3154,14 +3154,8 @@ def register(app, select, load, operations):
                     c.models = mp.tiers(plan, routes)
                     c.__post_init__()
                     c.save()
-                    engine = home / "plugins/tamanitomo-context/companion.json"
-                    fresh_engine = not engine.exists()
-                    install(c)
-                    restart = restart or (
-                        fresh_engine
-                        and (config(home).get("context") or {}).get("engine")
-                        == "tamanitomo-context"
-                    )
+                    # A running gateway keeps the plugin code it loaded.
+                    restart = install(c) or restart
                     report(f"Re-pinning {name}'s routines")
                     pinned = apply_job_models(
                         c, run=lambda a, home=home: rt.run(a, home=home)

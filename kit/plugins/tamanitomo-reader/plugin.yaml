@@ -1,0 +1,3 @@
+name: tamanitomo-reader
+version: 1.0.0
+description: Reads web pages on this machine for web_extract, so no reading service sees them

@@ -107,6 +107,11 @@ INJECTION_MAX = 9_000
 # hook-output spill limit that follows injection_cap follows this too.
 FACTS_FRACTION = 0.02
 FACTS_RESERVE_MAX = 60_000
+# The last messages from the human's other conversations -- another channel, or this
+# one before the morning's fresh start -- quoted so a new session can pick the thread
+# up. Reserved on top, like the facts, so it never pushes another section out.
+CONVERSATION_FRACTION = 0.004
+CONVERSATION_RESERVE_MAX = 4_000
 # The vault map is sent once per session and then rides in the cached prefix, so
 # it may take a larger slice than the per-turn injection. Automatic sizing gives
 # it a tenth of the window, up to 25K tokens; a fixed setting may go higher.
@@ -197,6 +202,18 @@ def facts_reserve(context_tokens: int) -> int:
         context_tokens * HERMES_CHARS_PER_TOKEN * FACTS_FRACTION,
         0,
         FACTS_RESERVE_MAX,
+    )
+
+
+def conversation_reserve(context_tokens: int) -> int:
+    """Chars reserved, on top of injection_cap(), for recent messages from the human's
+    other conversations. None on a tiny window."""
+    if tier(context_tokens) == "tiny":
+        return 0
+    return _clamp(
+        context_tokens * HERMES_CHARS_PER_TOKEN * CONVERSATION_FRACTION,
+        0,
+        CONVERSATION_RESERVE_MAX,
     )
 
 
@@ -354,6 +371,13 @@ class Companion:
     # Empty means "no anchor recorded", which reads the whole history as before.
     relationship_started: str = ""
     peer_interaction: bool = True
+    # Quote the last messages from the human's other conversations into each turn:
+    # another channel, or this one before the morning's fresh start. Starting fresh
+    # keeps replies quick; this keeps the thread.
+    conversation_handoff: bool = True
+    # Read web pages on this machine instead of through a reading service. The kit
+    # sets this up wherever no other reader was chosen in Hermes.
+    local_web_reader: bool = True
     # Which sensors this profile has switched on, by name.
     sensors: list = dataclasses.field(default_factory=list)
     # Per-job model choices, written by `tamanitomo models`. Empty means "whatever
@@ -380,6 +404,10 @@ class Companion:
                 )
         if not isinstance(self.peer_interaction, bool):
             raise ValueError("peer_interaction must be true or false")
+        if not isinstance(self.conversation_handoff, bool):
+            raise ValueError("conversation_handoff must be true or false")
+        if not isinstance(self.local_web_reader, bool):
+            raise ValueError("local_web_reader must be true or false")
         if not isinstance(self.adult_images, bool):
             raise ValueError("adult_images must be true or false")
         if self.adult_images and not self.explicit:
@@ -777,7 +805,18 @@ class Companion:
 
     @property
     def injection_cap(self) -> int:
-        return injection_cap(self.context_tokens) + facts_reserve(self.context_tokens)
+        return (
+            injection_cap(self.context_tokens)
+            + facts_reserve(self.context_tokens)
+            + self.conversation_cap
+        )
+
+    @property
+    def conversation_cap(self) -> int:
+        """Chars for recent messages from the human's other conversations."""
+        if not self.conversation_handoff:
+            return 0
+        return conversation_reserve(self.context_tokens)
 
     @property
     def compact(self) -> bool:
@@ -792,7 +831,8 @@ class Companion:
         rules = 380 if self.compact else 1450
         tail = 260 if self.compact else 620
         reserve = facts_reserve(self.context_tokens)
-        free = max(0, self.injection_cap - reserve - rules - tail)
+        conversation = self.conversation_cap
+        free = max(0, self.injection_cap - reserve - conversation - rules - tail)
         keep = [
             k for i, k in enumerate(_PRIORITY) if (i + 1) * _MIN_USEFUL <= free
         ] or _PRIORITY[:1]
@@ -818,6 +858,7 @@ class Companion:
                 over -= out[dropped]
                 out[dropped] = 0
         out["facts"] += reserve
+        out["conversation"] = conversation
         out["rules"], out["tail"], out["total"] = rules, tail, self.injection_cap
         return out
 
