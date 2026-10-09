@@ -1,22 +1,35 @@
-Tamanitomo 3.6.2: a companion that actually knows you, and a steadier pulse.
+Tamanitomo 3.6.3: one place to choose models, routines that stop failing, and a companion who keeps the thread.
 
-- **She knows all of it, not two facts.** What is known about you now has its own room in
-  every turn's context, sized from the model's window, instead of a slice so small that
-  two facts out of seventy-eight got through (and often none). Facts that matter most,
-  such as health, lead the list and are the last to be cut. Fixed a bug that listed
-  categories backwards and made `history` facts unreachable.
-- **No more duplicate memories.** A fact is no longer stored if Hermes's own notes
-  (USER.md or its archive) or the ledger already say it. The nightly reflection now
-  reasons about each fact against everything known, judging by meaning: new, more proof of
-  an existing fact, a correction, or already known. Repeats are kept as extra evidence
-  under the fact instead of new rows. One-off events (what you ate, when you woke) stay in
-  the journal; lasting patterns become facts. Passing or unclear things, such as an
-  illness, become a follow-up rather than a fact.
-- **Weekly tidy-up.** The hygiene job merges leftover duplicates, promotes the facts that
-  would hurt to forget, and writes a readable facts index next to the ledger.
-- **A calmer pulse.** The pulse and autonomy loops no longer wake on nearly every tick
-  because ambient sensors and re-worded plans changed the fingerprint; they now run on
-  real transitions.
+- **Pick up where you left off.** A conversation still starts fresh each morning so replies
+  stay quick, but your companion now sees the last few messages from before the reset and
+  from your other channels (Telegram, the app), so the thread carries over. It sits in a
+  space of its own and pushes nothing else out. On by default; Settings → Awareness.
+- **Web pages read on your machine.** Pages your companion opens are fetched straight from
+  their own site and turned into text locally. No reading service sees them, and a failed
+  read is never quietly handed to a free online one. Pages that need a browser to appear
+  point at the browser tool, which also runs locally. Settings → Awareness.
+- **One model plan.** Settings → AI models → Models replaces four separate screens: choose
+  what answers conversations, runs everyday routines and reflections, and what to fall back
+  to, then apply it to any of your companions. Every routine, Hermes's helper tasks and the
+  scheduled-job default follow, and each companion says what is still off the plan. Changes
+  land on the next message.
+- **Leaner conversations.** Hermes re-sent every earlier copy of the continuity snapshot
+  with each message, so most of a long evening's request was old copies. Now only the
+  newest goes, so replies start sooner and more real conversation fits before it is
+  summarised.
+- **Routines that stop failing.** Scheduled prompts run commands directly (a scheduled run
+  cannot approve the wrapped kind, and that cost one companion most of its updates in a
+  day); a second update in the same quarter hour lands; errors name exactly what to fix;
+  and facts or moments with an unfamiliar category are kept instead of refused.
+- **Quicker pages.** The chat feed no longer pages through scheduled runs, and the Models
+  page no longer waits for OpenRouter's model list.
+- **Also in this release:** a signed-in ChatGPT workload preset, independent projects and
+  friendships that carry on while you are away, trusted messages counted for daily contact
+  and quiet-hours learning, support for store-managed Hermes at the morning reset, and
+  Windows fixes.
+
+**After updating,** open Settings → Scheduled jobs and choose **Install / repair** (or apply
+your model plan), then restart the gateway once, so Hermes loads the new plugins.
 
 ### Install or update
 
