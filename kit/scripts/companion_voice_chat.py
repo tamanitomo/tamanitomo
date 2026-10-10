@@ -1,9 +1,19 @@
 """Isolated voice worker running in Hermes's environment."""
 
 import json
+import os
 import sys
 
 if __name__ == "__main__":
+    # Importing Hermes can re-run this script under Hermes's own Python (execv, in
+    # isolated mode). Let that happen before stdin is read: the re-run inherits stdin
+    # only while it is unread, and isolated mode leaves this folder off the path. With
+    # stdin read first, every request through this bridge arrived empty.
+    try:
+        import hermes_bootstrap  # noqa: F401
+    except ImportError:
+        pass
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     try:
         data = json.load(sys.stdin)
         if sys.argv[1] == "transcribe":

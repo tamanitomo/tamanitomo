@@ -1,5 +1,9 @@
 ## Unreleased
 
+- The model test in Settings → Models, the studio's Hermes image providers and image review,
+  and voice in the app work again. Hermes re-runs a helper under its own Python when the
+  helper first imports it, and every helper had read its request before that, so the re-run
+  started with an empty one. The helpers now let Hermes start first.
 - Photos that cannot render no longer cost a model run. The image timeline's job is gated
   before the model: when the run could only decline (asleep, a private moment, an interval
   already claimed, a scene already photographed) or when the ComfyUI the next photo would
