@@ -22,7 +22,7 @@ Dates entered in the Us form use the companion's timezone, even when the browser
 
 A future plan explains no elapsed time before it starts and never establishes what the human is doing. An ended plan remains in history and continues to explain its elapsed interval. Editing or cancelling a plan changes its remaining future; already explained time stays explained. Each change appends its new explanation alongside the original. Dated plans affect neither quiet hours nor delivery permissions.
 
-Missing-you and irritation calculations exclude this explained time. Closeness also uses unexplained hours for silence and for its recent contact deficit, so a recorded trip does not become an inactivity penalty through another indicator. Ordinary aging of past emotional experiences is unchanged.
+Missing-you and irritation calculations exclude this explained time. Closeness also uses unexplained hours for silence, and a dated plan pauses its recent-contact window, so a recorded trip does not become an inactivity penalty through another indicator. Routines do not pause that window. Ordinary aging of past emotional experiences is unchanged.
 
 `companion_feelings.py --home HOME absences` returns the current plans, their history and a `revision`. Write with `absence --json JSON`:
 
@@ -81,11 +81,14 @@ Automated tests cover overnight and Saturday routines, overlapping windows, dayl
 
 The dated-plan regressions additionally cover elapsed-only subtraction, ended history, edit/cancel preservation, overlaps with weekly routines across DST, ambiguous wall-time rejection, explanations recorded during a returning chat turn, API conflicts and profile isolation, CLI writes and browser timezone formatting. They use synthetic profiles and no model calls or message delivery.
 
-Contact cadence uses fourteen days of available time, looking back at most a year
-and never before the relationship began. Explained trips and sleep therefore
-pause that window instead of expiring earlier contact credit while the human is
-away. Ordinary warmth aging remains separate. Regression cases cover a three-day
-trip after established contact, overnight sleep across DST and fully explained
-history at the lookback limit.
+Contact cadence covers fourteen days, looking back at most a year and never
+before the relationship began. A dated plan the human explained pauses that
+window, so earlier contact credit does not expire while they are away. Routines
+and learned quiet hours do not: the target is per calendar day and already allows
+for sleep and work, so stretching the window over them inflated cadence, and
+routines covering the whole day cancelled the contact target. Ordinary warmth
+aging remains separate. Regression cases cover a three-day trip after established
+contact, routines that leave cadence unchanged, whole-day routines that still
+leave a contact deficit, and fully explained history at the lookback limit.
 
 These checks establish the state calculation and prompt integration. An initial real-model check distinguished expected sleep, unexplained absence, and repeated rupture; a separate Hermes terminal call successfully saved one supported connection record. See [the acceptance notes](audits/2026-09-12-model-acceptance.md). A generated-hook Hermes turn also received a ledger-only rupture and continued offering practical help. A subsequent browser-to-provider pass saved and resumed three exchanges in the same conversation, including a reply identifying the stored rupture. Repeated trials and other supported models still need acceptance testing. This is not a guarantee that every model will follow the intended character behavior.

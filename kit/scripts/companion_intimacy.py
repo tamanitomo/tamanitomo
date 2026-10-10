@@ -319,13 +319,18 @@ def day_credit(messages):
     return max(SHOW_UP_FLOOR, min(1.0, credit))
 
 
-def _cadence_window(c, now, config, first_day, tz):
-    """A fortnight of available time; explained hours do not expire contact.
+def _cadence_window(c, now, first_day, tz):
+    """A fortnight of contact, paused only by dated time away the human explained.
 
-    The existing absence union handles both dated plans and weekly routines.
-    Search at most one year, matching its own historical bound. Bisection is
-    bounded to minute precision, finer than the displayed cadence can express.
+    Routines and learned quiet hours do not stretch it. Par is per calendar day
+    and already allows for sleep and work; a fortnight of hours outside them
+    reached back weeks, so the same daily contact read as 0.87 instead of 0.37
+    with sleep and work set, and routines covering the whole day erased the
+    contact deficit entirely. Search at most one year, matching the absence
+    union's own historical bound. Bisection is bounded to minute precision,
+    finer than the displayed cadence can express.
     """
+    trips_only = {"absence_windows": []}
     end = now.astimezone(dt.timezone.utc)
     earliest = end - dt.timedelta(days=366)
     if first_day is not None:
@@ -342,7 +347,7 @@ def _cadence_window(c, now, config, first_day, tz):
 
     def hours(start):
         return (
-            feelings.absence(c, start.isoformat(), end, config)["unexplained_hours"]
+            feelings.absence(c, start.isoformat(), end, trips_only)["unexplained_hours"]
             or 0.0
         )
 
@@ -573,7 +578,7 @@ def compute(c, now=None) -> Dict[str, Any]:
     # only kind the meter noticed: a daily one-word ping reset the silence clock
     # completely while earning almost nothing, which made neglect look like devotion.
     # Measured over a fortnight so one quiet week does not read as abandonment.
-    window_begin, window_days = _cadence_window(c, now, absence_config, first_day, tz)
+    window_begin, window_days = _cadence_window(c, now, first_day, tz)
     recent = {}
     for day, messages in by_day.items():
         eligible = [(at, text) for at, text in messages if window_begin <= at <= now]

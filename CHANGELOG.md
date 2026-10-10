@@ -6,7 +6,10 @@
 - Refresh the chat dock across trusted channels without resending a turn or disturbing
   drafts. Search conversations by literal text, date and channel, then open nearby messages.
 - Record dated time away with an explanation and editable history. Combine it with weekly
-  and learned routines so explained time does not become a silence or cadence penalty.
+  and learned routines so explained time does not count as silence. A dated plan also
+  pauses the closeness contact window; routines do not, so declaring them cannot inflate
+  contact or cancel its target.
+- Function words such as "with" no longer bring up unrelated messages as recall topics.
 - Resume the onboarding interview after refresh, keeping non-secret answers on this device
   for seven days. Recover interrupted creation by its operation before offering a retry.
   Stage new connection settings privately so creating another companion does not change

@@ -18,10 +18,15 @@ import time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import companion_config as cc
 
+# Function words name no topic. Before "with" and its kind were listed, a shared
+# "with" was enough to offer an unrelated old message as a topic callback.
 BASE_STOP = set(
     """a an the when was were is are am i me my we our you your last time have has had did do
 does to in on at of for and or it that this what where how why remember recall ever been went go going
-tell about know please can could would since only always""".split()
+tell about know please can could would since only always
+with from into onto over under just like some more most then than them they their there these
+those which while will here out off too any all not but its his her him she who whose yes yeah
+lol gonna wanna""".split()
 )
 
 # Implicit callbacks need a subject, not just a shared time word or small talk.

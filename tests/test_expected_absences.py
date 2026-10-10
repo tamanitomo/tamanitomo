@@ -363,25 +363,49 @@ def test_explained_trip_does_not_expire_prior_contact_credit(companion):
     assert after["cadence"] == before["cadence"]
 
 
-def test_available_cadence_window_stays_put_during_sleep_across_dst(companion):
-    import companion_intimacy as intimacy
-    from zoneinfo import ZoneInfo
+SLEEP_AND_WORK = [
+    {"label": "Sleep", "days": list(range(7)), "start": "23:00", "end": "07:00"},
+    {"label": "Work", "days": [0, 1, 2, 3, 4], "start": "09:00", "end": "17:00"},
+]
 
-    companion.timezone = "America/New_York"
-    zone = ZoneInfo(companion.timezone)
-    begin = dt.datetime(2026, 10, 31, 23, tzinfo=zone)
-    end = dt.datetime(2026, 11, 1, 7, tzinfo=zone)
-    config = {
-        "absence_windows": [
-            {"label": "Sleep", "days": list(range(7)), "start": "23:00", "end": "07:00"}
-        ]
-    }
-    before, before_days = intimacy._cadence_window(companion, begin, config, None, zone)
-    after, after_days = intimacy._cadence_window(companion, end, config, None, zone)
-    assert (end.astimezone(UTC) - begin.astimezone(UTC)).total_seconds() == 9 * 3600
-    assert abs((after - before).total_seconds()) <= 60
-    assert after_days == pytest.approx(before_days, abs=1 / 1440)
-    assert before_days == pytest.approx(14, abs=1 / 1440)
+
+def test_daily_routines_do_not_stretch_the_cadence_window(companion):
+    import companion_intimacy as intimacy
+
+    feelings.save_settings(
+        companion,
+        {**feelings.DEFAULTS, "learn_rhythm": False, "absence_windows": SLEEP_AND_WORK},
+        feelings.settings(companion)["revision"],
+    )
+    start, days = intimacy._cadence_window(companion, NOW, None, UTC)
+    assert start == NOW - dt.timedelta(days=14)
+    assert days == pytest.approx(14, abs=1 / 1440)
+
+
+def test_routines_leave_contact_cadence_unchanged(companion):
+    import companion_intimacy as intimacy
+
+    # Par is per calendar day and already allows for sleep and work. Measuring
+    # the window in hours outside them more than doubled cadence for this history.
+    store = HermesStore(companion.home)
+    store.session("owner", "telegram", profile="")
+    for day in range(60):
+        store.say(
+            "owner",
+            "user",
+            "Synthetic owner conversation detail. " * 6,
+            (NOW - dt.timedelta(days=day, hours=4)).timestamp(),
+        )
+    plain = intimacy.compute(companion, NOW)
+    feelings.save_settings(
+        companion,
+        {**feelings.DEFAULTS, "learn_rhythm": False, "absence_windows": SLEEP_AND_WORK},
+        feelings.settings(companion)["revision"],
+    )
+    routine = intimacy.compute(companion, NOW)
+    assert 0 < plain["cadence"] < 1
+    assert routine["cadence"] == plain["cadence"]
+    assert routine["score"] == plain["score"]
 
 
 def test_available_cadence_lookback_is_bounded_and_respects_relationship_start(
@@ -395,21 +419,17 @@ def test_available_cadence_lookback_is_bounded_and_respects_relationship_start(
         end=(NOW + dt.timedelta(days=1)).isoformat(),
     )
     with patch.object(feelings, "absence", wraps=feelings.absence) as read:
-        start, days = intimacy._cadence_window(
-            companion, NOW, {"absence_windows": []}, None, UTC
-        )
+        start, days = intimacy._cadence_window(companion, NOW, None, UTC)
     assert start == NOW - dt.timedelta(days=366)
     assert days == 0
     assert read.call_count <= 6
     relationship_start = (NOW - dt.timedelta(days=2)).date()
-    start, days = intimacy._cadence_window(
-        companion, NOW, {"absence_windows": []}, relationship_start, UTC
-    )
+    start, days = intimacy._cadence_window(companion, NOW, relationship_start, UTC)
     assert start.date() == relationship_start
     assert days == 0
 
 
-def test_weekly_routines_also_exempt_closeness_contact_deficit(companion):
+def test_routines_covering_every_hour_do_not_cancel_the_contact_deficit(companion):
     import companion_intimacy as intimacy
 
     config = {
@@ -436,7 +456,9 @@ def test_weekly_routines_also_exempt_closeness_contact_deficit(companion):
         return_value={"last_from_human": NOW.isoformat(), "hours_since_human": 72},
     ):
         result = intimacy.compute(companion, NOW + dt.timedelta(days=3))
-    assert result["cadence"] == 1.0
+    # Declaring the whole day as routine once reported perfect cadence with no
+    # contact at all; the contact target must not be that easy to opt out of.
+    assert result["cadence"] == 0.0
 
 
 def test_cli_reads_and_records_only_the_requested_profile(companion):

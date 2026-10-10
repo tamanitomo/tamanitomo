@@ -60,8 +60,9 @@ date and source, and retrieved content remains evidence rather than instructions
 
 Explained absences are append-only records with time bounds, a reason and source.
 Their intervals are combined with weekly and learned routines before measuring
-unexplained silence or cadence gaps. Editing or cancelling a plan changes future
-coverage while preserving time already explained. See [FEELINGS.md](FEELINGS.md).
+unexplained silence; only dated plans pause the closeness contact window. Editing
+or cancelling a plan changes future coverage while preserving time already
+explained. See [FEELINGS.md](FEELINGS.md).
 
 ## Zero-LLM maintenance
 

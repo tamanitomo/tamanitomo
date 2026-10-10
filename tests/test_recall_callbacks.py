@@ -200,6 +200,12 @@ class RecallCallbacksTests(unittest.TestCase):
         self.assertIn("Cedar Labs", output)
         self.assertIn("Relative dates belong to the quoted message", output)
 
+    def test_a_shared_function_word_is_not_a_callback_topic(self):
+        self.say("I went to the market with my sister.")
+        query = "That was a fun day with the dog."
+        self.assertEqual(recall.implicit_terms(self.c, query), ["fun", "dog"])
+        self.assertEqual(self.search(query, implicit=True)["results"], [])
+
     def test_stale_future_and_undated_evidence_are_not_implicit_callbacks(self):
         self.say("The interview was with Ancient Labs", days=91)
         self.say("The interview is with Future Labs", days=-1)
