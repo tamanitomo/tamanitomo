@@ -1,4 +1,4 @@
-## Unreleased
+## 3.7.2 — Photos that wait for ComfyUI, helpers that keep their request (2026-10-10)
 
 - A morning recorded by the pulse in the same minute is no longer reported as a failed
   morning: the morning routine reads the state and carries on when it already has her up.
