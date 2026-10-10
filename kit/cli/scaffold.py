@@ -192,8 +192,9 @@ def _create_job_via_hermes(
             cmd += ["--reasoning-effort", str(effort)]
         if spec.get("continuity") and hermes_supports(base, c.home, "--continuity"):
             cmd += ["--continuity"]
-        if spec.get("preread"):
-            path = write_preread_script(c, spec, "preread")
+        if spec.get("preread") or spec.get("gate"):
+            mode = "preread" if spec.get("preread") else "gate"
+            path = write_preread_script(c, spec, mode)
             if hermes_supports(base, c.home, "--script"):
                 cmd += ["--script", path.name]
         if spec.get("monitor"):
@@ -257,11 +258,13 @@ def write_preread_script(c, spec, mode):
 
     `preread` output is injected into the prompt; `fingerprint` output is hashed,
     and an unchanged hash means Hermes skips the run. Same helper, two modes, so
-    the two can never describe different sources.
+    the two can never describe different sources. `gate` runs before the model
+    in place of a pre-read and ends with {"wakeAgent": false} when the run could
+    only decline.
     """
     module = (
         spec.get("monitor_module", "companion_preread")
-        if mode == "fingerprint"
+        if mode in ("fingerprint", "gate")
         else "companion_preread"
     )
     path = c.home / "scripts" / f"companion-{spec['key'].replace('_','-')}-{mode}.py"
@@ -445,6 +448,16 @@ def _install_jobs_locked(c, m, report):
                 "expr"
             ) == cr.cron_at(c.quiet_end, offset=10):
                 updates += ["--schedule", cr.render(spec["expr"], m)]
+            # A job whose spec gained a gate gets it, unless something else already
+            # runs before its model: a script someone chose is theirs to keep.
+            if (
+                spec.get("gate")
+                and not spec.get("preread")
+                and not spec.get("no_agent")
+                and not job.get("script")
+                and hermes_supports(tuple(cp.hermes_command()), c.home, "--script")
+            ):
+                updates += ["--script", write_preread_script(c, spec, "gate").name]
             # A job whose spec gained a monitor since it was created gets one, so the
             # gate reaches existing installs rather than only new ones.
             if (

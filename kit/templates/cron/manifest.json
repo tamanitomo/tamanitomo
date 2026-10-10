@@ -123,6 +123,7 @@
    ],
    "monitor": true,
    "monitor_module": "companion_timeline",
+   "gate": true,
    "sensitivity": "sensitive",
    "sends": "Her appearance, wardrobe and the private detail of a recorded moment."
   },

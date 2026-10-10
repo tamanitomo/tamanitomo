@@ -262,6 +262,13 @@ The check-in works the same way against a different signal: a small `on_session_
 flag, and the job's fingerprint contains no clock at all, so it stays completely silent when nobody
 is talking and fires within minutes when a conversation ends.
 
+The image timeline has both: a fingerprint of the visible scene, and a gate in `--script` that runs
+before the model and answers `{"wakeAgent": false}` whenever the run could only decline -- asleep, a
+private moment, the interval already claimed, the scene already photographed -- or when the ComfyUI
+the next photo would use is not answering. A hosted image provider is never asked, since asking would
+mean paying for an image. While ComfyUI is down the Photos page says so, and the run that follows its
+return takes the photo.
+
 ---
 
 ## Senses

@@ -467,6 +467,7 @@ def build(home=None, token="", state_dir=None):
                 }
             )
         return {
+            "provider": tl.provider_status(c),
             "captures": rows,
             "albums": tl.albums(c),
             "agent": c.agent,

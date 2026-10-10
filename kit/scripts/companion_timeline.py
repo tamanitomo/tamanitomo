@@ -333,11 +333,12 @@ def bounds(now):
     return min(slot, now - dt.timedelta(minutes=RECENT)) - dt.timedelta(seconds=1), now
 
 
-def prepare(c, now=None):
-    now = now or now_utc()
-    prune(c, now)
+def _refusal(c, now):
+    """(refusal, scene, style): each reason prepare declines a photo before it claims
+    the interval. gate() asks the same questions, so a run that could only decline
+    is never started."""
     if not c.image_timeline:
-        return {"ready": False, "reason": "Image timeline is off"}
+        return {"ready": False, "reason": "Image timeline is off"}, None, None
     # Nobody photographs themselves asleep, and a night of it is thirty near-identical
     # dark rooms in the gallery. The sleep window is declared at wind-down precisely so
     # this is a fact on disk rather than a judgement call the model makes at 03:00.
@@ -346,15 +347,19 @@ def prepare(c, now=None):
     night = companion_sleep.status(c, now)
     if night.get("asleep"):
         until = night.get("until_local") or night.get("until")
-        return {
-            "ready": False,
-            "asleep": night,
-            "reason": (
-                "Asleep"
-                + (f" until {until}" if until else "")
-                + "; no timeline images while asleep. The night resumes on its own."
-            ),
-        }
+        return (
+            {
+                "ready": False,
+                "asleep": night,
+                "reason": (
+                    "Asleep"
+                    + (f" until {until}" if until else "")
+                    + "; no timeline images while asleep. The night resumes on its own."
+                ),
+            },
+            None,
+            None,
+        )
     scene = current(c)
     # A recorded undressed moment can only be photographed honestly or not at all.
     # Without the permissions for the first, the second is the answer -- and saying
@@ -363,46 +368,105 @@ def prepare(c, now=None):
     # Her own "not this one" is final. Permissions can unlock a moment that is
     # merely undressed; they never overrule her asking not to be photographed.
     if reason == "declared":
-        return {
-            "ready": False,
-            "reason": "She marked this moment private; no photo of this one.",
-        }
+        return (
+            {
+                "ready": False,
+                "reason": "She marked this moment private; no photo of this one.",
+            },
+            None,
+            None,
+        )
     if reason == "undressed":
         from companion_portrait import undressed_render_allowed
 
         allowed, why = undressed_render_allowed(c)
         if not allowed:
-            return {
-                "ready": False,
-                "reason": f"A private moment ({why}); no photo of this one.",
-            }
-    now = now.astimezone(dt.timezone.utc)
-    seconds = c.image_interval_minutes * 60
-    slot = dt.datetime.fromtimestamp(
-        int(now.timestamp()) // seconds * seconds, tz=dt.timezone.utc
-    )
-    start, end = bounds(now)
+            return (
+                {
+                    "ready": False,
+                    "reason": f"A private moment ({why}); no photo of this one.",
+                },
+                None,
+                None,
+            )
+    start, end = bounds(now.astimezone(dt.timezone.utc))
     if (
         not scene
         or not scene["state"].get("confirmed", True)
         or not start <= timestamp(scene["recorded_at"]) <= end
     ):
-        return {
-            "ready": False,
-            "reason": "No state confirmed recently enough to make an honest scene; skip rather than invent one",
-        }
+        return (
+            {
+                "ready": False,
+                "reason": "No state confirmed recently enough to make an honest scene; skip rather than invent one",
+            },
+            None,
+            None,
+        )
     from companion_render import load_styles
 
     style = load_styles().get(c.image_style)
     if not style or c.image_style in ("none", "unset"):
-        return {"ready": False, "reason": "Choose a timeline image style first"}
-    # The id is what names the file on disk, so deriving it from the clock alone gave
-    # every companion capturing in the same quarter hour the same filename. Scoping it
-    # keeps two companions' pictures from ever being the same picture by name.
+        return (
+            {"ready": False, "reason": "Choose a timeline image style first"},
+            None,
+            None,
+        )
+    return None, scene, style
+
+
+def _slot(c, now):
+    """This interval's capture id and record path. The id names the file on disk, so
+    deriving it from the clock alone gave every companion capturing in the same
+    quarter hour the same filename; scoping it keeps two companions' pictures apart."""
+    seconds = c.image_interval_minutes * 60
+    slot = dt.datetime.fromtimestamp(
+        int(now.astimezone(dt.timezone.utc).timestamp()) // seconds * seconds,
+        tz=dt.timezone.utc,
+    )
     ident = hashlib.sha256((c.profile + "\0" + slot.isoformat()).encode()).hexdigest()[
         :24
     ]
-    path = root(c) / "captures" / (ident + ".json")
+    return ident, root(c) / "captures" / (ident + ".json")
+
+
+def _taken(c, now, scene):
+    """Why the photos already taken make this one unnecessary, or None."""
+    from companion_day import visual_key
+
+    now = now.astimezone(dt.timezone.utc)
+    captures = [row for _, row in records(c)]
+    recent = [
+        row
+        for row in captures
+        if row.get("status") in ("saved", "pending")
+        and now - timestamp(row["created_at"])
+        < dt.timedelta(minutes=c.image_interval_minutes)
+    ]
+    if recent:
+        return "Waiting for the photo interval"
+    # The interval is a ceiling on how often a photo may be taken, not a quota to
+    # fill. Without this, a quiet hour of the same scene became four near-identical
+    # pictures, and each one cost a generation call to produce something already in
+    # the gallery. A photograph is worth taking when there is something new in it.
+    saved = [row for row in captures if row.get("status") == "saved"]
+    latest = max(saved, key=lambda row: row["created_at"], default=None)
+    if (
+        latest
+        and latest.get("image_style") == c.image_style
+        and visual_key(latest["scene"]["state"]) == visual_key(scene["state"])
+    ):
+        return "The current visible moment already has an image"
+    return None
+
+
+def prepare(c, now=None):
+    now = now or now_utc()
+    prune(c, now)
+    refusal, scene, style = _refusal(c, now)
+    if refusal:
+        return refusal
+    ident, path = _slot(c, now)
     with file_lock(root(c) / ".lock"):
         if path.exists():
             return {
@@ -410,36 +474,12 @@ def prepare(c, now=None):
                 "reason": "This interval has already been claimed",
                 "capture": json.loads(path.read_text(encoding="utf-8")),
             }
-        from companion_day import visual_key
-
-        captures = [row for _, row in records(c)]
-        recent = [
-            row
-            for row in captures
-            if row.get("status") in ("saved", "pending")
-            and now - timestamp(row["created_at"])
-            < dt.timedelta(minutes=c.image_interval_minutes)
-        ]
-        if recent:
-            return {"ready": False, "reason": "Waiting for the photo interval"}
-        # The interval is a ceiling on how often a photo may be taken, not a quota to
-        # fill. Without this, a quiet hour of the same scene became four near-identical
-        # pictures, and each one cost a generation call to produce something already in
-        # the gallery. A photograph is worth taking when there is something new in it.
-        saved = [row for row in captures if row.get("status") == "saved"]
-        latest = max(saved, key=lambda row: row["created_at"], default=None)
-        if (
-            latest
-            and latest.get("image_style") == c.image_style
-            and visual_key(latest["scene"]["state"]) == visual_key(scene["state"])
-        ):
-            return {
-                "ready": False,
-                "reason": "The current visible moment already has an image",
-            }
+        reason = _taken(c, now, scene)
+        if reason:
+            return {"ready": False, "reason": reason}
         row = {
             "id": ident,
-            "created_at": now.isoformat(),
+            "created_at": now.astimezone(dt.timezone.utc).isoformat(),
             "status": "pending",
             "scene": scene,
             "image_style": c.image_style,
@@ -453,6 +493,101 @@ def prepare(c, now=None):
         "image_style_guidance": style["soul"],
         "instruction": "Generate one image with the configured Hermes image provider, matching this saved scene and the SOUL visual identity. Import the actual returned local file or HTTPS URL with save. Do not send it to the user.",
     }
+
+
+def provider_down(c, timeout=4):
+    """Why the image service the next photo would use is not answering, or None.
+
+    Only a ComfyUI preset is asked: it is a machine on the network that can be switched
+    off, and asking costs nothing. A hosted Hermes provider cannot be asked without
+    paying for an image. Every capture during one ComfyUI outage used to be a whole
+    model run that could only fail -- 29 of them over three days on one install. Each
+    answer is kept for the Photos page."""
+    import urllib.error
+    import urllib.parse
+    import companion_media as media
+
+    recipe = media.effective(c)
+    selected = recipe.get("routes", {}).get("portrait") or recipe.get("default_preset")
+    preset = next(
+        (p for p in recipe.get("presets") or () if p.get("id") == selected), None
+    )
+    reason = None
+    if preset and preset.get("provider") == "comfyui" and preset.get("endpoint"):
+        try:
+            base = media.endpoint(preset["endpoint"])
+        except ValueError:
+            base = None  # an unusable preset is the portrait step's error to report
+        if base:
+            try:
+                with urllib.request.urlopen(
+                    base + "/system_stats", timeout=timeout
+                ) as reply:
+                    reply.read(1)
+            except urllib.error.HTTPError:
+                pass  # it answered, even if not with what we asked for
+            except (OSError, ValueError):
+                host = urllib.parse.urlsplit(base).netloc
+                reason = f"ComfyUI at {host} is not answering"
+    _note_provider(c, reason)
+    return reason
+
+
+def _note_provider(c, reason, now=None):
+    now = now or now_utc()
+    path = root(c) / "provider.json"
+    try:
+        before = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        before = {}
+    since = (
+        (before.get("since") if before.get("reason") == reason else None)
+        or now.isoformat()
+        if reason
+        else None
+    )
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write(
+            path,
+            json.dumps(
+                {"reason": reason, "since": since, "checked_at": now.isoformat()}
+            ),
+        )
+    except OSError:
+        pass
+
+
+def provider_status(c, now=None):
+    """The Photos page's notice: the image service's last answer, if it was a failure
+    checked within the last two hours. Night skips the check, so nothing goes stale."""
+    try:
+        row = json.loads((root(c) / "provider.json").read_text(encoding="utf-8"))
+        checked = timestamp(row["checked_at"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if not row.get("reason") or (now or now_utc()) - checked > dt.timedelta(hours=2):
+        return None
+    return {"paused": row["reason"], "since": row.get("since")}
+
+
+def gate(c, now=None):
+    """Hermes runs this before the model. A photo prepare would decline, or one whose
+    image service is not answering, never wakes the model: the run is skipped with
+    {"wakeAgent": false}. None means wake as usual."""
+    now = now or now_utc()
+    refusal, scene, _ = _refusal(c, now)
+    if refusal:
+        reason = refusal["reason"]
+    elif _slot(c, now)[1].exists():
+        reason = "This interval has already been claimed"
+    else:
+        reason = _taken(c, now, scene)
+    if not reason:
+        down = provider_down(c)
+        if down:
+            reason = "Photos paused: " + down
+    return {"wakeAgent": False, "reason": reason} if reason else None
 
 
 def private_reason(c, state):
@@ -936,6 +1071,11 @@ def fingerprint(c, now=None):
 
         if not undressed_render_allowed(c)[0]:
             return "private moment\n"
+    # A ComfyUI that stops answering is a change (the run that follows is skipped by
+    # gate), and so is one that comes back, which is when the next photo is due.
+    down = provider_down(c)
+    if down:
+        return f"photos paused: {down}\n"
     return (
         f"style {c.image_style} scene {visual_key(state)} "
         f"confirmed {bool(state.get('confirmed',True))}\n"
@@ -946,7 +1086,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--home", type=pathlib.Path)
     sub = parser.add_subparsers(dest="action", required=True)
-    for action in ("prepare", "prune", "status", "latest", "fingerprint"):
+    for action in ("prepare", "prune", "status", "latest", "fingerprint", "gate"):
         sub.add_parser(action)
     p = sub.add_parser("save")
     p.add_argument("--id", required=True)
@@ -980,6 +1120,12 @@ def main():
     c = cc.load(args.home)
     if args.action == "fingerprint":
         sys.stdout.write(fingerprint(c))
+        return
+    if args.action == "gate":
+        # Hermes reads the last line; nothing printed means wake the model as usual.
+        verdict = gate(c)
+        if verdict:
+            print(json.dumps(verdict, ensure_ascii=False))
         return
     if args.action == "prepare":
         out = prepare(c)

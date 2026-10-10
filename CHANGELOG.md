@@ -1,3 +1,12 @@
+## Unreleased
+
+- Photos that cannot render no longer cost a model run. The image timeline's job is gated
+  before the model: when the run could only decline (asleep, a private moment, an interval
+  already claimed, a scene already photographed) or when the ComfyUI the next photo would
+  use is not answering, Hermes skips it. The Photos page says photos are paused and since
+  when, and the first run after ComfyUI returns takes the photo. Repair adds the gate to
+  existing installs. One outage had cost 29 full runs that could only fail.
+
 ## 3.7.1 — An update the app can install (2026-10-10)
 
 - 3.7.0's package carried a CI workflow file, which every installed updater refuses as

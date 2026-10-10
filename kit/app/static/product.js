@@ -1604,6 +1604,8 @@ workspaceHandlers.photos=async()=>{
   const generation=++photoPageGeneration;
   let [content,tl]=await Promise.all([api('/content?'+new URLSearchParams({kind:'image',limit:'1500',q:photoBrowse.query,day:photoBrowse.day,collection:photoBrowse.collection})),api('/timeline')]);if(current!=='photos'||generation!==photoPageGeneration)return;
   profileTimezone=content.timezone;let items=mergePhotos(content,tl);
+  let pausedSince='';
+  try{if(tl.provider?.since)pausedSince=new Date(tl.provider.since).toLocaleString([],{timeZone:profileTimezone||undefined,weekday:'short',hour:'numeric',minute:'2-digit'});}catch(_){}
   // One search field and a row of collection chips, the way a photo library
   // does it; the day picker is gone, its job taken by the date rail.
   const collections=[['all','All photos'],['photo session','Timeline'],['creation','Creations'],
@@ -1623,6 +1625,7 @@ workspaceHandlers.photos=async()=>{
         <button class="photo-chip photo-chip-icon" id="photo-manage-settings-btn" title="Manage photo settings" aria-label="Manage photo settings">\u2699</button>
       </div>
     </div>
+    ${tl.provider?.paused?`<div class="notice-strip" role="status"><p><strong>Photos paused.</strong> ${esc(tl.provider.paused)}${pausedSince?` (since ${esc(pausedSince)})`:''}. The photo job does not run, or cost anything, until it answers again.</p></div>`:''}
     <div id="photo-grid" class="photo-library"></div>
     <div class="photo-scrubber" id="photo-scrubber" aria-hidden="true"></div>
     <p class="dim small" id="photo-count" role="status"></p>
