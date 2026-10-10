@@ -575,7 +575,7 @@ def register(app, select, load, operations):
         rt, profile = select()
         return rt, profile, rt.home(profile)
 
-    def op(label, action):
+    def op(label, action, *, before_start=None):
         rt, profile, home = context()
         if any(
             c.scope[0] == str(rt.root) and not c.finished
@@ -589,6 +589,7 @@ def register(app, select, load, operations):
             label,
             lambda report: action(rt, profile, home, report),
             profile=profile,
+            before_start=before_start,
         )
 
     @app.post("/api/terminal")
@@ -929,8 +930,200 @@ def register(app, select, load, operations):
                 )
         return result
 
+    def attempt_file(ident):
+        if not isinstance(ident, str) or not re.fullmatch(r"[a-f0-9-]{36}", ident):
+            raise ValueError("Invalid setup attempt")
+        rt, profile = select()
+        scope = hashlib.sha256((str(rt.root) + ":" + profile).encode()).hexdigest()
+        return operations.directory / "setup" / scope / (ident + ".json")
+
+    def attempted_home(rt, profile):
+        return (
+            rt.root if profile in ("", "default") else cp.profile_path(rt.root, profile)
+        )
+
+    def connection_home(ident, *, create=False):
+        """Private connection settings for one owner's unfinished setup."""
+        if not ident:
+            return None
+        path = attempt_file(ident).with_suffix(".connections")
+        # Match the browser's seven-day draft lifetime. Only private staging
+        # directories in this selected owner's setup namespace are eligible.
+        if path.parent.exists():
+            for expired in path.parent.glob("*.connections"):
+                if (
+                    expired.is_dir()
+                    and not expired.is_symlink()
+                    and time.time() - expired.stat().st_mtime > 7 * 86400
+                ):
+                    shutil.rmtree(expired)
+        if create:
+            path.mkdir(parents=True, exist_ok=True, mode=0o700)
+            if os.name != "nt":
+                path.chmod(0o700)
+        return path
+
+    def connection_targets(payload, c):
+        staged = connection_home(payload.get("request_id"), create=True)
+        return [staged] if staged else list(dict.fromkeys([c.home, c.hermes_root]))
+
+    def ready_connections(payload):
+        ident = payload.get("request_id")
+        if not ident:
+            return None
+        rt, profile = select()
+        with _ONBOARDING_OAUTH_LOCK:
+            if any(
+                session.get("scope") == (str(rt.root), profile)
+                and session.get("request_id") == ident
+                and session.get("status") == "pending"
+                for session in _ONBOARDING_OAUTH_SESSIONS.values()
+            ):
+                raise ValueError(
+                    "Finish or cancel the account sign-in before creating this companion."
+                )
+        return connection_home(ident)
+
+    @app.post("/api/onboarding/attempt/{ident}/discard")
+    def discard_connections(ident: str):
+        rt, profile = select()
+        path = connection_home(ident)
+        with _ONBOARDING_OAUTH_LOCK:
+            for session in _ONBOARDING_OAUTH_SESSIONS.values():
+                if (
+                    session.get("scope") == (str(rt.root), profile)
+                    and session.get("request_id") == ident
+                    and session.get("status") == "pending"
+                ):
+                    session["cancelled"] = True
+                    session["proc"].terminate()
+                    session["status"] = "cancelled"
+        if path:
+            shutil.rmtree(path, ignore_errors=True)
+        return {"discarded": True}
+
+    def apply_connections(source, home):
+        """Apply only explicitly staged settings, never to a sibling or root."""
+        if source is None or not source.is_dir():
+            return
+        from companion_gateway import _env_values
+
+        values = _env_values(source)
+        if values:
+            with cp.file_lock(home / ".companion-env.lock"):
+                path = home / ".env"
+                lines = (
+                    path.read_text(encoding="utf-8").splitlines()
+                    if path.exists()
+                    else []
+                )
+                pattern = re.compile(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=")
+                lines = [
+                    line
+                    for line in lines
+                    if not (
+                        pattern.match(line) and pattern.match(line).group(1) in values
+                    )
+                ]
+                lines.extend(
+                    f"{key}={json.dumps(value)}" for key, value in values.items()
+                )
+                cp.atomic_write(path, "\n".join(lines) + "\n")
+                if os.name != "nt":
+                    path.chmod(0o600)
+        if (source / "config.yaml").exists():
+            settings = config(source)
+            save_config(home, lambda cfg: cfg.update(settings))
+        if (source / "auth.json").exists():
+            # Hermes groups accounts by provider. Keep unrelated providers and
+            # the order of each staged credential pool intact.
+            with cp.file_lock(home / ".companion-auth.lock"):
+                path = home / "auth.json"
+                current = json.loads(path.read_text()) if path.exists() else {}
+                staged = json.loads((source / "auth.json").read_text())
+                for key, value in staged.items():
+                    if isinstance(value, dict) and isinstance(current.get(key), dict):
+                        current[key].update(value)
+                    else:
+                        current[key] = value
+                cp.atomic_write(path, json.dumps(current))
+                if os.name != "nt":
+                    path.chmod(0o600)
+        models_path = source / "companion-models.json"
+        if models_path.exists():
+            with cp.file_lock(home / ".companion-profile-editor.lock"):
+                path = home / cc.CONFIG_NAME
+                cfg = json.loads(path.read_text())
+                cfg.setdefault("models", {}).update(json.loads(models_path.read_text()))
+                cp.atomic_write(path, json.dumps(cfg, indent=2) + "\n")
+
+    @app.get("/api/onboarding/attempt/{ident}")
+    def setup_attempt(ident: str):
+        connection_home(ident)  # expire abandoned credentials on recovery too
+        saved = hr.read_json(attempt_file(ident), {})
+        rt, _ = select()
+        target = saved.get("profile")
+        row = operations.get(saved["operation"]) if saved.get("operation") else None
+        return {
+            "profile": target,
+            "profile_exists": bool(target and attempted_home(rt, target).exists()),
+            "created": bool(
+                target and (attempted_home(rt, target) / cc.CONFIG_NAME).is_file()
+            ),
+            "operation": row,
+        }
+
+    def existing_attempt(payload):
+        ident = payload.get("request_id")
+        if not ident:
+            return None
+        saved = hr.read_json(attempt_file(ident), {})
+        digest = hashlib.sha256(
+            json.dumps(payload, sort_keys=True).encode()
+        ).hexdigest()
+        rt, _ = select()
+        row = operations.get(saved["operation"]) if saved.get("operation") else None
+        target_exists = bool(
+            saved.get("profile") and attempted_home(rt, saved["profile"]).exists()
+        )
+        if (
+            saved
+            and saved.get("digest") != digest
+            and (target_exists or (row and row["status"] in ("running", "complete")))
+        ):
+            raise ValueError(
+                "This setup attempt has different choices. Review and start a new attempt."
+            )
+        if row:
+            if row["status"] in ("running", "complete") or target_exists:
+                return row
+        return None
+
+    def create_attempt(payload, target, label, action):
+        ident = payload.get("request_id")
+        if not ident:
+            return op(label, action)
+        path = attempt_file(ident)
+        saved = {
+            "profile": target,
+            "digest": hashlib.sha256(
+                json.dumps(payload, sort_keys=True).encode()
+            ).hexdigest(),
+        }
+        cp.atomic_write(path, json.dumps(saved))
+        return op(
+            label,
+            action,
+            before_start=lambda row: cp.atomic_write(
+                path, json.dumps({**saved, "operation": row["id"]})
+            ),
+        )
+
     @app.post("/api/profiles")
     def create(payload: dict):
+        previous = existing_attempt(payload)
+        if previous:
+            return previous
         name = cp.profile_name(payload.get("profile", ""))
         answers = payload.get("answers")
         if not isinstance(answers, dict) or not answers.get("boundary"):
@@ -960,6 +1153,7 @@ def register(app, select, load, operations):
                 )
             )
         approved = payload.get("schedule_approved") is True
+        staged_connections = ready_connections(payload)
 
         def create_profile(rt, p, h, report):
             output = hr.redact(
@@ -979,6 +1173,7 @@ def register(app, select, load, operations):
             )
             profile_home = cp.profile_path(rt.root, name)
             inherit_api_credentials(rt.root, profile_home)
+            apply_connections(staged_connections, profile_home)
             result = {
                 "output": output,
                 "profile": name,
@@ -986,15 +1181,21 @@ def register(app, select, load, operations):
                 "schedule_note": "Background model jobs are paused. Enable them in Schedule & usage.",
             }
             approve_schedule(rt, profile_home, report, result, approved)
+            if staged_connections:
+                shutil.rmtree(staged_connections, ignore_errors=True)
             return result
 
-        return op("Create " + name, create_profile)
+        return create_attempt(payload, name, "Create " + name, create_profile)
 
     @app.post("/api/adopt")
     def adopt(payload: dict):
+        previous = existing_attempt(payload)
+        if previous:
+            return previous
         answers = payload.get("answers", {})
         if not isinstance(answers, dict) or not answers.get("boundary"):
             raise ValueError("Choose a relationship frame")
+        staged_connections = ready_connections(payload)
 
         def adopt_profile(rt, p, h, report):
             output = hr.redact(
@@ -1026,11 +1227,17 @@ def register(app, select, load, operations):
                 "schedule_active": False,
                 "schedule_note": "Background model jobs are paused. Enable them in Schedule & usage.",
             }
-            return approve_schedule(
+            apply_connections(staged_connections, h)
+            approve_schedule(
                 rt, h, report, result, payload.get("schedule_approved") is True
             )
+            if staged_connections:
+                shutil.rmtree(staged_connections, ignore_errors=True)
+            return result
 
-        return op("Adopt existing Hermes companion", adopt_profile)
+        return create_attempt(
+            payload, select()[1], "Adopt existing Hermes companion", adopt_profile
+        )
 
     @app.post("/api/profile/archive")
     def archive(payload: dict):
@@ -1112,7 +1319,7 @@ def register(app, select, load, operations):
             return {"deleted": ident, "vault_preserved": True}
 
     @app.get("/api/onboarding/environment")
-    def onboarding_environment():
+    def onboarding_environment(request_id: str = ""):
         rt, p, h = context()
         c = load()
         from kit.cli.roster import discover
@@ -1126,6 +1333,9 @@ def register(app, select, load, operations):
 
         env = _env_values(c.home)
         root_env = _env_values(c.hermes_root)
+        staged_home = connection_home(request_id)
+        staged_env = _env_values(staged_home) if staged_home else {}
+        env = {**env, **staged_env}
         token = (
             env.get("TELEGRAM_BOT_TOKEN")
             or root_env.get("TELEGRAM_BOT_TOKEN")
@@ -1146,7 +1356,13 @@ def register(app, select, load, operations):
 
         cfg = config(h)
         root_cfg = config(c.hermes_root)
-        model_cfg = cfg.get("model") or root_cfg.get("model") or {}
+        staged_config = config(staged_home) if staged_home else {}
+        model_cfg = (
+            staged_config.get("model")
+            or cfg.get("model")
+            or root_cfg.get("model")
+            or {}
+        )
         if isinstance(model_cfg, str):
             model_name = model_cfg
             provider_name = ""
@@ -1163,7 +1379,9 @@ def register(app, select, load, operations):
             ):
                 has_cred = True
                 break
-        if read_auth_accounts(c.hermes_root)["providers"]:
+        if read_auth_accounts(c.hermes_root)["providers"] or (
+            staged_home and read_auth_accounts(staged_home)["providers"]
+        ):
             has_cred = True
 
         loc = {}
@@ -1217,6 +1435,8 @@ def register(app, select, load, operations):
     def onboarding_local_setup(payload: dict):
         rt, p, h = context()
         c = load()
+        targets = connection_targets(payload, c)
+        staged_home = connection_home(payload.get("request_id"))
         from kit.app import local_models as lm
 
         model_id = text(payload.get("model_id", ""), "Model ID", 200, empty=True)
@@ -1260,7 +1480,7 @@ def register(app, select, load, operations):
             ctx_len = 4096 if mem["is_mobile"] else 8192
             provider_type = "ollama" if setup_type == "ollama" else "custom:local_llama"
 
-            for target_home in dict.fromkeys([c.home, c.hermes_root]):
+            for target_home in targets:
 
                 def mutate(cfg):
                     cfg.setdefault("model", {})
@@ -1274,26 +1494,24 @@ def register(app, select, load, operations):
 
                 save_config(target_home, mutate)
 
-            with cp.file_lock(h / ".companion-profile-editor.lock"):
+            models = {
+                key: {
+                    "provider": provider_type,
+                    "model": target_alias,
+                    "reasoning_effort": "none",
+                }
+                for key in ("chat", "loops", "reflection")
+            }
+            with cp.file_lock((staged_home or h) / ".companion-profile-editor.lock"):
                 companion_path = h / cc.CONFIG_NAME
-                if companion_path.exists():
+                if staged_home:
+                    cp.atomic_write(
+                        staged_home / "companion-models.json", json.dumps(models)
+                    )
+                elif companion_path.exists():
                     cfg = json.loads(companion_path.read_text(encoding="utf-8"))
                     cfg.setdefault("models", {})
-                    cfg["models"]["chat"] = {
-                        "provider": provider_type,
-                        "model": target_alias,
-                        "reasoning_effort": "none",
-                    }
-                    cfg["models"]["loops"] = {
-                        "provider": provider_type,
-                        "model": target_alias,
-                        "reasoning_effort": "none",
-                    }
-                    cfg["models"]["reflection"] = {
-                        "provider": provider_type,
-                        "model": target_alias,
-                        "reasoning_effort": "none",
-                    }
+                    cfg["models"].update(models)
                     cp.atomic_write(
                         companion_path,
                         json.dumps(cfg, indent=2, ensure_ascii=False) + "\n",
@@ -1328,7 +1546,7 @@ def register(app, select, load, operations):
                 "Telegram User ID must be numeric (e.g. from @userinfobot)"
             )
 
-        for target_home in dict.fromkeys([c.home, c.hermes_root]):
+        for target_home in connection_targets(payload, c):
             env_path = target_home / ".env"
             with cp.file_lock(target_home / ".companion-env.lock"):
                 lines = (
@@ -1357,6 +1575,7 @@ def register(app, select, load, operations):
     def onboarding_inference(payload: dict):
         rt, p, h = context()
         c = load()
+        targets = connection_targets(payload, c)
         provider = text(
             payload.get("provider", ""), "Provider", 100, empty=True
         ).lower()
@@ -1385,7 +1604,7 @@ def register(app, select, load, operations):
                     "groq": "GROQ_API_KEY",
                 }.get(provider, f"{provider.upper()}_API_KEY")
 
-            for target_home in dict.fromkeys([c.home, c.hermes_root]):
+            for target_home in targets:
                 env_path = target_home / ".env"
                 with cp.file_lock(target_home / ".companion-env.lock"):
                     lines = (
@@ -1415,14 +1634,15 @@ def register(app, select, load, operations):
                 if provider:
                     cfg["model"]["provider"] = provider
 
-            save_config(c.hermes_root, mutate)
-            save_config(h, mutate)
+            for target_home in targets:
+                save_config(target_home, mutate)
 
         return {"saved": True, "model": model, "provider": provider}
 
     @app.post("/api/onboarding/oauth/start")
     def onboarding_oauth_start(payload: dict):
         rt, p, h = context()
+        staged_home = connection_home(payload.get("request_id"), create=True)
         provider = text(payload.get("provider", "xai-oauth"), "Provider", 50).lower()
         if provider not in ("xai-oauth", "openai-codex", "qwen-oauth", "minimax-oauth"):
             raise ValueError("Unsupported OAuth provider")
@@ -1435,6 +1655,8 @@ def register(app, select, load, operations):
             "url": "",
             "code": "",
             "created_at": time.time(),
+            "scope": (str(rt.root), p),
+            "request_id": payload.get("request_id"),
         }
         cmd = rt.command() + [
             "auth",
@@ -1446,10 +1668,95 @@ def register(app, select, load, operations):
             "--timeout",
             "300",
         ]
+        oauth_env = rt.env()
+        if staged_home:
+            # Hermes can discover credentials through the OS home as well as
+            # HERMES_HOME. Keep both roots inside the private setup directory.
+            user_home = staged_home / "user"
+            user_home.mkdir(exist_ok=True, mode=0o700)
+            staged_env = dict(
+                HERMES_HOME=str(staged_home),
+                HOME=str(user_home),
+                USERPROFILE=str(user_home),
+                LOCALAPPDATA=str(user_home / "AppData"),
+                XDG_CONFIG_HOME=str(user_home / ".config"),
+                CODEX_HOME=str(user_home / ".codex"),
+            )
+            # PM dependency state follows HERMES_HOME. Bootstrap the installed
+            # runtime first, then enter the private auth home before any CLI
+            # provider imports. Starting the launcher in a blank HOME can
+            # provision another runtime and even rewrite its source launcher.
+            launcher = (
+                rt.root
+                / "hermes-agent"
+                / ".hermes"
+                / "bin"
+                / ("hermes.exe" if os.name == "nt" else "hermes")
+            )
+            if launcher.is_file() and not os.environ.get("COMPANION_HERMES_COMMAND"):
+                resolved_command = subprocess.run(
+                    [str(launcher), "--print-runtime-command"],
+                    env=oauth_env,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    check=True,
+                ).stdout
+            else:
+                prefix = rt.command()
+                python = Path(prefix[0]).parent / (
+                    "python.exe" if os.name == "nt" else "python"
+                )
+                if len(prefix) == 1 and python.is_file():
+                    # Older virtualenv entry points lack the metadata flag;
+                    # their adjacent interpreter owns the Hermes dependencies.
+                    bootstrap = (
+                        "import runpy\n"
+                        "try:\n    import hermes_bootstrap\n"
+                        "except ModuleNotFoundError as error:\n"
+                        "    if error.name != 'hermes_bootstrap': raise\n"
+                        "runpy.run_module('hermes_cli.main', run_name='__main__')\n"
+                    )
+                    resolved_command = json.dumps([str(python), "-I", "-c", bootstrap])
+                else:
+                    resolved_command = rt.run(
+                        ["--print-runtime-command"], home=rt.root, timeout=30
+                    ).stdout
+            try:
+                runtime_command = json.loads(resolved_command)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "This Hermes runtime cannot isolate account sign-in. Update Hermes or use an API key."
+                ) from exc
+            if not (
+                isinstance(runtime_command, list)
+                and len(runtime_command) == 4
+                and all(isinstance(arg, str) for arg in runtime_command)
+                and runtime_command[1:3] == ["-I", "-c"]
+            ):
+                raise ValueError(
+                    "This Hermes runtime cannot isolate account sign-in. Update Hermes or use an API key."
+                )
+            switch_home = (
+                "import os, runpy\n"
+                "_tamanitomo_run_module = runpy.run_module\n"
+                "def _tamanitomo_auth_main(name, *args, **kwargs):\n"
+                "    if name == 'hermes_cli.main':\n"
+                f"        os.environ.update({staged_env!r})\n"
+                "        runpy.run_module = _tamanitomo_run_module\n"
+                "    return _tamanitomo_run_module(name, *args, **kwargs)\n"
+                "runpy.run_module = _tamanitomo_auth_main\n"
+            )
+            cmd = (
+                runtime_command[:3]
+                + [switch_home + runtime_command[3]]
+                + cmd[len(rt.command()) :]
+            )
+            oauth_env["HERMES_DISABLE_LAZY_INSTALLS"] = "1"
         try:
             proc = subprocess.Popen(
                 cmd,
-                env=rt.env(),
+                env=oauth_env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -1526,7 +1833,8 @@ def register(app, select, load, operations):
     def onboarding_oauth_poll(ident: str):
         with _ONBOARDING_OAUTH_LOCK:
             sess = _ONBOARDING_OAUTH_SESSIONS.get(ident)
-        if not sess:
+        rt, profile = select()
+        if not sess or sess.get("scope") != (str(rt.root), profile):
             raise HTTPException(status_code=404, detail="OAuth session not found")
         return {
             "session_id": ident,
@@ -1541,6 +1849,9 @@ def register(app, select, load, operations):
     def onboarding_oauth_cancel(ident: str):
         with _ONBOARDING_OAUTH_LOCK:
             sess = _ONBOARDING_OAUTH_SESSIONS.get(ident)
+        rt, profile = select()
+        if not sess or sess.get("scope") != (str(rt.root), profile):
+            raise HTTPException(status_code=404, detail="OAuth session not found")
         if sess and sess.get("proc"):
             sess["cancelled"] = True
             try:
@@ -3429,6 +3740,29 @@ def register(app, select, load, operations):
             "agent": c.agent,
         }
 
+    @app.post("/api/feed/sync")
+    def conversation_sync(payload: dict):
+        """Read changes only; this endpoint never starts or repeats a chat turn."""
+        c = load()
+        page = hr.feed_sync(c, payload.get("after"), payload.get("known"))
+        return {**page, "messages": _attach_media(c, page["messages"])}
+
+    @app.get("/api/feed/search")
+    def conversation_search(
+        query: str = "",
+        day: str = "",
+        channel: str = "all",
+        before: str | None = None,
+        limit: int = 20,
+    ):
+        return hr.feed_search(load(), query, day, channel, before, limit)
+
+    @app.get("/api/feed/context/{ident}")
+    def conversation_context(ident: str):
+        c = load()
+        page = hr.feed_context(c, ident)
+        return {**page, "messages": _attach_media(c, page["messages"])}
+
     @app.get("/api/activity")
     def activity():
         from kit.cli.common import _read_jobs
@@ -3857,6 +4191,21 @@ def register(app, select, load, operations):
             return feelings.save_settings(
                 load(), payload.get("settings"), payload.get("revision")
             )
+        except FileExistsError as exc:
+            raise HTTPException(409, str(exc))
+
+    @app.get("/api/feelings/absences")
+    def feelings_absences():
+        import companion_feelings as feelings
+
+        return feelings.expected_absences(load())
+
+    @app.post("/api/feelings/absences")
+    def feelings_absence_record(payload: dict):
+        import companion_feelings as feelings
+
+        try:
+            return feelings.record_absence(load(), payload)
         except FileExistsError as exc:
             raise HTTPException(409, str(exc))
 

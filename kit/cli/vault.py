@@ -55,9 +55,9 @@ def cmd_restore(args):
 
 
 def cmd_backup(args):
-    """Export the companion's complete vault to a standalone zip archive."""
+    """Export a complete companion recovery bundle (profile, history and vault)."""
     import datetime as dt
-    import zipfile
+    import companion_backup as backup
 
     c = resolve(args, require_config=True)
     root = pathlib.Path(c.vault)
@@ -74,20 +74,34 @@ def cmd_backup(args):
             "".join(ch if ch.isalnum() else "_" for ch in c.agent).strip("_").lower()
             or "companion"
         )
-        out_path = out_dir / f"{clean_name}_vault_backup_{stamp}.zip"
+        out_path = out_dir / f"{clean_name}_recovery_{stamp}.zip"
     else:
         out_path = out_dir
 
-    count = 0
-    total_bytes = 0
-    with zipfile.ZipFile(out_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for p in root.rglob("*"):
-            if p.is_file() and not p.is_symlink():
-                rel = p.relative_to(root)
-                archive.write(p, arcname=str(rel))
-                count += 1
-                total_bytes += p.stat().st_size
-
-    print(f"Backed up {count} files ({total_bytes/1e6:.2f} MB) from {root} to:")
+    result = backup.export(
+        c, out_path, include_credentials=getattr(args, "include_credentials", False)
+    )
+    print(f"Verified {len(result['files'])} files ({result['bytes']/1e6:.2f} MB):")
     print(f"  {out_path.resolve()}")
+    print(result["note"])
+    return 0
+
+
+def cmd_recover(args):
+    """Inspect or restore a recovery bundle into new Hermes and vault folders."""
+    import companion_backup as backup
+
+    if not args.root and not args.vault:
+        result = backup.inspect(args.bundle)
+        print(
+            f"{result['agent']} · {result['created_at']} · {len(result['files'])} verified files"
+        )
+        print(result["note"])
+        print("Restore with --root NEW_HERMES_FOLDER --vault NEW_VAULT_FOLDER")
+        return 0
+    if not args.root or not args.vault:
+        raise ValueError("Supply both --root and --vault, using new directories")
+    result = backup.restore(args.bundle, args.root, args.vault)
+    print(f"Restored {result['agent']} to {result['home']}")
+    print(result["note"])
     return 0

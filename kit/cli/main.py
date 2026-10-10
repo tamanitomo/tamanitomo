@@ -25,7 +25,7 @@ from .menu import cmd_menu
 from .models import cmd_models
 from .pin import cmd_pin
 from .status import cmd_status
-from .vault import cmd_backup, cmd_restore
+from .vault import cmd_backup, cmd_restore, cmd_recover
 from .identity import cmd_identity
 from .app import cmd_app
 from .ops import cmd_chat, cmd_gateway, cmd_schedule
@@ -60,6 +60,7 @@ def main():
         ("status", cmd_status),
         ("restore", cmd_restore),
         ("backup", cmd_backup),
+        ("recover", cmd_recover),
         ("identity", cmd_identity),
         ("app", cmd_app),
         ("pin", cmd_pin),
@@ -87,11 +88,22 @@ def main():
             )
         if name == "backup":
             s.add_argument(
+                "--include-credentials",
+                action="store_true",
+                help="Include account credentials; keep this unencrypted archive private",
+            )
+            s.add_argument(
                 "--output",
                 "-o",
                 metavar="PATH",
                 help="Custom output path or directory for the zip backup",
             )
+        if name == "recover":
+            s.add_argument("bundle", type=pathlib.Path)
+            s.add_argument(
+                "--root", type=pathlib.Path, help="New Hermes installation directory"
+            )
+            s.add_argument("--vault", type=pathlib.Path, help="New vault directory")
         if name == "timeline":
             s.add_argument(
                 "state",

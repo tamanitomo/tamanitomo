@@ -319,6 +319,7 @@ window.onboarding=async function(adopt){
   const catalog=await api('/catalog');
   let envInfo={has_installed_profiles:false,telegram:{configured:false},inference:{configured:false}};
   try{envInfo=await api('/onboarding/environment');}catch(e){}
+  const inheritedEnvironment=envInfo;
 
   const target=$(adopt?'environment-onboarding':'onboarding');
   const other=$(adopt?'onboarding':'environment-onboarding');if(other)other.innerHTML='';
@@ -336,16 +337,67 @@ window.onboarding=async function(adopt){
     telegram_token:'',telegram_user_id:'',
     inference_mode:'auto',provider:'',model:'',api_key:''
   };
+  const initialDraft={...draft};
 
   let picks=new Array(QUIZ.length).fill(null);
   let derived=null,step=0,look=null,lookSeed=0;
   // A worker gets the personality scenes and the pace question; no world, no contact or relationship.
   const order=()=>QUIZ.map((q,i)=>i).filter(i=>draft.purpose!=='worker'||(!QUIZ[i].world&&(!QUIZ[i].direct||QUIZ[i].direct==='pace')));
   let oauthPollInterval=null;
-  let scheduleApproved=false;
+  let scheduleApproved=false,scheduleReviewed=false;
+  const storageKey='tamanitomo-onboarding-v1:'+INSTALLATION+':'+(PROFILE||'default')+':'+(adopt?'adopt':'new');
+  const newRequestId=()=>crypto.randomUUID?.()||Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('').replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/,'$1-$2-$3-$4-$5');
+  let phase='welcome',requestId=newRequestId(),saved=null;
+  const stageConnection=(path,payload)=>post(path,{...payload,request_id:requestId});
+  const refreshConnections=async()=>{try{envInfo=await api('/onboarding/environment?request_id='+requestId);}catch(_){};};
+  const safeDraft=()=>Object.fromEntries(Object.entries(draft).filter(([key])=>!['api_key','telegram_token'].includes(key)));
+  function persist(next=phase){
+    phase=next;
+    try{localStorage.setItem(storageKey,JSON.stringify({version:1,at:Date.now(),phase,draft:safeDraft(),picks,derived,step,look,lookSeed,scheduleApproved,scheduleReviewed,requestId}));}catch(_){}
+  }
+  try{
+    const value=JSON.parse(localStorage.getItem(storageKey)||'null');
+    if(value?.version===1&&Date.now()-value.at<7*86400000&&Array.isArray(value.picks)&&value.picks.length===QUIZ.length)saved=value;
+  }catch(_){}
+  function forget(){try{localStorage.removeItem(storageKey);}catch(_){}saved=null;}
+  async function startFresh(){
+    const oldRequest=saved?.requestId||requestId;
+    if(saved?.phase==='creating'){
+      try{
+        const attempt=await api('/onboarding/attempt/'+oldRequest);
+        if(attempt.created||attempt.profile_exists||attempt.operation?.status==='running')return resumeDraft();
+      }catch(error){requestId=oldRequest;return birthError(error);}
+    }
+    if(saved||phase!=='welcome'){
+      try{await post('/onboarding/attempt/'+oldRequest+'/discard');}catch(_){}
+    }
+    forget();
+    for(const key of Object.keys(draft))delete draft[key];
+    Object.assign(draft,initialDraft);picks=new Array(QUIZ.length).fill(null);
+    derived=null;look=null;lookSeed=0;step=0;scheduleApproved=false;scheduleReviewed=false;requestId=newRequestId();
+    envInfo=inheritedEnvironment;
+    if(oauthPollInterval)clearInterval(oauthPollInterval);
+    channelStep();
+  }
+  async function resumeDraft(){
+    const value=saved;
+    if(!value)return welcome();
+    const allowed=new Set([...Object.keys(draft),'agent_named','pronoun_set_chosen','soul_locks']);
+    for(const [key,item] of Object.entries(value.draft||{}))if(allowed.has(key)&&!['api_key','telegram_token'].includes(key))draft[key]=item;
+    picks=value.picks.map((pick,index)=>Number.isInteger(pick)&&pick>=0&&pick<QUIZ[index].a.length?pick:null);
+    derived=value.derived;look=value.look;lookSeed=Number(value.lookSeed)||0;
+    step=Math.max(0,Math.min(order().length-1,Number(value.step)||0));
+    scheduleApproved=value.scheduleApproved===true;
+    scheduleReviewed=value.scheduleReviewed===true;
+    if(/^[a-f0-9-]{36}$/.test(value.requestId||''))requestId=value.requestId;
+    await refreshConnections();
+    const pages={channel:channelStep,purpose:purposeStep,meet:meetStep,questions:questionStep,reveal:revealStep,ownership:ownershipStep,inference:inferenceStep,schedule:scheduleStep,creating:recoverBirth};
+    return (pages[value.phase]||channelStep)();
+  }
 
   const shell=(inner,cls='')=>{
     target.onkeydown=null;
+    target.oninput=null;target.onchange=null;
     target.innerHTML=`<div class="card creator ${cls}">${inner}</div>`;
     target.scrollIntoView({behavior:'smooth',block:'start'});
   };
@@ -372,7 +424,7 @@ window.onboarding=async function(adopt){
         </div>
         <div style="padding:14px;border-radius:8px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--edge)">
           <strong style="display:block;margin-bottom:4px">3. A little adventure</strong>
-          <p class="small dim">Twelve short scenes, then three choices about what you want. Skip any question.</p>
+          <p class="small dim">Sixteen personality scenes, seven world choices, and three preferences. Skip any question; progress is saved on this browser for seven days.</p>
         </div>
         <div style="padding:14px;border-radius:8px;background:color-mix(in srgb,var(--ink) 3%,transparent);border:1px solid var(--edge)">
           <strong style="display:block;margin-bottom:4px">4. Meet & connect</strong>
@@ -380,14 +432,18 @@ window.onboarding=async function(adopt){
         </div>
       </div>
       <div class="creator-actions" style="justify-content:center">
-        <button type="button" class="act" id="btn-welcome-start" style="padding:12px 32px;font-size:16px">Begin →</button>
+        ${saved?'<button type="button" class="act" id="btn-welcome-resume">Resume saved setup</button>':''}
+        <button type="button" class="${saved?'quiet':'act'}" id="btn-welcome-start" style="padding:12px 32px;font-size:16px">${saved?'Start over':'Begin →'}</button>
       </div>`);
-    $('btn-welcome-start').onclick=()=>channelStep();
+    if(saved)$('btn-welcome-resume').onclick=resumeDraft;
+    $('btn-welcome-start').onclick=startFresh;
   }
 
   /* ---------------------------------------------------------- 2. Channel Selection */
   function channelStep(){
+    persist('channel');
     const tgConfigured=envInfo?.telegram?.configured;
+    const selectedChannel=saved?draft.channel:(tgConfigured?'telegram':'web');
     shell(`
       <div class="creator-head">
         <span class="eyebrow">Step 1 of 6 · Channel</span>
@@ -402,14 +458,14 @@ window.onboarding=async function(adopt){
       <div class="creator-form">
         <div style="display:grid;gap:12px">
           <label style="display:flex;align-items:flex-start;gap:12px;padding:14px;border:1px solid var(--edge);border-radius:8px;cursor:pointer;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
-            <input type="radio" name="channel_pick" value="telegram" ${tgConfigured?'checked':''} style="margin-top:4px">
+            <input type="radio" name="channel_pick" value="telegram" ${selectedChannel==='telegram'?'checked':''} style="margin-top:4px">
             <div>
               <strong>Telegram Bot (Recommended for 24/7 access)</strong>
               <p class="small dim" style="margin-top:3px">Chat directly with your companion on your phone or desktop, with notifications and voice notes.</p>
             </div>
           </label>
           <label style="display:flex;align-items:flex-start;gap:12px;padding:14px;border:1px solid var(--edge);border-radius:8px;cursor:pointer;background:color-mix(in srgb,var(--surface) 95%,var(--ink) 5%)">
-            <input type="radio" name="channel_pick" value="web" ${!tgConfigured?'checked':''} style="margin-top:4px">
+            <input type="radio" name="channel_pick" value="web" ${selectedChannel==='web'?'checked':''} style="margin-top:4px">
             <div>
               <strong>Web Workspace Only</strong>
               <p class="small dim" style="margin-top:3px">Chat right here in this browser tab. You can always configure Telegram later in Settings.</p>
@@ -448,6 +504,7 @@ window.onboarding=async function(adopt){
       r.onchange=()=>{
         const isTg=r.value==='telegram';
         $('tg-guide-box').style.display=isTg?'block':'none';
+        draft.channel=r.value;persist();
       };
     }
 
@@ -457,8 +514,9 @@ window.onboarding=async function(adopt){
       if(!token){$('ob-tg-status').innerHTML='<span style="color:var(--warn)">Please enter a Bot Token.</span>';return;}
       $('ob-tg-status').innerHTML='<span class="dim">Saving...</span>';
       try{
-        const res=await post('/onboarding/telegram',{token,user_id:userId});
+        await stageConnection('/onboarding/telegram',{token,user_id:userId});
         draft.telegram_token=token;draft.telegram_user_id=userId;
+        persist();
         $('ob-tg-status').innerHTML='<span style="color:var(--good)">✅ Saved successfully!</span>';
       }catch(e){
         $('ob-tg-status').innerHTML=`<span style="color:var(--warn)">${esc(e.message||'Failed to save token')}</span>`;
@@ -475,7 +533,7 @@ window.onboarding=async function(adopt){
         if(!token&&!tgConfigured){$('ob-tg-status').textContent='Save your Telegram details, or choose Web Workspace Only.';return;}
         if(token&&(draft.telegram_token!==token||draft.telegram_user_id!==userId)){
           try{
-            await post('/onboarding/telegram',{token,user_id:userId});
+            await stageConnection('/onboarding/telegram',{token,user_id:userId});
             draft.telegram_token=token;draft.telegram_user_id=userId;
           }catch(e){$('ob-tg-status').textContent=e.message;return;}
         }
@@ -486,6 +544,7 @@ window.onboarding=async function(adopt){
 
   /* ---------------------------------------------------------- 3. Purpose Selection */
   function purposeStep(){
+    persist('purpose');
     shell(`
       <div class="creator-head">
         <span class="eyebrow">Step 2 of 6 · Companion Purpose</span>
@@ -522,6 +581,7 @@ window.onboarding=async function(adopt){
       </div>`);
 
     $('btn-pur-back').onclick=()=>channelStep();
+    target.onchange=()=>{draft.purpose=target.querySelector('input[name="purpose_pick"]:checked')?.value||'relational';persist();};
     $('btn-pur-next').onclick=()=>{
       draft.purpose=target.querySelector('input[name="purpose_pick"]:checked')?.value||'relational';
       step=0;
@@ -531,6 +591,7 @@ window.onboarding=async function(adopt){
 
   /* ---------------------------------------------------------- 3b. Who you are hoping to meet */
   function meetStep(){
+    persist('meet');
     const pron=draft.pronoun_set_chosen?draft.pronoun_set:'';
     const card=(name,value,title,body,checked)=>`<label class="meet-card"><input type="radio" name="${name}" value="${value}" ${checked?'checked':''}><span><strong>${title}</strong>${body?`<small class="dim">${body}</small>`:''}</span></label>`;
     shell(`
@@ -555,6 +616,13 @@ window.onboarding=async function(adopt){
         </div>
       </div>`);
     $('btn-meet-back').onclick=()=>purposeStep();
+    target.onchange=()=>{
+      const who=target.querySelector('input[name="meet_who"]:checked')?.value;
+      if(who&&who!=='surprise'){draft.pronoun_set=who;draft.pronoun_set_chosen=true;}
+      const age=Number(target.querySelector('input[name="meet_age"]:checked')?.value);
+      if(age)draft.age=age;
+      persist();
+    };
     $('btn-meet-next').onclick=()=>{
       let who=target.querySelector('input[name="meet_who"]:checked')?.value||'surprise';
       if(who==='surprise')who=Math.random()<0.5?'she':'he';
@@ -567,6 +635,7 @@ window.onboarding=async function(adopt){
 
   /* ---------------------------------------------------------- 4. PMD Mystery Dungeon Quiz */
   function questionStep(){
+    persist('questions');
     const seq=order(),total=seq.length,index=seq[step],item=QUIZ[index];
     const part=item.direct?'Make it yours':item.world?'Their world':'Your little adventure';
     shell(`
@@ -618,6 +687,7 @@ window.onboarding=async function(adopt){
   /* ---------------------------------------------------------- 5. Reveal Companion (Editable identity) */
   function revealStep(){
     if(!derived)derived=derive(picks,catalog);
+    persist('reveal');
     const p=catalog.personas[derived.persona]||{};
     const b=catalog.boundaries[derived.boundary]||{};
     const companionName=draft.agent||'Companion';
@@ -753,6 +823,8 @@ window.onboarding=async function(adopt){
       if(draft.pronoun_set!==before)look=resolveCompanion(derived,catalog,draft.pronoun_set,lookSeed);
     }
     $('btn-rev-accept').onclick=()=>{captureReview();derived.agent_type==='worker'?inferenceStep():ownershipStep();};
+    target.oninput=()=>{captureReview();persist();};
+    target.onchange=()=>{captureReview();persist();};
   }
 
   /* The look and life the quiz chose, as editable catalogue picks. */
@@ -781,6 +853,7 @@ window.onboarding=async function(adopt){
 
   /* ---------------------------------------------------------- 5b. Who keeps what */
   function ownershipStep(){
+    persist('ownership');
     const name=esc(draft.agent||'Your companion');
     const sections=[['core','Who '+name+' is','Personality'],['daily-life',name+'’s life','Work, rhythm, the things they love'],
                     ['voice','How '+name+' talks','Tone, texting, pet names'],['heart','Heart and temper','Feelings, flaws, making up'],
@@ -811,12 +884,14 @@ window.onboarding=async function(adopt){
         </div>
       </div>`);
     const capture=()=>{for(const el of target.querySelectorAll('[data-lock]'))draft.soul_locks[el.dataset.lock]=el.checked;};
+    target.onchange=()=>{capture();persist();};
     $('btn-own-back').onclick=()=>{capture();revealStep();};
     $('btn-own-next').onclick=()=>{capture();inferenceStep();};
   }
 
   /* ---------------------------------------------------------- 5. Model connection */
   function inferenceStep(){
+    persist('inference');
     const infConfigured=envInfo?.inference?.configured;
     const loc=envInfo?.local_models||{};
     const isMobile=Boolean(loc.is_mobile);
@@ -1033,10 +1108,11 @@ window.onboarding=async function(adopt){
         const statusDiv=$('ob-local-status');
         if(statusDiv)statusDiv.innerHTML='<span class="dim">Downloading & configuring local model...</span>';
         try{
-          await action('/onboarding/local-setup',{model_id:modelId,type:setupType,path:modelPath},r=>{
+          await action('/onboarding/local-setup',{model_id:modelId,type:setupType,path:modelPath,request_id:requestId},r=>{
             draft.inference_mode='local';
             draft.provider=r.provider||'custom:local_llama';
             draft.model=r.model||modelId;
+            persist();
             if(statusDiv){
               statusDiv.innerHTML=`
                 <div class="notice-strip status-good" style="margin:10px 0">
@@ -1061,7 +1137,7 @@ window.onboarding=async function(adopt){
         startBtn.disabled=true;
         try{
           await action('/local-models/start',{},async()=>{
-            envInfo=await api('/onboarding/environment');
+            await refreshConnections();
             inferenceStep();
           });
         }catch(e){
@@ -1090,7 +1166,8 @@ window.onboarding=async function(adopt){
       if(!apiKey){$('ob-api-status').innerHTML='<span style="color:var(--warn)">Please enter an API Key.</span>';return;}
       $('ob-api-status').innerHTML='<span class="dim">Saving...</span>';
       try{
-        await post('/onboarding/inference',{provider,api_key:apiKey,model});
+        await stageConnection('/onboarding/inference',{provider,api_key:apiKey,model});
+        draft.provider=provider;draft.model=model;draft.inference_mode='api';persist();
         $('ob-api-status').innerHTML='<span style="color:var(--good)">✅ Saved key & model!</span>';
       }catch(e){
         $('ob-api-status').innerHTML=`<span style="color:var(--warn)">${esc(e.message||'Failed to save')}</span>`;
@@ -1105,7 +1182,7 @@ window.onboarding=async function(adopt){
       $('ob-oauth-status-text').innerHTML='<span class="dim">Initiating device code...</span>';
 
       try{
-        const res=await post('/onboarding/oauth/start',{provider});
+        const res=await stageConnection('/onboarding/oauth/start',{provider});
         $('ob-oauth-code').textContent=res.user_code||'—';
         $('ob-oauth-url').href=res.verification_url||'#';
         $('ob-oauth-status-text').innerHTML='⏳ Waiting for your approval in the browser...';
@@ -1135,12 +1212,14 @@ window.onboarding=async function(adopt){
   }
 
   async function scheduleStep(){
+    persist('schedule');
     shell('<h2>Your companion’s routine</h2><p class="dim">Preparing schedule…</p>');
     try{
       const base=(draft.agent||'companion').toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,48)||'companion';
       const roster=await api('/profiles'),ids=new Set(roster.profiles.map(p=>p.id));
       let profile=base,suffix=2;while(ids.has(profile)){const tail='-'+suffix++;profile=base.slice(0,48-tail.length)+tail;}
       draft.profile=adopt?(PROFILE||'default'):profile;
+      persist();
       const plan=await post('/onboarding/schedule',{profile:draft.profile,adopt:Boolean(adopt),agent_type:derived.agent_type,
         quiet_start:derived.quiet_start,quiet_end:derived.quiet_end,timezone:draft.timezone});
       shell(`<h2>A rhythm for their day</h2>
@@ -1148,10 +1227,11 @@ window.onboarding=async function(adopt){
         <p>Small background checks keep their day moving. Reflections run daily, weekly, and monthly; independent projects start at 10:20 and 20:20.</p>
         <p class="dim small">${plan.offset_minutes?`Starts are staggered by ${plan.offset_minutes} minute(s) from the base routine. `:''}Clock-bound quiet hours and project times stay as chosen. Long-running jobs can still overlap.</p>
         <details><summary>View all ${plan.jobs.length} jobs</summary><dl class="fact-list">${plan.jobs.map(j=>`<div><dt>${esc(j.name)}${j.uses_model?'':' · no model'}</dt><dd><code>${esc(scheduleLabel(j.schedule))}</code></dd></div>`).join('')}</dl><p class="dim small">Edit individual times in Companion Continuity settings.</p></details>
-        <label class="inline-label"><input id="ob-schedule-approved" type="checkbox" ${adopt?'':'checked'}> Enable this routine after a successful model test</label>
+        <label class="inline-label"><input id="ob-schedule-approved" type="checkbox" ${(scheduleReviewed?scheduleApproved:!adopt)?'checked':''}> Enable this routine after a successful model test</label>
         <p class="dim small">Your host must stay awake and its Hermes gateway must run. They may write first if your contact settings allow it. Automatic photos wait until you connect an image provider and enable them.</p>
         <div class="creator-actions"><button type="button" class="quiet" id="ob-schedule-back">Back</button><button type="button" class="act" id="ob-schedule-create">Create companion</button></div>`);
       $('ob-schedule-back').onclick=inferenceStep;
+      $('ob-schedule-approved').onchange=()=>{scheduleApproved=$('ob-schedule-approved').checked;scheduleReviewed=true;persist();};
       $('ob-schedule-create').onclick=()=>{scheduleApproved=$('ob-schedule-approved').checked;return finalizeBirth();};
     }catch(error){
       shell(`<h2>Schedule unavailable</h2><p class="bad">${esc(error.message)}</p><button class="quiet" id="ob-schedule-back">Back</button>`);
@@ -1161,6 +1241,7 @@ window.onboarding=async function(adopt){
 
   /* ---------------------------------------------------------- 7. Finalize & Birth */
   async function finalizeBirth(){
+    persist('creating');
     shell(`
       <div class="creator-head reveal" style="text-align:center;padding:40px 0">
         <span class="eyebrow" style="color:var(--accent);font-size:16px">Awakening...</span>
@@ -1208,7 +1289,8 @@ window.onboarding=async function(adopt){
 
     const profileId=draft.profile;
     try{
-      await action(adopt?'/adopt':'/profiles',adopt?{answers,schedule_approved:scheduleApproved}:{profile:profileId,answers,schedule_approved:scheduleApproved},r=>{
+      await action(adopt?'/adopt':'/profiles',adopt?{answers,schedule_approved:scheduleApproved,request_id:requestId}:{profile:profileId,answers,schedule_approved:scheduleApproved,request_id:requestId},r=>{
+        forget();
         target.innerHTML=`
           <div class="card creator" style="text-align:center;padding:40px 20px">
             <span style="font-size:48px;display:block;margin-bottom:12px">🎉</span>
@@ -1226,8 +1308,34 @@ window.onboarding=async function(adopt){
         };
       });
     }catch(e){
-      shell(`<div class="notice-strip is-firm"><p>Creation failed: ${esc(e.message)}</p></div><button class="act" onclick="location.reload()">Retry</button>`);
+      birthError(e);
     }
+  }
+
+  function birthError(error){
+    shell(`<div class="notice-strip is-firm"><p>${esc(error.message)}</p><p>Your choices are saved. Check the existing attempt before retrying.</p></div><button class="act" id="ob-birth-recover">Check creation status</button>`);
+    $('ob-birth-recover').onclick=recoverBirth;
+  }
+  async function recoverBirth(){
+    persist('creating');
+    shell('<h2>Checking your saved setup</h2><p class="dim">Reading the original attempt…</p>');
+    try{
+      const result=await api('/onboarding/attempt/'+requestId);
+      if(result.operation?.status==='running'){
+        await followOperation(result.operation,()=>{});
+        return recoverBirth();
+      }
+      if(result.created||result.profile_exists){
+        const complete=result.created&&result.operation?.status==='complete';
+        if(complete)forget();
+        shell(`<h2>${esc(draft.agent)} ${complete?'is saved':'needs setup review'}</h2><p>${complete?'Your companion is ready.':result.created?'Setup stopped after saving the profile. Open Settings → Installation & gateway to inspect and repair it. Your questionnaire remains saved in this browser.':'Setup left a Hermes profile folder before finishing the companion. Open the profile to inspect and adopt or repair it. Your questionnaire remains saved in this browser.'}</p><button class="act" id="ob-recovered-open">Open companion</button>`);
+        $('ob-recovered-open').onclick=()=>navigateProfile(result.profile,'now');
+      }else{
+        shell(`<h2>Your choices are ready</h2><p>${esc(result.operation?.error||'No companion was created by this attempt.')}</p><button class="act" id="ob-recovered-retry">Retry saved setup</button><button class="quiet" id="ob-recovered-review">Review choices</button>`);
+        $('ob-recovered-retry').onclick=finalizeBirth;
+        $('ob-recovered-review').onclick=revealStep;
+      }
+    }catch(error){birthError(error);}
   }
 
   // Start at welcome

@@ -1,6 +1,10 @@
 # First install for a friend
 
-Linux has been exercised; native Windows and Android still need device acceptance tests. If you are handing the kit to someone else, share a clean checkout or the release ZIP — never your own working directory, Hermes home, or vault.
+Linux has been exercised, and a clean Android/Termux install and live conversation
+were checked on a Pixel 8 Pro; see the [device log](audits/2026-09-19-termux-e2e-log.txt).
+Native Windows and unattended overnight/reboot behavior still need their own
+acceptance checks. If you are handing the kit to someone else, share a clean
+checkout or the release ZIP — never your own working directory, Hermes home, or vault.
 
 ## Windows first
 
@@ -19,7 +23,11 @@ A fallback needs its own usable allowance. Hosting on a low-power device does no
 
 Hermes documents Termux as a best-effort platform. Its tested core includes CLI, cron, Telegram, and memory integrations. Android can suspend background work. Docker isolation and local faster-whisper are unavailable, and browser setup is experimental. See the official [Termux guide](https://hermes-agent.nousresearch.com/docs/getting-started/termux).
 
-Tamanitomo's dependency bootstrap and gateway service controls have not been validated on Termux. This ZIP is not yet a verified one-click Android host installer. Do not assume the Linux service buttons work on Android.
+Tamanitomo's Termux installer, dependency bootstrap, runit-supervised workspace and
+gateway, browser onboarding, credential inheritance and one live model conversation
+passed two clean installs on the device recorded in the
+[September 19 validation log](audits/2026-09-19-termux-e2e-log.txt). That run does not
+establish screen-off overnight or reboot reliability on every Android device.
 
 Before using a phone as the permanent host, validate its Android version, Python/dependency installation, app startup, Hermes gateway supervision, screen-off job execution overnight, reboot recovery, and vault backups. Keep paid photo schedules off until those checks pass. A spare plugged-in phone is a candidate for a core-feature pilot; a full desktop-equivalent environment is not established by successful Hermes installation alone.
 

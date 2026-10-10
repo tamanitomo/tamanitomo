@@ -11,6 +11,7 @@ import datetime as dt
 import hashlib
 import json
 import math
+import os
 import pathlib
 import re
 import sys
@@ -224,7 +225,170 @@ def record(c, data, now=None):
     return {"written": True, "experience": row}
 
 
-def absence(c, since, now, config):
+def _absence_time(value, timezone=None):
+    """Resolve wall time explicitly; never guess during a DST gap or fold."""
+    try:
+        stamp = dt.datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        raise ValueError("Use an ISO date and time for the expected absence")
+    if stamp.tzinfo is not None:
+        return stamp.astimezone(UTC)
+    if not timezone:
+        raise ValueError("Expected absence times need a timezone or an explicit offset")
+    try:
+        zone = ZoneInfo(timezone)
+    except (ValueError, KeyError, TypeError):
+        raise ValueError("Choose a valid timezone")
+    choices = {
+        candidate.astimezone(UTC)
+        for fold in (0, 1)
+        if (candidate := stamp.replace(tzinfo=zone, fold=fold))
+        .astimezone(UTC)
+        .astimezone(zone)
+        .replace(tzinfo=None)
+        == stamp
+    }
+    if len(choices) != 1:
+        raise ValueError(
+            "That local time is ambiguous or does not exist because the clocks change. "
+            "Use an ISO timestamp with an explicit UTC offset."
+        )
+    return choices.pop()
+
+
+def expected_absences(c, now=None):
+    """Current dated expectations plus their unchanged, append-only evidence."""
+    now = now or dt.datetime.now(UTC)
+    path = c.life / "expected-absences.jsonl"
+    raw = path.read_text(encoding="utf-8") if path.exists() else ""
+    history = [json.loads(line) for line in raw.splitlines() if line.strip()]
+    if any(not isinstance(row, dict) for row in history):
+        raise ValueError("Invalid expected absence ledger")
+    latest = {}
+    for row in history:
+        if _stamp(row["recorded_at"]) <= now:
+            latest[row["id"]] = row
+    rows = []
+    for row in latest.values():
+        status = (
+            "cancelled"
+            if row["action"] == "cancel"
+            else (
+                "ended"
+                if _stamp(row["end"]) <= now
+                else "upcoming" if _stamp(row["start"]) > now else "current"
+            )
+        )
+        rows.append({**row, "status": status})
+    return {
+        "absences": sorted(rows, key=lambda row: (row["start"], row["id"])),
+        "history": history,
+        "revision": hashlib.sha256(raw.encode()).hexdigest(),
+        "timezone": c.timezone or "UTC",
+    }
+
+
+def record_absence(c, data, now=None):
+    """Save a human-supported plan. Changes preserve time already explained."""
+    now = now or dt.datetime.now(UTC)
+    if now.tzinfo is None:
+        raise ValueError("Timezone required")
+    now = now.astimezone(UTC)
+    if not isinstance(data, dict):
+        raise ValueError("Expected absence must be an object")
+    action = data.get("action", "create")
+    if action not in ("create", "edit", "cancel"):
+        raise ValueError("action must be create, edit or cancel")
+    clean = {
+        "action": action,
+        "evidence": _text(data.get("evidence"), "the human's explanation", 1000),
+        "source": _text(data.get("source"), "evidence source", 300),
+    }
+    if action != "cancel":
+        start = _absence_time(data.get("start"), data.get("timezone"))
+        end = _absence_time(data.get("end"), data.get("timezone"))
+        if end <= start:
+            raise ValueError("Expected absence end must be after its start")
+        clean.update(
+            label=_text(data.get("label"), "absence label", 80),
+            start=start.isoformat(),
+            end=end.isoformat(),
+        )
+    ident = data.get("id")
+    if not ident and action == "create":
+        ident = hashlib.sha256(json.dumps(clean, sort_keys=True).encode()).hexdigest()[
+            :24
+        ]
+    if not isinstance(ident, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", ident):
+        raise ValueError("Use a short alphanumeric absence id")
+    clean["id"] = ident
+    event_id = (
+        data.get("event_id")
+        or hashlib.sha256(
+            json.dumps(
+                {**clean, "revision": data.get("revision")}, sort_keys=True
+            ).encode()
+        ).hexdigest()[:24]
+    )
+    if not isinstance(event_id, str) or not re.fullmatch(
+        r"[A-Za-z0-9_-]{1,80}", event_id
+    ):
+        raise ValueError("Use a short alphanumeric event_id for retries")
+    with file_lock(c.life / ".feelings.lock"):
+        state = expected_absences(c, now)
+        previous = next((row for row in state["absences"] if row["id"] == ident), None)
+        existing = next(
+            (row for row in state["history"] if row["event_id"] == event_id), None
+        )
+        if existing:
+            if any(existing.get(key) != value for key, value in clean.items()):
+                raise FileExistsError("Expected absence event id has different content")
+            return {"written": False, "event": existing, **state}
+        if data.get("revision") != state["revision"]:
+            raise FileExistsError("Expected absences changed. Reload before saving.")
+        if any(_stamp(row["recorded_at"]) > now for row in state["history"]):
+            raise ValueError("The clock precedes an existing expected absence record")
+        if action == "create" and previous:
+            raise FileExistsError("Expected absence id already exists; edit it instead")
+        if action != "create" and (not previous or previous["status"] == "cancelled"):
+            raise ValueError("Choose an existing, uncancelled expected absence")
+        if previous and _stamp(previous["recorded_at"]) > now:
+            raise ValueError("The clock precedes the previous expected absence record")
+        if action == "cancel":
+            clean.update({key: previous[key] for key in ("label", "start", "end")})
+        row = {**clean, "event_id": event_id, "recorded_at": now.isoformat()}
+        with (c.life / "expected-absences.jsonl").open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(row, ensure_ascii=False) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        return {"written": True, "event": row, **expected_absences(c, now)}
+
+
+def expected_absence_intervals(c, now):
+    """Each revision supersedes only the remaining future of its predecessor."""
+    pending = {}
+    intervals = []
+    for row in expected_absences(c, now)["history"]:
+        at = _stamp(row["recorded_at"])
+        if at > now:
+            continue
+        previous = pending.pop(row["id"], None)
+        if previous:
+            start, end, label = previous
+            if min(end, at) > start:
+                intervals.append((start, min(end, at), label))
+        if row["action"] != "cancel":
+            start = _stamp(row["start"])
+            # Creation can explain a past interval supplied by the human. Later
+            # edits cannot remove the explanation that already governed that time.
+            if row["action"] == "edit":
+                start = max(start, at)
+            pending[row["id"]] = (start, _stamp(row["end"]), row["label"])
+    intervals.extend(pending.values())
+    return intervals
+
+
+def absence(c, since, now, config, known_at=None):
     """Union expected windows in UTC; overlapping routines never count twice."""
     if not since:
         return {
@@ -248,6 +412,12 @@ def absence(c, since, now, config):
     tz = ZoneInfo(c.timezone or "UTC")
     intervals = []
     labels = []
+    for a, b, label in expected_absence_intervals(c, known_at or end):
+        if a <= end < b:
+            labels.append(label)
+        a, b = max(a, measured), min(b, end)
+        if b > a:
+            intervals.append((a, b))
     day = measured.astimezone(tz).date() - dt.timedelta(days=1)
     last = end.astimezone(tz).date()
     while day <= last:
@@ -375,7 +545,7 @@ def compute(c, now=None):
         and previous
         and 0 <= (now.astimezone(UTC) - _stamp(last)).total_seconds() < 300
     ):
-        arrival = absence(c, previous, _stamp(last), config)
+        arrival = absence(c, previous, _stamp(last), config, known_at=now)
     relevant = arrival or away
     gap = relevant["unexplained_hours"]
     longing = (
@@ -457,6 +627,7 @@ def compute(c, now=None):
             "longing": None if longing is None else clamp(longing),
         },
         "absence": away,
+        "expected_absences": expected_absences(c, now)["absences"],
         "slow_change": slow,
         "learned_rhythm": rhythm["evidence"],
         "recent_return": arrival,
@@ -491,14 +662,23 @@ def render(c, state):
                 if state["recent_return"]
                 else "Since their last message: "
             )
-            + f'{gap["hours"]:g}h; {gap["expected_hours"]:g}h within expected routines; {gap["unexplained_hours"]:g}h outside them.'
+            + f'{gap["hours"]:g}h; {gap["expected_hours"]:g}h explained by expected time apart; {gap["unexplained_hours"]:g}h outside it.'
         )
     if state["absence"]["current"]:
         lines.append(
-            "Expected routine now (not live observation): "
+            "Expected time apart now (not live observation): "
             + ", ".join(state["absence"]["current"])
             + ". Do not treat this as unexplained withdrawal."
         )
+    for row in state.get("expected_absences", []):
+        if row["status"] in ("current", "upcoming"):
+            lines.append(
+                f'Human-explained plan {row["id"]}: {row["label"]}, '
+                f'{row["start"]} to {row["end"]}; {row["status"]}. '
+                f'Evidence: {row["evidence"]} (source: {row["source"]}). '
+                "This is an expectation, not an observation of what they are doing. "
+                "No longing, irritation or relationship penalty for the explained interval."
+            )
     for row in state["reasons"]:
         lines.append(
             f'Recorded experience {row["id"]}: {row["text"]} (topic {row["topic"]}, occurrence {row["occurrence"]}, repair {round(row["repair"]*100)}%).'
@@ -511,7 +691,26 @@ def render(c, state):
     lines.append(
         "Record meaningful relationship experiences only when supported by this conversation, not every message: "
         + command
-        + " --json JSON. Fields: kind connection|rupture|repair|correction, topic (reuse for repeated experiences), text, evidence (actual words/context), strength 0..1; repair needs related rupture id; correction excludes a mistaken related experience without deleting it. Do not claim a record was saved until the command succeeds. Expected routines and temperament are editable in Together."
+        + " --json JSON. Fields: kind connection|rupture|repair|correction, topic (reuse for repeated experiences), text, evidence (actual words/context), strength 0..1; repair needs related rupture id; correction excludes a mistaken related experience without deleting it. Do not claim a record was saved until the command succeeds."
+    )
+    read_command = terminal_python_command(
+        pathlib.Path(__file__), "--home", c.home, "absences"
+    )
+    write_command = terminal_python_command(
+        pathlib.Path(__file__), "--home", c.home, "absence"
+    )
+    lines.append(
+        "When the human explicitly explains dated time away, save it with their actual words and source; "
+        "do not infer dates from silence or quiet hours. Read "
+        + read_command
+        + " for the current revision and IDs, then "
+        + write_command
+        + " --json JSON. Fields: action create|edit|cancel, revision, id (required for edit/cancel), "
+        "event_id (stable retry ID), label, start, end (ISO timestamps with offsets, or local ISO times plus timezone), "
+        "evidence (human's words), source (conversation/message reference). Cancel needs only action, revision, id, evidence and source. "
+        "Ask for unclear dates rather than inventing them. Future plans are expectations, not observed activity. "
+        "Edits and cancellation preserve elapsed explained time. Claim saved only after successful execution. "
+        "The human can review and change dated plans in Us → Expected time apart."
     )
     return "\n".join(lines) + "\n"
 
@@ -521,7 +720,10 @@ def main():
     parser.add_argument("--home", type=pathlib.Path)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("show")
+    sub.add_parser("absences")
     p = sub.add_parser("record")
+    p.add_argument("--json", required=True)
+    p = sub.add_parser("absence")
     p.add_argument("--json", required=True)
     args = parser.parse_args()
     c = cc.load(args.home)
@@ -530,7 +732,15 @@ def main():
             (
                 record(c, json.loads(args.json))
                 if args.command == "record"
-                else compute(c)
+                else (
+                    record_absence(c, json.loads(args.json))
+                    if args.command == "absence"
+                    else (
+                        expected_absences(c)
+                        if args.command == "absences"
+                        else compute(c)
+                    )
+                )
             ),
             ensure_ascii=False,
             indent=2,

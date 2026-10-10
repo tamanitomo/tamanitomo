@@ -1,5 +1,67 @@
 /* Settings: one section per page, listed in SETTINGS_NAV; each saves on its own. */
 
+async function mountCompanionRecovery(host){
+  if(!host)return;
+  const owner=INSTALLATION+':'+PROFILE;
+  const current=()=>host.isConnected&&owner===INSTALLATION+':'+PROFILE;
+  const latest=await api('/backup/status').catch(()=>({verified_at:null}));
+  if(!current())return;
+  host.innerHTML=`<h3 class="section-subheading">Complete companion recovery</h3>
+    <p class="dim small">Save this profile, conversations, settings and the entire shared vault, including its history. Keep the archive private: notes and conversations may contain sensitive information.</p>
+    <p class="dim small" data-backup-last>${latest.verified_at?`Last bundle verified ${esc(when(latest.verified_at))}`:'No complete backup verified yet.'}</p>
+    <label class="inline-label"><input type="checkbox" data-backup-secrets> Include saved account credentials (archive is not encrypted)</label>
+    <div class="actions"><button class="quiet" data-backup-export>${icon('download')} Download complete backup</button></div>
+    <details><summary>Restore or move a companion</summary>
+      <p class="dim small">Choose a recovery ZIP to inspect it first. Restore uses two new folders on this host; existing companions stay in place. Background jobs and outreach start paused.</p>
+      <label>Recovery ZIP<input type="file" accept=".zip,application/zip" data-backup-file></label>
+      <div data-backup-preview></div>
+    </details><p class="dim small" role="status" data-backup-status></p>`;
+  const status=host.querySelector('[data-backup-status]');
+  const headers=type=>({'content-type':type,...(token?{'x-tamanitomo-token':token,'x-companion-token':token}:{})});
+  const check=async response=>{if(!response.ok){const data=await response.json().catch(()=>({}));throw Error(data.detail||data.error||'Backup request failed');}return response;};
+  host.querySelector('[data-backup-export]').onclick=async event=>{
+    const button=event.currentTarget;button.disabled=true;status.textContent='Creating and checking the backup…';
+    try{
+      const response=await check(await fetch(scoped('/api/backup/export'),{method:'POST',headers:headers('application/json'),body:JSON.stringify({include_credentials:host.querySelector('[data-backup-secrets]').checked})}));
+      const blob=await response.blob();if(!current())return;
+      const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=(PROFILE||'companion')+'-recovery.zip';link.click();
+      setTimeout(()=>URL.revokeObjectURL(url),60000);
+      status.textContent='Backup verified and downloaded. Keep a copy on another device.';
+      host.querySelector('[data-backup-last]').textContent='Last bundle verified just now.';
+    }catch(error){if(current())status.textContent=error.message;}
+    finally{button.disabled=false;}
+  };
+  host.querySelector('[data-backup-file]').onchange=async event=>{
+    const input=event.currentTarget,file=input.files[0],preview=host.querySelector('[data-backup-preview]');
+    preview.innerHTML='';if(!file)return;
+    if(file.size>2_000_000_000){status.textContent='Choose a recovery bundle smaller than 2 GB.';return;}
+    input.disabled=true;status.textContent='Checking the archive and every file…';
+    try{
+      const response=await check(await fetch(scoped('/api/backup/preview'),{method:'POST',headers:headers('application/zip'),body:file}));
+      const data=await response.json();if(!current())return;
+      status.textContent='Backup integrity verified.';
+      preview.innerHTML=`<p><strong>${esc(data.agent)}</strong> · ${esc(when(data.created_at))} · ${data.files} files · ${(data.bytes/1e6).toFixed(1)} MB</p>
+        <p class="dim small">${data.credentials_included?'Saved credentials are included.':'Reconnect accounts after restoring.'} ${esc(data.note)}</p>
+        ${data.excluded.length?`<details><summary>${data.excluded.length} excluded paths</summary><pre>${esc(data.excluded.join('\n'))}</pre></details>`:''}
+        <label>New Hermes folder on this host<input data-restore-root placeholder="/path/to/recovered-hermes"></label>
+        <label>New vault folder on this host<input data-restore-vault placeholder="/path/to/recovered-vault"></label>
+        <button class="act" data-backup-restore>Restore into these new folders</button>`;
+      preview.querySelector('[data-backup-restore]').onclick=async click=>{
+        const button=click.currentTarget;button.disabled=true;status.textContent='Restoring and keeping routines paused…';
+        try{
+          const result=await post('/backup/restore',{id:data.id,root:preview.querySelector('[data-restore-root]').value.trim(),vault:preview.querySelector('[data-restore-vault]').value.trim()});
+          if(!current())return;
+          status.textContent=result.note;
+          preview.innerHTML=`<p>Restored successfully.</p><p class="dim small">Hermes: ${esc(result.root)}<br>Vault: ${esc(result.vault)}</p>${result.installation?'<button class="act" data-backup-open>Open restored companion</button>':'<p>Link the restored Hermes folder under Settings → Installation &amp; gateway to open it here.</p>'}`;
+          const open=preview.querySelector('[data-backup-open]');
+          if(open)open.onclick=()=>{const url=new URL(location.href);url.searchParams.set('installation',result.installation);url.searchParams.set('profile',result.profile);url.hash='settings';location.href=url;};
+        }catch(error){if(current())status.textContent=error.message;button.disabled=false;}
+      };
+    }catch(error){if(current())status.textContent=error.message;}
+    finally{input.disabled=false;}
+  };
+}
+
 /* The Hermes forms are expensive to build and carry live event handlers, so
    they are rendered once into a pool that stays in the document, and the cards
    are moved into whichever panel wants them. Moving a node keeps its
@@ -703,7 +765,7 @@ const settingsPanels=[
 
 {id:'diagnostics',title:'Diagnostics',
  blurb:'What is healthy, what is full, and what it has cost',
- keywords:'health diagnostics problems memory storage vault usage tokens cost',
+ keywords:'health diagnostics problems memory storage vault usage tokens cost backup recovery restore export move',
  async render(host){
   const [health,cost]=await Promise.all([api('/health'),api('/cost')]);
   host.innerHTML=`
@@ -726,12 +788,14 @@ const settingsPanels=[
   <div class="actions">
     <a class="quiet" href="${mediaUrl('/api/vault/export')}" download>${icon('download')} Download vault backup (.zip)</a>
   </div>
+  <div id="companion-recovery"></div>
 
   <h3 class="section-subheading">Model usage · last 30 recorded days</h3>
   ${cost.available
     ?`<table><thead><tr><th>Day</th><th>Input</th><th>Output</th><th>Runs</th></tr></thead><tbody>${cost.days.slice().reverse().map(d=>`<tr><td>${esc(d.day)}</td><td>${d.input==null?'Unknown':d.input.toLocaleString()}</td><td>${d.output==null?'Unknown':d.output.toLocaleString()}</td><td>${d.runs}</td></tr>`).join('')}</tbody></table>`
     :'<p class="dim">Nothing recorded yet.</p>'}`;
   host.querySelector('#diag-activity').onclick=showGatewayActivity;
+  await mountCompanionRecovery(host.querySelector('#companion-recovery'));
  }},
 
 {id:'hermes-core',bare:true,title:'Installation & gateway',

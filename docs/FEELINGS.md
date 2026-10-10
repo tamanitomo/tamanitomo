@@ -1,6 +1,6 @@
 # Contextual feelings
 
-Open **Together → Feelings & expected routines** to choose a temperament and add the human's normal sleep or busy periods. Chat links to this page beneath the companion's name. Home and Together show the same derived indicators that enter model context.
+Open **Us → Expected time apart** to add, review, edit or cancel dated plans such as a trip or a busy week. Home and Us show the same derived indicators that enter model context. Recurring routines and temperament remain in the feelings settings API and CLI state.
 
 The existing recorded mood, wants, and private stance remain the companion's authored state. Warmth, trust, hurt, irritation, and missing you add a game-like interpretation of the relationship. Their starting values are character defaults, not measured emotions. With no reliable message history, missing you is unknown.
 
@@ -13,6 +13,36 @@ A sleep routine and regular Saturday commitments reduce unexplained time apart. 
 Missing you has one measure: `longing` in the feelings state, computed from time outside expected routines. The older raw-hours "feeling the gap" bar was removed because it counted a night's sleep as distance.
 
 A returning message preserves the preceding gap briefly, so writing “hello” does not erase the context before the companion can greet you. A continuing conversation then uses its current gap. The model receives the difference between actual elapsed time and time within expected routines. A schedule is an expectation, not live knowledge that someone is asleep or busy. Routine evaluation is bounded to the most recent 366 days for exceptionally long gaps.
+
+### Dated explanations
+
+Dated plans require a start, an end, the human's explanation and its source. The companion can record a plan explicitly explained in conversation; it must use the human's actual words and a conversation/message reference, and ask when dates are unclear. A supplied source is retained for inspection, not independently authenticated by the ledger writer. The Us form records the owner's own explanation with source `owner-app`.
+
+Dates entered in the Us form use the companion's timezone, even when the browser is elsewhere. Overlapping dated and weekly windows count once. Calculation uses UTC elapsed time across clock changes; an ambiguous or nonexistent local time requires a full ISO timestamp with an explicit offset. The form's **Use full ISO timestamps** option supports those cases.
+
+A future plan explains no elapsed time before it starts and never establishes what the human is doing. An ended plan remains in history and continues to explain its elapsed interval. Editing or cancelling a plan changes its remaining future; already explained time stays explained. Each change appends its new explanation alongside the original. Dated plans affect neither quiet hours nor delivery permissions.
+
+Missing-you and irritation calculations exclude this explained time. Closeness also uses unexplained hours for silence and for its recent contact deficit, so a recorded trip does not become an inactivity penalty through another indicator. Ordinary aging of past emotional experiences is unchanged.
+
+`companion_feelings.py --home HOME absences` returns the current plans, their history and a `revision`. Write with `absence --json JSON`:
+
+```json
+{
+  "action": "create",
+  "revision": "REVISION_FROM_ABSENCES",
+  "id": "october-trip",
+  "event_id": "conversation-42-message-9",
+  "label": "Work trip",
+  "start": "2026-10-12T09:00:00-04:00",
+  "end": "2026-10-16T18:00:00-04:00",
+  "evidence": "I'll be on a work trip from Monday morning until Friday evening.",
+  "source": "conversation:42/message:9"
+}
+```
+
+`edit` uses the plan's `id` and the same fields with a new explanation. `cancel` needs `id`, `revision`, `evidence` and `source`; dates and label are retained from the plan. An optional `event_id` identifies a retry; reusing it with different content is rejected. Otherwise a retry ID is derived from the write and revision. Every write requires the revision read beforehand, and stale edits return a conflict. No command claims a successful save before the ledger append succeeds.
+
+The API uses `GET /api/feelings/absences` and `POST /api/feelings/absences` with these same fields. Local ISO times without offsets also accept an explicit IANA `timezone`, such as `America/New_York`.
 
 ## Temperament and experiences
 
@@ -39,7 +69,7 @@ Warmth and trust also move on their own, slowly, from how the two of you actuall
 
 ## Files and behavior
 
-Each companion keeps `feelings-settings.json` and the append-only `relationship-feelings.jsonl` in its own life directory. They are not moved into the shared human-facts directory. Settings use revision checks; repeated experience IDs are idempotent and conflicting content is rejected. The screen initially shows 30 experiences. Load older experiences to browse earlier records and make them available as repair or correction targets. Older records remain in the ledger and still affect the calculation.
+Each companion keeps `feelings-settings.json`, the append-only `relationship-feelings.jsonl`, and the append-only `expected-absences.jsonl` in its own life directory. They are not moved into the shared human-facts directory. Settings use revision checks; repeated experience IDs are idempotent and conflicting content is rejected. The screen initially shows 30 experiences. Load older experiences to browse earlier records and make them available as repair or correction targets. Older records remain in the ledger and still affect the calculation.
 
 `companion_feelings.py --home HOME show` reads the current state. `record --json JSON` records an experience. Its fields are `kind`, `topic`, `text`, `evidence`, and `strength` (0–1); repair and correction also need `related`, the original experience ID. Optional `id` supplies a stable retry identifier, and `at` supplies an ISO timestamp with timezone. Future experiences are rejected.
 
@@ -48,5 +78,14 @@ The same state is rebuilt for chat context and scheduled prereads. Turning the e
 ## Verification boundary
 
 Automated tests cover overnight and Saturday routines, overlapping windows, daylight-saving elapsed time, repetition after repair, personality differences, persistent trust effects, correction, idempotency, settings conflicts, profile isolation, and live chat/scheduled context. Browser checks cover settings, recording experiences, repair, correction, and the chat shortcut.
+
+The dated-plan regressions additionally cover elapsed-only subtraction, ended history, edit/cancel preservation, overlaps with weekly routines across DST, ambiguous wall-time rejection, explanations recorded during a returning chat turn, API conflicts and profile isolation, CLI writes and browser timezone formatting. They use synthetic profiles and no model calls or message delivery.
+
+Contact cadence uses fourteen days of available time, looking back at most a year
+and never before the relationship began. Explained trips and sleep therefore
+pause that window instead of expiring earlier contact credit while the human is
+away. Ordinary warmth aging remains separate. Regression cases cover a three-day
+trip after established contact, overnight sleep across DST and fully explained
+history at the lookback limit.
 
 These checks establish the state calculation and prompt integration. An initial real-model check distinguished expected sleep, unexplained absence, and repeated rupture; a separate Hermes terminal call successfully saved one supported connection record. See [the acceptance notes](audits/2026-09-12-model-acceptance.md). A generated-hook Hermes turn also received a ledger-only rupture and continued offering practical help. A subsequent browser-to-provider pass saved and resumed three exchanges in the same conversation, including a reply identifying the stored rupture. Repeated trials and other supported models still need acceptance testing. This is not a guarantee that every model will follow the intended character behavior.

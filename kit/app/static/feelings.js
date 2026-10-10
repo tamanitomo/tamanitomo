@@ -49,3 +49,93 @@ async function mountFeelingHistory(host){
   };
   draw();
 }
+
+/* Dated plans carry the human's explanation. Browser timezone never decides the
+   interval: wall times are resolved in the companion's zone by the server. */
+function absenceLocalTime(value,timezone){
+  if(!value)return '';
+  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(value));
+  const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+}
+function expectedAbsencesSummary(rows=[]){
+  const active=rows.filter(r=>['current','upcoming'].includes(r.status));
+  return `${active.length?`<ul>${active.slice(0,3).map(r=>`<li><strong>${esc(r.label)}</strong> · ${esc(when(r.start))} – ${esc(when(r.end))}</li>`).join('')}</ul>`:'<p class="dim small">No dated plans recorded.</p>'}
+    <button type="button" class="quiet" data-us-action="absences">Review or add time away</button>`;
+}
+async function openExpectedAbsences(){
+  if(!await confirmEditorLeave('dialog'))return;
+  dialog('Expected time apart','<div id="expected-absences"><p class="dim">Loading…</p></div>');
+  const host=$('expected-absences');
+  try{await mountExpectedAbsences(host);}catch(error){if(host.isConnected)host.innerHTML=`<p class="bad">${esc(error.message)}</p>`;}
+}
+async function mountExpectedAbsences(host){
+  const scope=INSTALLATION+'\0'+PROFILE;
+  const present=()=>host.isConnected&&scope===INSTALLATION+'\0'+PROFILE;
+  let state=await api('/feelings/absences');
+  if(!present())return;
+  const paint=()=>{
+    host.innerHTML=`<p class="dim">Trips, work and other time away you have explained. These plans are expectations, not observations. Explained time does not count as distance, and stays explained after the plan ends.</p>
+      <p class="small dim">Dates use ${esc(state.timezone)}. Quiet hours still control messages separately.</p>
+      <div class="actions"><button type="button" class="act" data-absence-new>Add time away</button><button type="button" class="quiet" data-absence-reload>Refresh</button></div>
+      <div data-absence-list>${state.absences.slice().reverse().map(row=>`<article class="moment-row"><div><strong>${esc(row.label)}</strong><p class="dim small">${esc(row.status)}</p></div><div>
+        <p>${esc(absenceLocalTime(row.start,state.timezone).replace('T',' '))} – ${esc(absenceLocalTime(row.end,state.timezone).replace('T',' '))}</p>
+        <details><summary>Explanation &amp; history</summary>${state.history.filter(x=>x.id===row.id).map(x=>`<p class="small"><strong>${esc(x.action)}</strong> · ${esc(when(x.recorded_at))}<br>${esc(x.evidence)}<br><span class="dim">${esc(x.source)} · ${esc(x.start)} – ${esc(x.end)}</span></p>`).join('')}</details>
+        ${row.status!=='cancelled'?`<div class="actions"><button type="button" class="quiet" data-absence-edit="${esc(row.id)}">Edit plan</button><button type="button" class="quiet" data-absence-cancel="${esc(row.id)}">Cancel plan</button></div>`:''}
+        </div></article>`).join('')||'<p class="dim">No dated plans yet.</p>'}</div>
+      <div data-absence-editor></div><p data-absence-status role="status"></p>`;
+    host.querySelector('[data-absence-new]').onclick=()=>edit(null,'create');
+    host.querySelector('[data-absence-reload]').onclick=async()=>{
+      if(!await confirmEditorLeave('dialog')||!present())return;
+      try{state=await api('/feelings/absences');if(present())paint();}
+      catch(error){if(present())host.querySelector('[data-absence-status]').textContent=error.message;}
+    };
+    for(const button of host.querySelectorAll('[data-absence-edit], [data-absence-cancel]'))button.onclick=()=>{
+      const id=button.dataset.absenceEdit||button.dataset.absenceCancel;
+      return edit(state.absences.find(row=>row.id===id),button.dataset.absenceCancel?'cancel':'edit');
+    };
+  };
+  const edit=async(row,action)=>{
+    if(!await confirmEditorLeave('dialog')||!present())return;
+    const box=host.querySelector('[data-absence-editor]');
+    const revision=state.revision;
+    box.innerHTML=`<form id="feelings-controls">
+      <h3>${action==='cancel'?'Cancel':action==='edit'?'Edit':'Add'} ${row?esc(row.label):'time away'}</h3>
+      ${action!=='create'?'<p class="dim small">Changes apply to the remaining plan. Time already explained stays explained.</p>':''}
+      ${action!=='cancel'?`<label>Label<input name="label" required maxlength="80" value="${esc(row?.label||'')}"></label>
+        <div class="form-grid"><label>Starts · ${esc(state.timezone)}<input type="datetime-local" name="start" required value="${esc(absenceLocalTime(row?.start,state.timezone))}"></label>
+        <label>Ends · ${esc(state.timezone)}<input type="datetime-local" name="end" required value="${esc(absenceLocalTime(row?.end,state.timezone))}"></label></div>
+        <label><input type="checkbox" name="explicit"> Use full ISO timestamps with UTC offsets (for a clock change)</label>`:''}
+      <label>${action==='create'?'Your explanation':'What changed?'}<textarea name="evidence" required maxlength="1000" placeholder="Your own words about this time away"></textarea></label>
+      <div class="actions"><button class="act" type="submit">${action==='cancel'?'Save cancellation':'Save plan'}</button><button type="button" class="quiet" data-absence-close>Back to plans</button></div>
+      <p data-absence-error role="status"></p></form>`;
+    const form=box.querySelector('form');
+    if(action!=='cancel')form.elements.explicit.onchange=()=>{
+      for(const key of ['start','end']){
+        const input=form.elements[key];
+        if(form.elements.explicit.checked){input.type='text';input.placeholder='2026-11-01T01:30:00-04:00';if(row&&input.value===absenceLocalTime(row[key],state.timezone))input.value=row[key];}
+        else{const previous=input.value;input.type='datetime-local';input.value=/(?:Z|[+-]\d\d:\d\d)$/.test(previous)?absenceLocalTime(previous,state.timezone):previous;}
+      }
+    };
+    box.querySelector('[data-absence-close]').onclick=async()=>{if(await confirmEditorLeave('dialog')&&present())box.innerHTML='';};
+    form.onsubmit=async event=>{
+      event.preventDefault();
+      if(!form.reportValidity()||!present())return;
+      const payload={action,revision,evidence:form.elements.evidence.value,source:'owner-app'};
+      if(row)payload.id=row.id;
+      if(action!=='cancel')for(const key of ['label','start','end'])payload[key]=form.elements[key].value;
+      payload.timezone=state.timezone;
+      const button=form.querySelector('[type=submit]');button.disabled=true;
+      try{
+        const saved=await api('/feelings/absences',{method:'POST',body:JSON.stringify(payload)});
+        if(!present()||!form.isConnected)return;
+        state=saved;clearEditorDirty('dialog');paint();
+        host.querySelector('[data-absence-status]').textContent=action==='cancel'?'Plan cancelled. Elapsed time remains explained.':'Expected time away saved.';
+        if(current==='relationship'&&$('us-absences'))$('us-absences').innerHTML=expectedAbsencesSummary(state.absences);
+      }catch(error){if(present()&&form.isConnected)form.querySelector('[data-absence-error]').textContent=error.message+(error.status===409?' Keep your explanation, then refresh the plans before trying again.':'');}
+      finally{button.disabled=false;}
+    };
+    form.elements.evidence.focus();
+  };
+  paint();
+}

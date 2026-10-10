@@ -23,7 +23,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import companion_config as cc
 from companion_life import read_events, routine
 from companion_self import summary as self_summary
-from companion_recall import search
+from companion_recall import implicit_terms, search
 
 RECALL_TRIGGER = re.compile(
     r"\b(remember|recall|last time|ever|when did|when was|have i|did i|where did|what did i)\b",
@@ -738,23 +738,41 @@ def build(c, payload=None, now=None, maintenance_notice=""):
         except (OSError, ValueError, KeyError, TypeError, ImportError):
             pass
 
-    if RECALL_TRIGGER.search(msg):
+    explicit_recall = bool(RECALL_TRIGGER.search(msg))
+    if explicit_recall or implicit_terms(c, msg):
         try:
-            ev = search(c, msg, limit=3, seconds=0.75)
-            parts.append(
-                (
-                    7,
+            ev = search(
+                c,
+                msg,
+                limit=3 if explicit_recall else 2,
+                seconds=0.75,
+                implicit=not explicit_recall,
+                now=now,
+            )
+            if explicit_recall or ev["results"]:
+                label = (
                     "[Personal-history retrieval; quoted candidates require interpretation]\n"
-                    + clip(json.dumps(ev, ensure_ascii=False), max(300, b["facts"])),
+                    if explicit_recall
+                    else "[Possible topic callback; use only if relevant to what they mean now. "
+                    "Check dates and corrections; do not turn an old plan into a current event]\n"
                 )
-            )
+                parts.append(
+                    (
+                        7,
+                        label
+                        + clip(
+                            json.dumps(ev, ensure_ascii=False), max(300, b["facts"])
+                        ),
+                    )
+                )
         except Exception:
-            parts.append(
-                (
-                    7,
-                    "[History retrieval unavailable. Acknowledge uncertainty rather than inventing.]",
+            if explicit_recall:
+                parts.append(
+                    (
+                        7,
+                        "[History retrieval unavailable. Acknowledge uncertainty rather than inventing.]",
+                    )
                 )
-            )
 
     if b["ambient"]:
         amb = []

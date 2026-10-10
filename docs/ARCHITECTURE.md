@@ -44,6 +44,25 @@ allowing an embedding match or an invented recollection to become authority.
 Memory maintenance archives complete entries without model calls and preserves
 originals during interrupted writes.
 
+Recall uses the same read-only `companion_transcript` ownership boundary as chat
+history and cross-channel handoffs. Other profiles, groups and messages whose
+human ownership cannot be established are excluded, including when profiles
+share or hardlink a database. Compaction ancestry preserves access to eligible
+original quotations without crossing that boundary.
+
+Ordinary chat can also retrieve a small, topic-matched callback without an explicit
+"remember" request. The deterministic selector requires conversational cues and
+meaningful word overlap, uses active facts and recent trusted messages, and has a
+time/size budget. It avoids repeating the current turn and suppresses superseded
+facts; explicit historical recall labels retired claims as noncurrent. This is a
+conservative lexical aid, not semantic understanding. Every excerpt retains its
+date and source, and retrieved content remains evidence rather than instructions.
+
+Explained absences are append-only records with time bounds, a reason and source.
+Their intervals are combined with weekly and learned routines before measuring
+unexplained silence or cadence gaps. Editing or cancelling a plan changes future
+coverage while preserving time already explained. See [FEELINGS.md](FEELINGS.md).
+
 ## Zero-LLM maintenance
 
 `kit/templates/cron/manifest.json` marks these six maintenance routines
@@ -89,6 +108,12 @@ the transcript; the browser keeps a draft, a session reference and the current
 operation ID for reconnecting. Checking an interrupted operation does not
 resubmit the message. Profile scope is captured for each request so a late
 response cannot write into another companion's view or draft.
+
+The dock periodically reconciles trusted transcript IDs and offers literal
+conversation search with same-session context; neither path invokes a model.
+See [CHAT_CONTRACT.md](CHAT_CONTRACT.md). Whole-companion recovery uses verified
+archives and new destinations, leaving restored automation paused; see
+[BACKUPS.md](BACKUPS.md).
 
 ## Reading web pages
 

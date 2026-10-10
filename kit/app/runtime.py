@@ -647,7 +647,16 @@ class Operations:
         self.rows = {}
         self.busy = set()
 
-    def submit(self, scope, label, action, *, profile="default", kind="runtime"):
+    def submit(
+        self,
+        scope,
+        label,
+        action,
+        *,
+        profile="default",
+        kind="runtime",
+        before_start=None,
+    ):
         with self.lock:
             if scope in self.busy:
                 raise ValueError(
@@ -666,7 +675,20 @@ class Operations:
                 "started_at": dt.datetime.now(dt.timezone.utc).isoformat(),
             }
             self.rows[ident] = row
-            self._save(row)
+            try:
+                self._save(row)
+                if before_start:
+                    before_start(dict(row))
+            except Exception as exc:
+                # Nothing has run yet. A journal must be durable before a
+                # setup subprocess can create files or contact a model.
+                self.busy.discard(scope)
+                row.update(
+                    status="failed", error=redact(exc), progress="Needs attention"
+                )
+                with contextlib.suppress(Exception):
+                    self._save(row)
+                raise
 
         def report(message):
             with self.lock:
@@ -1038,40 +1060,252 @@ FEED_EXCLUDED_SOURCES = (
 )
 
 
+def _feed_message(view, record):
+    row = {
+        "id": record.source_message,
+        "source_message": record.source_message,
+        "role": "user" if record.speaker == "owner" else "assistant",
+        "content": record.content,
+        "timestamp": record.occurred_at,
+        "session": record.source_session,
+        "channel": record.source_kind,
+        "source": (
+            "tamanitomo"
+            if record.source_kind == "workspace"
+            else view.session(record.source_session)["source"]
+        ),
+        "cursor": _encode_cursor(record.occurred_at, int(record.source_message)),
+    }
+    row["revision"] = hashlib.sha256(
+        json.dumps(row, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()
+    return row
+
+
+def _feed_cursor(value):
+    cursor = _page_cursor(value)
+    if cursor and (type(cursor[1]) != int or not 0 <= cursor[1] <= 9223372036854775807):
+        raise ValueError("Invalid message cursor")
+    return cursor
+
+
+def _feed_records(view, limit, cursor=None, *, newer=False, where="", params=()):
+    """Bounded SQL pages, always filtered through the owner evidence rules."""
+    records = []
+    direction, operator = ("ASC", ">") if newer else ("DESC", "<")
+    while len(records) <= limit:
+        condition = (
+            f" AND (coalesce(m.timestamp,0),m.id){operator}(?,?)" if cursor else ""
+        )
+        rows = view.con.execute(
+            view._select()
+            + where
+            + condition
+            + f" ORDER BY coalesce(m.timestamp,0) {direction},m.id {direction} LIMIT 200",
+            (*view.params, *params, *(cursor or ())),
+        ).fetchall()
+        for row in rows:
+            record = view._record(row)
+            if record is not None:
+                records.append(record)
+                if len(records) > limit:
+                    return records[:limit], True
+        if len(rows) < 200:
+            break
+        cursor = (rows[-1]["timestamp"] or 0, rows[-1]["id"])
+    return records, False
+
+
 def feed_page(c, limit=60, before=None):
     """Visible owner conversations across trusted channels, read without a cache."""
     import companion_transcript as transcript
 
     if type(limit) != int or not 1 <= limit <= 200:
         raise ValueError("History page size must be 1-200")
-    cursor = _page_cursor(before)
-    if cursor and type(cursor[1]) != int:
-        raise ValueError("Invalid message cursor")
+    cursor = _feed_cursor(before)
 
     def read(view):
         if view is None:
-            return {"messages": [], "next_cursor": None}
+            return {"messages": [], "next_cursor": None, "latest_cursor": None}
         records, more = view.page(limit, cursor)
-        rows = [
-            {
-                "role": "user" if record.speaker == "owner" else "assistant",
-                "content": record.content,
-                "timestamp": record.occurred_at,
-                "session": record.source_session,
-                "source": (
-                    "tamanitomo"
-                    if record.source_kind == "workspace"
-                    else view.session(record.source_session)["source"]
-                ),
-            }
-            for record in records
-        ]
+        rows = [_feed_message(view, record) for record in records]
         next_cursor = (
             _encode_cursor(records[-1].occurred_at, int(records[-1].source_message))
             if more
             else None
         )
-        return {"messages": list(reversed(rows)), "next_cursor": next_cursor}
+        return {
+            "messages": list(reversed(rows)),
+            "next_cursor": next_cursor,
+            "latest_cursor": rows[0]["cursor"] if rows else None,
+        }
+
+    return transcript.owner_evidence(c, read)
+
+
+def feed_sync(c, after=None, known=None):
+    """New rows plus revisions/deletions of the caller's visible rows. Read only.
+
+    A missing or no-longer-trusted row is removed without disclosing why. The
+    client checks older loaded windows in batches; no transcript is cached here.
+    """
+    import companion_transcript as transcript
+
+    cursor = _feed_cursor(after)
+    known = {} if known is None else known
+    if not isinstance(known, dict) or len(known) > 200:
+        raise ValueError("Check at most 200 conversation messages at a time")
+    if any(
+        not isinstance(ident, str)
+        or not re.fullmatch(r"[1-9][0-9]{0,18}", ident)
+        or int(ident) > 9223372036854775807
+        or not isinstance(revision, str)
+        or len(revision) > 64
+        for ident, revision in known.items()
+    ):
+        raise ValueError("Invalid conversation revision")
+
+    def read(view):
+        if view is None:
+            return {
+                "messages": [],
+                "removed": list(known),
+                "after": None,
+                "more": False,
+            }
+        # All checks in one request observe the same database snapshot.
+        view.con.execute("BEGIN")
+        records, more = _feed_records(view, 200, cursor, newer=True)
+        messages = {r.source_message: _feed_message(view, r) for r in records}
+        visible = set()
+        if known:
+            placeholders = ",".join("?" for _ in known)
+            for row in view.con.execute(
+                view._select() + f" AND m.id IN ({placeholders})",
+                (*view.params, *[int(ident) for ident in known]),
+            ):
+                record = view._record(row)
+                if record is None:
+                    continue
+                visible.add(record.source_message)
+                message = _feed_message(view, record)
+                if message["revision"] != known[record.source_message]:
+                    messages[record.source_message] = message
+        return {
+            "messages": list(messages.values()),
+            "removed": [ident for ident in known if ident not in visible],
+            "after": (
+                _encode_cursor(records[-1].occurred_at, int(records[-1].source_message))
+                if records
+                else after
+            ),
+            "more": more,
+        }
+
+    return transcript.owner_evidence(c, read)
+
+
+def feed_search(c, query="", day="", channel="all", before=None, limit=20):
+    """Literal text search in trusted owner conversations; dates use profile time."""
+    import companion_transcript as transcript
+    from zoneinfo import ZoneInfo
+
+    if not isinstance(query, str) or len(query.strip()) > 200:
+        raise ValueError("Search text must be at most 200 characters")
+    query = query.strip()
+    if channel not in ("all", "workspace", "terminal", "telegram"):
+        raise ValueError("Unknown conversation channel")
+    if type(limit) != int or not 1 <= limit <= 50:
+        raise ValueError("Search page size must be 1-50")
+    cursor = _feed_cursor(before)
+    where, params = "", []
+    if day:
+        try:
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+                raise ValueError()
+            date = dt.date.fromisoformat(day)
+            zone = ZoneInfo(c.timezone)
+            start = dt.datetime.combine(date, dt.time(), zone)
+            end = dt.datetime.combine(date + dt.timedelta(days=1), dt.time(), zone)
+        except (ValueError, TypeError, OverflowError) as exc:
+            raise ValueError("Choose a valid date") from exc
+        where += " AND m.timestamp>=? AND m.timestamp<?"
+        params.extend((start.timestamp(), end.timestamp()))
+    if not query and not day and channel == "all":
+        raise ValueError("Enter text, a date, or a channel to search")
+
+    def read(view):
+        if view is None:
+            return {"matches": [], "next_cursor": None, "timezone": c.timezone}
+        view.con.execute("BEGIN")
+        view.con.create_function(
+            "feed_contains",
+            1,
+            lambda text: int(query.casefold() in str(text or "").casefold()),
+        )
+        condition = where + (" AND feed_contains(m.content)=1" if query else "")
+        # The source classification also distinguishes workspace from terminal.
+        view.con.create_function(
+            "feed_channel", 1, lambda session: view.owner_session(session) or ""
+        )
+        values = tuple(params)
+        if channel != "all":
+            condition += " AND feed_channel(m.session_id)=?"
+            values += (channel,)
+        records, more = _feed_records(
+            view, limit, cursor, where=condition, params=values
+        )
+        matches = []
+        for record in records:
+            row = _feed_message(view, record)
+            index = record.content.casefold().find(query.casefold()) if query else 0
+            start = max(0, index - 90)
+            row["excerpt"] = (
+                ("…" if start else "")
+                + record.content[start : start + 320]
+                + ("…" if start + 320 < len(record.content) else "")
+            )
+            del row["content"]
+            matches.append(row)
+        return {
+            "matches": matches,
+            "next_cursor": matches[-1]["cursor"] if more else None,
+            "timezone": c.timezone,
+        }
+
+    return transcript.owner_evidence(c, read)
+
+
+def feed_context(c, ident):
+    """The selected public message and nearby public messages in its session."""
+    import companion_transcript as transcript
+
+    if (
+        not re.fullmatch(r"[1-9][0-9]{0,18}", str(ident))
+        or int(ident) > 9223372036854775807
+    ):
+        raise ValueError("Invalid conversation message")
+
+    def read(view):
+        if view is None:
+            raise ValueError("This conversation message is no longer available")
+        view.con.execute("BEGIN")
+        row = view.con.execute(
+            view._select() + " AND m.id=?", (*view.params, int(ident))
+        ).fetchone()
+        record = view._record(row) if row else None
+        if record is None:
+            raise ValueError("This conversation message is no longer available")
+        cursor = (record.occurred_at, int(record.source_message))
+        args = {"where": " AND m.session_id=?", "params": (record.source_session,)}
+        older, _ = _feed_records(view, 3, cursor, **args)
+        newer, _ = _feed_records(view, 3, cursor, newer=True, **args)
+        return {
+            "messages": [
+                _feed_message(view, r) for r in [*reversed(older), record, *newer]
+            ],
+            "selected": record.source_message,
+        }
 
     return transcript.owner_evidence(c, read)
 

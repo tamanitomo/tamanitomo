@@ -20,10 +20,19 @@ Any machine with internet access, a modern browser and room for Hermes plus opti
 6. Review the proposed hooks and scheduled jobs before enabling them. Telegram is optional. Configure its credentials with Hermes if wanted; test gateway startup and Windows reboot recovery before relying on unattended schedules.
 7. Add optional image and voice providers using the guide below. Keep scheduled photos off until manual previews and the image reviewer work.
 
+The interview saves your non-secret answers on this browser for seven days. After
+a refresh, reopen **Create** or **Adopt** and choose **Resume saved setup**. API keys and
+Telegram tokens are not saved in the browser draft. Connection settings stay in
+private staging on the host until creation, **Start over**, or seven-day expiry;
+setting up another companion does not change the current companion's accounts.
+If creation is interrupted,
+use **Check creation status** to inspect its operation before retrying; a companion
+that already exists can be opened without creating it again.
+
 ## What is included
 
 - **Home, Journal, Vault, Photos, Settings:** the five primary destinations. Home shows the companion’s present; Journal contains recorded days and reflections; Vault provides notes, backlinks and an outline; Photos holds the visual library. Empty sections are normal before jobs have run.
-- **Floating Chat dock:** the same profile identity and memory, with streaming replies, earlier messages and push-to-talk voice on every page.
+- **Floating Chat dock:** the same profile identity and memory, with streaming replies, automatic refresh across trusted channels, conversation search, earlier messages and push-to-talk voice on every page.
 - **Home subviews and Settings:** companions, relationship history, identity, appearance, boundaries, routines, timezone and media settings.
 - **Photos & Creations:** view/download, keep album copies, see recorded generation source, label safe/NSFW and delete generated files. Opening NSFW details does not reveal the image; use Reveal there if wanted.
 - **Image Studio:** named cloud/OAuth/Comfy presets, category routing, structured six-part prompts, guided weight/LoRA slots, Civitai downloads and compatible image-to-image conversion.
@@ -47,7 +56,15 @@ Only images marked NSFW are blurred by default. Unreviewed images are identified
 
 ## Keep your data safe and available
 
-Back up the Hermes home and vault to a private location. They contain credentials, memory and personal content. Keep them outside the Kit code folder. The launcher's access token grants workspace access: don't post it publicly. For remote devices, use authenticated HTTPS/private networking; do not expose a raw token-only HTTP service to the internet. Android wrapping does not move Hermes to the phone.
+Use **Settings → System → Diagnostics → Companion recovery** to download a verified
+backup of the selected companion's profile, conversation history and entire shared
+vault. Credentials are excluded by default. A restore preview checks the archive
+before restoring into new folders, with background schedules and outreach paused.
+See [Backup and recovery](docs/BACKUPS.md) for the CLI, scope and restore checklist.
+Keep backups private and outside the Kit code folder: even without saved keys,
+they contain personal history.
+
+The launcher's access token grants workspace access: don't post it publicly. For remote devices, use authenticated HTTPS/private networking; do not expose a raw token-only HTTP service to the internet. Android wrapping does not move Hermes to the phone.
 
 Close Kit with Ctrl-C in the host launcher window; closing the browser alone leaves it running. Installed Hermes gateways may continue separately. After reboot, verify the gateway and schedules on your Windows machine. Do not assume a sleeping host is available.
 
@@ -59,6 +76,7 @@ Close Kit with Ctrl-C in the host launcher window; closing the browser alone lea
 - [Studios and image review](docs/STUDIOS.md)
 - [Workflow creator](docs/WORKFLOW_CREATOR.md)
 - [Updates and rollback](docs/UPDATES.md)
+- [Backup and recovery](docs/BACKUPS.md)
 - [Android wrapper settings](docs/ANDROID_WRAPPER.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 

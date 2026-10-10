@@ -524,6 +524,7 @@ workspaceHandlers.relationship=async()=>{
     ${section('us-memories','Remembered about you','',usMemoryPreviewHTML(facts,review))}
     ${section('us-discoveries',`Things ${esc(companionName)} has discovered`,'Preferences and little opinions that have emerged along the way.',usDiscoveriesHTML(prefs,US_LIMITS.discoveries,companionName,relationship.pronoun_set))}
     ${section('us-threads','Still between you','Questions, promises, and loose threads that have carried into another conversation.',usOpenThreadsHTML(threads))}
+    ${section('us-absences','Expected time apart','Dated plans you have explained, so time away stays understood.',expectedAbsencesSummary(feelings?.expected_absences||[]))}
     <div class="us-section us-advanced" id="us-advanced">${relationshipDetails(relationship,feelings,ledgers.standing||[],companionName)}</div>
   </div>`;
 
@@ -560,6 +561,7 @@ workspaceHandlers.relationship=async()=>{
     else if(act==='threads-all')$('us-threads').innerHTML=usOpenThreadsHTML(threads,Infinity);
     else if(act==='talk')await openChatWithDraft(b.dataset.draft);
     else if(act==='history')openEmotionalHistory();
+    else if(act==='absences')openExpectedAbsences();
     else if(act==='standing'){const list=$('us-standing-list'),open=list.hidden;list.hidden=!open;b.setAttribute('aria-expanded',String(open));}
   };
   const overview=await overviewLoad;

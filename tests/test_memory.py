@@ -262,11 +262,11 @@ class IsolationTests(unittest.TestCase):
         c.home.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(c.home / "state.db") as db:
             db.executescript(
-                "CREATE TABLE sessions(id TEXT, profile_name TEXT, source TEXT);\n                CREATE TABLE messages(id INTEGER PRIMARY KEY, session_id TEXT, role TEXT,\n                content TEXT, timestamp REAL, _compressed_summary INTEGER);\n                CREATE VIRTUAL TABLE messages_fts USING fts5(content);"
+                "CREATE TABLE sessions(id TEXT, profile_name TEXT, source TEXT, started_at REAL DEFAULT 0);\n                CREATE TABLE messages(id INTEGER PRIMARY KEY, session_id TEXT, role TEXT,\n                content TEXT, timestamp REAL, _compressed_summary INTEGER);\n                CREATE VIRTUAL TABLE messages_fts USING fts5(content);"
             )
             for i, profile in enumerate(("default", "other"), 1):
                 db.execute(
-                    "INSERT INTO sessions VALUES (?,?,?)", (str(i), profile, "cli")
+                    "INSERT INTO sessions(id,profile_name,source) VALUES (?,?,?)", (str(i), profile, "cli")
                 )
                 db.execute(
                     "INSERT INTO messages VALUES (?,?,?,?,?,?)",
@@ -806,7 +806,7 @@ class RecallScopeTests(unittest.TestCase):
     """A named profile must never surface another companion's messages, whether
     each profile owns its store or they all share one."""
 
-    SCHEMA = "CREATE TABLE sessions(id TEXT, profile_name TEXT, source TEXT);\n        CREATE TABLE messages(id INTEGER PRIMARY KEY, session_id TEXT, role TEXT,\n        content TEXT, timestamp REAL, _compressed_summary INTEGER);\n        CREATE VIRTUAL TABLE messages_fts USING fts5(content);"
+    SCHEMA = "CREATE TABLE sessions(id TEXT, profile_name TEXT, source TEXT, started_at REAL DEFAULT 0);\n        CREATE TABLE messages(id INTEGER PRIMARY KEY, session_id TEXT, role TEXT,\n        content TEXT, timestamp REAL, _compressed_summary INTEGER);\n        CREATE VIRTUAL TABLE messages_fts USING fts5(content);"
 
     def seed(self, path, rows):
         import sqlite3
@@ -815,7 +815,7 @@ class RecallScopeTests(unittest.TestCase):
         con = sqlite3.connect(path)
         con.executescript(self.SCHEMA)
         for i, (profile, text) in enumerate(rows, 1):
-            con.execute("INSERT INTO sessions VALUES (?,?,?)", (str(i), profile, "cli"))
+            con.execute("INSERT INTO sessions(id,profile_name,source) VALUES (?,?,?)", (str(i), profile, "cli"))
             con.execute(
                 "INSERT INTO messages VALUES (?,?,?,?,?,?)",
                 (i, str(i), "user", text, 1, 0),

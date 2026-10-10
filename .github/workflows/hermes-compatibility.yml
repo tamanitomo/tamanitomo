@@ -1,0 +1,47 @@
+name: Hermes compatibility
+
+on:
+  push:
+    branches: [beta, main]
+    paths:
+      - 'kit/**'
+      - 'requirements.txt'
+      - 'tools/check_hermes_compatibility.py'
+      - 'tests/test_hermes_compatibility.py'
+      - '.github/workflows/hermes-compatibility.yml'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installed-hermes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out the reviewed Hermes runtime
+        uses: actions/checkout@v4
+        with:
+          repository: NousResearch/hermes-agent
+          ref: bddd22be7c2e5f7630c3d90507e6e7280ff092e3
+          path: .hermes-compat
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.14'
+      - name: Install Hermes dependencies from its lockfile
+        run: |
+          uv sync --frozen --no-dev --no-default-groups --project .hermes-compat
+          uv pip install --python .hermes-compat/.venv/bin/python -r requirements.txt
+      - name: Verify plugins, routing and generated hooks without inference
+        run: |
+          uv run --no-project --python 3.14 tools/check_hermes_compatibility.py \
+            --hermes-root .hermes-compat \
+            --python .hermes-compat/.venv/bin/python \
+            --report hermes-compatibility.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hermes-compatibility
+          path: hermes-compatibility.json
+          if-no-files-found: error

@@ -434,7 +434,7 @@ function renderWardrobeCard(closet,s,stage=0){
   const clean=filterG(closet?.clean);
   const laundry=closet?.laundry_in_progress;
   let html=`<div class="card wardrobe-card"><div class="section-subheading" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><span class="eyebrow">Wardrobe & Care</span>${laundry?'<span class="pill is-washing" style="font-size:11px">🧺 Laundry running</span>':''}</div>`;
-  html+=`<div class="wardrobe-block"><div class="wardrobe-block-title"><span>Currently Wearing</span><span class="dim small">${wearing.length} piece${wearing.length===1?'':'s'}</span></div><div class="wardrobe-chip-list">${bySlot(wearing).map(w=>wardrobeChip(w,'is-wearing','\u{1F464}')).join('')||'<span class="dim small">Casual wear</span>'}</div></div>`;
+  html+=`<div class="wardrobe-block"><div class="wardrobe-block-title"><span>Currently Wearing</span><span class="dim small">${wearing.length} piece${wearing.length===1?'':'s'}</span></div><div class="wardrobe-chip-list">${bySlot(wearing).map(w=>wardrobeChip(w,'is-wearing','\u{1F464}')).join('')||'<span class="dim small">No outfit recorded</span>'}</div></div>`;
   if(laidOut&&(laidOutItems.length||laidOut.plan?.intent)){
     const plan=laidOut.plan||{};
     html+=`<div class="wardrobe-block" style="border-left:3px solid var(--warn);margin-top:12px"><div class="wardrobe-block-title"><span style="color:var(--warn)">✨ Laid Out For Tomorrow</span><span class="dim small">${laidOutItems.length} pieces</span></div>${laidOutItems.length?`<div class="wardrobe-chip-list">${bySlot(laidOutItems).map(w=>wardrobeChip(w,'is-laid-out','\u{1F6CF}\uFE0F','Laid out \u00b7 ')).join('')}</div>`:''}${plan.intent?`<div class="laid-out-intent-quote">“${esc(plan.intent)}”</div>`:''}</div>`;
@@ -864,7 +864,7 @@ workspaceHandlers.now=async()=>{
         <div class="presence-avatar-column">
           <div class="presence-avatar-frame-tall">
             ${photo?`<img class="presence-avatar-img-tall" src="${mediaUrl(photo.url)}" alt="${esc(d.agent)}">`:`<div class="presence-avatar-placeholder-tall">${esc(d.agent.slice(0,1))}</div>`}
-            <span class="presence-pulse-dot" title="Active presence"></span>
+            ${s?'<span class="presence-pulse-dot" title="Recorded presence"></span>':''}
           </div>
         </div>
 
@@ -876,10 +876,11 @@ workspaceHandlers.now=async()=>{
           </div>
 
           <div class="presence-status-stack">
-            <div class="presence-chip-row"><span class="chip-label">✨ Status:</span> <span class="chip-val">${esc(s?.activity||'Resting quietly')}</span></div>
-            <div class="presence-chip-row"><span class="chip-label">📍 Location:</span> <span class="chip-val">${esc(s?.location||'Home')}</span></div>
-            <div class="presence-chip-row"><span class="chip-label">💭 Mood:</span> <span class="chip-val">${esc(s?.mood||'Peaceful')}</span></div>
-            <div class="presence-chip-row"><span class="chip-label">👗 Attire:</span> <span class="chip-val">${esc(currentOutfit||'Casual wear')}</span></div>
+            <div class="presence-chip-row"><span class="chip-label">✨ Status:</span> <span class="chip-val">${esc(s?.activity||'No update yet')}</span></div>
+            <div class="presence-chip-row"><span class="chip-label">📍 Location:</span> <span class="chip-val">${esc(s?.location||'Not recorded')}</span></div>
+            <div class="presence-chip-row"><span class="chip-label">💭 Mood:</span> <span class="chip-val">${esc(s?.mood||'Not recorded')}</span></div>
+            <div class="presence-chip-row"><span class="chip-label">👗 Attire:</span> <span class="chip-val">${esc(currentOutfit||'Not recorded')}</span></div>
+            ${d.state?.recorded_at?`<p class="dim small">Last recorded ${esc(when(d.state.recorded_at))}</p>`:''}
           </div>
 
           ${latestThought?`

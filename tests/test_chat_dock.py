@@ -195,6 +195,172 @@ def test_feed_pages_have_no_gaps_or_duplicates(workspace):
     assert seen == ["said in web", "said in terminal", "said in owner"]
 
 
+def test_feed_sync_reports_new_rows_edits_and_removed_visibility(workspace):
+    c, _, client = workspace
+    page = client.get("/api/feed").json()
+    known = {row["id"]: row["revision"] for row in page["messages"]}
+    with sqlite3.connect(c.home / "state.db") as db:
+        db.execute("UPDATE messages SET content='corrected owner text' WHERE id=3")
+        db.execute("UPDATE messages SET display_kind='internal' WHERE id=2")
+        db.execute("DELETE FROM messages WHERE id=1")
+        db.executemany(
+            "INSERT INTO messages(id,session_id,role,content,timestamp,platform_message_id) VALUES (?,?,?,?,?,?)",
+            [
+                (30, "owner", "user", "a new Telegram message", 150, "30"),
+                (31, "stranger", "user", "private to someone else", 151, "31"),
+            ],
+        )
+    result = client.post(
+        "/api/feed/sync", json={"after": page["latest_cursor"], "known": known}
+    ).json()
+    assert set(result["removed"]) == {"1", "2"}
+    assert {row["id"]: row["content"] for row in result["messages"]} == {
+        "3": "corrected owner text",
+        "30": "a new Telegram message",
+    }
+    assert "session" not in result  # Reads never select the device's chat session.
+    unchanged = client.post(
+        "/api/feed/sync",
+        json={
+            "after": result["after"],
+            "known": {row["id"]: row["revision"] for row in result["messages"]},
+        },
+    ).json()
+    assert unchanged["messages"] == []
+    assert unchanged["removed"] == []
+
+
+def test_feed_sync_paginates_equal_timestamps_and_revoked_owner_binding(workspace):
+    c, _, client = workspace
+    initial = client.get("/api/feed").json()
+    with sqlite3.connect(c.home / "state.db") as db:
+        db.executemany(
+            "INSERT INTO messages(id,session_id,role,content,timestamp) VALUES (?,'web','assistant',?,200)",
+            [(i, f"message {i}") for i in range(30, 235)],
+        )
+    first = client.post(
+        "/api/feed/sync", json={"after": initial["latest_cursor"]}
+    ).json()
+    second = client.post("/api/feed/sync", json={"after": first["after"]}).json()
+    assert first["more"] is True
+    assert second["more"] is False
+    assert [r["id"] for r in first["messages"] + second["messages"]] == [
+        str(i) for i in range(30, 235)
+    ]
+    (c.home / ".tamanitomo-chat-owner.json").write_text('{"telegram": []}')
+    revoked = client.post(
+        "/api/feed/sync", json={"after": second["after"], "known": {"3": "old"}}
+    ).json()
+    assert revoked["removed"] == ["3"]
+    assert revoked["messages"] == []
+
+
+def test_conversation_search_is_literal_unicode_and_owner_scoped(workspace):
+    c, _, client = workspace
+    with sqlite3.connect(c.home / "state.db") as db:
+        db.execute(
+            "UPDATE messages SET content='Straße 100%_ memorable' WHERE id IN (1,3,4,5,8,20,21)"
+        )
+    page = client.get("/api/feed/search", params={"query": "STRASSE 100%_"}).json()
+    assert [row["id"] for row in page["matches"]] == ["3", "1"]
+    assert "content" not in page["matches"][0]
+    assert "Straße" in page["matches"][0]["excerpt"]
+    assert (
+        client.get("/api/feed/search", params={"query": "100%z"}).json()["matches"]
+        == []
+    )
+    assert [
+        row["id"]
+        for row in client.get(
+            "/api/feed/search", params={"query": "memorable", "channel": "workspace"}
+        ).json()["matches"]
+    ] == ["1"]
+    assert [
+        row["id"]
+        for row in client.get(
+            "/api/feed/search", params={"query": "memorable", "channel": "telegram"}
+        ).json()["matches"]
+    ] == ["3"]
+
+
+def test_search_pages_and_day_filter_use_profile_timezone(workspace):
+    c, _, client = workspace
+    c.timezone = "America/New_York"
+    c.save()
+    stamps = [
+        dt.datetime(2026, 3, 8, 4, 59, tzinfo=dt.timezone.utc).timestamp(),
+        dt.datetime(2026, 3, 8, 5, 0, tzinfo=dt.timezone.utc).timestamp(),
+        dt.datetime(2026, 3, 9, 3, 59, tzinfo=dt.timezone.utc).timestamp(),
+        dt.datetime(2026, 3, 9, 4, 0, tzinfo=dt.timezone.utc).timestamp(),
+    ]
+    with sqlite3.connect(c.home / "state.db") as db:
+        db.executemany(
+            "INSERT INTO messages(id,session_id,role,content,timestamp) VALUES (?,'web','assistant','old shared joke',?)",
+            [(30 + index, stamp) for index, stamp in enumerate(stamps)],
+        )
+    params = {"day": "2026-03-08", "query": "shared joke", "limit": 1}
+    first = client.get("/api/feed/search", params=params).json()
+    second = client.get(
+        "/api/feed/search", params={**params, "before": first["next_cursor"]}
+    ).json()
+    assert [first["matches"][0]["id"], second["matches"][0]["id"]] == ["32", "31"]
+    assert second["next_cursor"] is None
+
+
+def test_search_context_shows_only_public_same_session_messages(workspace):
+    c, _, client = workspace
+    with sqlite3.connect(c.home / "state.db") as db:
+        db.executemany(
+            "INSERT INTO messages(id,session_id,role,content,timestamp) VALUES (?,'web',?,?,?)",
+            [
+                (30, "user", "before", 200),
+                (31, "tool", "secret tool output", 201),
+                (32, "assistant", "the matching exchange", 202),
+                (33, "user", "after", 203),
+            ],
+        )
+    result = client.get("/api/feed/context/32").json()
+    assert result["selected"] == "32"
+    assert [r["content"] for r in result["messages"]] == [
+        "said in web",
+        "before",
+        "the matching exchange",
+        "after",
+    ]
+    for hidden_id in (4, 5, 8, 20, 21, 31, 999999):
+        assert client.get(f"/api/feed/context/{hidden_id}").status_code == 400
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {},
+        {"query": "x" * 201},
+        {"channel": "cron"},
+        {"day": "2026-02-30"},
+        {"query": "said", "limit": 0},
+        {"query": "said", "before": "invalid"},
+    ],
+)
+def test_search_rejects_invalid_filters(workspace, params):
+    _, _, client = workspace
+    assert client.get("/api/feed/search", params=params).status_code == 400
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"known": []},
+        {"known": {"private": "revision"}},
+        {"known": {str(i): "r" for i in range(1, 202)}},
+        {"after": "invalid"},
+    ],
+)
+def test_feed_sync_rejects_invalid_revision_requests(workspace, payload):
+    _, _, client = workspace
+    assert client.post("/api/feed/sync", json=payload).status_code == 400
+
+
 @pytest.mark.parametrize(
     "session", ["stranger", "group", "owner", "gateway-local", "other-profile"]
 )
@@ -569,7 +735,9 @@ class WarmBridgeTests(unittest.TestCase):
 
         bridges.prepare(sys.executable, self.env)
         stale = next(iter(bridges.ready.values()))[0]
-        (self.root / "config.yaml").write_text("model: {default: other}\n", encoding="utf-8")
+        (self.root / "config.yaml").write_text(
+            "model: {default: other}\n", encoding="utf-8"
+        )
         proc, errors = bridges.take(sys.executable, self.env)
         self.addCleanup(errors.close)
         self.assertIsNot(proc, stale)
@@ -708,7 +876,9 @@ class WorkspaceAssetPerformanceTests(WorkspaceFixture):
             headers=self.headers,
         )
         assert "immutable" in current.headers["cache-control"]
-        assert self.get("/media/portrait").headers["cache-control"] == "private, no-cache"
+        assert (
+            self.get("/media/portrait").headers["cache-control"] == "private, no-cache"
+        )
         again = self.client.get(
             "/media/portrait",
             params={"profile": "nova"},

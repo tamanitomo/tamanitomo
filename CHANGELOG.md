@@ -1,4 +1,21 @@
-## Unreleased — her story, what she can notice, and an honest sense of missing you
+## Unreleased — continuity, recovery, and her continuing life
+
+- Keep recall inside the selected companion's owner-verified conversations, including
+  original messages retained through compaction. Add bounded, topic-based callbacks to
+  active facts and recent conversations, with provenance and correction handling.
+- Refresh the chat dock across trusted channels without resending a turn or disturbing
+  drafts. Search conversations by literal text, date and channel, then open nearby messages.
+- Record dated time away with an explanation and editable history. Combine it with weekly
+  and learned routines so explained time does not become a silence or cadence penalty.
+- Resume the onboarding interview after refresh, keeping non-secret answers on this device
+  for seven days. Recover interrupted creation by its operation before offering a retry.
+  Stage new connection settings privately so creating another companion does not change
+  the current companion's accounts or model.
+- Export and verify a complete companion recovery bundle, inspect it before restoring to
+  new folders, and keep restored schedules and outreach paused. Credentials are opt-in.
+- Show unrecorded presence, location, mood and clothing honestly on Home.
+- Add isolated multi-day continuity scenarios and compatibility checks against actual Hermes
+  plugin discovery, gateway, cron and no-agent maintenance paths.
 
 - Stop inventing signals. With Spotify unconnected the music sensor is silent (it no longer
   makes up a listening mood from the hour, and removes its stale legacy file); the season

@@ -111,6 +111,26 @@ def session_kind(row, binding, workspace):
     return None, "unverified_source:" + (source or "none")
 
 
+def shared_store(c):
+    """A redirected or hard-linked store cannot own unlabelled profile rows."""
+    path = Path(c.home) / "state.db"
+    try:
+        if path.resolve().parent != Path(c.home).resolve() or path.stat().st_nlink > 1:
+            return True
+        candidates = [Path(c.hermes_root) / "state.db"]
+        directory = Path(c.hermes_root) / "profiles"
+        if directory.exists():
+            candidates.extend(p / "state.db" for p in directory.iterdir() if p.is_dir())
+        return any(
+            other.exists()
+            and other.resolve() != path.resolve()
+            and path.samefile(other)
+            for other in candidates
+        )
+    except OSError:
+        return True
+
+
 def owner_evidence(c, callback, binding=None):
     """Read one profile in one read-only connection, without copying its history."""
     root = str(Path(__file__).resolve().parents[2])
@@ -124,6 +144,14 @@ def owner_evidence(c, callback, binding=None):
             if state is None:
                 return callback(None)
             connection, session_columns, scope, params = state
+            if shared_store(c):
+                if "profile_name" not in session_columns:
+                    raise SourceUnavailable(
+                        "Cannot safely scope this shared session store"
+                    )
+                if c.profile:
+                    scope = "lower(coalesce(profile_name,''))=?"
+                    params = (c.profile.lower(),)
             message_columns = {
                 row[1] for row in connection.execute("PRAGMA table_info(messages)")
             }
@@ -345,3 +373,42 @@ class Transcript:
                 if len(records) >= limit:
                     return records, True
         return records, len(rows) < 400
+
+    def search(self, words, deadline, limit=40, since=None, until=None):
+        """Bounded lexical candidates, with the same ownership checks as chat.
+
+        The FTS index narrows candidates only. Session and message identity,
+        visibility, compression and source eligibility still pass through _record.
+        Newest matches win ties, so a busy archive does not hide later corrections.
+        """
+        if not words or time.monotonic() >= deadline:
+            return [], False
+        self.con.execute(
+            f"PRAGMA busy_timeout={max(1, int((deadline-time.monotonic())*1000))}"
+        )
+        self.con.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
+        match = " OR ".join('"' + word.replace('"', '""') + '"' for word in words)
+        condition = " AND m.role='user' AND m.id IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?)"
+        values = [*self.params, match]
+        if since is not None:
+            condition += " AND m.timestamp>=?"
+            values.append(float(since))
+        if until is not None:
+            condition += " AND m.timestamp<=?"
+            values.append(float(until))
+        rows = self.con.execute(
+            self._select()
+            + condition
+            + " ORDER BY m.timestamp DESC,m.id DESC LIMIT 200",
+            values,
+        ).fetchall()
+        records = []
+        for row in rows:
+            if time.monotonic() >= deadline:
+                return records, False
+            record = self._record(row)
+            if record and len(record.content) <= 30000:
+                records.append(record)
+                if len(records) >= limit:
+                    return records, False
+        return records, len(rows) < 200

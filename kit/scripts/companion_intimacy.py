@@ -319,6 +319,55 @@ def day_credit(messages):
     return max(SHOW_UP_FLOOR, min(1.0, credit))
 
 
+def _cadence_window(c, now, config, first_day, tz):
+    """A fortnight of available time; explained hours do not expire contact.
+
+    The existing absence union handles both dated plans and weekly routines.
+    Search at most one year, matching its own historical bound. Bisection is
+    bounded to minute precision, finer than the displayed cadence can express.
+    """
+    end = now.astimezone(dt.timezone.utc)
+    earliest = end - dt.timedelta(days=366)
+    if first_day is not None:
+        earliest = min(
+            end,
+            max(
+                earliest,
+                dt.datetime.combine(first_day, dt.time(), tzinfo=tz).astimezone(
+                    dt.timezone.utc
+                ),
+            ),
+        )
+    target = CADENCE_WINDOW_DAYS * 24.0
+
+    def hours(start):
+        return (
+            feelings.absence(c, start.isoformat(), end, config)["unexplained_hours"]
+            or 0.0
+        )
+
+    width = dt.timedelta(days=CADENCE_WINDOW_DAYS)
+    start = max(earliest, end - width)
+    available = hours(start)
+    upper = end
+    while available < target and start > earliest:
+        upper = start
+        width *= 2
+        start = max(earliest, end - width)
+        available = hours(start)
+    if available <= target:
+        return start, available / 24.0
+    # Select the latest boundary that still contains the requested available
+    # hours. A trip advances the endpoint without advancing this boundary.
+    while (upper - start).total_seconds() > 60:
+        middle = start + (upper - start) / 2
+        if hours(middle) >= target:
+            start = middle
+        else:
+            upper = middle
+    return start, hours(start) / 24.0
+
+
 def compute(c, now=None) -> Dict[str, Any]:
     """Compute the companion's intimacy escalation state, score (0-100), and stage."""
     now = now or dt.datetime.now(dt.timezone.utc)
@@ -490,13 +539,19 @@ def compute(c, now=None) -> Dict[str, Any]:
         hurt_mult = 1.4 if temperament == "expressive" else 1.0
         earned_score -= hurt * 35.0 * hurt_mult + irritation * 15.0
 
-    # Inactivity decay:
-    # If the user is silent > 24 hours, lose ~1.2 points per 24 hours of silence.
+    # Inactivity decay counts only unexplained time, using the same expected
+    # routines and dated plans as feelings. Quiet hours are delivery policy.
     # Floor is 25.0 (Stage 1 Friends) if Stage 1 was ever achieved, or 0.0 if not.
-    import companion_thread
+    absence_config = feelings.settings(c)["settings"]
+    if absence_config["learn_rhythm"]:
+        import companion_rhythm
 
-    thread = companion_thread.read(c, now)
-    hours_since_human = thread.get("hours_since_human")
+        absence_config = {
+            **absence_config,
+            "absence_windows": absence_config["absence_windows"]
+            + companion_rhythm.learned(c, now)["windows"],
+        }
+    hours_since_human = feelings_state["absence"]["unexplained_hours"]
     if hours_since_human is None and connections:
         try:
             latest_conn = max(
@@ -504,14 +559,9 @@ def compute(c, now=None) -> Dict[str, Any]:
             )
             if latest_conn.tzinfo is None:
                 latest_conn = latest_conn.replace(tzinfo=dt.timezone.utc)
-            hours_since_human = max(
-                0.0,
-                (
-                    now.astimezone(dt.timezone.utc)
-                    - latest_conn.astimezone(dt.timezone.utc)
-                ).total_seconds()
-                / 3600.0,
-            )
+            hours_since_human = feelings.absence(
+                c, latest_conn.isoformat(), now, absence_config
+            )["unexplained_hours"]
         except Exception:
             pass
 
@@ -523,13 +573,24 @@ def compute(c, now=None) -> Dict[str, Any]:
     # only kind the meter noticed: a daily one-word ping reset the silence clock
     # completely while earning almost nothing, which made neglect look like devotion.
     # Measured over a fortnight so one quiet week does not read as abandonment.
-    today = now.astimezone(tz).date()
-    window_start = today - dt.timedelta(days=CADENCE_WINDOW_DAYS - 1)
-    if first_day is not None:
-        window_start = max(window_start, first_day)
-    window_days = max(1, (today - window_start).days + 1)
-    recent_credit = sum(v for d, v in credits.items() if d >= window_start)
-    cadence = recent_credit / (window_days * CADENCE_PAR)
+    window_begin, window_days = _cadence_window(c, now, absence_config, first_day, tz)
+    recent = {}
+    for day, messages in by_day.items():
+        eligible = [(at, text) for at, text in messages if window_begin <= at <= now]
+        if eligible:
+            recent[day] = day_credit(eligible)
+    for connection in connections:
+        try:
+            at = dt.datetime.fromisoformat(connection["at"])
+            if at.tzinfo is None:
+                at = at.replace(tzinfo=dt.timezone.utc)
+            if window_begin <= at <= now:
+                day = at.astimezone(tz).date()
+                recent[day] = max(recent.get(day, 0.0), CONNECTION_FLOOR)
+        except (KeyError, TypeError, ValueError):
+            pass
+    recent_credit = sum(recent.values())
+    cadence = recent_credit / (window_days * CADENCE_PAR) if window_days else 1.0
     # Charged per day of the window, scaled by how far short of par it fell, so
     # that sustained thin contact costs about what sustained silence does rather
     # than being written off as a couple of missed days.

@@ -14,6 +14,7 @@ function editorScope(element){
   return element.closest('section')?.id;
 }
 function recordEditorChange(event){
+  if(event.target.closest('#companion-recovery'))return;
   if(!event.target.matches(trackedEditorFields)||['job-filter','hermes-existing-path'].includes(event.target.id))return;
   const scope=editorScope(event.target);if(scope)dirtyEditors.add(scope);updateEditorStatus();
 }

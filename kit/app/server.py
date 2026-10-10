@@ -136,6 +136,9 @@ def build(home=None, token="", state_dir=None):
     from .manage import register
 
     register(app, select, load, Operations(state / "operations"))
+    from .backups import register as register_backups
+
+    register_backups(app, select, load)
     from .content import register as register_content
 
     register_content(app, load)
