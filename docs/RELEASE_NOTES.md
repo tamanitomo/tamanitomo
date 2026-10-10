@@ -1,38 +1,34 @@
-Tamanitomo 3.6.3: one place to choose models, routines that stop failing, and a companion who keeps the thread.
+Tamanitomo 3.7.0: memory that stays clean, a life of her own that stays consistent, and one conversation across your devices.
 
-- **Pick up where you left off.** A conversation still starts fresh each morning so replies
-  stay quick, but your companion now sees the last few messages from before the reset and
-  from your other channels (Telegram, the app), so the thread carries over. It sits in a
-  space of its own and pushes nothing else out. On by default; Settings → Awareness.
-- **Web pages read on your machine.** Pages your companion opens are fetched straight from
-  their own site and turned into text locally. No reading service sees them, and a failed
-  read is never quietly handed to a free online one. Pages that need a browser to appear
-  point at the browser tool, which also runs locally. Settings → Awareness.
-- **One model plan.** Settings → AI models → Models replaces four separate screens: choose
-  what answers conversations, runs everyday routines and reflections, and what to fall back
-  to, then apply it to any of your companions. Every routine, Hermes's helper tasks and the
-  scheduled-job default follow, and each companion says what is still off the plan. Changes
-  land on the next message.
-- **Leaner conversations.** Hermes re-sent every earlier copy of the continuity snapshot
-  with each message, so most of a long evening's request was old copies. Now only the
-  newest goes, so replies start sooner and more real conversation fits before it is
-  summarised.
-- **Routines that stop failing.** Scheduled prompts run commands directly (a scheduled run
-  cannot approve the wrapped kind, and that cost one companion most of its updates in a
-  day); a second update in the same quarter hour lands; errors name exactly what to fix;
-  and facts or moments with an unfamiliar category are kept instead of refused.
-- **Quicker pages.** The chat feed no longer pages through scheduled runs, and the Models
-  page no longer waits for OpenRouter's model list.
-- **Also in this release:** a signed-in ChatGPT workload preset, independent projects and
-  friendships that carry on while you are away, trusted messages counted for daily contact
-  and quiet-hours learning, support for store-managed Hermes at the morning reset, and
-  Windows fixes.
-
-**After updating,** open Settings → Scheduled jobs and choose **Install / repair** (or apply
-your model plan), then restart the gateway once, so Hermes loads the new plugins.
-
-### Install or update
-
-Download **tamanitomo-release.zip** and its SHA-256 checksum below. Extract the ZIP into its own application folder and run the Tamanitomo launcher, or use the in-app updater. Keep your Hermes home and vault outside the application folder. Use the attached release ZIP for updates; GitHub's generated source archives are for development.
-
-Existing Hermes profiles, transcripts, memories and vault files need no migration. Android/Termux's precompiled wheel download remains available on the `wheelhouse-aarch64` branch.
+- **One fact, said twice, is one fact.** A reworded repeat of something she already knows
+  becomes more evidence for it instead of a second copy, and a close one comes back to her
+  with the fact it resembles, so she can refine it or keep both on purpose. Routines that
+  record facts in batches now see why one was not saved, which they never did before.
+- **Today's news stays today's.** A fact that says today, tonight, tomorrow or this week
+  leaves her profile after the following day (a week for "this week"); the ledger keeps it.
+  Notes about her own day, or about software, are no longer filed as facts about you.
+  `companion_self.py tidy` plans a one-time tidy of an older ledger and applies only after
+  you have read it, and the weekly hygiene works through old quote-style facts ten at a time.
+- **Callbacks that fit.** She can bring up something you mentioned before without being
+  asked, from her facts and the last 90 days of your own conversations only, and an everyday
+  word like "working" is not a topic. Recall never reaches another companion's or a group's
+  messages.
+- **Her story and what she notices.** Anniversaries and traditions counted from your history,
+  holidays for her country (both off until you switch them on in Settings → Sensors), what she
+  has said about her past kept consistent, a floor plan for her home, and observations such as
+  a late night or a question left hanging, stated without guessing at moods.
+- **Feelings that move like feelings.** Warmth and trust grow slowly from real two-way days.
+  Missing you is one measure that ignores your routines and the quiet hours she learns from
+  when you actually write. Time away you explain is recorded with dates and never counts as
+  distance, and declaring routines cannot inflate closeness.
+- **One conversation everywhere.** The chat window picks up messages from Telegram and your
+  other devices without disturbing a draft, and past conversations can be searched by text,
+  date and channel.
+- **Recover a companion.** Export a verified bundle, inspect it, and restore it into new
+  folders with schedules and outreach paused. A bundle is limited to 2 GB for now, which
+  long-running installations exceed.
+- **Setup you can resume.** The interview survives a refresh, an interrupted creation is
+  checked before it is retried, and setting up a new companion no longer changes the current
+  one's accounts or model.
+- **An honest Home.** With nothing recorded, Home says so instead of a made-up resting state;
+  unknown meters show a dash, and music and season appear only when they are actually known.

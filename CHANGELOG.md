@@ -1,4 +1,4 @@
-## Unreleased — continuity, recovery, and her continuing life
+## 3.7.0 — Cleaner memory, her own story, and one conversation everywhere (2026-10-10)
 
 - Keep recall inside the selected companion's owner-verified conversations, including
   original messages retained through compaction. Add bounded, topic-based callbacks to
