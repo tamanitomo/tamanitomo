@@ -828,6 +828,14 @@ def build(home=None, token="", state_dir=None):
         except ValueError as exc:
             raise HTTPException(404, str(exc))
 
+    def _learn_rhythm(c):
+        import companion_feelings as feelings
+
+        try:
+            return feelings.settings(c)["settings"]["learn_rhythm"]
+        except (OSError, ValueError):
+            return True
+
     @app.get("/api/settings")
     def get_settings():
         c = load()
@@ -863,6 +871,7 @@ def build(home=None, token="", state_dir=None):
             "relationship_pace": c.relationship_pace,
             "peer_interaction": c.peer_interaction,
             "conversation_handoff": c.conversation_handoff,
+            "learn_rhythm": _learn_rhythm(c),
             "local_web_reader": reader["local"],
             "web_reader_other": reader["other"],
             "image_style": c.image_style,
@@ -893,7 +902,6 @@ def build(home=None, token="", state_dir=None):
         "image_interval_minutes",
         "bars",
         "relationship_progression",
-        "relationship_pace",
         "peer_interaction",
         "conversation_handoff",
         "local_web_reader",
@@ -944,6 +952,40 @@ def build(home=None, token="", state_dir=None):
                 400,
                 "Confirm that both you and the companion are adults before enabling adult themes",
             )
+        # Pace is chosen when the companion is made. Changing it later would rewrite
+        # how fast everything already earned had been earned; a page from before this
+        # rule still sends the unchanged value, which is accepted as a no-op.
+        if "relationship_pace" in payload:
+            if payload.pop("relationship_pace") != c.relationship_pace:
+                raise HTTPException(
+                    400,
+                    "Pace is set when the companion is created and can't be changed afterwards.",
+                )
+        # Learning quiet hours lives with the feelings settings. It is offered here
+        # beside the other awareness switches and saved there, after everything
+        # else in the request has been accepted.
+        learn = payload.pop("learn_rhythm", None)
+        if learn is not None and not isinstance(learn, bool):
+            raise HTTPException(400, "learn_rhythm must be true or false")
+
+        def save_learn_rhythm():
+            import companion_feelings as feelings
+
+            current = feelings.settings(c)
+            if current["settings"]["learn_rhythm"] == learn:
+                return
+            try:
+                feelings.save_settings(
+                    c,
+                    {**current["settings"], "learn_rhythm": learn},
+                    current["revision"],
+                )
+            except FileExistsError as exc:
+                raise HTTPException(409, str(exc))
+
+        if learn is not None and not payload:
+            save_learn_rhythm()
+            return {"saved": ["learn_rhythm"]}
         unknown = sorted(set(payload) - ALLOWED)
         if unknown:
             raise HTTPException(400, f'not settable from here: {", ".join(unknown)}')
@@ -959,9 +1001,15 @@ def build(home=None, token="", state_dir=None):
         with preserve_human_records(old, c):
             c.save()
             companion_integrity.sign_creation(c)
+        if learn is not None:
+            save_learn_rhythm()
         if "remote_pin" in payload:
             save_access_pin(initial.hermes_root, c.remote_pin)
-        result = {"saved": sorted(payload)}
+        result = {
+            "saved": sorted(
+                [*payload, *(["learn_rhythm"] if learn is not None else [])]
+            )
+        }
         if "local_web_reader" in payload:
             from companion_routing import set_reader
 

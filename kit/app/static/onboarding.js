@@ -313,6 +313,13 @@ function resolveCompanion(derived,catalog,pronouns,seed){
 const OUTREACH_LABEL={free:'Social messages welcome',updates_only:'Only meaningful updates',never:'Replies only — never writes first'};
 const PACE_LABEL={slow:'Slow and gradual',natural:'Natural',quick:'Open to quicker familiarity'};
 const PERMIT_LABEL={yes:'Allowed',ask:'Ask first',no:'Never'};
+/* How strongly feelings land and how long they take to fade. The personality
+   suggests one; the person chooses, once. Kept in step with companion_feelings. */
+const TEMPERAMENT_LABEL={steady:'Steady: even, over things in about a week',expressive:'Expressive: feels strongly, about two weeks',guarded:'Guarded: slow to trust, about a month'};
+const TEMPERAMENT_FOR=Object.assign({},
+  ...['warm','bright','sunny','social','romantic','intense','mischievous','creative','whimsical','adventurous','melancholy'].map(k=>({[k]:'expressive'})),
+  ...['quiet','shy','stoic'].map(k=>({[k]:'guarded'})));
+const temperamentOf=d=>TEMPERAMENT_LABEL[d.temperament]?d.temperament:(TEMPERAMENT_FOR[d.persona]||'steady');
 const TYPE_LABEL={companion:'Companion',colleague:'Colleague',worker:'Worker'};
 
 window.onboarding=async function(adopt){
@@ -716,6 +723,7 @@ window.onboarding=async function(adopt){
         <p class="dim" style="margin:0 0 14px;line-height:1.5">${esc(p.blurb||p.description||'A thoughtful presence tuned to your pace.')}</p>
         <dl class="reveal-list">
           <div><dt>Pace</dt><dd>${esc(PACE_LABEL[derived.relationship_pace]||derived.relationship_pace)}</dd></div>
+          <div><dt>Temperament</dt><dd>${esc(TEMPERAMENT_LABEL[temperamentOf(derived)])}</dd></div>
           <div><dt>Writing First</dt><dd>${esc(OUTREACH_LABEL[derived.outreach]||derived.outreach)}</dd></div>
           <div><dt>Quiet Hours</dt><dd>${esc(derived.quiet_start)} – ${esc(derived.quiet_end)}</dd></div>
           <div><dt>Unprompted Photos</dt><dd>${esc(PERMIT_LABEL[derived.permit_image]||derived.permit_image)}</dd></div>
@@ -770,6 +778,10 @@ window.onboarding=async function(adopt){
           <label>Pace
             <select id="cust-pace">${options(Object.entries(PACE_LABEL),derived.relationship_pace)}</select>
           </label>
+          <label>Temperament
+            <select id="cust-temperament">${options(Object.entries(TEMPERAMENT_LABEL),temperamentOf(derived))}</select>
+          </label>
+          <small class="dim">Pace and temperament are chosen once: they can't be changed after ${esc(draft.agent||'your companion')} is created.</small>
         </div>
           <div class="time-pair">
             <label>Quiet from<input id="cust-quiet-start" type="time" value="${esc(derived.quiet_start)}"></label>
@@ -819,6 +831,7 @@ window.onboarding=async function(adopt){
       if($('cust-persona'))derived.persona=$('cust-persona').value;
       if($('cust-boundary'))derived.boundary=$('cust-boundary').value;
       if($('cust-pace'))derived.relationship_pace=$('cust-pace').value;
+      if($('cust-temperament'))derived.temperament=$('cust-temperament').value;
       // The catalogue lists differ by gender, so a changed pronoun re-rolls the look.
       if(draft.pronoun_set!==before)look=resolveCompanion(derived,catalog,draft.pronoun_set,lookSeed);
     }
@@ -1260,6 +1273,7 @@ window.onboarding=async function(adopt){
       agent_type:derived.agent_type||'companion',
       boundary:derived.boundary||'best-friend',
       relationship_pace:derived.relationship_pace||'natural',
+      temperament:temperamentOf(derived),
       outreach:derived.outreach||'updates_only',
       outreach_per_day:Number(derived.outreach_per_day)||3,
       quiet_start:derived.quiet_start||'23:00',

@@ -724,8 +724,8 @@ function renderHeroMetersContent(emotions,bars){
   // Home is a glance and Us is the page, so they keep different
   // treatments — but they must not describe the same meter in different words.
   // The labels and the explanations come from one place; the colour and the glow
-  // are the hero's own. A meter with no value is unknown, not a resting number:
-  // an empty bar and a dash say "not known yet" where 80% would claim a measurement.
+  // are the hero's own. A meter with no value yet is empty: 0% and an empty bar,
+  // never a resting number like 80% that nothing measured.
   const look={
     warmth:{color:'linear-gradient(90deg,#f43f5e,#fb923c)',glow:'rgba(244,63,94,0.4)'},
     trust:{color:'linear-gradient(90deg,#0ea5e9,#10b981)',glow:'rgba(14,165,233,0.4)'},
@@ -736,12 +736,10 @@ function renderHeroMetersContent(emotions,bars){
   const config=FEELING_METERS.map(([key,label,icon,desc])=>({key,label,icon,desc,...(look[key]||{})}));
   return config.map(m=>{
     const raw=meters[m.key];
-    const known=typeof raw==='number'&&isFinite(raw);
-    const pct=known?Math.round(Math.max(0,Math.min(1,raw))*100):0;
-    const shown=known?`${pct}%`:'—';
-    const aria=known?`${m.label} meter: ${pct}%`:`${m.label} meter: not known yet`;
+    const pct=typeof raw==='number'&&isFinite(raw)?Math.round(Math.max(0,Math.min(1,raw))*100):0;
+    const shown=`${pct}%`;
     return `
-      <div class="hero-meter-item${known?'':' is-unknown'}" title="${esc(m.label)}: ${known?shown:'not known yet'} · ${esc(m.desc)}" tabindex="0" aria-label="${esc(aria)}">
+      <div class="hero-meter-item" title="${esc(m.label)}: ${shown} · ${esc(m.desc)}" tabindex="0" aria-label="${esc(`${m.label} meter: ${shown}`)}">
         <div class="hero-meter-label-row">
           <span class="hero-meter-label"><span class="meter-icon">${m.icon}</span> <span class="meter-name">${m.label}</span></span>
           <span class="hero-meter-pct">${shown}</span>
@@ -751,7 +749,7 @@ function renderHeroMetersContent(emotions,bars){
         </div>
         <div class="hero-meter-tooltip" role="tooltip">
           <div class="hero-meter-tooltip-title"><span>${m.icon} ${esc(m.label)}</span> <span class="hero-meter-tooltip-val">${shown}</span></div>
-          <div class="hero-meter-tooltip-desc">${known?esc(m.desc):'Not known yet — '+esc(m.desc)}</div>
+          <div class="hero-meter-tooltip-desc">${esc(m.desc)}</div>
         </div>
       </div>`;
   }).join('');

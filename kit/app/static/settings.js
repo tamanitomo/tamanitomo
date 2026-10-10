@@ -340,6 +340,7 @@ const settingsPanels=[
   </div>
   <div class="sensor-grid">
     ${toggleRow('conversation-handoff','Pick up where you left off','The last few messages from your other conversations (another channel, or before the morning fresh start) come along, so a new conversation keeps the thread.',s.conversation_handoff)}
+    ${toggleRow('learn-rhythm','Learn your quiet hours','From when you actually write, so a night\u2019s sleep or a working day is not counted as time apart. On unless you switch it off.',s.learn_rhythm!==false)}
     ${toggleRow('local-web-reader','Read web pages on this machine',s.local_web_reader||!s.web_reader_other
       ?'Pages are fetched from their own site and read here. No reading service sees what is read, and a failed read is never passed to one.'
       :`Pages are read by ${s.web_reader_other}, chosen in Hermes. Switch on to read them here instead.`,s.local_web_reader)}
@@ -366,6 +367,7 @@ const settingsPanels=[
     const payload={
       location:host.querySelector('#loc').value,
       conversation_handoff:host.querySelector('#conversation-handoff').checked,
+      learn_rhythm:host.querySelector('#learn-rhythm').checked,
       sensors:[...host.querySelectorAll('[data-sensor]')].filter(x=>x.checked).map(x=>x.dataset.sensor)};
     // Sent only when switched, so saving a location never overrides a reader chosen in Hermes.
     const reader=host.querySelector('#local-web-reader').checked;
@@ -544,9 +546,10 @@ const settingsPanels=[
       </div>
     </div>
     <div class="contact-row">
-      <label class="contact-label" for="pace">Pace</label>
+      <span class="contact-label">Pace</span>
       <div class="contact-controls">
-        <select id="pace">${options([['slow','Slow and gradual'],['natural','Natural'],['quick','Open to quicker familiarity']],s.relationship_pace)}</select>
+        <span>${esc(labels.pace[s.relationship_pace]||s.relationship_pace)}</span>
+        <span class="dim small">Chosen when ${esc(s.agent||'your companion')} was created; it can't be changed.</span>
       </div>
     </div>
     <div class="contact-row">
@@ -599,7 +602,6 @@ const settingsPanels=[
     const wantsAdult=host.querySelector('#adult-themes').value==='true';
     const payload={
       relationship_progression:host.querySelector('#progression').value,
-      relationship_pace:host.querySelector('#pace').value,
       peer_interaction:host.querySelector('#peer-interaction').value==='true',
       bars:host.querySelector('#bars').checked,
       explicit:wantsAdult};

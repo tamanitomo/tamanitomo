@@ -298,7 +298,7 @@ class SleepIsNotDistanceTests(unittest.TestCase):
         self.assertTrue(feelings.settings(self.c)["settings"]["learn_rhythm"])
 
 
-def test_home_meters_show_unknown_not_a_resting_number():
+def test_home_meters_show_an_empty_meter_as_zero_not_a_resting_number():
     run_browser_contract(r"""
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -315,12 +315,11 @@ ${source.slice(start, end)}
 globalThis.render=renderHeroMetersContent;
 `);
 const empty = render({}, {});
-assert.ok(!/hero-meter-pct">\d+%/.test(empty), 'no invented number');
-assert.equal((empty.match(/hero-meter-pct">—</g) || []).length, 5);
-assert.equal((empty.match(/is-unknown/g) || []).length, 5);
-assert.ok(empty.includes('not known yet'));
+assert.equal((empty.match(/hero-meter-pct">0%</g) || []).length, 5, 'every empty meter reads 0%');
+assert.equal((empty.match(/width:0%/g) || []).length, 5, 'and its bar is empty');
+assert.ok(!empty.includes('—'), 'no dash');
 const known = render({state: {meters: {warmth: 0.65, trust: 0.5, hurt: 0, irritation: 0.1, longing: null}}}, {});
 assert.ok(known.includes('65%') && known.includes('50%'));
-assert.equal((known.match(/is-unknown/g) || []).length, 1, 'only missing-you has no value');
-assert.ok(known.includes('>0%<'), 'a real zero is still shown as 0%');
+assert.equal((known.match(/hero-meter-pct">0%</g) || []).length, 2, 'a real zero and a missing value both read 0%');
+assert.ok(!/hero-meter-pct">8\d%/.test(empty), 'never a resting number');
 """)

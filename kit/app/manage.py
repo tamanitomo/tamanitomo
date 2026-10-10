@@ -4193,6 +4193,8 @@ def register(app, select, load, operations):
             )
         except FileExistsError as exc:
             raise HTTPException(409, str(exc))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
 
     @app.get("/api/feelings/absences")
     def feelings_absences():

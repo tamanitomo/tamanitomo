@@ -1,3 +1,14 @@
+## Unreleased
+
+- Pace and temperament are chosen at setup and kept. Setup now asks for a temperament (steady,
+  expressive or guarded), suggested by the personality; afterwards neither can be changed from the
+  app, because every feeling is worked out under them and a change rewrote feelings already felt.
+- The window before she misses you stays between 12 and 96 hours, and one time-away plan covers at
+  most 14 days. A longer absence is renewed by explaining again once it has begun; plans booked back
+  to back in advance count as one stretch.
+- Settings → Sensors has a switch for learning your quiet hours (on by default).
+- A meter with no value yet reads 0% with an empty bar.
+
 ## 3.7.2 — Photos that wait for ComfyUI, helpers that keep their request (2026-10-10)
 
 - A morning recorded by the pulse in the same minute is no longer reported as a failed

@@ -1110,6 +1110,28 @@ def place_soul(c, report, answers=None):
     report.append(f"  SOUL.md: linked to {target}")
 
 
+def record_temperament(c, ans, report):
+    """Temperament is chosen once, at creation, and kept: the feelings refuse a
+    change afterwards. A companion set up again keeps the one it has."""
+    import companion_feelings as feelings
+
+    if (c.life / "feelings-settings.json").exists():
+        return
+    chosen = ans.get("temperament") or feelings.temperament_for(c.persona)
+    if chosen not in feelings.PROFILES:
+        report.append(f"  ! unknown temperament {chosen!r}; using steady")
+        chosen = "steady"
+    try:
+        feelings.save_settings(
+            c,
+            {**feelings.DEFAULTS, "personality": chosen},
+            feelings.settings(c)["revision"],
+            creating=True,
+        )
+    except (OSError, ValueError, FileExistsError) as exc:
+        report.append(f"  ! could not record the temperament: {exc}")
+
+
 def scaffold(c, ans, report, soul_mode="create", raw=None):
     """soul_mode: create (new file) | append (existing agent) | replace."""
     import yaml
@@ -1260,6 +1282,7 @@ def scaffold(c, ans, report, soul_mode="create", raw=None):
         companion_integrity.sign_creation(c)
     except Exception:
         pass
+    record_temperament(c, ans, report)
     install_hook(c, m, report)
     install_jobs(c, m, report)
     offer_multiplex(c, report, raw)

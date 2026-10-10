@@ -12,10 +12,10 @@ const FEELING_METERS=[
 function feelingMeters(meters){
   return `<div class="meter-grid">${FEELING_METERS.map(([key,label,icon,why])=>{
     const value=meters?meters[key]:null;
-    const pct=value==null?null:Math.round(value*100);
+    const pct=typeof value==='number'&&isFinite(value)?Math.round(Math.max(0,Math.min(1,value))*100):0;
     return `<div class="meter-card meter-${key}" title="${esc(why)}">
-      <div class="meter-head"><span>${icon} ${label}</span><strong>${pct==null?'—':pct+'%'}</strong></div>
-      <div class="meter-track"><div class="meter-fill" style="width:${pct||0}%"></div></div>
+      <div class="meter-head"><span>${icon} ${label}</span><strong>${pct}%</strong></div>
+      <div class="meter-track"><div class="meter-fill" style="width:${pct}%"></div></div>
       <small class="dim">${esc(why)}</small>
     </div>`;
   }).join('')}</div>`;

@@ -54,6 +54,23 @@ def save(c, now=NOW, **overrides):
     return feelings.record_absence(c, payload, now)
 
 
+def saved_before_the_limit(c, start, end, ident="trip"):
+    """A plan written before one plan was limited to 14 days: it is still read."""
+    row = {
+        "action": "create",
+        "id": ident,
+        "label": "Long trip",
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "evidence": "I will be away for a while.",
+        "source": "conversation:test/message:7",
+        "event_id": ident + "-created",
+        "recorded_at": NOW.isoformat(),
+    }
+    with (c.life / "expected-absences.jsonl").open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps(row) + "\n")
+
+
 def gap(c, since, now, windows=None):
     return feelings.absence(
         c, since.isoformat(), now, {"absence_windows": windows or []}
@@ -317,10 +334,8 @@ def test_explained_trip_does_not_create_silence_or_cadence_decay(companion):
         ),
     ):
         unexplained = intimacy.compute(companion, later)
-        save(
-            companion,
-            start=(NOW - dt.timedelta(days=20)).isoformat(),
-            end=(NOW + dt.timedelta(days=5)).isoformat(),
+        saved_before_the_limit(
+            companion, NOW - dt.timedelta(days=20), NOW + dt.timedelta(days=5)
         )
         explained_before = intimacy.compute(companion, NOW)
         explained_after = intimacy.compute(companion, later)
@@ -413,10 +428,8 @@ def test_available_cadence_lookback_is_bounded_and_respects_relationship_start(
 ):
     import companion_intimacy as intimacy
 
-    save(
-        companion,
-        start=(NOW - dt.timedelta(days=800)).isoformat(),
-        end=(NOW + dt.timedelta(days=1)).isoformat(),
+    saved_before_the_limit(
+        companion, NOW - dt.timedelta(days=800), NOW + dt.timedelta(days=1)
     )
     with patch.object(feelings, "absence", wraps=feelings.absence) as read:
         start, days = intimacy._cadence_window(companion, NOW, None, UTC)

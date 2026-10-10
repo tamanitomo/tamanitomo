@@ -33,6 +33,41 @@ DEFAULTS = {
     "absence_windows": [],
     "learn_rhythm": True,
 }
+# How long she can go without hearing from you before she starts to miss you. The
+# bounds keep the setting from being a way to switch missing you off; a file saved
+# before them is read at the nearest bound rather than refused.
+CONNECTION_HOURS = (12, 96)
+# One explanation of time away covers at most two weeks ahead. A longer absence is
+# renewed by explaining again once it has begun: without the limit one entry could
+# pause missing you, and every slow cooling, for a year.
+ABSENCE_MAX = dt.timedelta(days=14)
+# Plans closer together than this are one stretch of time away.
+ABSENCE_JOIN = dt.timedelta(hours=24)
+
+# The temperament a personality suggests at setup, before the person chooses.
+TEMPERAMENT_FOR_PERSONA = {
+    **dict.fromkeys(
+        (
+            "warm",
+            "bright",
+            "sunny",
+            "social",
+            "romantic",
+            "intense",
+            "mischievous",
+            "creative",
+            "whimsical",
+            "adventurous",
+            "melancholy",
+        ),
+        "expressive",
+    ),
+    **dict.fromkeys(("quiet", "shy", "stoic"), "guarded"),
+}
+
+
+def temperament_for(persona):
+    return TEMPERAMENT_FOR_PERSONA.get(persona, "steady")
 
 
 def _text(value, label, limit=500):
@@ -62,13 +97,16 @@ def _number(value, label, low, high):
     return value
 
 
-def validate_settings(data):
+def validate_settings(data, stored=False):
     if not isinstance(data, dict):
         raise ValueError("Feelings settings must be an object")
     personality = data.get("personality", "steady")
     if personality not in PROFILES:
         raise ValueError("Choose steady, expressive or guarded")
-    hours = _number(data.get("connection_hours", 48), "connection_hours", 6, 168)
+    hours = data.get("connection_hours", 48)
+    if stored and isinstance(hours, (int, float)) and not isinstance(hours, bool):
+        hours = min(max(hours, CONNECTION_HOURS[0]), CONNECTION_HOURS[1])
+    hours = _number(hours, "connection_hours", *CONNECTION_HOURS)
     windows = data.get("absence_windows", [])
     if not isinstance(windows, list) or len(windows) > 20:
         raise ValueError("Supply at most 20 expected absence windows")
@@ -115,16 +153,27 @@ def settings(c):
     path = c.life / "feelings-settings.json"
     raw = path.read_text(encoding="utf-8") if path.exists() else ""
     return {
-        "settings": validate_settings(json.loads(raw) if raw else DEFAULTS),
+        "settings": validate_settings(
+            json.loads(raw) if raw else DEFAULTS, stored=True
+        ),
         "revision": hashlib.sha256(raw.encode()).hexdigest(),
     }
 
 
-def save_settings(c, data, revision):
+def save_settings(c, data, revision, creating=False):
+    """Save the feelings settings. Temperament is chosen when the companion is
+    created and is kept from then on: every feeling is worked out under it, so
+    changing it later rewrote feelings already felt (switching to steady after a
+    fight shrank the hurt)."""
     clean = validate_settings(data)
     with file_lock(c.life / ".feelings.lock"):
-        if revision != settings(c)["revision"]:
+        current = settings(c)
+        if revision != current["revision"]:
             raise FileExistsError("Feelings settings changed. Reload before saving.")
+        if not creating and clean["personality"] != current["settings"]["personality"]:
+            raise ValueError(
+                "Temperament is chosen when the companion is created and can't be changed afterwards."
+            )
         atomic_write(
             c.life / "feelings-settings.json",
             json.dumps(clean, ensure_ascii=False, indent=2) + "\n",
@@ -334,6 +383,12 @@ def record_absence(c, data, now=None):
         end = _absence_time(data.get("end"), data.get("timezone"))
         if end <= start:
             raise ValueError("Expected absence end must be after its start")
+        if end - max(start, now) > ABSENCE_MAX or (
+            action == "create" and end - start > ABSENCE_MAX
+        ):
+            raise ValueError(
+                "One time-away plan covers at most 14 days. Record the rest once the time away has begun."
+            )
         clean.update(
             label=_text(data.get("label"), "absence label", 80),
             start=start.isoformat(),
@@ -381,6 +436,10 @@ def record_absence(c, data, now=None):
             raise ValueError("The clock precedes the previous expected absence record")
         if action == "cancel":
             clean.update({key: previous[key] for key in ("label", "start", "end")})
+        else:
+            _within_renewal(
+                state, ident, _stamp(clean["start"]), _stamp(clean["end"]), now
+            )
         row = {**clean, "event_id": event_id, "recorded_at": now.isoformat()}
         path = c.life / "expected-absences.jsonl"
         # After a torn write the file can end mid-line; start a fresh one.
@@ -396,6 +455,31 @@ def record_absence(c, data, now=None):
             stream.flush()
             os.fsync(stream.fileno())
         return {"written": True, "event": row, **expected_absences(c, now)}
+
+
+def _within_renewal(state, ident, start, end, now):
+    """Refuse a plan that would carry one stretch of time away more than 14 days
+    past its latest explanation. Plans that touch are one stretch, so two weeks
+    recorded back to back in advance are a month; renewing during the time away
+    is explaining again, which is what the limit asks for."""
+    others = [
+        (_stamp(row["start"]), _stamp(row["end"]))
+        for row in state["absences"]
+        if row["id"] != ident and row["status"] in ("current", "upcoming")
+    ]
+    first, last = start, end
+    changed = True
+    while changed:
+        changed = False
+        for s, e in others:
+            if s <= last + ABSENCE_JOIN and e >= first - ABSENCE_JOIN:
+                if s < first or e > last:
+                    first, last = min(first, s), max(last, e)
+                    changed = True
+    if last > max(first, now) + ABSENCE_MAX:
+        raise ValueError(
+            "Together with the time away already planned, this would cover more than 14 days. Record the rest once the time away has begun."
+        )
 
 
 def expected_absence_intervals(c, now):
@@ -417,7 +501,9 @@ def expected_absence_intervals(c, now):
             # edits cannot remove the explanation that already governed that time.
             if row["action"] == "edit":
                 start = max(start, at)
-            pending[row["id"]] = (start, _stamp(row["end"]), row["label"])
+            # A plan saved before the two-week limit is read up to it.
+            end = min(_stamp(row["end"]), max(start, at) + ABSENCE_MAX)
+            pending[row["id"]] = (start, end, row["label"])
     intervals.extend(pending.values())
     return intervals
 

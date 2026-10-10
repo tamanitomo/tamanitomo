@@ -561,6 +561,7 @@ SETUP_KEYS = frozenset(
         "share_people",
         "agent_type",
         "relationship_pace",
+        "temperament",
         "soul_locks",
         "hope",
     }
