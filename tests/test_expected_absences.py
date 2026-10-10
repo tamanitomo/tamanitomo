@@ -645,3 +645,27 @@ vm.createContext(context);vm.runInContext(fs.readFileSync('kit/app/static/feelin
   assert.equal(requests.length,3,'an old editor must never write to another profile');
 })().catch(error=>{console.error(error);process.exitCode=1;});
 """)
+
+
+def test_a_damaged_line_is_set_aside_not_fatal(companion):
+    # One torn line used to stop the whole feelings calculation for the companion.
+    save(companion)
+    path = companion.life / "expected-absences.jsonl"
+    with path.open("a", encoding="utf-8") as stream:
+        stream.write('{"id": "torn", "action": "cre')
+    later = NOW + dt.timedelta(hours=1)
+    state = feelings.expected_absences(companion, later)
+    assert [row["id"] for row in state["absences"]] == ["trip"]
+    assert state["skipped_lines"] == 1
+    assert feelings.compute(companion, later)["expected_absences"]
+    save(
+        companion,
+        now=later,
+        id="course",
+        label="Course",
+        start=(NOW + dt.timedelta(days=5)).isoformat(),
+        end=(NOW + dt.timedelta(days=6)).isoformat(),
+    )
+    state = feelings.expected_absences(companion, later)
+    assert sorted(row["id"] for row in state["absences"]) == ["course", "trip"]
+    assert state["skipped_lines"] == 1

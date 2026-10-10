@@ -1,5 +1,7 @@
 ## Unreleased
 
+- A damaged line in the time-away ledger is set aside and counted instead of switching off
+  the companion's feelings, and the next record starts on a fresh line.
 - The model test in Settings → Models, the studio's Hermes image providers and image review,
   and voice in the app work again. Hermes re-runs a helper under its own Python when the
   helper first imports it, and every helper had read its request before that, so the re-run

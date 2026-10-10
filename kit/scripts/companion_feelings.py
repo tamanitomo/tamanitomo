@@ -261,9 +261,20 @@ def expected_absences(c, now=None):
     now = now or dt.datetime.now(UTC)
     path = c.life / "expected-absences.jsonl"
     raw = path.read_text(encoding="utf-8") if path.exists() else ""
-    history = [json.loads(line) for line in raw.splitlines() if line.strip()]
-    if any(not isinstance(row, dict) for row in history):
-        raise ValueError("Invalid expected absence ledger")
+    # A torn or hand-damaged line is set aside and counted, never fatal: one bad
+    # line used to stop the whole feelings calculation for the companion.
+    history, skipped = [], 0
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+            if not _absence_row_ok(row):
+                raise ValueError(line)
+        except ValueError:
+            skipped += 1
+            continue
+        history.append(row)
     latest = {}
     for row in history:
         if _stamp(row["recorded_at"]) <= now:
@@ -285,7 +296,21 @@ def expected_absences(c, now=None):
         "history": history,
         "revision": hashlib.sha256(raw.encode()).hexdigest(),
         "timezone": c.timezone or "UTC",
+        **({"skipped_lines": skipped} if skipped else {}),
     }
+
+
+def _absence_row_ok(row):
+    if not isinstance(row, dict) or not isinstance(row.get("id"), str):
+        return False
+    if row.get("action") not in ("create", "edit", "cancel"):
+        return False
+    try:
+        for key in ("recorded_at", "start", "end"):
+            _stamp(row[key])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return True
 
 
 def record_absence(c, data, now=None):
@@ -357,8 +382,17 @@ def record_absence(c, data, now=None):
         if action == "cancel":
             clean.update({key: previous[key] for key in ("label", "start", "end")})
         row = {**clean, "event_id": event_id, "recorded_at": now.isoformat()}
-        with (c.life / "expected-absences.jsonl").open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps(row, ensure_ascii=False) + "\n")
+        path = c.life / "expected-absences.jsonl"
+        # After a torn write the file can end mid-line; start a fresh one.
+        torn = (
+            path.exists()
+            and path.stat().st_size
+            and not path.read_bytes().endswith(b"\n")
+        )
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(
+                ("\n" if torn else "") + json.dumps(row, ensure_ascii=False) + "\n"
+            )
             stream.flush()
             os.fsync(stream.fileno())
         return {"written": True, "event": row, **expected_absences(c, now)}
