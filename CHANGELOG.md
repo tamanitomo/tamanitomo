@@ -1,5 +1,7 @@
 ## Unreleased
 
+- A morning recorded by the pulse in the same minute is no longer reported as a failed
+  morning: the morning routine reads the state and carries on when it already has her up.
 - She knows what she already sent. Her context lists the messages and photos delivered in
   the last day, read from the outbox, because the copy of a sent message into her
   conversation can fail and left her surprised by your reply to her own photo.
