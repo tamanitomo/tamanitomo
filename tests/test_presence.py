@@ -1,4 +1,5 @@
 from contextlib import closing
+
 """Presence, wardrobe tokens, settings, portable host probes, and launchers."""
 
 import contextlib
@@ -218,20 +219,33 @@ class PresenceTests(unittest.TestCase):
         )
 
     def test_a_record_nested_under_presence_is_told_where_the_fields_go(self):
-        nested = {"previous_id": None, "presence": {"activity": "reading", "location": "home", "clothes": ["pajamas"]}}
-        with self.assertRaisesRegex(ValueError, r"outfit is missing.*nested inside 'presence'.*not \"clothes\""):
+        nested = {
+            "previous_id": None,
+            "presence": {
+                "activity": "reading",
+                "location": "home",
+                "clothes": ["pajamas"],
+            },
+        }
+        with self.assertRaisesRegex(
+            ValueError, r"outfit is missing.*nested inside 'presence'.*not \"clothes\""
+        ):
             presence.update(self.c, nested, self.now)
 
     def test_outfit_errors_name_what_is_actually_wrong(self):
         with self.assertRaisesRegex(ValueError, "must be a list .* not str"):
             presence.update(self.c, self.data(outfit="pajamas"), self.now)
         with self.assertRaisesRegex(ValueError, "lists 21 items; at most 20"):
-            presence.update(self.c, self.data(outfit=[f"x{i}" for i in range(21)]), self.now)
+            presence.update(
+                self.c, self.data(outfit=[f"x{i}" for i in range(21)]), self.now
+            )
 
     def test_an_episode_under_the_wrong_key_is_called_missing_not_too_long(self):
         record = self.data(episode="Reading before bed.")
         del record["text"]
-        with self.assertRaisesRegex(ValueError, r'episode text \(key "text"\) is missing'):
+        with self.assertRaisesRegex(
+            ValueError, r'episode text \(key "text"\) is missing'
+        ):
             presence.update(self.c, record, self.now)
         with self.assertRaisesRegex(ValueError, "is 1601 characters; at most 1600"):
             presence.update(self.c, self.data(text="x" * 1601), self.now)
@@ -242,7 +256,12 @@ class PresenceTests(unittest.TestCase):
         del record["previous_id"]
         record["state"] = {"previous_id": first["id"]}
         ident = re.escape(first["id"])
-        with self.assertRaisesRegex(ValueError, "previous_id is missing at the top level.*" + ident + ".*nested inside 'state'"):
+        with self.assertRaisesRegex(
+            ValueError,
+            "previous_id is missing at the top level.*"
+            + ident
+            + ".*nested inside 'state'",
+        ):
             presence.update(self.c, record, self.now)
 
     def test_unknown_outfits_are_rejected_and_current_state_is_in_context(self):
@@ -1164,7 +1183,9 @@ class AwakeFingerprintProseTests(unittest.TestCase):
 
     def test_a_sleep_with_no_declared_end_does_not_freeze_the_gate_forever(self):
         """One missed wake-up must not leave her asleep all day with every tick suppressed."""
-        night = self.now + dt.timedelta(hours=11, minutes=30)  # 23:30, inside quiet hours
+        night = self.now + dt.timedelta(
+            hours=11, minutes=30
+        )  # 23:30, inside quiet hours
         presence.update(
             self.c,
             {
@@ -1180,7 +1201,9 @@ class AwakeFingerprintProseTests(unittest.TestCase):
             },
             night,
         )
-        at = lambda hours: preread.fingerprint(self.c, night + dt.timedelta(hours=hours))
+        at = lambda hours: preread.fingerprint(
+            self.c, night + dt.timedelta(hours=hours)
+        )
         self.assertEqual(at(2), at(6), "a normal night stays quiet")
         self.assertNotEqual(at(11), at(6), "past a night's length the gate must open")
         self.assertNotEqual(at(12), at(11), "and keep reopening each hour")
@@ -1191,15 +1214,23 @@ class AwakeFingerprintProseTests(unittest.TestCase):
             self.c,
             {
                 "previous_id": presence.current(self.c)["id"],
-                "outfit": ["tee"], "location": "bedroom", "activity": "napping",
-                "mood": "sleepy", "text": "Nap.", "transition": "Lay down.",
-                "activity_change": "transition", "asleep": True, "setting": "private",
+                "outfit": ["tee"],
+                "location": "bedroom",
+                "activity": "napping",
+                "mood": "sleepy",
+                "text": "Nap.",
+                "transition": "Lay down.",
+                "activity_change": "transition",
+                "asleep": True,
+                "setting": "private",
             },
             nap,
         )
         at = lambda hours: preread.fingerprint(self.c, nap + dt.timedelta(hours=hours))
         self.assertEqual(at(1), at(2), "a nap is left alone")
-        self.assertNotEqual(at(4), at(3), "but a daytime sleep flag does not freeze the gate")
+        self.assertNotEqual(
+            at(4), at(3), "but a daytime sleep flag does not freeze the gate"
+        )
 
     def test_a_declared_transition_still_opens_the_gate(self):
         """The fix must not become a trap the agent can never leave (ISS-04B)."""
@@ -1243,7 +1274,9 @@ def test_presence_and_daylight_dates_use_portable_unpadded_days(tmp_path):
             return super().strftime(format)
 
     now = PortableDateTime(2026, 9, 1, 14, 5, tzinfo=dt.timezone.utc)
-    companion = SimpleNamespace(agent="Nova", timezone="Atlantic/Reykjavik", soul_dir=tmp_path)
+    companion = SimpleNamespace(
+        agent="Nova", timezone="Atlantic/Reykjavik", soul_dir=tmp_path
+    )
     state = {"recorded_at": now.isoformat(), "state": {"mood": "content"}}
     with (
         patch.object(dt, "datetime", PortableDateTime),
@@ -1352,7 +1385,7 @@ class HookHealthCheckTests(unittest.TestCase):
             c = SimpleNamespace(home=Path(tmp))
             (c.home / "hooks").mkdir()
             hook = c.home / "hooks/companion-context.py"
-            hook.write_text("print('{\"context\": \"\"}')\n", encoding="utf-8")
+            hook.write_text('print(\'{"context": ""}\')\n', encoding="utf-8")
             ok = SimpleNamespace(returncode=0, stdout='{"context": ""}', stderr="")
             bad = SimpleNamespace(returncode=1, stdout="", stderr="boom")
             with patch.object(watch.subprocess, "run", return_value=ok) as run:
@@ -1423,11 +1456,16 @@ class VaultMapSkipsSectionsTests(unittest.TestCase):
             c = SimpleNamespace(vault=Path(tmp), profile="", share_people=True)
             (c.vault / "Journal").mkdir()
             (c.vault / "Journal/Tuesday.md").write_text("# Rain\n", encoding="utf-8")
-            with patch.object(vi, "_excluded", return_value=set()), patch.object(
-                vi, "headings", side_effect=AssertionError("opened a note")
+            with (
+                patch.object(vi, "_excluded", return_value=set()),
+                patch.object(
+                    vi, "headings", side_effect=AssertionError("opened a note")
+                ),
             ):
                 notes = vi.scan(c, with_headings=False)
-            self.assertEqual([(n["dir"], n["name"]) for n in notes], [("Journal", "Tuesday")])
+            self.assertEqual(
+                [(n["dir"], n["name"]) for n in notes], [("Journal", "Tuesday")]
+            )
 
 
 class SettingsNavigationTests(unittest.TestCase):
@@ -1436,11 +1474,14 @@ class SettingsNavigationTests(unittest.TestCase):
     def test_every_section_is_listed_exactly_once(self):
         source = (ROOT / "kit/app/static/settings.js").read_text(encoding="utf-8")
         panels = re.findall(r"^\{id:'([a-z-]+)'", source, re.M)
-        nav = source[source.index("const SETTINGS_NAV=[") : source.index("const settingsEntries")]
+        nav = source[
+            source.index("const SETTINGS_NAV=[") : source.index("const settingsEntries")
+        ]
         listed = [
             item
             for item in re.findall(r"'([a-z-]+)'", nav)
-            if item not in {"roster", "identity", "local-models", "image-studio", "voice"}
+            if item
+            not in {"roster", "identity", "local-models", "image-studio", "voice"}
         ]
         self.assertEqual(sorted(panels), sorted(listed))
         self.assertEqual(len(listed), len(set(listed)))
@@ -1464,19 +1505,44 @@ class ReleaseManifestTests(unittest.TestCase):
         )
         if tracked.returncode:
             self.skipTest("not a git checkout")
-        shipped = set(json.loads((ROOT / "release-files.json").read_text(encoding="utf-8")))
+        shipped = set(
+            json.loads((ROOT / "release-files.json").read_text(encoding="utf-8"))
+        )
         missing = [
             name
             for name in tracked.stdout.split()
-            if name.startswith("kit/") and "/__pycache__/" not in name and name not in shipped
+            if name.startswith("kit/")
+            and "/__pycache__/" not in name
+            and name not in shipped
         ]
         self.assertEqual(missing, [])
 
+    def test_the_built_package_is_one_the_updater_accepts(self):
+        # 3.7.0 shipped a workflow file that every installed updater refused.
+        import tempfile
+        from kit.app import updates
+        from tools import build_release
+
+        shipped = json.loads((ROOT / "release-files.json").read_text(encoding="utf-8"))
+        hidden = [n for n in shipped if n.startswith(".")]
+        self.assertTrue(set(hidden) <= set(updates.RELEASE_DOTFILES), hidden)
+        with tempfile.TemporaryDirectory() as tmp:
+            package = build_release.build(Path(tmp) / "release.zip")
+            installed = Path(tmp) / "installed"
+            installed.mkdir()
+            (installed / "SHA256SUMS.json").write_text("{}", encoding="utf-8")
+            updates.stage(package.read_bytes(), root=installed)
+            self.assertTrue((installed / ".pending-update/VERSION").is_file())
+
     def test_every_asset_the_page_links_ships(self):
         page = (ROOT / "kit/app/static/index.html").read_text(encoding="utf-8")
-        shipped = set(json.loads((ROOT / "release-files.json").read_text(encoding="utf-8")))
+        shipped = set(
+            json.loads((ROOT / "release-files.json").read_text(encoding="utf-8"))
+        )
         linked = set(re.findall(r'(?:src|href)="/static/([^"?]+)"', page))
-        self.assertEqual(sorted(f for f in linked if f"kit/app/static/{f}" not in shipped), [])
+        self.assertEqual(
+            sorted(f for f in linked if f"kit/app/static/{f}" not in shipped), []
+        )
 
 
 class ShortFormSceneTests(AwakeFingerprintProseTests):
@@ -1484,7 +1550,9 @@ class ShortFormSceneTests(AwakeFingerprintProseTests):
 
     def test_continue_needs_only_a_sentence(self):
         later = self.now + dt.timedelta(minutes=16)
-        out = presence.continue_scene(self.c, "Still at the table, plate pushed aside.", now=later)
+        out = presence.continue_scene(
+            self.c, "Still at the table, plate pushed aside.", now=later
+        )
         self.assertTrue(out["written"] is not False)
         state = presence.current(self.c)["state"]
         self.assertEqual(state["activity"], "eating lunch")
@@ -1493,33 +1561,55 @@ class ShortFormSceneTests(AwakeFingerprintProseTests):
     def test_transition_fills_the_rest_and_clears_sleep(self):
         bed = self.now + dt.timedelta(minutes=15)
         presence.transition_scene(
-            self.c, "going to sleep", "Tired, brushed teeth and lay down.", "Lights off.",
-            location="bedroom", asleep=True, setting="private", now=bed,
+            self.c,
+            "going to sleep",
+            "Tired, brushed teeth and lay down.",
+            "Lights off.",
+            location="bedroom",
+            asleep=True,
+            setting="private",
+            now=bed,
         )
         self.assertTrue(presence.current(self.c)["state"]["asleep"])
         morning = bed + dt.timedelta(hours=8)
         presence.transition_scene(
-            self.c, "making coffee", "Woke up and went to the kitchen.", "Slow start.",
-            location="kitchen", now=morning,
+            self.c,
+            "making coffee",
+            "Woke up and went to the kitchen.",
+            "Slow start.",
+            location="kitchen",
+            now=morning,
         )
         state = presence.current(self.c)["state"]
-        self.assertFalse(state["asleep"], "getting up must end sleep without being told twice")
+        self.assertFalse(
+            state["asleep"], "getting up must end sleep without being told twice"
+        )
         self.assertEqual(state["location"], "kitchen")
 
     def test_a_record_that_changes_activity_ends_sleep_unless_it_says_otherwise(self):
         bed = self.now + dt.timedelta(minutes=15)
         presence.transition_scene(
-            self.c, "going to sleep", "Lay down.", "Lights off.",
-            location="bedroom", asleep=True, setting="private", now=bed,
+            self.c,
+            "going to sleep",
+            "Lay down.",
+            "Lights off.",
+            location="bedroom",
+            asleep=True,
+            setting="private",
+            now=bed,
         )
         up = bed + dt.timedelta(hours=8)
         presence.update(
             self.c,
             {
                 "previous_id": presence.current(self.c)["id"],
-                "outfit": ["tee"], "location": "kitchen",
-                "activity": "making coffee", "mood": "groggy", "text": "Up.",
-                "transition": "Woke and went downstairs.", "activity_change": "transition",
+                "outfit": ["tee"],
+                "location": "kitchen",
+                "activity": "making coffee",
+                "mood": "groggy",
+                "text": "Up.",
+                "transition": "Woke and went downstairs.",
+                "activity_change": "transition",
                 "setting": "private",
             },
             up,
@@ -1533,14 +1623,20 @@ class ShortFormSceneTests(AwakeFingerprintProseTests):
             encoding="utf-8",
         )
         presence.transition_scene(
-            self.c, "cooking dinner", "Lunch done, started dinner early.", "Onions first.",
-            duration=30, now=self.now + dt.timedelta(minutes=15),
+            self.c,
+            "cooking dinner",
+            "Lunch done, started dinner early.",
+            "Onions first.",
+            duration=30,
+            now=self.now + dt.timedelta(minutes=15),
         )
         late = self.now + dt.timedelta(minutes=75)
         with self.assertRaisesRegex(ValueError, "--delay-reason"):
             presence.continue_scene(self.c, "Still stirring.", now=late)
         presence.continue_scene(
-            self.c, "Still stirring.", now=late,
+            self.c,
+            "Still stirring.",
+            now=late,
             delay_reason="The sauce needs another twenty minutes to reduce.",
         )
         state = presence.current(self.c)["state"]
@@ -1549,6 +1645,9 @@ class ShortFormSceneTests(AwakeFingerprintProseTests):
     def test_continue_can_correct_a_wrong_sleep_flag(self):
         presence.current(self.c)
         out = presence.continue_scene(
-            self.c, "Already up and about.", asleep=False, now=self.now + dt.timedelta(minutes=16)
+            self.c,
+            "Already up and about.",
+            asleep=False,
+            now=self.now + dt.timedelta(minutes=16),
         )
         self.assertFalse(presence.current(self.c)["state"].get("asleep", False))

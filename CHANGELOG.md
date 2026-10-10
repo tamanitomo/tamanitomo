@@ -1,3 +1,9 @@
+## 3.7.1 — An update the app can install (2026-10-10)
+
+- 3.7.0's package carried a CI workflow file, which every installed updater refuses as
+  private state, so updating from the app stopped before it changed anything. 3.7.1 leaves
+  it out, and a test now builds the package and runs it through the updater's own checks.
+
 ## 3.7.0 — Cleaner memory, her own story, and one conversation everywhere (2026-10-10)
 
 - Keep recall inside the selected companion's owner-verified conversations, including

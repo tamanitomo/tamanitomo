@@ -16,6 +16,13 @@ import uuid
 INSTANCE_ID = uuid.uuid4().hex
 
 
+# The only dot-paths an update package may carry. Installed updaters back to 3.6.x
+# refuse any other, so a package must never ship one outside this list, and adding
+# to it helps only installs that already have the newer updater. 3.7.0 shipped a CI
+# workflow, and no 3.6.3 install could update to it.
+RELEASE_DOTFILES = (".gitignore", ".gitattributes", ".github/workflows/test.yml")
+
+
 def stage(raw, root=ROOT):
     if len(raw) > MAX_ZIP:
         raise ValueError("Update package exceeds 25 MB")
@@ -48,11 +55,7 @@ def stage(raw, root=ROOT):
                 or name.casefold() in {n.casefold() for n in files}
             ):
                 raise ValueError("Ambiguous release path")
-            if name.startswith(".") and name not in (
-                ".gitignore",
-                ".gitattributes",
-                ".github/workflows/test.yml",
-            ):
+            if name.startswith(".") and name not in RELEASE_DOTFILES:
                 raise ValueError("Private state cannot be included in an update")
             if any(
                 x in p.parts for x in (".env", ".venv", "__pycache__")

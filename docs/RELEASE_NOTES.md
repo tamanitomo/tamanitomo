@@ -1,4 +1,6 @@
-Tamanitomo 3.7.0: memory that stays clean, a life of her own that stays consistent, and one conversation across your devices.
+Tamanitomo 3.7.1: memory that stays clean, a life of her own that stays consistent, and one conversation across your devices.
+
+3.7.1 is 3.7.0 with its package fixed: the app's updater refused 3.7.0 before changing anything.
 
 - **One fact, said twice, is one fact.** A reworded repeat of something she already knows
   becomes more evidence for it instead of a second copy, and a close one comes back to her

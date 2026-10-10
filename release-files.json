@@ -1,6 +1,5 @@
 [
   ".gitattributes",
-  ".github/workflows/hermes-compatibility.yml",
   ".gitignore",
   "AGENTS.md",
   "CHANGELOG.md",
