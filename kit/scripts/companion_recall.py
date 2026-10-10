@@ -37,7 +37,16 @@ CALLBACK_STOP = set(
     doing feeling good great bad okay fine thanks thank hello hey weather outside
     nice day days night nights sunny rainy raining cloudy forecast see think thought says said got get getting want wanted
     need needed time back one much very it's that's there's i'm i've i'll don't
-    haven't isn't wasn't will would should actually already also well looks look""".split()
+    haven't isn't wasn't will would should actually already also well looks look
+    working worked works fun funny cool awesome amazing alright sure maybe probably pretty
+    kind kinda sort sorta stuff thing things lot lots little bit big small new old make
+    makes made making take takes took taking come comes came coming feel feels felt try
+    tried trying use used using start started starting finish finished done help helped
+    helping keep kept let lets put give gave ask asked talk talked talking wait waiting
+    nothing someone everyone guy guys nope haha omg hopefully honestly basically
+    literally totally definitely almost enough else even every long right wrong better
+    best worse worst same different though although because until during after before
+    around through ready busy tired happy glad sorry love loved""".split()
 )
 CALLBACK_CUE = re.compile(
     r"\b(my|our|again|still|finally|tomorrow|today|tonight|yesterday|that|the)\b", re.I
@@ -97,8 +106,12 @@ def sources(c):
     ]
 
 
+def _matched(text, words):
+    return set(words).intersection(terms(text, set(), limit=None))
+
+
 def _overlap(text, words):
-    return len(set(words).intersection(terms(text, set(), limit=None)))
+    return len(_matched(text, words))
 
 
 def _retired_evidence(c, active, deadline):
@@ -183,16 +196,17 @@ def search(c, query, limit=6, seconds=1.0, *, implicit=False, now=None):
     for fact in active:
         if time.monotonic() > deadline:
             break
-        score = _overlap(fact["statement"], words)
-        if score:
+        matched = _matched(fact["statement"], words)
+        if matched:
             candidates.append(
                 (
-                    score + 0.2,
+                    len(matched) + 0.2,
                     {
                         "source": fact.get("source")
                         or str(c.human_dir / "facts.jsonl"),
                         "id": fact["id"],
                         "kind": "human_fact",
+                        "matched": sorted(matched),
                         "confidence": fact["confidence"],
                         "evidence": fact["evidence"],
                         "recorded_at": fact.get("recorded_at"),
@@ -249,6 +263,7 @@ def search(c, query, limit=6, seconds=1.0, *, implicit=False, now=None):
                 out["warnings"].append(
                     "shared session store: scoped strictly to this profile"
                 )
+
             records, complete = transcript.owner_evidence(
                 c,
                 lambda view: (
@@ -282,15 +297,16 @@ def search(c, query, limit=6, seconds=1.0, *, implicit=False, now=None):
                     or _quote_key(text) == _quote_key(query)
                 ):
                     continue
-                score = _overlap(text, words)
-                if not score:
+                matched = _matched(text, words)
+                if not matched:
                     continue
                 candidates.append(
                     (
-                        score + 0.1,
+                        len(matched) + 0.1,
                         {
                             "source": f"hermes:message:{row.source_message}",
                             "session": row.source_session,
+                            "matched": sorted(matched),
                             "timestamp": row.occurred_at,
                             "recorded_at": dt.datetime.fromtimestamp(
                                 row.occurred_at, dt.timezone.utc

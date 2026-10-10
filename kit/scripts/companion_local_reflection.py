@@ -672,7 +672,7 @@ def _held_if_similar(c, out, statement, evidence, now, category, source):
     no way to retry, so a fact the ledger found similar to one it holds is set aside for
     a person to decide rather than dropped. Nothing is lost and nothing is duplicated.
     """
-    if out.get("written") or not out.get("similar_to"):
+    if out.get("written") or out.get("merged_into") or not out.get("similar_to"):
         return out
     best = out["similar_to"][0]
     if best["similarity"] >= ATTACH_SIMILARITY:

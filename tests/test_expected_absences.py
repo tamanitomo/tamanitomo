@@ -429,6 +429,37 @@ def test_available_cadence_lookback_is_bounded_and_respects_relationship_start(
     assert days == 0
 
 
+def test_routine_hours_never_count_as_silence(companion):
+    import companion_intimacy as intimacy
+
+    # The owner's rule (2026-10-10): time inside routines is not silence. Only the
+    # silence penalty changes; the contact cadence stays a calendar fortnight.
+    store = HermesStore(companion.home)
+    store.session("owner", "telegram", profile="")
+    for day in range(3, 40):
+        for turn in range(8):
+            store.say(
+                "owner",
+                "user",
+                str(turn) + " Synthetic owner conversation detail." * 7,
+                (NOW - dt.timedelta(days=day) + dt.timedelta(hours=turn)).timestamp(),
+            )
+    plain = intimacy.compute(companion, NOW)
+    whole_day = [
+        {"label": "Morning", "days": list(range(7)), "start": "00:00", "end": "12:00"},
+        {"label": "Evening", "days": list(range(7)), "start": "12:00", "end": "00:00"},
+    ]
+    feelings.save_settings(
+        companion,
+        {**feelings.DEFAULTS, "learn_rhythm": False, "absence_windows": whole_day},
+        feelings.settings(companion)["revision"],
+    )
+    routine = intimacy.compute(companion, NOW)
+    assert plain["cadence"] >= 1.0
+    assert routine["cadence"] == plain["cadence"]
+    assert routine["score"] > plain["score"]
+
+
 def test_routines_covering_every_hour_do_not_cancel_the_contact_deficit(companion):
     import companion_intimacy as intimacy
 

@@ -23,9 +23,11 @@ rewriting history. Context budgets limit what is presented, not what happened.
 from __future__ import annotations
 import uuid
 import argparse
+import collections
 import datetime as dt
 import hashlib
 import json
+import math
 import os
 import pathlib
 import re
@@ -139,6 +141,7 @@ def _read(path, kind=None):
 _ROW_METADATA = frozenset(
     {
         "recorded_at",
+        "expires_at",
         "provenance",
         "statement_origin",
         "statement_check",
@@ -254,6 +257,7 @@ def record_fact(
     weight="",
     confirm_distinct=False,
     user_memory=None,
+    lasting=False,
 ):
     """Append one fact.
 
@@ -261,11 +265,18 @@ def record_fact(
     overflow archive already says is not stored: that file is where Hermes keeps
     what it knows about the human, and a second copy here would only drift.
 
-    A statement that says nearly the same thing as an active fact (see
-    similar_facts) is not written: the answer is {"written": False,
-    "similar_to": [...]} naming what already exists. Nothing is lost by that --
-    re-record with `supersedes` set to refine or correct the existing fact, or with
-    `confirm_distinct=True` when it really is a separate fact.
+    A statement that is an active fact said again (similarity of at least
+    SAME_FACT, see similar_facts) is not written as a fact: its evidence is added
+    to the existing one, the way a repeat is meant to be kept, and the answer
+    names it as `merged_into`. A statement that is only close to one is not
+    written: the answer is {"written": False, "similar_to": [...]} naming what
+    already exists. Nothing is lost by either -- re-record with `supersedes` set to
+    refine or correct the existing fact, or with `confirm_distinct=True` when it
+    really is a separate fact.
+
+    A statement that is one day's news ("is setting up a projector today") is
+    written with `expires_at` (see short_lived_until) and leaves the active view
+    after it; the row stays in the ledger. `lasting=True` keeps it in view.
 
     A statement equal (by canonical_statement) to an active fact is refused
     with `duplicate_of`, unless it is an explicit correction: a valid
@@ -321,11 +332,15 @@ def record_fact(
         row["statement_check"] = PARAPHRASE_CHECK
     if held_decision:
         row["held_decision"] = dict(held_decision)
+    expires = None if lasting else short_lived_until(statement, now)
+    if expires:
+        row["expires_at"] = expires.isoformat()
+    names = () if human == "the human" else (human,)
     key = canonical_statement(statement)
     equal = []
 
     def guard():
-        active = facts(root)
+        active = facts(root, now=now)
         if supersedes:
             if not any(f["id"] == supersedes for f in active):
                 raise ValueError("supersedes must refer to an active fact")
@@ -345,27 +360,106 @@ def record_fact(
                     "duplicate_of": f["id"],
                 }
         if not confirm_distinct:
-            near = similar_facts(active, statement)
+            near = similar_facts(active, statement, names=names)
+            if near and near[0]["similarity"] >= SAME_FACT:
+                return {"written": False, "same_as": near[0]["id"], "similar_to": near}
             if near:
-                return {
-                    "written": False,
-                    "reason": "a similar fact is already recorded",
-                    "similar_to": near,
-                    "next": (
-                        "If this refines or corrects one of them, record it again with "
-                        "supersedes=<that id>. If it is a genuinely separate fact, record it "
-                        "again with confirm_distinct=true. If it adds nothing, leave it."
-                    ),
-                }
+                return _similar_refusal(near)
         return None
 
     out = _append(pathlib.Path(root) / "facts.jsonl", row, guard=guard)
+    if out.get("same_as"):
+        # Evidence is added outside the ledger lock it takes itself; the fact can be
+        # retracted in between, and then this is the ordinary refusal instead.
+        target = out["same_as"]
+        try:
+            added = add_evidence(root, target, evidence, now)
+        except ValueError:
+            return _similar_refusal(out["similar_to"])
+        return {
+            "written": False,
+            "reason": "the same fact is already recorded; this evidence was added to it",
+            "merged_into": target,
+            "evidence_added": added["written"],
+            "similar_to": out["similar_to"],
+            "next": (
+                "Nothing else to do. If the new wording says something the recorded fact "
+                f"does not, record it again with supersedes={target}."
+            ),
+        }
+    notes = []
     if out["written"] and equal:
         out["equal_to"] = equal
-        out["note"] = (
+        notes.append(
             "Correction recorded; another active fact already says the same thing. Nothing was merged."
         )
+    if out["written"] and out["entry"].get("expires_at"):
+        out["expires_at"] = out["entry"]["expires_at"]
+        notes.append(
+            f"Kept as short-lived: it reads as one day's news, so it leaves the profile "
+            f"after {out['expires_at'][:10]} (the ledger keeps it). If it needs a follow-up, "
+            "add an open loop; if it is lasting, record it without the day words or with "
+            "lasting=true."
+        )
+    if notes:
+        out["note"] = " ".join(notes)
     return out
+
+
+def _similar_refusal(near):
+    return {
+        "written": False,
+        "reason": "a similar fact is already recorded",
+        "similar_to": near,
+        "next": (
+            "If this refines or corrects one of them, record it again with "
+            "supersedes=<that id>. If it is a genuinely separate fact, record it "
+            "again with confirm_distinct=true. If it adds nothing, leave it."
+        ),
+    }
+
+
+# One day's news, and how many days after the one it was said on it stays in view.
+_SHORT_LIVED = (
+    (
+        re.compile(
+            r"\b(?:today|tonight|this (?:morning|afternoon|evening)|right now|"
+            r"at the moment|just now|(?:earlier|later) today|yesterday|last night)\b"
+        ),
+        1,
+    ),
+    (re.compile(r"\btomorrow\b"), 2),
+    (re.compile(r"\bthis (?:week|weekend)\b"), 7),
+)
+
+
+def short_lived_until(statement, now):
+    """When a statement that is one day's news should leave the profile, or None.
+
+    "Robin is setting up a projector today" is true for a day; kept as a fact, it was
+    still read out to the companion a month later. Only the statement is read, never
+    the evidence, which is usually dated. The end of the following local day (a
+    week for "this week"), so the news is still there for a follow-up."""
+    text = _loose(statement)
+    days = max((d for pattern, d in _SHORT_LIVED if pattern.search(text)), default=0)
+    if not days:
+        return None
+    return (now + dt.timedelta(days=days)).replace(
+        hour=23, minute=59, second=59, microsecond=0
+    )
+
+
+def _expired(row, now):
+    stamp = row.get("expires_at")
+    if not stamp:
+        return False
+    try:
+        at = dt.datetime.fromisoformat(stamp)
+    except (TypeError, ValueError):
+        return False
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=dt.timezone.utc)
+    return at <= now
 
 
 _NUMBER_WORDS = {
@@ -749,8 +843,10 @@ def questions(root, status=None):
     return [q for q in out if q["status"] == status] if status else out
 
 
-def facts(root, category=None):
-    """Active facts only; corrections and retractions retain the original history."""
+def facts(root, category=None, now=None):
+    """Active facts only; corrections and retractions retain the original history.
+    A short-lived fact is active until its `expires_at`."""
+    now = now or dt.datetime.now(dt.timezone.utc)
     history = _read(pathlib.Path(root) / "facts.jsonl")
     rows = [r for r in history if r.get("kind") == "human_fact"]
     dead = {r["supersedes"] for r in rows if r.get("supersedes")}
@@ -763,6 +859,7 @@ def facts(root, category=None):
             r["id"] in dead
             or r.get("status", "active") != "active"
             or _app_tombstone(r)
+            or _expired(r, now)
         ):
             continue
         seen[r["id"]] = r
@@ -918,19 +1015,104 @@ def known_in_user_memory(c, statement, cover=0.8):
     return None
 
 
-def _pair_similarity(a, b, threshold=0.6):
-    """(score, differing words, contained) when word sets a and b look like one
-    statement, else None. The one rule duplicate_facts reports and record_fact
-    enforces."""
-    if not a or not b:
-        return None
-    score = len(a & b) / len(a | b)
-    contained = a <= b or b <= a
-    if score < threshold and not (
-        contained and score >= 0.5 and min(len(a), len(b)) >= 4
-    ):
-        return None
-    return score, sorted(a ^ b), contained
+# Words that say nothing about what a statement is about. Only for comparing
+# statements; _FILLER is unchanged for the USER.md check.
+_FUNCTION_WORDS = frozenset(
+    """is are was were be been being am has have had having do does did will would shall
+    should can could may might must it it's this that these those there here as if then than
+    so such very just also too about over under up out off he she they them him we you i me
+    us who whom whose which what when where why how all any some each more most said says
+    say told tells currently now still really""".split()
+)
+# A flipped polarity is a different fact however many words two statements share.
+_POLARITY = re.compile(
+    r"\b(?:not|never|no|none|nobody|nothing|neither|nor|without|cannot|\w+n't|"
+    r"dislike[sd]?|hate[sd]?|stopped)\b"
+)
+# Weighted share of what two statements say (see _similarity). From SAME_FACT a new
+# statement is the old one said again and becomes evidence for it. From SIMILAR_FACT,
+# or when the smaller statement is CONTAINED_FACT inside the other, the writer is
+# asked whether it refines the old fact or is a separate one. Calibrated on two
+# companions' real ledgers (2026-10-10): every pair past these lines was one fact
+# worded twice or a fact and its refinement; the misses had been plain word overlap
+# below 0.65, "considering" against "consider", or "IT-support" read as a name.
+SAME_FACT = 0.75
+SIMILAR_FACT = 0.35
+CONTAINED_FACT = 0.6
+
+
+def _stem(word):
+    """Crude on purpose: "leaving"/"leave", "considering"/"consider", "tanks"/"tank"."""
+    if not word.isalpha():
+        return word
+    if word.endswith("ies") and len(word) > 4:
+        return word[:-3] + "y"
+    for suffix in ("es", "s"):
+        if (
+            word.endswith(suffix)
+            and not word.endswith("ss")
+            and len(word) - len(suffix) >= 3
+        ):
+            word = word[: -len(suffix)]
+            break
+    for suffix in ("ing", "ed", "ly"):
+        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+            word = word[: -len(suffix)]
+            break
+    return word[:-1] if word.endswith("e") and len(word) >= 4 else word
+
+
+def _content(statement, names=frozenset()):
+    """What a statement is about, stemmed: not its grammar, and not the people it is
+    about, whose names are in nearly every fact."""
+    out = set()
+    for word in _words(statement):
+        for part in word.split("-"):
+            if part and part not in _FUNCTION_WORDS and part not in names:
+                # "three" must stay a number, not become "thre".
+                out.add(part if _DISTINCT.match(part) else _stem(part))
+    return out
+
+
+def _weigher(word_sets):
+    """How much sharing a word says: "projector" in one fact, more than "work" in thirty.
+    Smoothed, so a ledger of three facts does not count every new word as rare."""
+    seen = collections.Counter(w for s in word_sets for w in s)
+    n = len(word_sets)
+    return lambda w: math.log((n + 10) / (seen[w] + 5))
+
+
+def _similarity(a, b, weight):
+    """(weighted overlap, weighted share of the smaller set) of two word sets."""
+    shared = a & b
+    if not shared:
+        return 0.0, 0.0
+    ws, wa, wb = (sum(map(weight, s)) for s in (shared, a, b))
+    return ws / (wa + wb - ws), ws / min(wa, wb)
+
+
+_QUALIFIERS = frozenset("last next previous other another former latter".split())
+
+
+def _conflict(a_text, b_text, a, b):
+    """Why two statements that share most of their words are still two facts, or None:
+    "two cats"/"three cats", "his last job"/"his job", "likes"/"dislikes", "C++"/"C",
+    "sister Alice"/"sister Beth". A number or name only one of them mentions ("married
+    in 2015", "IT-support", "named Leo") is detail, not a different fact."""
+    if (a ^ b) & _QUALIFIERS:
+        return "a qualifier such as last, next or former differs"
+    changed_a = {w for w in a - b if _DISTINCT.match(w)}
+    changed_b = {w for w in b - a if _DISTINCT.match(w)}
+    if changed_a and changed_b:
+        return "a number, ordinal or negation differs"
+    if bool(_POLARITY.search(_loose(a_text))) != bool(_POLARITY.search(_loose(b_text))):
+        return "one says the opposite of the other"
+    if _SYMBOLS.findall(a_text) != _SYMBOLS.findall(b_text):
+        return "a symbol differs"
+    names_a, names_b = _capitalised(a_text), _capitalised(b_text)
+    if names_a - names_b and names_b - names_a:
+        return "a name differs"
+    return None
 
 
 _SYMBOLS = re.compile(r"[+#%$&@=<>\u00b0/\u00d7\u2212]|(?<!\w)-(?=\d)")
@@ -945,57 +1127,68 @@ def _capitalised(*texts):
     return out
 
 
-def similar_facts(active, statement, threshold=0.65, limit=3):
+def similar_facts(active, statement, threshold=SIMILAR_FACT, limit=3, names=()):
     """Active facts that probably say what `statement` says, best first.
 
-    Deliberately conservative, because a refused write is a lost memory: a pair that
-    differs by a number, an ordinal, a negation, a name, or a symbol ("C++"/"C") is
-    NOT similar here. "Sister Alice"/"sister Beth", "likes coffee"/"does not like
-    coffee" and "has two cats"/"has three cats" are different facts."""
-    words = _words(statement)
+    `similarity` is the weighted overlap of their content words (see _similarity);
+    record_fact treats SAME_FACT and above as the same fact said again. A pair whose
+    words differ by a number, an ordinal, a negation, a symbol or a swapped name
+    ("Sister Alice"/"sister Beth", "likes coffee"/"does not like coffee", "has two
+    cats"/"has three cats") is never similar here: those are different facts."""
+    names = {str(n).casefold() for n in names if n}
+    words = _content(statement, names)
+    sets = [_content(f.get("statement"), names) for f in active]
+    weight = _weigher(sets)
     out = []
-    for f in active:
-        hit = _pair_similarity(words, _words(f.get("statement")), threshold)
-        if not hit:
+    for f, other in zip(active, sets):
+        overlap, contained = _similarity(words, other, weight)
+        if overlap < threshold and not (
+            contained >= CONTAINED_FACT and len(words & other) >= 2
+        ):
             continue
-        if any(_DISTINCT.match(w) for w in hit[1]):
+        if _conflict(statement, f.get("statement") or "", words, other):
             continue
-        if _SYMBOLS.findall(statement) != _SYMBOLS.findall(f.get("statement") or ""):
-            continue
-        if set(hit[1]) & _capitalised(statement, f.get("statement")):
-            continue
-        out.append((hit[0], f))
-    out.sort(key=lambda t: -t[0])
+        out.append((overlap, contained, f))
+    out.sort(key=lambda t: (-t[0], -t[1]))
     return [
-        {"id": f["id"], "statement": f.get("statement"), "similarity": round(sc, 3)}
-        for sc, f in out[:limit]
+        {
+            "id": f["id"],
+            "statement": f.get("statement"),
+            "similarity": round(overlap, 3),
+            "containment": round(contained, 3),
+        }
+        for overlap, contained, f in out[:limit]
     ]
 
 
-def duplicate_facts(root, threshold=0.6):
+def duplicate_facts(root, threshold=SIMILAR_FACT, names=()):
     """Pairs of active facts that may say the same thing, for a person to review.
 
     Report only: nothing is retracted, superseded or merged. A pair whose words
-    differ by a number, an ordinal or a negation is flagged as such rather than
-    hidden, because "likes"/"dislikes" and "first"/"second" are the cases where
-    a guess would be worst.
+    differ by a number, an ordinal, a negation or a name is flagged as such rather
+    than hidden, because "likes"/"dislikes" and "first"/"second" are the cases where
+    a guess would be worst. `same_fact` marks the pairs record_fact would now merge.
     """
     rows = facts(root)
-    words = [_words(f.get("statement")) for f in rows]
+    names = {str(n).casefold() for n in names if n}
+    words = [_content(f.get("statement"), names) for f in rows]
+    weight = _weigher(words)
     out = []
     for i in range(len(rows)):
         for j in range(i + 1, len(rows)):
             a, b = words[i], words[j]
             if not a or not b:
                 continue
-            shared = len(a & b)
-            score = shared / len(a | b)
+            score, contained_share = _similarity(a, b, weight)
             contained = a <= b or b <= a
             if score < threshold and not (
-                contained and score >= 0.5 and min(len(a), len(b)) >= 4
+                contained_share >= CONTAINED_FACT and len(a & b) >= 2
             ):
                 continue
             differ = sorted(a ^ b)
+            conflict = _conflict(
+                rows[i].get("statement") or "", rows[j].get("statement") or "", a, b
+            )
             reason = (
                 "identical wording"
                 if not differ
@@ -1005,13 +1198,13 @@ def duplicate_facts(root, threshold=0.6):
                     else f"{round(score*100)}% of content words shared"
                 )
             )
-            if any(_DISTINCT.match(w) for w in differ):
-                reason += (
-                    "; differs by a number, ordinal or negation -- probably distinct"
-                )
+            if conflict:
+                reason += f"; {conflict} -- probably distinct"
             out.append(
                 {
                     "similarity": round(score, 3),
+                    "containment": round(contained_share, 3),
+                    "same_fact": score >= SAME_FACT and not conflict,
                     "reason": reason,
                     "differing_words": differ,
                     "facts": [
@@ -1029,7 +1222,7 @@ def duplicate_facts(root, threshold=0.6):
                     ],
                 }
             )
-    out.sort(key=lambda p: -p["similarity"])
+    out.sort(key=lambda p: (-p["similarity"], -p["containment"]))
     return {
         "candidates": out,
         "count": len(out),
@@ -1353,6 +1546,223 @@ def soul_init(c, anchor=None, backups=None):
     return {"written": True, "soul_chars": len(out), "appended": i < 0}
 
 
+# ---- tidying an older ledger --------------------------------------------
+# Facts written before 3.0.24 were the human's words with a name in front.
+_QUOTE_FACT = re.compile(r"\s*[\w' -]{1,40} said:\s*[\"“]")
+TIDY_ACTIONS = ("merge", "expire", "retire", "rewrite", "review")
+
+
+def _stamp(value):
+    at = dt.datetime.fromisoformat(value)
+    return at if at.tzinfo else at.replace(tzinfo=dt.timezone.utc)
+
+
+def tidy_plan(root, now, human="the human"):
+    """A one-time tidy of a ledger written before these checks, for a person to read
+    before tidy_apply. Nothing is changed here.
+
+      merge   -- one fact recorded more than once (equal, or SAME_FACT with nothing in
+                 conflict). The earliest statement form stays; each later copy's
+                 evidence is added to it and the copy is retracted.
+      expire  -- one day's news recorded as lasting, past the time it would now stay
+                 in view. Retracted; the ledger keeps it.
+      rewrite -- a quote-style fact (`Name said: "..."`). Rewriting needs judgment, so
+                 the item applies only once someone fills in `new_statement` (and
+                 `lasting`), or changes it to `retire` when nothing in it lasts.
+      review  -- two facts close enough that one may refine the other. Report only.
+
+    Every change tidy_apply makes is appended -- evidence, a superseding fact or a
+    retraction -- so the history stays readable."""
+    names = set() if human == "the human" else {str(human).casefold()}
+    rows = sorted(facts(root, now=now), key=lambda f: f.get("recorded_at", ""))
+    sets = [_content(f.get("statement"), names) for f in rows]
+    weight = _weigher(sets)
+    quoted = [bool(_QUOTE_FACT.match(f.get("statement") or "")) for f in rows]
+    group = list(range(len(rows)))
+
+    def find(i):
+        while group[i] != i:
+            group[i] = group[group[i]]
+            i = group[i]
+        return i
+
+    close = []
+    for i in range(len(rows)):
+        for j in range(i + 1, len(rows)):
+            a, b = sets[i], sets[j]
+            si, sj = rows[i]["statement"], rows[j]["statement"]
+            same = canonical_statement(si) == canonical_statement(sj)
+            if not same and a and b and not _conflict(si, sj, a, b):
+                overlap, contained = _similarity(a, b, weight)
+                if overlap >= SAME_FACT:
+                    same = True
+                elif overlap >= SIMILAR_FACT or (
+                    contained >= CONTAINED_FACT and len(a & b) >= 2
+                ):
+                    close.append((i, j, overlap, contained))
+            if same:
+                group[find(j)] = find(i)
+    members = collections.defaultdict(list)
+    for i in range(len(rows)):
+        members[find(i)].append(i)
+    items, merged = [], set()
+    for group_rows in members.values():
+        if len(group_rows) < 2:
+            continue
+        keep = next((i for i in group_rows if not quoted[i]), group_rows[0])
+        for i in group_rows:
+            if i == keep:
+                continue
+            merged.add(i)
+            items.append(
+                {
+                    "action": "merge",
+                    "id": rows[i]["id"],
+                    "statement": rows[i]["statement"],
+                    "into": rows[keep]["id"],
+                    "into_statement": rows[keep]["statement"],
+                    "evidence": [
+                        rows[i]["evidence"],
+                        *rows[i].get("more_evidence", ()),
+                    ],
+                }
+            )
+    for i, f in enumerate(rows):
+        if i in merged:
+            continue
+        said = _stamp(f["recorded_at"]) if f.get("recorded_at") else now
+        day = short_lived_until(f["statement"], said)
+        if quoted[i]:
+            items.append(
+                {
+                    "action": "rewrite",
+                    "id": f["id"],
+                    "statement": f["statement"],
+                    "category": f["category"],
+                    "recorded_at": f.get("recorded_at"),
+                    "mentions_a_day": bool(day),
+                    "new_statement": "",
+                    "lasting": False,
+                }
+            )
+        elif day and not f.get("expires_at") and day <= now:
+            items.append(
+                {
+                    "action": "expire",
+                    "id": f["id"],
+                    "statement": f["statement"],
+                    "recorded_at": f.get("recorded_at"),
+                }
+            )
+    for i, j, overlap, contained in close:
+        # A quote-style fact is already listed for rewriting; pairing it is noise.
+        if i in merged or j in merged or quoted[i] or quoted[j]:
+            continue
+        items.append(
+            {
+                "action": "review",
+                "ids": [rows[i]["id"], rows[j]["id"]],
+                "statements": [rows[i]["statement"], rows[j]["statement"]],
+                "similarity": round(overlap, 3),
+                "containment": round(contained, 3),
+            }
+        )
+    return {
+        "created_at": now.isoformat(),
+        "active_facts": len(rows),
+        "counts": dict(collections.Counter(item["action"] for item in items)),
+        "items": items,
+        "note": (
+            "Nothing has been changed. merge and expire apply as listed; rewrite applies "
+            "once new_statement is filled in (or the action is changed to retire); review "
+            "is for reading. Apply with `tidy --apply <this file>`."
+        ),
+    }
+
+
+def tidy_apply(root, plan, now, human="the human"):
+    """Apply a tidy_plan a person has read. An item whose facts changed since the plan
+    was made is skipped and reported, never forced. A rewrite whose statement the
+    paraphrase screen doubts is skipped unless the item says `"reviewed": true`."""
+    items = plan.get("items") if isinstance(plan, dict) else None
+    if not isinstance(items, list):
+        raise ValueError('a tidy plan holds {"items": [...]}')
+    done, skipped = [], []
+    for item in items:
+        if not isinstance(item, dict) or item.get("action") not in TIDY_ACTIONS:
+            raise ValueError(f"each tidy item needs an action from {TIDY_ACTIONS}")
+        action, fid = item["action"], item.get("id")
+        if action == "review":
+            continue
+        active = {f["id"]: f for f in facts(root, now=now)}
+        f = active.get(fid)
+        if not f or f.get("statement") != item.get("statement"):
+            skipped.append(
+                {"id": fid, "action": action, "why": "no longer active, or changed"}
+            )
+            continue
+        if action == "merge":
+            into = active.get(item.get("into"))
+            if not into:
+                skipped.append(
+                    {"id": fid, "action": action, "why": "the fact to keep is gone"}
+                )
+                continue
+            for evidence in item.get("evidence") or ():
+                if evidence:
+                    add_evidence(root, into["id"], evidence, now)
+            retract_fact(
+                root, fid, f"the same fact as {into['id']}; its evidence is there", now
+            )
+        elif action == "expire":
+            retract_fact(
+                root,
+                fid,
+                "one day's news kept as a lasting fact; out of view, kept in the ledger",
+                now,
+            )
+        elif action == "retire":
+            retract_fact(
+                root,
+                fid,
+                item.get("reason") or "nothing lasting in it; retired in a tidy",
+                now,
+            )
+        else:
+            statement = (item.get("new_statement") or "").strip()
+            if not statement:
+                skipped.append(
+                    {"id": fid, "action": action, "why": "no new_statement yet"}
+                )
+                continue
+            quote = re.sub(r"^\S+:\s", "", f.get("evidence") or "", count=1)
+            doubts = paraphrase_concerns(statement, quote, (human,))
+            if doubts and item.get("reviewed") is not True:
+                skipped.append({"id": fid, "action": action, "why": "; ".join(doubts)})
+                continue
+            out = record_fact(
+                root,
+                statement,
+                f["evidence"],
+                now,
+                item.get("category") or f["category"],
+                f.get("confidence", "stated"),
+                f.get("source", ""),
+                fid,
+                human,
+                statement_origin="model_paraphrase",
+                weight=f.get("weight", ""),
+                lasting=bool(item.get("lasting")),
+            )
+            if not out.get("written"):
+                skipped.append(
+                    {"id": fid, "action": action, "why": out.get("reason", "")}
+                )
+                continue
+        done.append({"id": fid, "action": action})
+    return {"applied": len(done), "done": done, "skipped": skipped}
+
+
 # ---- batch input ---------------------------------------------------------
 LEDGER_KINDS = (
     "fact",
@@ -1423,8 +1833,11 @@ def _apply(c, entry, now):
             weight=entry.get("weight", ""),
             confirm_distinct=bool(entry.get("confirm_distinct")),
             user_memory=c,
+            lasting=bool(entry.get("lasting")),
         )
-        return {**out, "note": note} if note else out
+        if note:
+            out = {**out, "note": " ".join(x for x in (out.get("note"), note) if x)}
+        return out
     if kind == "pref":
         return record_pref(
             c.life,
@@ -1446,6 +1859,22 @@ def _apply(c, entry, now):
         )
     mode = entry.get("mode", "append")
     return soul_write(c, entry.get("text"), mode, now)
+
+
+# What a batch result repeats from each entry's own answer. Without the reason and
+# the facts it matched, "written": false was all a job saw of a refused fact, and it
+# had no way to supersede, confirm or drop it as told.
+_BATCH_ANSWER = (
+    "reason",
+    "duplicate_of",
+    "similar_to",
+    "merged_into",
+    "evidence_added",
+    "expires_at",
+    "equal_to",
+    "next",
+    "note",
+)
 
 
 def ledger_batch(c, path, now):
@@ -1484,7 +1913,7 @@ def ledger_batch(c, path, now):
                 "ok": True,
                 "id": (out.get("entry") or {}).get("id") if "entry" in out else None,
                 "written": out.get("written", True),
-                **({"note": out["note"]} if out.get("note") else {}),
+                **{k: out[k] for k in _BATCH_ANSWER if out.get(k)},
             }
         )
     if not entries:
@@ -1513,6 +1942,11 @@ def main():
         "--confirm-distinct",
         action="store_true",
         help="record even though a similar fact exists (it is a separate fact)",
+    )
+    f.add_argument(
+        "--lasting",
+        action="store_true",
+        help="keep it in view even though it mentions today, tomorrow or this week",
     )
     ae = s.add_parser(
         "add-evidence", help="another quote or observation for a known fact"
@@ -1550,7 +1984,15 @@ def main():
         "duplicate-facts",
         help="List likely duplicate facts for review; changes nothing",
     )
-    df.add_argument("--threshold", type=float, default=0.6)
+    df.add_argument("--threshold", type=float, default=SIMILAR_FACT)
+    td = s.add_parser(
+        "tidy",
+        help="Plan a one-time tidy of the facts ledger; changes nothing without --apply",
+    )
+    td.add_argument("--out", type=pathlib.Path, help="write the plan to this file")
+    td.add_argument(
+        "--apply", type=pathlib.Path, help="apply a plan file a person has read"
+    )
     w = s.add_parser("wonder")
     w.add_argument("--status", choices=["open", "asked", "answered", "dropped"])
     ph = s.add_parser("pref-history")
@@ -1580,6 +2022,7 @@ def main():
             weight=x.weight,
             confirm_distinct=x.confirm_distinct,
             user_memory=c,
+            lasting=x.lasting,
         )
     elif x.cmd == "add-evidence":
         out = add_evidence(c.human_dir, x.id, x.evidence, now)
@@ -1606,7 +2049,20 @@ def main():
     elif x.cmd == "decide-held":
         out = decide_held(c.human_dir, x.id, x.decision, now, c.human)
     elif x.cmd == "duplicate-facts":
-        out = duplicate_facts(c.human_dir, x.threshold)
+        out = duplicate_facts(c.human_dir, x.threshold, names=(c.human,))
+    elif x.cmd == "tidy":
+        if x.apply:
+            plan = json.loads(x.apply.read_text(encoding="utf-8"))
+            out = tidy_apply(c.human_dir, plan, now, c.human)
+        else:
+            plan = tidy_plan(c.human_dir, now, c.human)
+            if x.out:
+                atomic_write(
+                    x.out, json.dumps(plan, ensure_ascii=False, indent=2) + "\n"
+                )
+                out = {"plan": str(x.out), "counts": plan["counts"]}
+            else:
+                out = plan
     elif x.cmd == "wonder":
         out = {"questions": questions(c.life, x.status)}
     elif x.cmd == "pref-history":

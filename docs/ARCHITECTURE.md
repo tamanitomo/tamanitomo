@@ -38,6 +38,22 @@ accepted paraphrase is correct. Direct fact-writing callers must provide
 substantive evidence, but the low-level ledger writer cannot authenticate an
 arbitrary supplied quotation.
 
+A fact said again stays one fact. `record_fact` compares a new statement with
+the active facts by their content words: stemmed, without grammar or the
+people's names, and weighted so that a rare shared word counts for more than a
+common one. A near-identical restatement is added to the existing fact as
+evidence; a close one is refused with the fact it matched, so the writer can
+supersede it, confirm it is separate or drop it. A changed number, ordinal or
+qualifier, an opposite, a different symbol or a swapped name keeps two
+statements apart, while a detail only one of them adds does not. Batch results
+carry each refusal's reason and the facts it matched. A statement that is one
+day's news (today, tonight, tomorrow, this week) is written with `expires_at`
+and leaves the profile after the following day, or a week for "this week"; the
+row stays in the ledger, and `lasting` keeps a fact in view.
+`companion_self.py tidy` plans a one-time tidy of an older ledger -- facts
+recorded more than once, stale day news, quote-style facts to rewrite -- and
+applies it only after a person has read the plan.
+
 Retrieval may locate a useful candidate; it does not establish truth. Keeping
 the original quotation makes a memory inspectable and correctable instead of
 allowing an embedding match or an invented recollection to become authority.
@@ -52,7 +68,8 @@ original quotations without crossing that boundary.
 
 Ordinary chat can also retrieve a small, topic-matched callback without an explicit
 "remember" request. The deterministic selector requires conversational cues and
-meaningful word overlap, uses active facts and recent trusted messages, and has a
+meaningful word overlap (everyday words such as "working" or "fun" are not
+topics), uses active facts and recent trusted messages, and has a
 time/size budget. It avoids repeating the current turn and suppresses superseded
 facts; explicit historical recall labels retired claims as noncurrent. This is a
 conservative lexical aid, not semantic understanding. Every excerpt retains its

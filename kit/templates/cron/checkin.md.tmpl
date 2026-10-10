@@ -6,7 +6,7 @@ The daily reflection is the right place for the shape of a day. It is the wrong 
 
 So record what would be lost by morning, and nothing else:
 
-- A fact {{HUMAN}} gave you, with the evidence, as a `fact` entry.
+- A lasting fact {{HUMAN}} gave you, with the evidence, as a `fact` entry: something still true next month (a job, a person, a preference, a health condition, a plan). Today's errand, event or mood is not a fact; if it needs a follow-up it is a loop, and a statement that says today, tonight, tomorrow or this week is only kept briefly anyway.
 - Something {{SUBJ_H}} told you about how to work with {{OBJ_H}} — a `standing` entry through `{{NOTES_CMD}} add --file`.
 - Something that happened between you worth keeping: a nickname, a joke, a first — a `moment` entry.
 - A thread left hanging, as a loop through `{{LOOPS_CMD}} add --file`, with an honest `gentle_use` line.
@@ -23,7 +23,7 @@ For standing instructions or relationship moments, create a separate `{"entries"
 `{{NOTES_CMD}} add --file "<absolute path just written>"`.
 For a loop or caring callback (e.g. check on headache, appointment, project, how an event went), use `{"title":"...","detail":"...","gentle_use":"...","follow_up_after":"+3h"}` (or `this_evening`, `tomorrow_morning`, `+6h`, `+1d`) with
 `{{LOOPS_CMD}} add --file "<absolute path just written>"`.
-Check exit code 0 and `failed_at: null` for batches. Fix a reported failure before clearing the check-in;
+Check exit code 0 and `failed_at: null` for batches, then read each fact's result: `merged_into` means you already held it and the evidence was added there; `similar_to` means a close fact exists, so do what its `next` says; `expires_at` means it was kept as short-lived. Fix a reported failure before clearing the check-in;
 if one correction does not resolve it, report the error and leave the check-in pending for retry.
 
 If nothing durable happened, record nothing. Most conversations leave nothing behind and that is normal; inventing something to record is how a ledger fills up with noise and stops being worth reading.

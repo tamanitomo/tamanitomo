@@ -200,10 +200,21 @@ class RecallCallbacksTests(unittest.TestCase):
         self.assertIn("Cedar Labs", output)
         self.assertIn("Relative dates belong to the quoted message", output)
 
+    def test_an_everyday_word_alone_is_not_a_callback_topic(self):
+        # On the live stores most automatic callbacks matched only "working" or "fun".
+        for i in range(5):
+            self.say(f"Working on the release again, step {i}.", days=2 + i)
+        self.say("The projector in the church hall kept flickering.", days=5)
+        result = self.search("The projector is finally working.", implicit=True)
+        self.assertEqual(result["terms"], ["projector"])
+        excerpts = [r["excerpt"] for r in result["results"]]
+        self.assertTrue(any("projector" in e for e in excerpts), excerpts)
+        self.assertFalse(any("release again" in e for e in excerpts), excerpts)
+
     def test_a_shared_function_word_is_not_a_callback_topic(self):
         self.say("I went to the market with my sister.")
         query = "That was a fun day with the dog."
-        self.assertEqual(recall.implicit_terms(self.c, query), ["fun", "dog"])
+        self.assertEqual(recall.implicit_terms(self.c, query), ["dog"])
         self.assertEqual(self.search(query, implicit=True)["results"], [])
 
     def test_stale_future_and_undated_evidence_are_not_implicit_callbacks(self):

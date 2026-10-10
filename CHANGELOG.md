@@ -9,7 +9,22 @@
   and learned routines so explained time does not count as silence. A dated plan also
   pauses the closeness contact window; routines do not, so declaring them cannot inflate
   contact or cancel its target.
-- Function words such as "with" no longer bring up unrelated messages as recall topics.
+- Function words such as "with", and everyday words such as "working" and "fun", no
+  longer bring up unrelated messages as recall topics.
+- One fact said twice stays one fact (#2). A reworded repeat becomes evidence for the
+  fact it repeats, and a close one is returned with the fact it matched. Matching
+  ignores word endings, grammar and the people's names and weighs rare words more, so
+  "would consider opening a nursery" and "is considering opening a nursery" now meet,
+  and a detail only one statement capitalises ("IT-support") no longer reads as a
+  different name. Batch results now say why a fact was not written, which they never
+  did, so a refused fact can be superseded or confirmed as told.
+- One day's news no longer stays a fact: a statement that says today, tonight, tomorrow
+  or this week leaves the profile after the following day (a week for this week). The
+  ledger keeps it, and `lasting` keeps a fact in view. The check-in now asks for lasting
+  facts only.
+- `companion_self.py tidy` plans a one-time tidy of an older ledger -- facts recorded
+  more than once, stale day news, quote-style facts to rewrite -- and applies only a
+  plan that has been read. The weekly hygiene works through it ten rewrites at a time.
 - Resume the onboarding interview after refresh, keeping non-secret answers on this device
   for seven days. Recover interrupted creation by its operation before offering a retry.
   Stage new connection settings privately so creating another companion does not change

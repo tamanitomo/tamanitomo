@@ -35,11 +35,16 @@ MEMORY CHECK: Before adding compact memory, run `{{MEMORY_CMD}} archive --apply`
 
 7. FACTS CONSOLIDATION. What you know about {{HUMAN}} is the heart of this, and it must stay complete,
    not merely small. Run `{{SELF_CMD}} duplicate-facts`. For each pair that really is one fact worded
-   twice, record a single fuller statement with `{{SELF_CMD}} fact ... --supersedes <the older id>`
-   (the fuller wording, evidence from the quote that had more), and retract the leftover with
-   `{{SELF_CMD}} retract-fact`. A pair flagged as differing by a number, ordinal or negation is
-   probably two facts: leave both. Never merge two facts if either says something the merged one
-   would lose. Then read `{{SELF_CMD}} facts-index` and ask of each item: would forgetting this make
+   twice (one marked `same_fact` always is), record a single fuller statement with
+   `{{SELF_CMD}} fact ... --supersedes <the older id>` (the fuller wording, evidence from the quote that
+   had more), and retract the leftover with `{{SELF_CMD}} retract-fact`. A pair flagged "probably
+   distinct" is two facts: leave both. Never merge two facts if either says something the merged one
+   would lose. Facts from before facts were statements read `{{HUMAN}} said: "..."`. Run
+   `{{SELF_CMD}} tidy --out "<a new file under {{DATA}}/companion-life/.inputs/>"`; in that file, for up to
+   ten `rewrite` items, write the lasting part as a statement in `new_statement`, or change the action
+   to `retire` when nothing in it lasts. Then run `{{SELF_CMD}} tidy --apply "<that file>"`: its `merge`
+   and `expire` items apply as listed, and rewrites you left empty wait for next week.
+   Then read `{{SELF_CMD}} facts-index` and ask of each item: would forgetting this make
    {{HUMAN}} feel unknown? A disability, illness, allergy, loss, family member, pet, job, or a
    sensitive boundary should be core: `{{SELF_CMD}} weigh --id <id> --weight core`. Core facts are
    always kept in view; do not mark trivia core. Finish with `{{SELF_CMD}} facts-index --write`.
