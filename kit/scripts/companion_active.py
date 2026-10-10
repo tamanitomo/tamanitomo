@@ -9,6 +9,7 @@ Nothing here is authored: every line is read from a source that owns it.
   ## Active open loops    the open-loops ledger
   ## The thread           the relationship-thread sensor, if one is installed
   ## Ambient              the sensor files, if any
+  ## You already sent     the outbox's deliveries from the last day
   ## Queued               the outbox, if one is waiting
 
 A source that is missing produces no section at all. An absent sensor must never
@@ -135,6 +136,17 @@ def queued(c, now=None):
         return ""
 
 
+def sent(c, now=None):
+    """What she already sent in the last day, whether or not it reached the
+    conversation above."""
+    try:
+        import companion_outbox
+
+        return companion_outbox.render_sent(c, now)
+    except (OSError, ValueError, ImportError):
+        return ""
+
+
 def recent_conversation(c, now=None):
     """Recent chat exchange, conversational commitments, and user persuasion."""
     try:
@@ -242,6 +254,7 @@ def build(c, now=None):
         ("Recent photo / camera glimpse", recent_photo(c)),
         ("Today’s intended plan & laid-out clothes", intended_plan(c, now)),
         ("Recent conversation & commitments", recent_conversation(c, now)),
+        ("You already sent (last day)", sent(c, now)),
         ("Contextual feelings", feelings),
         ("Active open loops & caring callbacks", open_loops(c, now)),
         ("Asked for", waiting_missions(c, now)),

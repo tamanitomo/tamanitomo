@@ -587,3 +587,66 @@ def test_updater_process_observation_and_failed_drain_restore_paused_jobs(tmp_pa
         ["cron", "pause", "second"],
         ["cron", "resume", "first"],
     ]
+
+
+class SentRecentlyTests(unittest.TestCase):
+    """She knows what she sent even when the copy into her conversation failed."""
+
+    def setUp(self):
+        import companion_config as cc
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = pathlib.Path(self.tmp.name)
+        self.c = cc.Companion(
+            agent="Nova",
+            human="Robin",
+            hermes_root=root / "home",
+            vault=root / "vault",
+            timezone="UTC",
+        )
+        self.c.home.mkdir(parents=True)
+        self.c.life.mkdir(parents=True)
+        self.c.save()
+
+    def test_a_delivered_message_is_listed_and_an_old_one_is_not(self):
+        import companion_active as active
+        import companion_outbox as outbox
+
+        now = dt.datetime(2026, 10, 9, 22, 0, tzinfo=dt.timezone.utc)
+        rows = []
+        for ident, body, sent_at in (
+            ("old", "A photo from last week.", now - dt.timedelta(days=2)),
+            ("new", "The lake at dusk, just for you.", now - dt.timedelta(hours=3)),
+            ("waiting", "Still in the queue.", None),
+        ):
+            rows.append(
+                {
+                    "kind": "outbox",
+                    "id": ident,
+                    "content": "image",
+                    "body": body,
+                    "status": "queued",
+                    "priority": "normal",
+                    "queued_at": (now - dt.timedelta(days=3)).isoformat(),
+                }
+            )
+            if sent_at:
+                rows.append(
+                    {
+                        "kind": "outbox_update",
+                        "id": ident,
+                        "status": "sent",
+                        "at": sent_at.isoformat(),
+                    }
+                )
+        outbox.path_for(self.c).write_text(
+            "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8"
+        )
+        self.assertEqual(
+            outbox.render_sent(self.c, now),
+            "- Fri 19:00 image: The lake at dusk, just for you.",
+        )
+        page = active.build(self.c, now)
+        self.assertIn("## You already sent (last day)", page)
+        self.assertNotIn("A photo from last week", page)

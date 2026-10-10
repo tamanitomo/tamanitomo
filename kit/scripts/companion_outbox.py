@@ -330,6 +330,37 @@ def render(c, now=None):
     )
 
 
+def sent_recently(c, now=None, hours=24, limit=6):
+    """What she actually sent in the last day, oldest first, as (sent_at, entry).
+
+    A sent message is meant to be copied into her conversation too, and that copy can
+    fail; when it did, she had no record of a photo she had just sent and was surprised
+    by the reply to it. The ledger is the record that does not depend on the copy."""
+    tz = _tz(c)
+    now = now or dt.datetime.now(tz)
+    rows = []
+    for entry in fold(c):
+        if entry.get("status") != "sent":
+            continue
+        try:
+            at = dt.datetime.fromisoformat(entry.get("decided_at") or "")
+        except ValueError:
+            continue
+        at = at if at.tzinfo else at.replace(tzinfo=tz)
+        if dt.timedelta(0) <= now - at <= dt.timedelta(hours=hours):
+            rows.append((at, entry))
+    rows.sort(key=lambda row: row[0])
+    return rows[-limit:]
+
+
+def render_sent(c, now=None):
+    tz = _tz(c)
+    return "\n".join(
+        f"- {at.astimezone(tz):%a %H:%M} {e['content']}: {e['body'][:120]}"
+        for at, e in sent_recently(c, now)
+    )
+
+
 def batch(c, path, now=None):
     data = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
     if isinstance(data, dict) and "entries" in data:

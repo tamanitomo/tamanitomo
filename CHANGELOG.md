@@ -1,5 +1,8 @@
 ## Unreleased
 
+- She knows what she already sent. Her context lists the messages and photos delivered in
+  the last day, read from the outbox, because the copy of a sent message into her
+  conversation can fail and left her surprised by your reply to her own photo.
 - A damaged line in the time-away ledger is set aside and counted instead of switching off
   the companion's feelings, and the next record starts on a fresh line.
 - The model test in Settings → Models, the studio's Hermes image providers and image review,
