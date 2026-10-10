@@ -107,6 +107,22 @@ class SameFactTests(unittest.TestCase):
                 self.assertTrue(self.fact(one, root=root)["written"])
                 self.assertTrue(self.fact(two, root=root)["written"])
 
+    def test_the_companions_own_day_and_debugging_notes_are_not_facts_about_robin(self):
+        own = self.fact(
+            "Nova finished reading a novel about a lighthouse.", agent="Nova"
+        )
+        self.assertFalse(own["written"])
+        self.assertIn("about Nova", own["reason"])
+        note = self.fact(
+            "Robin's pulse error comes from companion_presence.py:101 rejecting the outfit."
+        )
+        self.assertFalse(note["written"])
+        self.assertIn("technical note", note["reason"])
+        self.assertTrue(
+            self.fact("Robin told Nova he loves her.", agent="Nova")["written"]
+        )
+        self.assertFalse((self.root / "facts.jsonl").read_text().count("Nova finished"))
+
     def test_a_batch_says_why_a_fact_was_not_written(self):
         c = cc.Companion(
             agent="Nova",
@@ -375,6 +391,16 @@ class TidyTests(unittest.TestCase):
             },
             out["skipped"],
         )
+
+    def test_the_companions_own_name_is_not_a_doubt(self):
+        self.ledger()
+        plan = self.plan()
+        item = next(i for i in plan["items"] if i.get("id") == "fact-pay")
+        item["new_statement"] = "Robin told Nova he makes 48k after a $3k raise."
+        doubted = slf.tidy_apply(self.root, {"items": [item]}, self.NOW, "Robin")
+        self.assertIn("Nova", doubted["skipped"][0]["why"])
+        named = slf.tidy_apply(self.root, {"items": [item]}, self.NOW, "Robin", "Nova")
+        self.assertEqual(named["applied"], 1)
 
     def test_a_doubtful_rewrite_waits_until_a_person_marks_it_reviewed(self):
         self.ledger()

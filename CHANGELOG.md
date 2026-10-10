@@ -22,6 +22,8 @@
   or this week leaves the profile after the following day (a week for this week). The
   ledger keeps it, and `lasting` keeps a fact in view. The check-in now asks for lasting
   facts only.
+- A statement about the companion's own day, or a technical note citing a file, is no
+  longer recorded as a fact about the person; the answer says where it belongs.
 - `companion_self.py tidy` plans a one-time tidy of an older ledger -- facts recorded
   more than once, stale day news, quote-style facts to rewrite -- and applies only a
   plan that has been read. The weekly hygiene works through it ten rewrites at a time.

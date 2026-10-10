@@ -258,6 +258,7 @@ def record_fact(
     confirm_distinct=False,
     user_memory=None,
     lasting=False,
+    agent="",
 ):
     """Append one fact.
 
@@ -294,6 +295,8 @@ def record_fact(
         raise ValueError(f"weight must be one of {WEIGHTS}")
     statement = _text(statement, 400, "statement")
     evidence = _text(evidence, 600, "evidence")
+    if misfiled := _not_about_the_human(statement, agent, human):
+        return misfiled
     if user_memory is not None and not supersedes:
         known = known_in_user_memory(user_memory, statement)
         if known:
@@ -404,6 +407,31 @@ def record_fact(
     if notes:
         out["note"] = " ".join(notes)
     return out
+
+
+# A file or a source line in a statement is a note about software, not the person.
+_TECHNICAL = re.compile(
+    r"\b[\w./-]+\.(?:py|js|ts|json|jsonl|ya?ml|toml|md|sh|service)(?::\d+)?\b"
+)
+
+
+def _not_about_the_human(statement, agent, human):
+    """A refusal for a statement that is not a fact about the human, or None. Both
+    kinds were in real ledgers: the companion's own day ("Nova finished reading a
+    novel") and a debugging note citing companion_presence.py:101."""
+    if agent and re.match(rf"\s*{re.escape(agent)}(?:'s)?\b", statement, re.I):
+        return {
+            "written": False,
+            "reason": f"this is about {agent}, not {human}",
+            "next": "Keep your own day in your journal or preferences; facts are about the person.",
+        }
+    if _TECHNICAL.search(statement):
+        return {
+            "written": False,
+            "reason": "this reads as a technical note, not a fact about the person",
+            "next": "Keep notes about software in the vault; record only what it says about them, in their terms.",
+        }
+    return None
 
 
 def _similar_refusal(near):
@@ -1680,10 +1708,11 @@ def tidy_plan(root, now, human="the human"):
     }
 
 
-def tidy_apply(root, plan, now, human="the human"):
+def tidy_apply(root, plan, now, human="the human", agent=""):
     """Apply a tidy_plan a person has read. An item whose facts changed since the plan
     was made is skipped and reported, never forced. A rewrite whose statement the
-    paraphrase screen doubts is skipped unless the item says `"reviewed": true`."""
+    paraphrase screen doubts is skipped unless the item says `"reviewed": true`; the
+    human's and the companion's own names are not doubts."""
     items = plan.get("items") if isinstance(plan, dict) else None
     if not isinstance(items, list):
         raise ValueError('a tidy plan holds {"items": [...]}')
@@ -1736,7 +1765,7 @@ def tidy_apply(root, plan, now, human="the human"):
                 )
                 continue
             quote = re.sub(r"^\S+:\s", "", f.get("evidence") or "", count=1)
-            doubts = paraphrase_concerns(statement, quote, (human,))
+            doubts = paraphrase_concerns(statement, quote, (human, agent))
             if doubts and item.get("reviewed") is not True:
                 skipped.append({"id": fid, "action": action, "why": "; ".join(doubts)})
                 continue
@@ -1753,6 +1782,7 @@ def tidy_apply(root, plan, now, human="the human"):
                 statement_origin="model_paraphrase",
                 weight=f.get("weight", ""),
                 lasting=bool(item.get("lasting")),
+                agent=agent,
             )
             if not out.get("written"):
                 skipped.append(
@@ -1834,6 +1864,7 @@ def _apply(c, entry, now):
             confirm_distinct=bool(entry.get("confirm_distinct")),
             user_memory=c,
             lasting=bool(entry.get("lasting")),
+            agent=c.agent,
         )
         if note:
             out = {**out, "note": " ".join(x for x in (out.get("note"), note) if x)}
@@ -2023,6 +2054,7 @@ def main():
             confirm_distinct=x.confirm_distinct,
             user_memory=c,
             lasting=x.lasting,
+            agent=c.agent,
         )
     elif x.cmd == "add-evidence":
         out = add_evidence(c.human_dir, x.id, x.evidence, now)
@@ -2053,7 +2085,7 @@ def main():
     elif x.cmd == "tidy":
         if x.apply:
             plan = json.loads(x.apply.read_text(encoding="utf-8"))
-            out = tidy_apply(c.human_dir, plan, now, c.human)
+            out = tidy_apply(c.human_dir, plan, now, c.human, c.agent)
         else:
             plan = tidy_plan(c.human_dir, now, c.human)
             if x.out:
