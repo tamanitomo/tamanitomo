@@ -32,8 +32,10 @@ def instructions(c):
         f'{_command(c, "companion_canon.py")} add --topic T --statement S --evidence "where you said it". '
         "A topic you have already covered is refused until you say whether it revises (--supersedes ID) "
         "or adds to (--also) what you said.",
-        "When you describe a place in real detail, record it once: "
-        f'{_command(c, "companion_places.py")} add --name N --description D --detail X. '
+        "Where you are is part of every presence update: when you move, say which place "
+        '("place": "home" with "room", a place id from your places, or "out"), and the first '
+        'time you go somewhere describe it with "new_place" (or '
+        f'{_command(c, "companion_places.py")} add --name N --description D). '
         "Later visits must match it; add new detail with the detail command instead of rewriting it.",
     ]
     if not home:
@@ -89,14 +91,29 @@ def chat_parts(c, relationship_budget, compact=False):
     return parts, suppressed
 
 
+HOME_MISSING = (
+    "[Your home is not on record yet, so it can drift from one day to the next. Describe it "
+    "once, in the next presence update you write: add "
+    '"home": {"description": "what kind of home it is and where", "rooms": ["Kitchen=what it is '
+    'like", "Bedroom=...", ...]} and "room" for the room you are in. Decide it from what you '
+    "already know of your life; after that every room and every move is kept.]"
+)
+
+
 def scheduled(c, limit=1500):
     """Places only, for the scheduled runs that choose where she is and what she does."""
     if not c.has_inner_life:
         return ""
     shown = places.render(c, limit)
-    if not shown:
-        return ""
-    return (
-        "[Places in your life, as first described. Where you go must match them; add detail with "
-        "companion_places.py detail rather than contradict]\n" + shown
+    block = (
+        (
+            "[Places in your life, as first described, with their ids. Where you go must match "
+            'them; when you move, say which with "place" ("out" when you are out and about); add '
+            "detail with companion_places.py detail rather than contradict]\n" + shown
+        )
+        if shown
+        else ""
     )
+    if not places.home(c):
+        block = HOME_MISSING + ("\n" + block if block else "")
+    return block

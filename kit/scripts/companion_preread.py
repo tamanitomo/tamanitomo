@@ -73,14 +73,14 @@ def preread(c, now=None):
             "[For a presence update, these are the current record token and worn wardrobe IDs; "
             "do not substitute clothing descriptions for IDs:]"
         )
-        out.append(
-            json.dumps(
-                {
-                    "previous_id": scene["id"],
-                    "outfit": [item["id"] for item in scene["state"].get("outfit", [])],
-                }
-            )
-        )
+        ids = {
+            "previous_id": scene["id"],
+            "outfit": [item["id"] for item in scene["state"].get("outfit", [])],
+        }
+        for key in ("place", "room"):
+            if scene["state"].get(key):
+                ids[key] = scene["state"][key]
+        out.append(json.dumps(ids))
     if scene and not scene["state"].get("confirmed", True):
         anchor = companion_presence.last_confirmed(c)
         when = anchor["recorded_at"][11:16] if anchor else "unknown"

@@ -196,6 +196,182 @@ def add_room(c, spec, now):
     return out
 
 
+# Out and about with nowhere in particular to be: a walk, the streets, a bus.
+# Not a place in the ledger, and never needs describing.
+OUT_ID = "out"
+
+
+def _named(rows, name):
+    want = re.sub(r"\s+", " ", str(name or "")).strip().casefold()
+    return next((r for r in rows if r["name"].casefold() == want), None)
+
+
+def resolve(c, data, previous, location):
+    """Where a presence record is, as code-owned fields, and what must be written.
+
+    Returns ({"place": id, "room": name} or {}, writes). Nothing is written here,
+    so a dry-run check can call it; `record_writes` applies the writes when the
+    state itself is recorded.
+
+    `place` is hers to say, like `setting` and `asleep`: the location is prose and
+    was spelled eight ways for one kitchen, so nothing is ever read out of it.
+    Once her home is on record, a record that moves somewhere has to say which
+    place it is; staying put carries the place forward.
+    """
+    rows = places(c)
+    known = {p["id"]: p for p in rows}
+    home_row = known.get(HOME_ID)
+    writes = []
+    if data.get("home") is not None:
+        if home_row:
+            raise ValueError(
+                'your home is already described; give "room" for a room of it, or add '
+                "what is new with companion_places.py detail"
+            )
+        spec = data["home"]
+        if not isinstance(spec, dict):
+            raise ValueError(
+                'home must be {"description": ..., "rooms": ["Kitchen=what it is like", ...]}'
+            )
+        entry = {
+            "home": True,
+            "name": _text(spec.get("name") or "Home", 80, "home name"),
+            "description": _text(spec.get("description"), 700, "home description"),
+            "rooms": [_room(r) for r in (spec.get("rooms") or [])][:MAX_ROOMS],
+            "details": [_text(d, 200, "detail") for d in (spec.get("details") or [])],
+        }
+        if not entry["rooms"]:
+            raise ValueError("describe your home with its rooms: at least one room")
+        writes.append(("place", entry))
+        home_row = {**entry, "id": HOME_ID}
+    place = data.get("place")
+    room = data.get("room")
+    new = data.get("new_place")
+    if new is not None:
+        if place not in (None, ""):
+            raise ValueError('give "place" or "new_place", not both')
+        if not isinstance(new, dict):
+            raise ValueError('new_place must be {"name": ..., "description": ...}')
+        name = _text(new.get("name"), 80, "new_place name")
+        same = _named(rows, name)
+        if same:
+            place = same["id"]
+        else:
+            details = new.get("details") or (
+                [new["detail"]] if new.get("detail") else []
+            )
+            entry = {
+                "name": name,
+                "description": _text(
+                    new.get("description"), 700, "new_place description"
+                ),
+                "details": [_text(d, 200, "detail") for d in details][:MAX_DETAILS],
+            }
+            writes.append(("place", entry))
+            place = slug(name)
+            known[place] = {**entry, "id": place}
+    if place in (None, "") and (room not in (None, "") or data.get("home") is not None):
+        place = HOME_ID  # only her home has rooms, and describing it is being in it
+    before = (previous or {}).get("state") or {}
+    moved = not previous or before.get("location") != location
+    if place in (None, ""):
+        if not moved and before.get("place"):
+            carried = {"place": before["place"]}
+            if before.get("room"):
+                carried["room"] = before["room"]
+            return carried, writes
+        if moved and home_row and previous:
+            raise ValueError(_where_message(rows, home_row, before, location))
+        return {}, writes
+    if not isinstance(place, str) or len(place) > 80:
+        raise ValueError("place must be the id of a place, as text")
+    if place == OUT_ID:
+        if room not in (None, ""):
+            raise ValueError("rooms belong to your home, not to being out")
+        return {"place": OUT_ID}, writes
+    if place == HOME_ID:
+        if not home_row:
+            raise ValueError(
+                'your home is not on record yet: describe it once by adding "home": '
+                '{"description": "...", "rooms": ["Kitchen=what it is like", ...]} to this '
+                "record, then say the room you are in"
+            )
+        out = {"place": HOME_ID}
+        if room not in (None, ""):
+            spec = _room(str(room) if not isinstance(room, dict) else room)
+            on_plan = next(
+                (
+                    r
+                    for r in home_row.get("rooms", [])
+                    if r["name"].casefold() == spec["name"].casefold()
+                ),
+                None,
+            )
+            if not on_plan:
+                writes.append(("room", spec))
+            out["room"] = on_plan["name"] if on_plan else spec["name"]
+        return out, writes
+    if place not in known:
+        raise ValueError(
+            f"no place {place!r} on record. "
+            + _where_message(rows, home_row, before, location, moved=False)
+        )
+    if room not in (None, ""):
+        raise ValueError(
+            "rooms belong to your home; record a part of another place as a detail"
+        )
+    return {"place": place}, writes
+
+
+def _where_message(rows, home_row, before, location, moved=True):
+    venues = [p for p in rows if p["id"] != HOME_ID]
+    rooms = (
+        ", ".join(r["name"] for r in (home_row or {}).get("rooms", [])) or "none yet"
+    )
+    lines = []
+    if moved:
+        lines.append(
+            f"you moved (\"{before.get('location', '')}\" -> \"{location}\"): say where you are."
+        )
+    lines.append(
+        f'At home: "place": "home" with "room" (your rooms: {rooms}; a new room is added).'
+    )
+    if venues:
+        lines.append(
+            "A place you have been: "
+            + "; ".join(f'"{p["id"]}" ({p["name"]})' for p in venues[-12:])
+            + "."
+        )
+    lines.append(
+        'Somewhere new, the first time: "new_place": {"name": ..., "description": ...}. '
+        'Out and about with nowhere in particular to be: "place": "out".'
+    )
+    return " ".join(lines)
+
+
+def record_writes(c, writes, now):
+    """Apply what `resolve` decided, in order. A place already there is left as it was."""
+    for kind, payload in writes:
+        if kind == "place":
+            add(c, payload, now)
+        elif kind == "room":
+            add_room(c, payload, now)
+
+
+def name_of(c, place, room=""):
+    """'the kitchen at home', 'Larkin's Books', or '' -- for anything that shows where."""
+    if not place:
+        return ""
+    if place == OUT_ID:
+        return "out and about"
+    found = next((p for p in places(c) if p["id"] == place), None)
+    if not found:
+        return ""
+    if place == HOME_ID:
+        return f"{room} at home" if room else "home"
+    return found["name"]
+
+
 def render(c, limit=1800):
     rows = places(c)
     if not rows:
@@ -203,7 +379,7 @@ def render(c, limit=1800):
     lines = []
     for p in rows:
         head = (
-            f"{p['name']}"
+            f"[{p['id']}] {p['name']}"
             + (" (your home)" if p["id"] == HOME_ID else "")
             + f": {p['description']}"
         )

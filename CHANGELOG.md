@@ -14,6 +14,13 @@
   said, twice a day on a bad week. The app shows problems (the banner and Settings →
   Diagnostics, which has a switch to send them to the chat as before), and `alerts_webhook`
   sends them to a phone push service or an ntfy topic.
+- Where she is is hers to say, as a field: `place` (`home` with a `room`, a place she has
+  been, or `out`), carried while she stays put. The first visit somewhere describes it
+  (`new_place`), and her home is described once with its rooms (`home`); every scheduled run
+  asks for that until it is done. After that a move that does not say where is refused
+  with her rooms and places listed. One live kitchen had been written eight ways, and
+  places were only ever recorded from chat, so neither companion had a single one.
+  Pictures of a place carry how she described it.
 
 ## 3.8.0 — Meters that move a day at a time, stages that unlock, and her own needs (2026-10-11)
 

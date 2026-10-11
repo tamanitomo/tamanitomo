@@ -114,6 +114,40 @@ def identity_block(c, use_override=True):
 OWN_BOX = {"lighting": "lighting", "framing": "camera"}
 
 
+def place_look(c, state, limit=160):
+    """How the place looks, as she first described it, so the shop or the room she
+    goes back to is the same shop and the same room in every picture. '' when the
+    record names no place, or one with nothing to show (her home as a whole, out)."""
+    ident = state.get("place")
+    if not ident:
+        return ""
+    try:
+        import companion_places as places
+
+        found = next((p for p in places.places(c) if p["id"] == ident), None)
+    except (OSError, ValueError):
+        return ""
+    if not found:
+        return ""
+    if ident == places.HOME_ID:
+        room = next(
+            (
+                r
+                for r in found.get("rooms", [])
+                if r["name"].casefold() == str(state.get("room", "")).casefold()
+            ),
+            None,
+        )
+        if not (room and room.get("description")):
+            return ""
+        look = f"the {room['name'].lower()}: {room['description']}"
+    else:
+        look = f"{found['name']}: {found['description']}"
+    if len(look) <= limit:
+        return look
+    return look[:limit].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+
+
 def scene_block(c, record=None):
     """Where she is and what she is doing. Only that.
 
@@ -136,7 +170,7 @@ def scene_block(c, record=None):
     ):
         place = "in " + place
     visual = state.get("visual") or {}
-    parts = [state.get("activity", ""), place]
+    parts = [state.get("activity", ""), place, place_look(c, state)]
     parts.extend(
         f"{key}: {value}"
         for key, value in visual.items()

@@ -692,7 +692,7 @@ class PlacesTests(unittest.TestCase):
         self.assertIn("**Kitchen**", text)
         self.assertIn("Smells of chalk", text)
         self.assertIn("Editing this file changes nothing", text)
-        self.assertTrue(places.render(self.c).startswith("- Home (your home)"))
+        self.assertTrue(places.render(self.c).startswith("- [home] Home (your home)"))
 
 
 class StoryInContextTests(unittest.TestCase):
@@ -762,11 +762,18 @@ class StoryInContextTests(unittest.TestCase):
         self.assertNotIn("has not written back", context.build(self.c, now=self.now))
 
     def test_a_scheduled_run_sees_her_places_but_not_her_tool_instructions(self):
-        self.assertEqual(story.scheduled(self.c), "")
+        self.assertEqual(story.scheduled(self.c), story.HOME_MISSING)
         places.add(self.c, {"name": "Gym", "description": "Basement gym."}, self.now)
         block = story.scheduled(self.c)
         self.assertIn("Basement gym.", block)
+        self.assertIn("[place-gym-", block)
         self.assertNotIn("set-home", block)
+        places.add(
+            self.c,
+            {"home": True, "description": "A flat.", "rooms": ["Kitchen=small"]},
+            self.now,
+        )
+        self.assertNotIn("not on record", story.scheduled(self.c))
 
     def test_a_small_window_says_what_it_left_out_instead_of_dropping_it_silently(self):
         small = companion(
@@ -778,3 +785,166 @@ class StoryInContextTests(unittest.TestCase):
         text = context.build(small, now=self.now)
         self.assertIn("your places and history", text)
         self.assertNotIn("Keeping your story straight", text)
+
+
+class PlaceInPresenceTests(unittest.TestCase):
+    """Where she is, as a field she sets, so one kitchen is one kitchen."""
+
+    def setUp(self):
+        import companion_presence as presence
+
+        self.presence = presence
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.c = companion(self.tmp.name)
+        presence.update_wardrobe(
+            self.c, [{"id": "jeans", "description": "blue jeans", "use": "day"}]
+        )
+        self.now = at(5, 9)
+        self.step = 0
+
+    def write(self, location, **extra):
+        self.step += 1
+        current = self.presence.current(self.c)
+        record = {
+            "previous_id": current["id"] if current else None,
+            "outfit": ["jeans"],
+            "location": location,
+            "activity": f"something {self.step}",
+            "mood": "fine",
+            "care": [],
+            "transition": "walked over" if current else "",
+            "text": "An ordinary moment.",
+            **extra,
+        }
+        when = self.now + dt.timedelta(minutes=20 * self.step)
+        self.presence.update(self.c, record, when)
+        return self.presence.current(self.c)["state"]
+
+    def describe_home(self):
+        return self.write(
+            "home, kitchen",
+            home={
+                "description": "A small flat over a bakery.",
+                "rooms": ["Kitchen=narrow, yellow tiles", "Bedroom=a skylight"],
+            },
+            room="kitchen",
+        )
+
+    def test_before_her_home_is_on_record_nothing_is_refused(self):
+        self.write("the kitchen")
+        state = self.write("the park")
+        self.assertNotIn("place", state)
+
+    def test_describing_her_home_records_it_and_puts_her_in_a_room(self):
+        state = self.describe_home()
+        self.assertEqual((state["place"], state["room"]), ("home", "Kitchen"))
+        home = places.home(self.c)
+        self.assertEqual([r["name"] for r in home["rooms"]], ["Kitchen", "Bedroom"])
+
+    def test_once_home_is_on_record_a_move_must_say_where(self):
+        self.describe_home()
+        with self.assertRaisesRegex(ValueError, "say where you are") as raised:
+            self.write("the bedroom")
+        self.assertIn("Kitchen, Bedroom", str(raised.exception))
+        state = self.write("the bedroom", room="Bedroom")
+        self.assertEqual((state["place"], state["room"]), ("home", "Bedroom"))
+
+    def test_staying_put_carries_the_place(self):
+        self.describe_home()
+        state = self.write("home, kitchen")
+        self.assertEqual((state["place"], state["room"]), ("home", "Kitchen"))
+
+    def test_a_new_room_joins_the_floor_plan(self):
+        self.describe_home()
+        state = self.write("the little study", place="home", room="Study")
+        self.assertEqual(state["room"], "Study")
+        self.assertIn("Study", [r["name"] for r in places.home(self.c)["rooms"]])
+
+    def test_somewhere_new_is_described_once_and_visited_by_id(self):
+        self.describe_home()
+        state = self.write(
+            "Larkin's Books on the high street",
+            new_place={"name": "Larkin's Books", "description": "Two narrow floors."},
+        )
+        shop = state["place"]
+        self.assertTrue(shop.startswith("place-larkin-s-books-"))
+        self.write("home, kitchen", room="Kitchen")
+        self.assertEqual(self.write("the bookshop", place=shop)["place"], shop)
+        again = self.write(
+            "the bookshop again",
+            new_place={"name": "larkin's books", "description": "Different words."},
+        )
+        self.assertEqual(again["place"], shop)
+        self.assertEqual(len(places.places(self.c)), 2)
+
+    def test_what_cannot_be_is_refused_with_the_choices(self):
+        self.describe_home()
+        with self.assertRaisesRegex(ValueError, "no place 'place-nowhere'"):
+            self.write("somewhere", place="place-nowhere")
+        places.add(self.c, {"name": "Gym", "description": "Basement."}, self.now)
+        gym = places.places(self.c)[-1]["id"]
+        with self.assertRaisesRegex(ValueError, "rooms belong to your home"):
+            self.write("the gym pool", place=gym, room="Pool")
+
+    def test_out_and_about_needs_no_description(self):
+        self.describe_home()
+        self.assertEqual(
+            self.write("walking by the river", place="out")["place"], "out"
+        )
+
+    def test_a_check_writes_no_places(self):
+        current = self.presence.current(self.c)
+        self.presence.check(
+            self.c,
+            {
+                "previous_id": current["id"] if current else None,
+                "outfit": ["jeans"],
+                "location": "home",
+                "activity": "a check",
+                "mood": "fine",
+                "care": [],
+                "transition": "",
+                "text": "x",
+                "home": {"description": "A flat.", "rooms": ["Kitchen=small"]},
+            },
+            self.now,
+        )
+        self.assertIsNone(places.home(self.c))
+
+    def test_the_short_form_says_where_too(self):
+        self.describe_home()
+        state = self.presence.transition_scene(
+            self.c,
+            "browsing",
+            "walked to the market",
+            "Stalls everywhere.",
+            location="the Saturday market",
+            new_place={"name": "Saturday market", "description": "Stalls on a lot."},
+            now=self.now + dt.timedelta(hours=3),
+        )
+        self.assertTrue(state["written"] is not False)
+        here = self.presence.current(self.c)["state"]
+        self.assertTrue(here["place"].startswith("place-saturday-market-"))
+        with self.assertRaisesRegex(ValueError, "say where you are"):
+            self.presence.transition_scene(
+                self.c,
+                "heading home",
+                "walked back",
+                "Tired feet.",
+                location="the walk home",
+                now=self.now + dt.timedelta(hours=4),
+            )
+
+    def test_a_picture_of_a_place_looks_like_the_place(self):
+        import companion_portrait as portrait
+
+        self.describe_home()
+        scene, _ = portrait.scene_block(self.c)
+        self.assertIn("the kitchen: narrow, yellow tiles", scene)
+        self.write(
+            "Larkin's Books",
+            new_place={"name": "Larkin's Books", "description": "Two narrow floors."},
+        )
+        scene, _ = portrait.scene_block(self.c)
+        self.assertIn("Larkin's Books: Two narrow floors.", scene)

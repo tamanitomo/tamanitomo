@@ -669,6 +669,14 @@ def update(c, data, now=None, dry_run=False):
             parent = next(
                 (row for row in events(c) if row["id"] == data["previous_id"]), None
             )
+        # Which place she is in: hers to say, carried while she stays put (see
+        # companion_places.resolve). Writes wait for the record itself.
+        import companion_places
+
+        where, place_writes = companion_places.resolve(
+            c, data, parent, state["location"]
+        )
+        state.update(where)
         legacy_retry = (
             previous
             and previous["id"] == ident
@@ -763,6 +771,7 @@ def update(c, data, now=None, dry_run=False):
         # Everything above is validation; this is the only line that writes.
         if dry_run:
             return {"written": False, "valid": True}
+        companion_places.record_writes(c, place_writes, now)
         result = record(
             c.life,
             narrative,
@@ -815,6 +824,9 @@ def _carried_record(c):
     }
     if st.get("setting"):
         rec["setting"] = st["setting"]
+    for key in ("place", "room"):
+        if st.get(key):
+            rec[key] = st[key]
     if "private" in st:
         rec["private"] = st["private"]
     for key in ("duration_minutes", "next"):
@@ -906,6 +918,9 @@ def transition_scene(
     decision="",
     setting="",
     now=None,
+    place="",
+    room="",
+    new_place=None,
 ):
     """A real change. Only what changed is named; `update` still applies every rule."""
     now = now or dt.datetime.now(ZoneInfo(c.timezone))
@@ -923,8 +938,18 @@ def transition_scene(
     rec.pop("duration_minutes", None)
     rec.pop("visual", None)
     rec.pop("private", None)
+    if location and location != rec.get("location"):
+        # Somewhere else: the old place is about the old location.
+        rec.pop("place", None)
+        rec.pop("room", None)
     if location:
         rec["location"] = location
+    if place:
+        rec["place"] = place
+    if room:
+        rec["room"] = room
+    if new_place:
+        rec["new_place"] = new_place
     if outfit is not None:
         rec["outfit"] = outfit
     if mood:
@@ -1147,6 +1172,18 @@ def main():
     tr.add_argument("--setting", choices=SETTINGS)
     tr.add_argument("--anchor", default="")
     tr.add_argument("--decision", choices=("", "follow", "defer"), default="")
+    tr.add_argument(
+        "--place",
+        default="",
+        help='where you are: "home", "out", or a place id from your places',
+    )
+    tr.add_argument("--room", default="", help="the room, when the place is home")
+    tr.add_argument(
+        "--new-place",
+        default="",
+        help="somewhere you have not been before, by name (with --place-description)",
+    )
+    tr.add_argument("--place-description", default="")
     for name in ("update", "wardrobe"):
         p = sub.add_parser(name)
         p.add_argument("--file", type=pathlib.Path, required=True)
@@ -1184,6 +1221,13 @@ def main():
             args.anchor,
             args.decision,
             args.setting,
+            place=args.place,
+            room=args.room,
+            new_place=(
+                {"name": args.new_place, "description": args.place_description}
+                if args.new_place
+                else None
+            ),
         )
     else:
         data = json.loads(args.file.read_text(encoding="utf-8"))

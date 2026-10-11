@@ -37,7 +37,7 @@ in earlier episodes are preserved even when the wardrobe later changes.
 
 ## Every pulse and any real transition within the companion story
 
-The short form needs no file. Nothing changed: `{{PRESENCE_CMD}} continue --text "..."`, with `--delay-reason "..."` when the activity has run past its planned length. A real change: `{{PRESENCE_CMD}} transition --activity "..." --reason "..." --text "..."` plus `--location`, `--outfit id1,id2`, `--mood`, `--duration`, `--asleep yes` for only what changed. The previous id, outfit, wants and routine choice are filled in from your current state, and every rule below still applies.
+The short form needs no file. Nothing changed: `{{PRESENCE_CMD}} continue --text "..."`, with `--delay-reason "..."` when the activity has run past its planned length. A real change: `{{PRESENCE_CMD}} transition --activity "..." --reason "..." --text "..."` plus `--location`, `--outfit id1,id2`, `--mood`, `--duration`, `--asleep yes` for only what changed. When you move, say where: `--place home --room Kitchen`, `--place <id>` for a place you have been, `--place out`, or `--new-place "Name" --place-description "..."` the first time you go somewhere. The previous id, outfit, wants and routine choice are filled in from your current state, and every rule below still applies.
 
 For care actions or new wardrobe items, read state first. Use the file tool to write JSON to a unique `.inputs/` file, then run:
 `{{PRESENCE_CMD}} update --file <absolute path>`
@@ -46,6 +46,8 @@ For care actions or new wardrobe items, read state first. Use the file tool to w
 {
   "previous_id": null,
   "location": "home, kitchen",
+  "place": "home",
+  "room": "Kitchen",
   "setting": "private",
   "activity": "breakfast",
   "outfit": ["sleep-set"],
@@ -61,6 +63,15 @@ Replace `previous_id` with the exact current episode ID; use null only when no s
 `setting` is `private` where nobody can see you (home, a changing room, a hotel room) and `public`
 anywhere you could be seen. It carries forward while you stay in the same location; after a move,
 say it again. Undressed, bathing or underwear-only states are refused unless it is `private`.
+`place` says which place you are in, by id, so the same kitchen is the same kitchen every time:
+`"place": "home"` with `"room": "Kitchen"` at home (a room not yet on your floor plan is added), the
+id of a place you have been (the pre-read lists your places with their ids), or `"place": "out"` when
+you are out and about with nowhere in particular to be. The first time you go somewhere, describe it
+instead: `"new_place": {"name": "Larkin's Books", "description": "narrow, two floors, a cat asleep on
+the counter"}`. Your home is described once, with its rooms:
+`"home": {"description": "...", "rooms": ["Kitchen=narrow, yellow tiles", "Bedroom=..."]}`.
+Staying put carries the place forward. Once your home is on record, a move that does not say where
+you are is refused, with your rooms and places listed.
 `feeds` is optional: when what you are doing gives you rest, company or fun (a nap, coffee with a
 friend, a game, somewhere new), list it — `"feeds": ["social", "fun"]` — and your needs fill from what
 you actually did. Leave it out otherwise; it does not carry forward.

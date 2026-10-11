@@ -58,6 +58,20 @@ def schema(wardrobe, care_enabled=False, themes=None):
     # Code-owned facts about the moment, stated rather than read out of the prose.
     fields["setting"] = {"type": "string", "enum": ["private", "public"]}
     fields["private"] = {"type": "boolean"}
+    # Which place, by id ("" when she stays where she is), and somewhere new by name.
+    fields["place"] = {"type": "string", "maxLength": 80}
+    fields["room"] = {"type": "string", "maxLength": 60}
+    fields["new_place"] = {
+        "anyOf": [
+            {
+                "type": "object",
+                "properties": {"name": text(80), "description": text(700)},
+                "required": ["name", "description"],
+                "additionalProperties": False,
+            },
+            {"type": "null"},
+        ]
+    }
     fields.update(day.schema_fields())
     # Tomorrow is stated, never inferred. The theme is an enum of the day-shapes
     # this companion actually has, so the only themes she can pick are ones that
@@ -249,8 +263,16 @@ def pulse(
         "examples in the personality. Clothing can change for a believable reason. "
         'setting is "private" where nobody can see you (home, a changing room) and "public" '
         "anywhere you could be seen. private is true only for a moment you would not want "
-        "photographed at all."
+        "photographed at all. "
+        'place is "" while you stay where you are. When you move it says where: "home" with '
+        'room, the id of one of your places, or "out" when you are out and about; somewhere '
+        'you have never been is place "" with new_place {name, description}.'
     )
+    import companion_story
+
+    where = companion_story.scheduled(c)
+    if where:
+        system += "\n" + where
     system += "\n" + day.GUIDANCE
     if phase == "morning":
         system += " This is the morning checkpoint: reflect waking, rest and the start of the day. If already awake, continue coherently; do not rewind to bed."

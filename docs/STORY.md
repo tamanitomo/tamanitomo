@@ -32,6 +32,8 @@ Her history is hers to invent and then it is fixed. Each statement has a topic. 
 
 Her home has a floor plan: a description and rooms (`set-home --room "Kitchen=yellow tile"`). Until she has recorded it she is told so, and told not to describe the inside of her home in detail. Any other place (the gym, the corner bookstore) is recorded the first time she describes it in detail, and later visits add details instead of rewriting it. `companion-life/places.md` is a readable copy rendered from `places.jsonl`; editing it changes nothing. Scheduled runs that choose where she is see the same places.
 
+Where she is is a field on every presence record, set by her, never read out of the location's wording: `place` is `home` (with `room`), the id of a place she has been, or `out` when she is out and about with nowhere in particular to be. The first time she goes somewhere she describes it with `new_place` in the same record, and her home is described once with `home` (a description and its rooms). Staying put carries the place forward. Until her home is on record, every scheduled run asks her to describe it; once it is, a record that moves somewhere without saying which place is refused with her rooms and places listed, so one kitchen stops being written eight ways. A room not yet on the floor plan is added when she names it. Pictures of a place carry how she described it, so the shop she goes back to looks like the same shop.
+
 ## Moments
 
 The relationship ledger (`companion_notes.py moment ...`) records jokes, nicknames, rituals, firsts and milestones with the words or occasion they came from (`--evidence`). Rituals can recur, as above.
