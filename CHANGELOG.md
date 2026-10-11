@@ -17,6 +17,10 @@
 - The meters keep their own daily record (`meters.json`), kept by a new no-model **meters** job every
   15 minutes; reading them anywhere else writes nothing. Each day's contact is kept as first seen,
   so conversations Hermes deletes later never lower closeness or trust. Repair adds the job.
+- Home and Us say what is moving each meter (a sweet moment, a rupture and how far it is made up,
+  days you both talked, silence past the window) and where closeness is heading: "Chemistry in about
+  5 good days", "Cooling: thin contact these two weeks". Home shows the first lines in each meter's
+  tooltip; Us → What is moving things lists them all.
 
 ## 3.7.2 — Photos that wait for ComfyUI, helpers that keep their request (2026-10-10)
 

@@ -721,6 +721,7 @@ function wireCalendarComponent(root,events,agentName,refreshFn,prefix='cal',now=
 
 function renderHeroMetersContent(emotions,bars){
   const meters=emotions?.state?.meters||bars?.feelings?.meters||{};
+  const why=emotions?.explain?.meters||{};
   // Home is a glance and Us is the page, so they keep different
   // treatments — but they must not describe the same meter in different words.
   // The labels and the explanations come from one place; the colour and the glow
@@ -750,6 +751,7 @@ function renderHeroMetersContent(emotions,bars){
         <div class="hero-meter-tooltip" role="tooltip">
           <div class="hero-meter-tooltip-title"><span>${m.icon} ${esc(m.label)}</span> <span class="hero-meter-tooltip-val">${shown}</span></div>
           <div class="hero-meter-tooltip-desc">${esc(m.desc)}</div>
+          ${meterWhy(why[m.key])}
         </div>
       </div>`;
   }).join('');
@@ -903,6 +905,7 @@ workspaceHandlers.now=async()=>{
             <div class="hero-meters-stack">
               ${renderHeroMetersContent(emotions,d.bars)}
             </div>
+            ${closenessLine(emotions?.explain?.closeness)}
           </div>
         </div>
       </div>

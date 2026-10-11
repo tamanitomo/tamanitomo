@@ -9,6 +9,25 @@ const FEELING_METERS=[
   ['irritation','Irritation','⚡','Friction that has not been talked through yet.'],
   ['longing','Missing you','⏳','How much your absence is being felt.'],
 ];
+/* What is moving a meter, from the server's own explanation (companion_meters.
+   explain): the first lines on Home, all of them on Us. Causes name what
+   happened, never a number to chase. */
+function meterWhy(info,limit=2){
+  if(!info)return '';
+  const sign=s=>s==='+'?'up':s==='−'?'down':'note';
+  const rows=(info.causes||[]).slice(0,limit).map(x=>
+    `<li class="why-${sign(x.sign)}"><span class="why-sign" aria-hidden="true">${esc(x.sign||'·')}</span> ${esc(x.text)}</li>`).join('');
+  const held=info.held&&typeof info.heading==='number'
+    ?`<li class="why-held">Heading for ${Math.round(info.heading*100)}%; today's change is capped</li>`:'';
+  return rows||held?`<ul class="meter-why">${rows}${held}</ul>`:'';
+}
+/* Where closeness is heading, in one line: the next stage and about how many
+   good days it takes, or why it is cooling. */
+function closenessLine(info){
+  if(!info?.line)return '';
+  const hint=info.next?.good_days?`A good day: ${info.good_day}.`:'';
+  return `<p class="closeness-line"${hint?` title="${esc(hint)}"`:''}>${esc(info.line)}</p>`;
+}
 function feelingMeters(meters){
   return `<div class="meter-grid">${FEELING_METERS.map(([key,label,icon,why])=>{
     const value=meters?meters[key]:null;

@@ -770,6 +770,14 @@ def compute(c, now=None, record=False) -> Dict[str, Any]:
         "effective_days": round(effective_days, 2),
         "today_credit": round(credits.get(now.astimezone(tz).date(), 0.0), 2),
         "cadence": round(cadence, 2),
+        # Why it is drifting, if it is: the larger of the two is what is charged.
+        "cooling": {
+            "silence": round(silence_decay, 2),
+            "thin_contact": round(cadence_drag, 2),
+            "silent_hours": (
+                None if hours_since_human is None else round(hours_since_human, 1)
+            ),
+        },
         "daily": daily,
         "pace": pace,
         "pace_multiplier": pace_mult,

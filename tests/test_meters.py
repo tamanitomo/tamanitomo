@@ -395,3 +395,187 @@ class TestRetention:
             scores.append(meters.tick(companion, on(day))["points"])
         assert scores[-1] < 25
         assert all(a - b <= 6 for a, b in zip(scores, scores[1:]))
+
+
+# ---- reading the meters: what moves them and where closeness is heading -------
+
+LATER = dt.datetime(2026, 9, 20, 18, 0, tzinfo=dt.timezone.utc)
+
+
+def feelings_state(**overrides):
+    state = {
+        "personality": "steady",
+        "experiences": [],
+        "reasons": [],
+        "slow_change": {"warmth": 0.1, "trust": 0.05, "contact_days": 12},
+        "absence": {"hours": 0.4, "expected_hours": 0, "unexplained_hours": 0.4},
+        "recent_return": None,
+        "daily": {},
+    }
+    state.update(overrides)
+    return state
+
+
+def closeness_state(**overrides):
+    state = {
+        "points": 44,
+        "stage": 1,
+        "stage_name": "Friends",
+        "pace_multiplier": 1.0,
+        "today_credit": 0.5,
+        "cooling": {"silence": 0, "thin_contact": 0, "silent_hours": 0.4},
+        "daily": {"value": 44, "target": 44, "held": False},
+        "meters": {"hurt": 0},
+    }
+    state.update(overrides)
+    return state
+
+
+def row(kind, text, at, ident, **extra):
+    return {"id": ident, "kind": kind, "text": text, "at": at.isoformat(), **extra}
+
+
+class TestExplain:
+    def text(self, items):
+        return [x["sign"] + x["text"] for x in items]
+
+    def test_a_rupture_names_itself_under_each_meter_it_moves(self, companion):
+        hurt = row("rupture", "Robin forgot the recital", LATER - days(1), "r1")
+        out = meters.explain(
+            companion,
+            feelings_state(experiences=[hurt], reasons=[{"id": "r1", "repair": 0.5}]),
+            closeness_state(),
+            LATER,
+        )["meters"]
+        line = "−Robin forgot the recital (yesterday, partly made up)"
+        assert line in self.text(out["warmth"]["causes"])
+        assert line in self.text(out["trust"]["causes"])
+        assert line in self.text(out["irritation"]["causes"])
+        assert self.text(out["hurt"]["causes"]) == [line + "; fades over about 7 days"]
+
+    def test_sweet_moments_and_time_together(self, companion):
+        sweet = row("connection", "A long walk by the river", LATER - days(2), "c1")
+        out = meters.explain(
+            companion, feelings_state(experiences=[sweet]), closeness_state(), LATER
+        )["meters"]
+        assert self.text(out["warmth"]["causes"]) == [
+            "+A sweet moment 2 days ago: A long walk by the river",
+            "+12 days you both talked",
+        ]
+        assert "+Sweet moments, a little each day" in self.text(out["trust"]["causes"])
+
+    def test_old_and_corrected_moments_are_left_out(self, companion):
+        old = row("connection", "Long ago", LATER - days(30), "c1")
+        wrong = row("rupture", "A misunderstanding", LATER - days(1), "r1")
+        fix = row("correction", "That was not a rupture", LATER, "x1", related="r1")
+        out = meters.explain(
+            companion,
+            feelings_state(experiences=[old, wrong, fix]),
+            closeness_state(),
+            LATER,
+        )["meters"]
+        assert out["hurt"]["causes"] == []
+        assert all("Long ago" not in x["text"] for x in out["warmth"]["causes"])
+
+    def test_silence_past_the_window_and_missing_you(self, companion):
+        away = {"hours": 62, "expected_hours": 16, "unexplained_hours": 50}
+        out = meters.explain(
+            companion, feelings_state(absence=away), closeness_state(), LATER
+        )["meters"]
+        assert self.text(out["irritation"]["causes"]) == [
+            "−50 hours without hearing from you, past the 48-hour window"
+        ]
+        assert self.text(out["longing"]["causes"]) == [
+            "62 hours since you last wrote, 16 of them expected"
+        ]
+        near = meters.explain(companion, feelings_state(), closeness_state(), LATER)
+        assert self.text(near["meters"]["longing"]["causes"]) == [
+            "You wrote within the hour"
+        ]
+
+    def test_a_held_meter_says_where_it_is_heading(self, companion):
+        daily = {"trust": {"value": 0.6, "target": 0.9, "held": True}}
+        out = meters.explain(
+            companion, feelings_state(daily=daily), closeness_state(), LATER
+        )["meters"]["trust"]
+        assert out["held"] and out["heading"] == 0.9
+
+    @pytest.mark.parametrize(
+        "overrides, line",
+        [
+            ({}, "Trusted in about 5 good days"),
+            (
+                {"points": 10, "stage": 0, "stage_name": "Just Met"},
+                "Familiar in about 3 good days",
+            ),
+            (
+                {"points": 10, "stage": 0, "pace_multiplier": 0.6},
+                "Familiar in about 5 good days",
+            ),
+            (
+                {"daily": {"value": 50, "target": 58, "held": True}},
+                "Rising: today's step is taken, and the rest comes over the next days",
+            ),
+            (
+                {"daily": {"value": 38, "target": 20, "held": True}},
+                "Falling, at most 6 points a day",
+            ),
+            (
+                {"cooling": {"silence": 2.4, "thin_contact": 1, "silent_hours": 72}},
+                "Cooling: 3 days without hearing from you",
+            ),
+            (
+                {"cooling": {"silence": 0, "thin_contact": 4, "silent_hours": 20}},
+                "Cooling: thin contact these two weeks",
+            ),
+            (
+                {"points": 95, "stage": 4, "stage_name": "Bonded"},
+                "Bonded: as close as it gets",
+            ),
+            ({"permanent_friend": True}, "Friendship is where this rests now"),
+        ],
+    )
+    def test_where_closeness_is_heading(self, companion, overrides, line):
+        out = meters.explain(
+            companion, feelings_state(), closeness_state(**overrides), LATER
+        )["closeness"]
+        assert out["line"] == line
+
+    def test_a_romance_names_the_romantic_stages(self, companion):
+        companion.boundary = "partner"
+        out = meters.explain(companion, feelings_state(), closeness_state(), LATER)[
+            "closeness"
+        ]
+        assert out["line"] == "Chemistry in about 5 good days"
+        assert out["next"] == {"name": "Chemistry", "at": 50, "good_days": 5}
+
+
+def test_the_pages_render_the_reasons_escaped():
+    from tests.test_chat_dock import run_browser_contract
+
+    run_browser_contract(r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync('kit/app/static/feelings.js', 'utf8');
+vm.runInThisContext(`
+const esc=v=>String(v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+${source.slice(source.indexOf('function meterWhy'), source.indexOf('function feelingMeters'))}
+globalThis.meterWhy=meterWhy;globalThis.closenessLine=closenessLine;
+`);
+const info = {causes: [
+  {sign: '+', text: 'A sweet moment: <b>hi</b>'},
+  {sign: '−', text: 'Silence'},
+  {sign: '', text: 'Third'},
+], held: true, heading: 0.9};
+const two = meterWhy(info);
+assert.ok(two.includes('&lt;b&gt;hi&lt;/b&gt;') && !two.includes('<b>'), 'escaped');
+assert.equal((two.match(/<li/g) || []).length, 3, 'two causes and the held line');
+assert.ok(two.includes('Heading for 90%'));
+assert.equal((meterWhy(info, Infinity).match(/<li/g) || []).length, 4);
+assert.equal(meterWhy({causes: [], held: false}), '');
+assert.equal(meterWhy(null), '');
+const line = closenessLine({line: 'Chemistry in about 5 good days', next: {good_days: 5}, good_day: 'a real conversation'});
+assert.ok(line.includes('Chemistry in about 5 good days') && line.includes('title="A good day: a real conversation."'));
+assert.equal(closenessLine(null), '');
+""")

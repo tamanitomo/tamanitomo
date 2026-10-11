@@ -4172,15 +4172,19 @@ def register(app, select, load, operations):
         import companion_integrity
         import companion_intimacy
 
+        import companion_meters
+
         c = load()
         integrity = companion_integrity.verify_integrity(c)
         intimacy = companion_intimacy.compute(c)
+        state = feelings.compute(c)
         return {
             **feelings.settings(c),
-            "state": feelings.compute(c),
+            "state": state,
             "integrity_lockout": False,
             "integrity_warning": None,
             "intimacy": intimacy,
+            "explain": companion_meters.explain(c, state, intimacy),
         }
 
     @app.put("/api/feelings/settings")
@@ -4259,8 +4263,20 @@ def register(app, select, load, operations):
         kinds = {r["moment"] for r in active}
         integrity = companion_integrity.verify_integrity(c)
         intimacy = companion_intimacy.compute(c)
+        bars = (
+            __import__("companion_bars").compute(c, intimacy=intimacy)
+            if c.bars
+            else None
+        )
+        import companion_feelings
+        import companion_meters
+
+        explain = companion_meters.explain(
+            c, (bars or {}).get("feelings") or companion_feelings.compute(c), intimacy
+        )
         return {
-            "bars": (__import__("companion_bars").compute(c) if c.bars else None),
+            "bars": bars,
+            "explain": explain,
             "moments": rows,
             "kinds": notes.LABELS,
             "boundary": c.boundary,

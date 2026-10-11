@@ -89,6 +89,17 @@ Sweet moments add at most 0.02 trust a day (connection moments recorded from 11 
 
 The record is `meters.json` in the companion's life directory: each day's end-of-day values, and each day's contact as first seen (the day's closeness credit and message counts). Closeness and slow change are built from every day you talked, and Hermes deletes old conversations; a kept day is never lowered by a deleted one, and a day wholly inside the fortnight of contact counts as kept too. Reading the meters never writes, so building her context writes nothing. The no-model **meters** job (every 15 minutes) is the one writer. A record that cannot be read is set aside as `meters.json.damaged` and a new one begins.
 
+## Reading the meters
+
+Home and Us say what is moving each meter, in plain words built from the computed state (`companion_meters.explain`, returned as `explain` by `/api/feelings` and `/api/relationship`). Each meter's tooltip on Home shows its first two causes; **Us → What is moving things** lists them all.
+
+- A sweet moment or a rupture from the last week names itself, with how far a rupture has been made up; hurt adds how long it takes to fade for her temperament.
+- Days you both talked and requests she finished account for slow change; trust says when it is not growing because something is unrepaired.
+- Irritation names silence past the connection window; missing you says how long since you last wrote and how much of it was expected.
+- A meter held by today's cap says where it is heading.
+
+Closeness gets one line under its badge: the next stage and about how many good days it takes (a good day is a real conversation, several messages spread over the day), or why it is cooling (days without hearing from you, or thin contact over the fortnight), or that today's step is taken and the rest comes over the next days. The estimate uses the first-week ramp (6 points a good day) before Friends and the slow burn (1.25) after it, both scaled by pace. Causes name what happened, never a number to chase.
+
 ## Files and behavior
 
 Each companion keeps `feelings-settings.json`, the append-only `relationship-feelings.jsonl`, and the append-only `expected-absences.jsonl` in its own life directory. They are not moved into the shared human-facts directory. Settings use revision checks; repeated experience IDs are idempotent and conflicting content is rejected. The screen initially shows 30 experiences. Load older experiences to browse earlier records and make them available as repair or correction targets. Older records remain in the ledger and still affect the calculation.

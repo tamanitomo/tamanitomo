@@ -114,8 +114,21 @@ function relationshipHero(relationship,feelings,companionName){
       `<li class="us-state-chip chip-${k}"><span aria-hidden="true">${mark}</span> ${esc(word)}</li>`).join('')}</ul>`:''}
     ${feelings?.mood?`<p class="dim small us-mood">${esc(companionName)}’s mood lately: ${esc(feelings.mood)}</p>`:''}
     ${usStageTrack(intimacy)}
+    ${closenessLine(relationship?.explain?.closeness)}
+    ${usWhy(relationship?.explain)}
     ${usStanding(intimacy,companionName)}
   </section>`;
+}
+/* Everything moving the meters, folded away: Home shows the first lines, this
+   shows them all. */
+function usWhy(explain){
+  if(!explain)return '';
+  const rows=[['Closeness',explain.closeness],...FEELING_METERS.map(([key,label])=>[label,explain.meters?.[key]])]
+    .filter(([,info])=>info&&((info.causes||[]).length||info.held));
+  if(!rows.length)return '';
+  return `<details class="us-why"><summary>What is moving things</summary>
+    <dl>${rows.map(([label,info])=>`<div><dt>${esc(label)}</dt><dd>${meterWhy(info,Infinity)}</dd></div>`).join('')}</dl>
+  </details>`;
 }
 
 /* --------------------------------------------------------- shared history */

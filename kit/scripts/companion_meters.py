@@ -27,6 +27,7 @@ from __future__ import annotations
 import contextlib
 import datetime as dt
 import json
+import math
 import pathlib
 import sys
 from zoneinfo import ZoneInfo
@@ -250,6 +251,196 @@ def history(c, now, days=14):
         for day, values in sorted(data["days"].items())
         if first <= day <= today.isoformat()
     ]
+
+
+# ---- why each meter reads what it does -------------------------------------
+#
+# Plain lines for Home and the Us page, built only from the computed states. A
+# cause names what happened, never a number to chase: the meters are there to be
+# read, not farmed.
+
+RECENT_DAYS = 7
+GOOD_DAY = "a real conversation, several messages spread over the day"
+
+
+def _ago(c, when, now):
+    days = (day_of(c, now) - day_of(c, when)).days
+    return "today" if days <= 0 else "yesterday" if days == 1 else f"{days} days ago"
+
+
+def _quoted(text, limit=80):
+    text = " ".join(str(text or "").split())
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def _plural(n, word):
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
+def explain(c, feelings_state, closeness, now=None):
+    """Why each meter reads what it does, and what the next stage takes."""
+    import companion_feelings as feelings
+    import companion_intimacy as intimacy
+
+    now = now or dt.datetime.now(dt.timezone.utc)
+    history = feelings_state.get("experiences") or []
+    corrected = {r.get("related") for r in history if r.get("kind") == "correction"}
+    repaired = {
+        r["id"]: r.get("repair", 0) for r in feelings_state.get("reasons") or []
+    }
+    recent = sorted(
+        (
+            r
+            for r in history
+            if r.get("kind") in ("connection", "rupture")
+            and r.get("id") not in corrected
+            and (day_of(c, now) - day_of(c, r["at"])).days <= RECENT_DAYS
+        ),
+        key=lambda r: r["at"],
+        reverse=True,
+    )
+    sweet = [r for r in recent if r["kind"] == "connection"]
+    sore = [r for r in recent if r["kind"] == "rupture"]
+
+    def rupture(r):
+        made_up = repaired.get(r["id"], 0)
+        status = (
+            ", made up"
+            if made_up >= 1
+            else ", partly made up" if made_up > 0 else ", not made up yet"
+        )
+        return ("−", f"{_quoted(r['text'])} ({_ago(c, r['at'], now)}{status})")
+
+    slow = feelings_state.get("slow_change") or {}
+    days_together = int(slow.get("contact_days") or 0)
+    kept = int(slow.get("kept_requests") or 0)
+    profile = feelings.PROFILES.get(feelings_state.get("personality"), {})
+    absence = feelings_state.get("recent_return") or feelings_state.get("absence") or {}
+    try:
+        window = feelings.settings(c)["settings"]["connection_hours"]
+    except (OSError, ValueError):
+        window = feelings.DEFAULTS["connection_hours"]
+
+    causes = {name: [] for name in ("warmth", "trust", "hurt", "irritation", "longing")}
+    for r in sweet[:2]:
+        causes["warmth"].append(
+            ("+", f"A sweet moment {_ago(c, r['at'], now)}: {_quoted(r['text'])}")
+        )
+    if days_together and slow.get("warmth"):
+        causes["warmth"].append(
+            ("+", f"{_plural(days_together, 'day')} you both talked")
+        )
+    if sweet:
+        causes["trust"].append(("+", "Sweet moments, a little each day"))
+    if days_together and slow.get("trust"):
+        causes["trust"].append(
+            ("+", f"{_plural(days_together, 'day')} you both talked")
+        )
+    if kept:
+        causes["trust"].append(("+", f"{_plural(kept, 'request')} finished"))
+    if slow.get("paused_by_unrepaired_rupture"):
+        causes["trust"].append(("−", "Not growing while something is unrepaired"))
+    for r in sore[:2]:
+        causes["warmth"].append(rupture(r))
+        causes["trust"].append(rupture(r))
+        causes["irritation"].append(rupture(r))
+        line = rupture(r)
+        days = profile.get("recovery_days")
+        causes["hurt"].append(
+            (line[0], line[1] + (f"; fades over about {days} days" if days else ""))
+        )
+    hours, unexplained = absence.get("hours"), absence.get("unexplained_hours")
+    if unexplained is not None and unexplained > window:
+        causes["irritation"].append(
+            (
+                "−",
+                f"{round(unexplained)} hours without hearing from you, past the {window}-hour window",
+            )
+        )
+    if hours is not None and hours < 1:
+        causes["longing"].append(("", "You wrote within the hour"))
+    elif hours is not None:
+        explained = absence.get("expected_hours") or 0
+        causes["longing"].append(
+            (
+                "",
+                f"{_plural(round(hours), 'hour')} since you last wrote"
+                + (f", {round(explained)} of them expected" if explained >= 1 else ""),
+            )
+        )
+
+    daily = feelings_state.get("daily") or {}
+    meters = {}
+    for name, rows in causes.items():
+        info = daily.get(name) or {}
+        meters[name] = {
+            "causes": [{"sign": sign, "text": text} for sign, text in rows],
+            "held": bool(info.get("held")),
+            "heading": info.get("target") if info.get("held") else None,
+        }
+    return {"meters": meters, "closeness": _closeness(c, closeness, intimacy)}
+
+
+def _closeness(c, state, intimacy):
+    points = int(state.get("points") or 0)
+    stage = int(state.get("stage") or 0)
+    following = next(
+        (s for s in intimacy.stages_for(c) if s["stage"] == stage + 1), None
+    )
+    daily = state.get("daily") or {}
+    cooling = state.get("cooling") or {}
+    silence = cooling.get("silence") or 0
+    thin = cooling.get("thin_contact") or 0
+    silent_days = int((cooling.get("silent_hours") or 0) // 24)
+
+    causes = []
+    credit = float(state.get("today_credit") or 0)
+    if credit > 0:
+        causes.append(
+            ("+", f"Today counts as {round(credit * 100)}% of a good day so far")
+        )
+    if silence > 0 and silent_days:
+        causes.append(("−", f"{_plural(silent_days, 'day')} without hearing from you"))
+    if thin > silence:
+        causes.append(("−", "Thin contact these two weeks"))
+    if (state.get("meters") or {}).get("hurt", 0) >= 0.1:
+        causes.append(("−", "Something still hurts"))
+
+    good_days = None
+    if state.get("permanent_friend") or state.get("nsfw_revoked"):
+        line, following = "Friendship is where this rests now", None
+    elif daily.get("held") and daily.get("target", 0) > daily.get("value", 0):
+        line = "Rising: today's step is taken, and the rest comes over the next days"
+    elif daily.get("held"):
+        line = f"Falling, at most {DAILY_CAP['closeness']:g} points a day"
+    elif max(silence, thin) >= 0.5:
+        line = (
+            "Cooling: thin contact these two weeks"
+            if thin > silence
+            else f"Cooling: {_plural(max(1, silent_days), 'day')} without hearing from you"
+        )
+    elif following:
+        # Points a good day earns: the first-week ramp, then the slow burn.
+        rate = (6.0 if points < 25 else 1.25) * float(state.get("pace_multiplier") or 1)
+        good_days = max(1, math.ceil((following["min_score"] - points) / rate))
+        line = f"{following['name']} in about {_plural(good_days, 'good day')}"
+    else:
+        line = f"{state.get('stage_name') or 'Bonded'}: as close as it gets"
+    return {
+        "line": line,
+        "next": (
+            {
+                "name": following["name"],
+                "at": following["min_score"],
+                "good_days": good_days,
+            }
+            if following
+            else None
+        ),
+        "good_day": GOOD_DAY,
+        "causes": [{"sign": sign, "text": text} for sign, text in causes],
+        "held": bool(daily.get("held")),
+    }
 
 
 def tick(c, now=None):

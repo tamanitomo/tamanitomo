@@ -1439,6 +1439,20 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
   line-height:1.4;
   color:var(--dim);
 }
+.meter-why{list-style:none;margin:6px 0 0;padding:0;font-size:11px;line-height:1.4;color:var(--ink)}
+.meter-why li{display:flex;gap:6px;align-items:baseline}
+.meter-why .why-sign{flex:none;width:.8em;text-align:center;font-weight:700;color:var(--dim)}
+.meter-why .why-up .why-sign{color:var(--good,#16a34a)}
+.meter-why .why-down .why-sign{color:var(--bad,#dc2626)}
+.meter-why .why-held{color:var(--dim);font-style:italic}
+.closeness-line{margin:10px 0 0;font-size:12px;line-height:1.4;color:var(--dim);text-align:center}
+.us-hero .closeness-line{text-align:left;margin-top:12px}
+.us-why{margin:12px 0 0}
+.us-why summary{cursor:pointer;font-size:13px;color:var(--dim)}
+.us-why dl{display:grid;gap:10px;margin:10px 0 0}
+.us-why dt{font-size:12px;font-weight:700;color:var(--ink)}
+.us-why dd{margin:0}
+.us-why .meter-why{font-size:13px;margin-top:2px}
 .hero-meter-item:hover .hero-meter-tooltip{
   opacity:1;
   visibility:visible;
@@ -1636,6 +1650,7 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
   }
   /* A tooltip anchored to a 52px square would sit off the screen edge. */
   .hero-meter-tooltip{display:none}
+  .hero-meters-card .closeness-line{grid-column:1/-1;margin:2px 0 0}
 }
 
 /* ------------------------------------------------ the reader's date picker */
