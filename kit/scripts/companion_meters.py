@@ -459,10 +459,17 @@ def _closeness(c, state, intimacy):
 
 def tick(c, now=None):
     """Keep the record: work the meters out now and write today's values and
-    every day's contact. The `meters` job runs this every 15 minutes."""
+    every day's contact, and note a lucky or unlucky day in its plan. The
+    `meters` job runs this every 15 minutes."""
     import companion_intimacy
+    import companion_needs
 
-    return companion_intimacy.compute(c, now, record=True)
+    state = companion_intimacy.compute(c, now, record=True)
+    try:
+        companion_needs.log_luck(c, now)
+    except (OSError, ValueError):
+        pass
+    return state
 
 
 def main():

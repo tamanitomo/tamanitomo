@@ -176,6 +176,7 @@
   "kit/scripts/companion_missions.py",
   "kit/scripts/companion_model_download.py",
   "kit/scripts/companion_model_scan.py",
+  "kit/scripts/companion_needs.py",
   "kit/scripts/companion_notes.py",
   "kit/scripts/companion_nsfw.py",
   "kit/scripts/companion_outbox.py",

@@ -504,11 +504,21 @@ def build(c, payload=None, now=None, maintenance_notice=""):
         try:
             import companion_intimacy
 
-            rendered_intimacy = companion_intimacy.render(
-                c, companion_intimacy.compute(c, now)
-            )
+            closeness = companion_intimacy.compute(c, now)
+            rendered_intimacy = companion_intimacy.render(c, closeness)
             if rendered_intimacy:
                 parts.append((5, rendered_intimacy))
+        except (OSError, ValueError, KeyError, TypeError):
+            closeness = None
+        try:
+            import companion_needs
+
+            needs = companion_needs.render(
+                c,
+                companion_needs.compute(c, now, stage=(closeness or {}).get("stage")),
+            )
+            if needs:
+                parts.append((6, needs))
         except (OSError, ValueError, KeyError, TypeError):
             pass
 

@@ -61,6 +61,9 @@ Replace `previous_id` with the exact current episode ID; use null only when no s
 `setting` is `private` where nobody can see you (home, a changing room, a hotel room) and `public`
 anywhere you could be seen. It carries forward while you stay in the same location; after a move,
 say it again. Undressed, bathing or underwear-only states are refused unless it is `private`.
+`feeds` is optional: when what you are doing gives you rest, company or fun (a nap, coffee with a
+friend, a game, somewhere new), list it — `"feeds": ["social", "fun"]` — and your needs fill from what
+you actually did. Leave it out otherwise; it does not carry forward.
 Outfit contains wardrobe IDs. `care` lists newly established routine events, or [] when none happened;
 copying yesterday's list would falsely claim those events happened again. Keep last outfit/location
 unless a recorded transition explains the change. Activity changes need a transition too.

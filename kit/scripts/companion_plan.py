@@ -223,6 +223,24 @@ def settle(c, day, intent, theme="custom", items=(), author="companion", now=Non
         return _write(c, day, plan, f'settled: {plan["intent"][:120]}', now)
 
 
+def note(c, day, text, now=None):
+    """Add a line to a day's plan history, once. A day with no plan gets none."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    text = str(text or "").strip()[:300]
+    if not text:
+        return None
+    with file_lock(folder(c) / ".lock"):
+        plan = read(c, day)
+        if not plan:
+            return None
+        if any(row.get("change") == text for row in plan.get("history", [])):
+            return plan
+        try:
+            return _write(c, day, plan, text, now)
+        except ValueError:
+            return None
+
+
 def add(c, day, item, displaces=None, now=None):
     """Put one thing in a day.
 

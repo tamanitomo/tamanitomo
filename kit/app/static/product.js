@@ -880,6 +880,7 @@ workspaceHandlers.now=async()=>{
             <div class="presence-chip-row"><span class="chip-label">📍 Location:</span> <span class="chip-val">${esc(s?.location||'Not recorded')}</span></div>
             <div class="presence-chip-row"><span class="chip-label">💭 Mood:</span> <span class="chip-val">${esc(s?.mood||'Not recorded')}</span></div>
             <div class="presence-chip-row"><span class="chip-label">👗 Attire:</span> <span class="chip-val">${esc(currentOutfit||'Not recorded')}</span></div>
+            ${needsRow(emotions?.needs)}
             ${d.state?.recorded_at?`<p class="dim small">Last recorded ${esc(when(d.state.recorded_at))}</p>`:''}
           </div>
 

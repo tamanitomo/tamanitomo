@@ -97,3 +97,45 @@ marked asleep. Continuing a private scene preserves its camera privacy.
 Existing authored routines are retained. Repair can refresh untouched shipped
 prompts while preserving edited prompts; inspect its report for custom text that
 needs a manual reconciliation. Updating source does not rewrite live life history.
+
+## Needs
+
+She has needs the way anyone does, and they are part of her day rather than a game
+(`companion_needs.py`; the owner's design, 2026-10-10). There are no numbers to push and
+nothing to tap to feed her.
+
+| Need | From | Moves with |
+| --- | --- | --- |
+| Rest (energy) | Just Met | the night she declared (or her quiet hours, when none was), how long she has been up, a rest she records |
+| Company | Friends | hours the two of you both wrote, her own outings and friends, sweet moments |
+| Fun | Friends | her own games, hobbies and new places, sweet moments |
+| Closeness (affection) | Chemistry, in a romance | sweet moments and hours the two of you talked |
+
+Energy starts the day as full as the night was long (eight hours is a full start) and every
+waking hour spends a little, so anyone is tired by late evening. A night nobody declared is
+still a night, spent in the quiet hours: up early in them after five or more hours, she slept
+and woke early; up just after they began, she is staying up late. Company, fun and closeness
+sit at a comfortable level while life goes on as usual, rise with what fills them for a day or
+so, and dip only after a dry spell: about three days without company, four without anything
+fun, or two without closeness. They never count a dry spell from before 11 October 2026.
+
+When what she does gives her rest, company or fun (a nap, a friend, a game, somewhere new),
+her presence update says so with `"feeds": ["energy"|"social"|"fun"]`. Closeness comes only
+from the two of you, so it is not hers to grant herself.
+
+A need that is calling reaches her context in her own terms ("You are tired: a short night…",
+"You would like some company…"), with what to do about it: let it shape her day and how she
+sounds, never recite it, never make you responsible for it, and say she wants closeness
+warmly, once, never as a demand. The autonomy loop lets a calling need shape what she does
+next. Home shows only that she has needs, in words: **Needs: rest, some fun**, or
+**Nothing pressing**.
+
+Each day she rolls a d20, seeded by the companion and the date, so every job and page agrees:
+1 in 20 days is lucky (slept wonderfully, a happy surprise, ran into an old friend) and 5 in
+20 unlucky (a rough night, plans fell through, a lonely day, a draining day). Her day runs from
+when she woke, so a rough night belongs to the morning after it. A lucky or unlucky day is
+noted once in that day's plan by the meters job, reaches her context as part of her day, and
+shows in the Home needs tooltip.
+
+`companion_needs.py --home HOME show` prints the current needs; `luck` prints today's roll.
+

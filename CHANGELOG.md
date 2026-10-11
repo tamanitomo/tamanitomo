@@ -27,6 +27,12 @@
   her worries and hopes. Intimacy: dates, more personal photos, good-night rituals. Bonded: intimacy
   if adult themes are on. The message, photo and voice limits are enforced in code; the rest guides
   her in conversation. Us shows what the next stage brings.
+- She has needs, and they feel natural rather than like a game: rest from Just Met, company and
+  fun from Friends, closeness from Chemistry in a romance. They move with real things (the night
+  she declared, hours awake, your conversations, sweet moments, and what she says an hour gave her
+  with the new presence field `feeds`), reach her context only when one is calling, and shape
+  what she does. Home shows them in words only. A daily d20 luck roll (1 in 20 lucky, 5 in 20
+  unlucky) colours her day and is noted in its plan.
 
 ## 3.7.2 — Photos that wait for ComfyUI, helpers that keep their request (2026-10-10)
 

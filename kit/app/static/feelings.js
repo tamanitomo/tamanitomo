@@ -34,6 +34,17 @@ function closenessNext(info){
   if(!next?.unlocks?.length)return '';
   return `<p class="closeness-next"><span class="closeness-next-name">At ${esc(next.name)}:</span> ${next.unlocks.map(esc).join(' · ')}</p>`;
 }
+/* What she needs right now, in words, never as a number or a bar: the page only
+   shows that she has needs and which are calling. She lives them. */
+const NEED_WORDS={energy:'rest',social:'company',fun:'fun',affection:'closeness'};
+function needsRow(needs){
+  if(!needs?.has?.length)return '';
+  const wants=needs.wants||[];
+  const say=needs.asleep?'Asleep, catching up on rest':wants.length?wants.join(', '):'Nothing pressing';
+  const luck=['lucky','unlucky'].includes(needs.luck?.kind)?` Today: ${needs.luck.what}.`:'';
+  const title=`She has needs (${needs.has.map(n=>NEED_WORDS[n]||n).join(', ')}). They move with her day and your time together.${luck}`;
+  return `<div class="presence-chip-row" title="${esc(title)}"><span class="chip-label">🫶 Needs:</span> <span class="chip-val">${esc(say)}</span></div>`;
+}
 function feelingMeters(meters){
   return `<div class="meter-grid">${FEELING_METERS.map(([key,label,icon,why])=>{
     const value=meters?meters[key]:null;

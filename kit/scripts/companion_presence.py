@@ -644,6 +644,21 @@ def update(c, data, now=None, dry_run=False):
         # photographed" (never overridden) from "she is undressed" (the adult gate's call).
         if "private" in data:
             state["private"] = bool(data["private"])
+        # What this hour gave her, as she says: rest, company or fun. Her needs
+        # (companion_needs) fill from it. Like `private`, it is about this moment
+        # and does not carry forward.
+        if "feeds" in data:
+            feeds = data["feeds"]
+            if not isinstance(feeds, list) or not set(feeds) <= {
+                "energy",
+                "social",
+                "fun",
+            }:
+                raise ValueError(
+                    'feeds lists what this moment gave you: any of "energy", "social", "fun"'
+                )
+            if feeds:
+                state["feeds"] = sorted(set(feeds))
         if setting in SETTINGS:
             state["setting"] = setting
         narrative = text(data.get("text"), 'episode text (key "text")', 1600)

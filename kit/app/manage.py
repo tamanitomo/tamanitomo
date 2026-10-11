@@ -4166,6 +4166,14 @@ def register(app, select, load, operations):
         except FileExistsError as exc:
             raise HTTPException(409, str(exc))
 
+    def _needs(c, intimacy):
+        import companion_needs
+
+        try:
+            return companion_needs.compute(c, stage=intimacy.get("stage"))
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+
     @app.get("/api/feelings")
     def feelings_read():
         import companion_feelings as feelings
@@ -4185,6 +4193,7 @@ def register(app, select, load, operations):
             "integrity_warning": None,
             "intimacy": intimacy,
             "explain": companion_meters.explain(c, state, intimacy),
+            "needs": _needs(c, intimacy),
         }
 
     @app.put("/api/feelings/settings")
