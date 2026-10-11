@@ -181,6 +181,7 @@ def day_ideas(c, now):
             season=sensors.season_for(c, now),
         ).get("suggestions", [])
         people = [p for p in life.people_due(c.life, now.date(), 3) if p.get("due")]
+        mine = life.own_people(c.life)
         own = life.interests(c.life)["added"][-5:]
     except Exception:
         return ""
@@ -190,7 +191,7 @@ def day_ideas(c, now):
         shopping = companion_lifestyle.shopping_offer(c, now)
     except Exception:
         shopping = ""
-    if not ideas and not people and not shopping and not own:
+    if not ideas and not people and not shopping and not own and mine >= life.OWN_ENOUGH:
         return ""
     lines = [
         "[Ideas for today — invitations, not a schedule. Take one that appeals, combine two, or do "
@@ -222,15 +223,28 @@ def day_ideas(c, now):
     if shopping:
         lines.append(shopping)
     if people:
-        lines.append(
-            "People you have not seen in a while: "
-            + ", ".join(
-                p.get("name", "someone")
-                + f" [id={p.get('id', '')}]"
-                + (f" ({p['relation']})" if p.get("relation") else "")
-                for p in people
+        lines.append("People you have not seen in a while:")
+        for p in people:
+            seen = p.get("days_since")
+            news = p.get("news") or {}
+            lines.append(
+                f"- {p.get('name', 'someone')} [id={p.get('id', '')}]"
+                + (f" ({p['relation'][:80]})" if p.get("relation") else "")
+                + (f", last seen {seen} days ago" if seen is not None else "")
+                + (f"; last you heard ({news['on']}): {news['text']}" if news else "")
             )
-            + f". Note it with `{cmd} saw --person <id>` when you do see someone."
+        lines.append(
+            'When you spend time with someone, say so in that presence update: "with": '
+            '["<id>"] (that is what records seeing them). What is going on in their own '
+            f'life is noted with `{cmd} news --person <id> --text "..."`, so the next '
+            "meeting picks up from it."
+        )
+    if mine < life.OWN_ENOUGH:
+        lines.append(
+            f"[Your life has few people of your own yet ({mine}). When it fits, let someone "
+            "in: a coworker or classmate, a neighbour, family, a friend from somewhere you go. "
+            f'Record them once with `{cmd} add-person --name "..." --relation "..." --met '
+            '"..." --cadence weekly|fortnightly|monthly`; after that they recur.]'
         )
     return "\n".join(lines)
 

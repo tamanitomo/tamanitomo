@@ -677,6 +677,13 @@ def update(c, data, now=None, dry_run=False):
             c, data, parent, state["location"]
         )
         state.update(where)
+        # Who she is with, by id: hers to say, and how a friend comes to have
+        # been seen (companion_life.company).
+        import companion_life
+
+        with_ids = companion_life.company(c.life, data, parent, state["location"])
+        if with_ids:
+            state["with"] = with_ids
         legacy_retry = (
             previous
             and previous["id"] == ident
@@ -772,6 +779,10 @@ def update(c, data, now=None, dry_run=False):
         if dry_run:
             return {"written": False, "valid": True}
         companion_places.record_writes(c, place_writes, now)
+        if with_ids:
+            companion_life.saw_people(
+                c.life, with_ids, now.astimezone(ZoneInfo(c.timezone)).date()
+            )
         result = record(
             c.life,
             narrative,
@@ -921,6 +932,7 @@ def transition_scene(
     place="",
     room="",
     new_place=None,
+    with_=None,
 ):
     """A real change. Only what changed is named; `update` still applies every rule."""
     now = now or dt.datetime.now(ZoneInfo(c.timezone))
@@ -950,6 +962,8 @@ def transition_scene(
         rec["room"] = room
     if new_place:
         rec["new_place"] = new_place
+    if with_ is not None:
+        rec["with"] = with_
     if outfit is not None:
         rec["outfit"] = outfit
     if mood:
@@ -1184,6 +1198,12 @@ def main():
         help="somewhere you have not been before, by name (with --place-description)",
     )
     tr.add_argument("--place-description", default="")
+    tr.add_argument(
+        "--with",
+        dest="with_",
+        default=None,
+        help="who you are with now, comma-separated ids or names; empty for nobody",
+    )
     for name in ("update", "wardrobe"):
         p = sub.add_parser(name)
         p.add_argument("--file", type=pathlib.Path, required=True)
@@ -1227,6 +1247,11 @@ def main():
                 {"name": args.new_place, "description": args.place_description}
                 if args.new_place
                 else None
+            ),
+            with_=(
+                None
+                if args.with_ is None
+                else [x.strip() for x in args.with_.split(",") if x.strip()]
             ),
         )
     else:

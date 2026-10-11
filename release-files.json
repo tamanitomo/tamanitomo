@@ -281,6 +281,7 @@
   "tests/test_onboarding_browser.py",
   "tests/test_onboarding_recovery.py",
   "tests/test_outbox.py",
+  "tests/test_people.py",
   "tests/test_presence.py",
   "tests/test_recall_callbacks.py",
   "tests/test_signals.py",

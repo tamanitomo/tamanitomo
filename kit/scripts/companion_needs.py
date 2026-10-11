@@ -157,7 +157,11 @@ def _presence_feeds(c, since, now):
             break
         if at > now:
             continue
-        for need in row["state"].get("feeds") or ():
+        fed = set(row["state"].get("feeds") or ())
+        # Time with someone from her life is company, whether or not she said so.
+        if row["state"].get("with"):
+            fed.add("social")
+        for need in sorted(fed):
             if need in FEEDS:
                 out.append((at, need))
     return out

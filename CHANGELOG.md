@@ -21,6 +21,14 @@
   with her rooms and places listed. One live kitchen had been written eight ways, and
   places were only ever recorded from chat, so neither companion had a single one.
   Pictures of a place carry how she described it.
+- The people in her life are one cast. People setup wrote into her routine were never
+  part of it (their meetings were never recorded); they are now hers, seen weekly. The
+  shared seed list (the same eight names for every companion, never once mentioned on a
+  live install) is offered a few at a time, a different few per companion, only until she
+  has three people of her own, and she is asked to let someone in until she does. A
+  presence record says who is with her (`with`, by id or name), which records the meeting
+  and counts as company. What is going on in someone's own life is kept (`news`) and comes
+  back with them the next time they are due.
 
 ## 3.8.0 — Meters that move a day at a time, stages that unlock, and her own needs (2026-10-11)
 

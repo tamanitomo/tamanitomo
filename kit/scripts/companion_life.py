@@ -184,29 +184,166 @@ def _seed_cast():
     return data
 
 
-def cast(root):
-    """Everyone in her life: the seeded people plus anyone she has added."""
-    root = pathlib.Path(root)
+# Setup now writes people of her own into the routine (`recurring_cast`), and she
+# adds more herself. The shared seed list is a stopgap for a life that has nobody
+# yet: every companion on a machine got the same eight names and, on a live
+# install, not one of them ever came up. So it is offered only until she has
+# people of her own, a few at a time and a different few per companion, and a
+# seed she actually spent time with stays.
+CADENCES = ("weekly", "fortnightly", "monthly")
+OWN_ENOUGH = 3
+SEEDS_OFFERED = 4
+MAX_WITH = 8
+
+
+def _routine_cast(root):
+    """The people written into her routine at setup: hers from the start."""
     try:
-        own = json.loads((root / CAST_FILE).read_text(encoding="utf-8"))
+        data = json.loads((pathlib.Path(root) / "routine.json").read_text("utf-8"))
     except (OSError, ValueError):
-        own = {}
-    if not isinstance(own, dict):
-        own = {}
-    people = {
-        x["id"]: x
-        for x in _seed_cast().get("cast", [])
-        if isinstance(x, dict) and x.get("id")
-    }
-    for row in own.get("added", []) or []:
+        return []
+    rows = data.get("recurring_cast") if isinstance(data, dict) else None
+    out = []
+    for row in rows or []:
+        if not isinstance(row, dict) or not str(row.get("name") or "").strip():
+            continue
+        name = str(row["name"]).strip()[:80]
+        out.append(
+            {
+                "id": str(row.get("id") or "").strip()
+                or re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:32],
+                "name": name,
+                "relation": str(row.get("relation") or row.get("who") or "friend")[
+                    :300
+                ],
+                "note": str(row.get("standing") or row.get("note") or "")[:300],
+                # Someone she wrote into her week at setup is someone she sees weekly.
+                "cadence": (
+                    row["cadence"] if row.get("cadence") in CADENCES else "weekly"
+                ),
+                "own": True,
+            }
+        )
+    return out
+
+
+def _offered_seeds(root, seeds):
+    """A few seeded people, a different few for each companion's life folder."""
+    key = str(pathlib.Path(root).resolve())
+    ranked = sorted(
+        seeds, key=lambda x: hashlib.sha256((key + "|" + x["id"]).encode()).digest()
+    )
+    return ranked[:SEEDS_OFFERED]
+
+
+def cast(root):
+    """Everyone in her life: her own people (from setup and the ones she added),
+    plus a few seeded ones while she has fewer than OWN_ENOUGH of her own."""
+    root = pathlib.Path(root)
+    own = _cast_file(root)
+    seen = own["last_seen"]
+    news = own.get("news") if isinstance(own.get("news"), dict) else {}
+    removed = set(own["removed"])
+    people = {x["id"]: x for x in _routine_cast(root)}
+    for row in own["added"]:
         if isinstance(row, dict) and row.get("id"):
-            people[row["id"]] = {**row, "hers": True}
-    for ident in own.get("removed", []) or []:
-        people.pop(ident, None)
-    seen = own.get("last_seen", {}) if isinstance(own.get("last_seen"), dict) else {}
+            people[row["id"]] = {**row, "hers": True, "own": True}
+    mine = [i for i in people if i not in removed]
+    seeds = [
+        x for x in _seed_cast().get("cast", []) if isinstance(x, dict) and x.get("id")
+    ]
+    offered = _offered_seeds(root, seeds) if len(mine) < OWN_ENOUGH else []
+    for x in seeds:
+        if x["id"] not in people and (x in offered or seen.get(x["id"])):
+            people[x["id"]] = dict(x)
+    out = []
     for ident, person in people.items():
+        if ident in removed:
+            continue
         person["last_seen"] = seen.get(ident)
-    return list(people.values())
+        latest = (news.get(ident) or [None])[-1]
+        if isinstance(latest, dict):
+            person["news"] = latest
+        out.append(person)
+    return out
+
+
+def own_people(root):
+    """How many people in her life are hers rather than seeded."""
+    return sum(1 for p in cast(root) if p.get("own"))
+
+
+def find_people(root, names):
+    """Ids for the people named (by id or name, any case); unknown names refused."""
+    people = cast(root)
+    by_key = {}
+    for p in people:
+        by_key[p["id"].casefold()] = p["id"]
+        by_key[p["name"].casefold()] = p["id"]
+    out = []
+    for name in names:
+        key = str(name or "").strip().casefold()
+        if key not in by_key:
+            listed = ", ".join(f'"{p["id"]}" ({p["name"]})' for p in people[:12])
+            raise ValueError(
+                f"nobody called {str(name)!r} is in your life yet. The people you know: "
+                f"{listed or 'nobody yet'}. Someone new is added once with "
+                "companion_life.py add-person, then they can be with you."
+            )
+        if by_key[key] not in out:
+            out.append(by_key[key])
+    return out
+
+
+def saw_people(root, ids, day):
+    """Record that she spent time with these people on `day`; writes only on change."""
+    day = day.isoformat() if hasattr(day, "isoformat") else str(day)
+    data = _cast_file(root)
+    changed = [i for i in ids if data["last_seen"].get(i) != day]
+    if not changed:
+        return []
+    for ident in changed:
+        data["last_seen"][ident] = day
+    _write_cast(root, data)
+    return changed
+
+
+def add_news(root, ident, text, day):
+    """What is going on in someone's own life, as she last heard it."""
+    text = str(text or "").strip()
+    if not text:
+        raise ValueError("say what is new with them")
+    if ident not in {p["id"] for p in cast(root)}:
+        raise ValueError(f"Nobody called {ident!r} is in the cast")
+    day = day.isoformat() if hasattr(day, "isoformat") else str(day)
+    data = _cast_file(root)
+    news = data.get("news") if isinstance(data.get("news"), dict) else {}
+    rows = [r for r in news.get(ident, []) if isinstance(r, dict)]
+    if rows and rows[-1].get("text") == text[:300]:
+        return rows[-1]
+    rows.append({"on": day, "text": text[:300]})
+    news[ident] = rows[-10:]
+    data["news"] = news
+    _write_cast(root, data)
+    return rows[-1]
+
+
+def company(root, data, previous, location):
+    """Who is with her in a presence record, as ids. `with` is hers to say; it
+    carries forward while she stays in the same place and ends when she moves."""
+    if "with" not in data:
+        before = (previous or {}).get("state") or {}
+        if previous and before.get("location") == location:
+            return list(before.get("with") or [])
+        return []
+    names = data["with"]
+    if not isinstance(names, list) or len(names) > MAX_WITH:
+        raise ValueError(
+            f"with lists the people you are with right now, by id or name (at most {MAX_WITH})"
+        )
+    if any(not isinstance(n, str) for n in names):
+        raise ValueError("with lists people by id or name, as text")
+    return find_people(root, names)
 
 
 def _write_cast(root, data):
@@ -309,7 +446,16 @@ def people_due(root, day=None, count=3):
                 "overdue_by": max(0, gap - want),
             }
         )
-    rows.sort(key=lambda r: (-r["overdue_by"], r["name"]))
+
+    # How overdue relative to how often they meet: a monthly friend unseen for six
+    # weeks is less pressing than a weekly one unseen for three. Her own people
+    # before seeded ones when it is close.
+    def pressing(row):
+        want = spacing.get(row.get("cadence", "fortnightly"), 14)
+        gap = row["days_since"] if row["days_since"] is not None else want * 2
+        return -round(min(3.0, gap / want), 1), not row.get("own"), row["name"]
+
+    rows.sort(key=pressing)
     return rows[:count] if count else rows
 
 
@@ -1091,6 +1237,11 @@ def main():
         "--cadence", default="fortnightly", choices=["weekly", "fortnightly", "monthly"]
     )
     ap.add_argument("--note", default="")
+    nw = s.add_parser(
+        "news", help="What is going on in someone's own life, as you last heard it"
+    )
+    nw.add_argument("--person", required=True)
+    nw.add_argument("--text", required=True)
     sp = s.add_parser("saw", help="Record spending time with someone, by id")
     sp.add_argument("--person", required=True)
     sp.add_argument("--day")
@@ -1198,6 +1349,8 @@ def main():
         )
     elif a.cmd == "saw":
         out = saw_person(root, a.person, a.day or now.date().isoformat())
+    elif a.cmd == "news":
+        out = add_news(root, a.person, a.text, now.date())
     elif a.cmd == "drop-person":
         out = drop_person(root, a.person)
     elif a.cmd == "suggest":
