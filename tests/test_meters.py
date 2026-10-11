@@ -547,7 +547,16 @@ class TestExplain:
             "closeness"
         ]
         assert out["line"] == "Chemistry in about 5 good days"
-        assert out["next"] == {"name": "Chemistry", "at": 50, "good_days": 5}
+        assert out["next"] == {
+            "name": "Chemistry",
+            "at": 50,
+            "good_days": 5,
+            "unlocks": [
+                "flirting and pet names",
+                "photos of herself",
+                "sharing her worries and hopes",
+            ],
+        }
 
 
 def test_the_pages_render_the_reasons_escaped():

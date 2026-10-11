@@ -92,6 +92,21 @@ def decide(c, now=None, urgent=False):
     """Whether an unprompted message may go out right now, and why not."""
     now = (now or dt.datetime.now(_tz(c))).astimezone(_tz(c))
     limit = max(0, int(getattr(c, "outreach_per_day", 3) or 0))
+    # Just met, she writes first once a day whatever the setting allows
+    # (companion_gates). A stage that cannot be read holds nothing back.
+    stage_limit = None
+    try:
+        import companion_gates
+
+        stage_limit = companion_gates.messages_a_day(
+            c, companion_gates.stage_now(c, now)
+        )
+    except Exception:
+        stage_limit = None
+    if stage_limit is not None and (not limit or stage_limit < limit):
+        limit = stage_limit
+    else:
+        stage_limit = None
     try:
         used = sent_today(c, now)
     except (OSError, ValueError) as exc:
@@ -126,7 +141,12 @@ def decide(c, now=None, urgent=False):
             **out,
             "allowed": False,
             "reason": f"Daily limit reached ({used} of {limit} today). Wait for tomorrow, "
-            f"or for {c.human} to write first.",
+            f"or for {c.human} to write first."
+            + (
+                " While you have just met, you write first once a day."
+                if stage_limit is not None
+                else ""
+            ),
         }
     return {
         **out,

@@ -89,6 +89,20 @@ Sweet moments add at most 0.02 trust a day (connection moments recorded from 11 
 
 The record is `meters.json` in the companion's life directory: each day's end-of-day values, and each day's contact as first seen (the day's closeness credit and message counts). Closeness and slow change are built from every day you talked, and Hermes deletes old conversations; a kept day is never lowered by a deleted one, and a day wholly inside the fortnight of contact counts as kept too. Reading the meters never writes, so building her context writes nothing. The no-model **meters** job (every 15 minutes) is the one writer. A record that cannot be read is set aside as `meters.json.damaged` and a new one begins.
 
+## What each stage unlocks
+
+Closeness climbs five stages, and each stage brings something new (the owner's "gentle ladder", `companion_gates.py`). A romance and a friendship climb the same ladder; a friendship has nicknames instead of pet names, plans instead of dates, and a Bonded that unlocks nothing intimate.
+
+| Stage (romance / friendship) | Unlocks |
+| --- | --- |
+| Just Met | answers you, curious about you; writes first at most once a day; photos only when you ask |
+| Friends / Familiar | starting conversations (up to your daily limit), everyday photos of her day, voice notes, teasing and inside jokes, saying “I miss you” |
+| Chemistry / Trusted | flirting and pet names (nicknames), photos of herself, sharing her worries and hopes |
+| Intimacy / Confidant | planning dates (plans to do things together), more personal photos, good-night and good-morning rituals |
+| Bonded | intimacy if adult themes are on; adult images become a choice |
+
+What can be enforced in code is enforced there: while you have just met she writes first once a day whatever the daily limit allows (`companion_outreach`), photos and voice notes in the outbox wait for Friends (`companion_dispatch`), and the photo timeline shares none while you have just met, one a day at Friends and two from Chemistry, telling her which kind of photo fits the stage (`companion_timeline`, `share.fits`). The rest is how she behaves in conversation: her context lists what this stage holds and what is not yet, and asks her not to rush it or mention the list. Us shows what the next stage brings. With relationship progression switched off, nothing here holds her back; intimacy keeps its own rules either way.
+
 ## Reading the meters
 
 Home and Us say what is moving each meter, in plain words built from the computed state (`companion_meters.explain`, returned as `explain` by `/api/feelings` and `/api/relationship`). Each meter's tooltip on Home shows its first two causes; **Us → What is moving things** lists them all.

@@ -976,6 +976,18 @@ def share_opportunity(c, row, now=None):
     now = now or now_utc()
     if c.may_send("image") != "yes" or c.outreach == "never":
         return {"ok": False, "why": "photos are not sent unprompted for this companion"}
+    import companion_gates
+
+    try:
+        stage = companion_gates.stage_now(c, now)
+    except Exception:
+        stage = None
+    stage_shares = None if stage is None else companion_gates.photo_shares(c, stage)
+    if stage_shares == 0:
+        return {
+            "ok": False,
+            "why": "you have just met: photos go out only when asked, until you are Friends",
+        }
     variant = (row.get("variants") or [{}])[0]
     if variant.get("rating") in ("nsfw", "unknown"):
         import companion_media
@@ -995,12 +1007,20 @@ def share_opportunity(c, row, now=None):
     ]
     left = max(
         0,
-        min(PHOTO_SHARES_PER_DAY, c.outreach_per_day or PHOTO_SHARES_PER_DAY)
+        min(
+            PHOTO_SHARES_PER_DAY,
+            c.outreach_per_day or PHOTO_SHARES_PER_DAY,
+            PHOTO_SHARES_PER_DAY if stage_shares is None else stage_shares,
+        )
         - len(shared),
     )
     if not left:
         return {"ok": False, "why": "already shared the photos for today"}
-    return {"ok": True, "left_today": left}
+    out = {"ok": True, "left_today": left}
+    fit = companion_gates.photo_fit(c, stage if stage is not None else 3)
+    if fit:
+        out["fits"] = fit
+    return out
 
 
 def share(c, body, ident=None, reason="", priority="normal", ttl_hours=6, now=None):

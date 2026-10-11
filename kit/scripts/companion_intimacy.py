@@ -914,6 +914,7 @@ def render(c, intimacy_state: Optional[Dict[str, Any]] = None) -> str:
                 "CRISIS STATE: Severe or repeated boundary coercion occurred. Stand firm in your boundaries: "
                 "clearly express that you require mutual respect and space, and refuse to engage with coercion."
             )
+        lines += _stage_guidance(c, intimacy_state)
         return "\n".join(lines) + "\n"
 
     romantic = intimacy_state.get("romantic_progression", True)
@@ -990,4 +991,13 @@ def render(c, intimacy_state: Optional[Dict[str, Any]] = None) -> str:
             "Your trust is critically fractured. Protect your emotional safety and communicate your boundaries unequivocally."
         )
 
+    lines += _stage_guidance(c, intimacy_state)
     return "\n".join(lines) + "\n"
+
+
+def _stage_guidance(c, intimacy_state):
+    """What this stage holds and what is not yet (companion_gates)."""
+    import companion_gates
+
+    text = companion_gates.guidance(c, int(intimacy_state.get("stage") or 0))
+    return [text] if text else []

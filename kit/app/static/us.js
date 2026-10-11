@@ -115,6 +115,7 @@ function relationshipHero(relationship,feelings,companionName){
     ${feelings?.mood?`<p class="dim small us-mood">${esc(companionName)}’s mood lately: ${esc(feelings.mood)}</p>`:''}
     ${usStageTrack(intimacy)}
     ${closenessLine(relationship?.explain?.closeness)}
+    ${closenessNext(relationship?.explain?.closeness)}
     ${usWhy(relationship?.explain)}
     ${usStanding(intimacy,companionName)}
   </section>`;

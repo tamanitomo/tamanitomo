@@ -426,6 +426,19 @@ def _closeness(c, state, intimacy):
         line = f"{following['name']} in about {_plural(good_days, 'good day')}"
     else:
         line = f"{state.get('stage_name') or 'Bonded'}: as close as it gets"
+    unlocks = []
+    if following:
+        import companion_gates
+
+        if companion_gates.applies(c):
+            unlocks = next(
+                (
+                    step["unlocks"]
+                    for step in companion_gates.ladder(c)
+                    if step["stage"] == following["stage"]
+                ),
+                [],
+            )
     return {
         "line": line,
         "next": (
@@ -433,6 +446,7 @@ def _closeness(c, state, intimacy):
                 "name": following["name"],
                 "at": following["min_score"],
                 "good_days": good_days,
+                "unlocks": unlocks,
             }
             if following
             else None

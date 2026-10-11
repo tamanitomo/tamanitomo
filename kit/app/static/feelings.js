@@ -28,6 +28,12 @@ function closenessLine(info){
   const hint=info.next?.good_days?`A good day: ${info.good_day}.`:'';
   return `<p class="closeness-line"${hint?` title="${esc(hint)}"`:''}>${esc(info.line)}</p>`;
 }
+/* What the next stage brings, from the stage ladder (companion_gates). */
+function closenessNext(info){
+  const next=info?.next;
+  if(!next?.unlocks?.length)return '';
+  return `<p class="closeness-next"><span class="closeness-next-name">At ${esc(next.name)}:</span> ${next.unlocks.map(esc).join(' · ')}</p>`;
+}
 function feelingMeters(meters){
   return `<div class="meter-grid">${FEELING_METERS.map(([key,label,icon,why])=>{
     const value=meters?meters[key]:null;

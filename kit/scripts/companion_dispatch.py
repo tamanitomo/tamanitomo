@@ -112,6 +112,20 @@ def verdict(c, entry, now):
             "action": "withhold",
             "reason": f"{entry.get('content')} is set to ask: offer it in words, do not attach it unasked",
         }
+    if entry.get("content", "text") != "text":
+        try:
+            import companion_gates
+
+            ready = companion_gates.may_send(
+                c, companion_gates.stage_now(c, now), entry.get("content")
+            )
+        except Exception:
+            ready = True
+        if not ready:
+            return {
+                "action": "withhold",
+                "reason": f"unprompted {entry.get('content')} waits until you are Friends; until then only when asked",
+            }
     asleep = outreach.in_quiet_hours(c, now)
     awake = asleep and recently_active(c, now)
     if asleep and entry.get("priority") != "high" and not awake:

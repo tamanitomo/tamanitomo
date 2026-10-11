@@ -21,6 +21,12 @@
   days you both talked, silence past the window) and where closeness is heading: "Chemistry in about
   5 good days", "Cooling: thin contact these two weeks". Home shows the first lines in each meter's
   tooltip; Us → What is moving things lists them all.
+- Each closeness stage unlocks something new, Tamagotchi-style. Just Met: she writes first once a
+  day and sends photos only when asked. Friends: conversations up to your limit, everyday photos,
+  voice notes, teasing, saying she misses you. Chemistry: flirting and pet names, photos of herself,
+  her worries and hopes. Intimacy: dates, more personal photos, good-night rituals. Bonded: intimacy
+  if adult themes are on. The message, photo and voice limits are enforced in code; the rest guides
+  her in conversation. Us shows what the next stage brings.
 
 ## 3.7.2 — Photos that wait for ComfyUI, helpers that keep their request (2026-10-10)
 

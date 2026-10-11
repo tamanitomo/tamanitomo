@@ -21,6 +21,16 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTBOX_TZ = dt.timezone.utc
 
 
+def past_just_met(test):
+    """These tests are about the person's own limits, so the companion is past
+    Just Met, whose one-message-a-day rule (companion_gates) is tested apart."""
+    import companion_gates
+
+    stage = patch.object(companion_gates, "stage_now", return_value=1)
+    stage.start()
+    test.addCleanup(stage.stop)
+
+
 class OutboxFixture(unittest.TestCase):
 
     def setUp(self):
@@ -38,6 +48,7 @@ class OutboxFixture(unittest.TestCase):
             outreach_per_day=2,
         )
         self.c.life.mkdir(parents=True, exist_ok=True)
+        past_just_met(self)
         self.day = dt.datetime(2026, 9, 10, 14, 0, tzinfo=OUTBOX_TZ)
         self.night = dt.datetime(2026, 9, 11, 2, 0, tzinfo=OUTBOX_TZ)
         self.evening = dt.datetime(2026, 9, 10, 22, 30, tzinfo=OUTBOX_TZ)
@@ -285,6 +296,7 @@ class OutreachGateTests(unittest.TestCase):
             outreach="free",
             outreach_per_day=3,
         )
+        past_just_met(self)
         self.noon = dt.datetime(2026, 9, 9, 12, 0, tzinfo=dt.timezone.utc)
         self.night = dt.datetime(2026, 9, 9, 2, 0, tzinfo=dt.timezone.utc)
 
@@ -351,7 +363,14 @@ class OutreachGateTests(unittest.TestCase):
         import json
         import subprocess
 
-        c = cc.dataclasses.replace(self.c, quiet_start="00:00", quiet_end="00:00")
+        # The claims run in other processes, out of reach of a patched stage, so
+        # the person's own cap is tested with the stage ladder switched off.
+        c = cc.dataclasses.replace(
+            self.c,
+            quiet_start="00:00",
+            quiet_end="00:00",
+            relationship_progression="off",
+        )
         c.save()
         script = pathlib.Path(out.__file__)
         children = [

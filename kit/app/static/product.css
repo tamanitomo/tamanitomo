@@ -1447,6 +1447,8 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
 .meter-why .why-held{color:var(--dim);font-style:italic}
 .closeness-line{margin:10px 0 0;font-size:12px;line-height:1.4;color:var(--dim);text-align:center}
 .us-hero .closeness-line{text-align:left;margin-top:12px}
+.closeness-next{margin:4px 0 0;font-size:12px;line-height:1.5;color:var(--dim)}
+.closeness-next-name{font-weight:700;color:var(--ink)}
 .us-why{margin:12px 0 0}
 .us-why summary{cursor:pointer;font-size:13px;color:var(--dim)}
 .us-why dl{display:grid;gap:10px;margin:10px 0 0}
