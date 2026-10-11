@@ -665,8 +665,115 @@ class SentRecentlyTests(unittest.TestCase):
         )
         self.assertEqual(
             outbox.render_sent(self.c, now),
-            "- Fri 19:00 image: The lake at dusk, just for you.",
+            "- Fri 19:00 image: The lake at dusk, just for you.\n"
+            "Earlier these two weeks (say something new, not these again):\n"
+            "- Wed 07 Oct image: A photo from last week.",
         )
         page = active.build(self.c, now)
-        self.assertIn("## You already sent (last day)", page)
-        self.assertNotIn("A photo from last week", page)
+        self.assertIn("## You already sent (last two weeks)", page)
+        self.assertNotIn("Still in the queue.\nEarlier", page)
+
+
+class SayingItAgainTests(unittest.TestCase):
+    """Two weeks of what she said, so she does not say it again."""
+
+    NOW = dt.datetime(2026, 10, 20, 12, 0, tzinfo=dt.timezone.utc)
+
+    def setUp(self):
+        import companion_outbox as outbox
+
+        self.outbox = outbox
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        self.c = cc.Companion(
+            agent="Nova",
+            human="Robin",
+            hermes_root=root / "h",
+            vault=root / "v",
+            timezone="UTC",
+            soul_in_vault=False,
+        )
+        self.c.life.mkdir(parents=True)
+
+    def said(self, body, days_ago, status="sent"):
+        at = self.NOW - dt.timedelta(days=days_ago)
+        ident = f"m{len(self.outbox.fold(self.c))}"
+        rows = [
+            {
+                "kind": "outbox",
+                "id": ident,
+                "content": "text",
+                "body": body,
+                "status": "queued",
+                "priority": "normal",
+                "queued_at": at.isoformat(),
+                "expires_at": (at + dt.timedelta(hours=8)).isoformat(),
+                "target": "telegram",
+            }
+        ]
+        if status != "queued":
+            rows.append(
+                {
+                    "kind": "outbox_update",
+                    "id": ident,
+                    "status": status,
+                    "at": at.isoformat(),
+                }
+            )
+        with self.outbox.path_for(self.c).open("a", encoding="utf-8") as f:
+            f.write("".join(json.dumps(r) + "\n" for r in rows))
+
+    def queue(self, body):
+        return self.outbox.queue(self.c, {"body": body}, self.NOW)
+
+    def test_the_same_news_twice_is_refused_with_the_first(self):
+        self.said(
+            "I followed the lighthouse question a little further: the keeper's logs "
+            "say the lamp was lit every night for ninety years.",
+            2,
+        )
+        with self.assertRaisesRegex(
+            ValueError, "you already said nearly this on Sun 18 Oct"
+        ):
+            self.queue(
+                "I followed the lighthouse question further. The keeper's logs confirm "
+                "the lamp was lit every single night for ninety years."
+            )
+
+    def test_two_weeks_on_it_is_news_again(self):
+        self.said(
+            "I followed the lighthouse question a little further: the keeper's logs "
+            "say the lamp was lit every night for ninety years.",
+            15,
+        )
+        self.assertTrue(
+            self.queue(
+                "I followed the lighthouse question further. The keeper's logs confirm "
+                "the lamp was lit every single night for ninety years."
+            )["written"]
+        )
+
+    def test_a_good_night_is_a_ritual_not_a_repeat(self):
+        self.said("Good night, sleep well \u2764\ufe0f", 1)
+        self.assertTrue(
+            self.queue("Good night, sleep well, Robin \u2764\ufe0f")["written"]
+        )
+
+    def test_what_never_reached_him_can_be_said(self):
+        body = (
+            "The bakery on the corner finally reopened and the sourdough is back, "
+            "still warm when I got there this morning."
+        )
+        self.said(body, 1, status="failed")
+        self.assertTrue(self.queue(body)["written"])
+
+    def test_the_same_opening_every_time_is_refused(self):
+        for n, topic in enumerate(("tides", "kites", "bridges")):
+            self.said(
+                f"I followed a little {topic} curiosity today, about thing {n}.", n + 1
+            )
+        with self.assertRaisesRegex(ValueError, 'open with "i followed a"'):
+            self.queue(
+                "I followed a small curiosity about clocks this morning, it was fun."
+            )

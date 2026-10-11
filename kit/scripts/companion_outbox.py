@@ -23,6 +23,7 @@ import datetime as dt
 import hashlib
 import json
 import pathlib
+import re
 import sys
 from zoneinfo import ZoneInfo
 
@@ -84,6 +85,19 @@ def check_target(value, human="the human"):
 
 
 MAX_QUEUED = 20
+# Saying the same thing again. Her messages are compared with what she sent (or
+# still has on its way) in the last two weeks: by the weighted share of their
+# content words, as facts are, and by how they open. Calibrated on two live
+# outboxes (2026-10-11): the same message re-sent scored 0.34-0.51, everything
+# else 0.30 or less. Short messages are not compared -- a good-night is a ritual,
+# not a repeat.
+REPEAT_DAYS = 14
+SAME_MESSAGE = 0.33
+MIN_WORDS = 6
+OPENER_WORDS = 3
+OPENER_REPEATS = 3
+OPENER_WINDOW = 10
+EARLIER_SHOWN = 8
 
 
 def _tz(c):
@@ -144,6 +158,9 @@ def queue(c, entry, now=None):
                 and prior.get("body", "").strip() == body.strip()
             ):
                 return {"written": False, "entry": prior}
+        again = repeats(c, body, now, history)
+        if again:
+            raise ValueError(again)
         row = {
             "id": entry.get("id")
             or "msg-"
@@ -165,6 +182,67 @@ def queue(c, entry, now=None):
             "queued_at": now.isoformat(),
         }
         return slf._append(path_for(c), row)
+
+
+def _opener(body):
+    words = re.findall(r"[\w'’]+", str(body or "").casefold())
+    return " ".join(words[:OPENER_WORDS]) if len(words) >= OPENER_WORDS else ""
+
+
+def _said(history, now, tz):
+    """(when, entry) for what she sent, or still has on its way, in the window."""
+    out = []
+    for entry in history:
+        status = entry.get("status")
+        if status not in ("sent", "queued") + PHASES:
+            continue
+        stamp = entry.get("decided_at") if status == "sent" else entry.get("queued_at")
+        try:
+            at = dt.datetime.fromisoformat(stamp or "")
+        except ValueError:
+            continue
+        at = at if at.tzinfo else at.replace(tzinfo=tz)
+        if dt.timedelta(0) <= now - at <= dt.timedelta(days=REPEAT_DAYS):
+            out.append((at, entry))
+    return sorted(out, key=lambda row: row[0])
+
+
+def repeats(c, body, now=None, history=None):
+    """Why this message would be her saying the same thing again, or None."""
+    tz = _tz(c)
+    now = now or dt.datetime.now(tz)
+    said = _said(fold(c) if history is None else history, now, tz)
+    if not said:
+        return None
+    names = {
+        str(n).casefold()
+        for n in [getattr(c, "human", ""), getattr(c, "agent", "")]
+        + list(getattr(c, "names", []) or [])
+        if n
+    }
+    words = slf._content(body, names)
+    if len(words) >= MIN_WORDS:
+        sets = [slf._content(e.get("body"), names) for _, e in said]
+        weight = slf._weigher(sets + [words])
+        for (at, entry), other in zip(said, sets):
+            if len(other) < MIN_WORDS:
+                continue
+            overlap, _ = slf._similarity(words, other, weight)
+            if overlap >= SAME_MESSAGE:
+                return (
+                    f"you already said nearly this on {at.astimezone(tz):%a %d %b}: "
+                    f'"{entry.get("body", "")[:120]}". Say something new, or nothing.'
+                )
+    opener = _opener(body)
+    if opener and len(body.split()) >= 8:
+        sent = [e for _, e in said if e.get("status") == "sent"][-OPENER_WINDOW:]
+        same = [e for e in sent if _opener(e.get("body")) == opener]
+        if len(same) >= OPENER_REPEATS:
+            return (
+                f'{len(same)} of your last {len(sent)} messages open with "{opener}"; '
+                "open this one another way."
+            )
+    return None
 
 
 def mark(c, ident, status, detail="", now=None):
@@ -354,11 +432,27 @@ def sent_recently(c, now=None, hours=24, limit=6):
 
 
 def render_sent(c, now=None):
+    """The last day in full, and the rest of the fortnight in a line each, so
+    she can see what she has been saying and not say it again."""
     tz = _tz(c)
-    return "\n".join(
+    recent = sent_recently(c, now)
+    lines = [
         f"- {at.astimezone(tz):%a %H:%M} {e['content']}: {e['body'][:120]}"
-        for at, e in sent_recently(c, now)
-    )
+        for at, e in recent
+    ]
+    shown = {e.get("id") for _, e in recent}
+    earlier = [
+        (at, e)
+        for at, e in sent_recently(c, now, hours=24 * REPEAT_DAYS, limit=200)
+        if e.get("id") not in shown
+    ][-EARLIER_SHOWN:]
+    if earlier:
+        lines.append("Earlier these two weeks (say something new, not these again):")
+        lines += [
+            f"- {at.astimezone(tz):%a %d %b} {e['content']}: {e['body'][:70]}"
+            for at, e in earlier
+        ]
+    return "\n".join(lines)
 
 
 def batch(c, path, now=None):

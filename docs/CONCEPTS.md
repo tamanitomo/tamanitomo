@@ -35,6 +35,12 @@ Jobs queue. A dispatcher sends. It takes one message per run, drops anything pas
 than delivering it late, and never retries a send it could not confirm — a double message is worse
 than a missing one.
 
+Queueing also refuses saying the same thing again. A message is compared with what she sent, or
+still has on its way, in the last two weeks: one whose content words mostly match an earlier one
+is refused with that earlier message, and so is a fourth message in ten that opens with the same
+three words. Short messages are left alone; a good-night is a ritual, not a repeat. Her context
+lists the last day of what she sent in full and the rest of the fortnight a line each.
+
 ## 5. An absent sensor is silent
 
 Every sense is optional and every one degrades to nothing. A sensor that cannot report writes no

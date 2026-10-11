@@ -44,6 +44,11 @@
   until it is fixed, a cracked phone screen four days, a free ticket something to look forward
   to. While one lasts it is in her context ("Still going on: caught a cold, day 2 of about 3")
   and in her needs, a good night never cancels a cold, and Home says so in words.
+- She does not say the same thing twice. A message is refused when it mostly repeats
+  something she sent (or has on its way) in the last two weeks, with the earlier message
+  shown so she can say something new, and when it is the fourth in ten to open the same
+  way. Short messages are not compared. Her context now lists the whole fortnight of what
+  she sent (the last day in full, earlier days a line each), not just the last day.
 
 ## 3.8.0 — Meters that move a day at a time, stages that unlock, and her own needs (2026-10-11)
 
