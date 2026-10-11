@@ -378,6 +378,15 @@ class Companion:
     # Read web pages on this machine instead of through a reading service. The kit
     # sets this up wherever no other reader was chosen in Hermes.
     local_web_reader: bool = True
+    # Where "something has stopped working" goes. The app always shows it. "chat"
+    # also sends it through her own channel, which puts a status report in her
+    # voice into her conversation, so it is off unless chosen. A webhook (a phone
+    # push service, an ntfy topic) gets it as well when set; a bearer token for it
+    # is read from alerts_webhook_token_file so no secret sits in this file.
+    alerts: str = "app"
+    alerts_webhook: str = ""
+    alerts_webhook_token_file: str = ""
+    alerts_webhook_format: str = "json"  # json | text (ntfy)
     # Which sensors this profile has switched on, by name.
     sensors: list = dataclasses.field(default_factory=list)
     # Per-job model choices, written by `tamanitomo models`. Empty means "whatever
@@ -408,6 +417,17 @@ class Companion:
             raise ValueError("conversation_handoff must be true or false")
         if not isinstance(self.local_web_reader, bool):
             raise ValueError("local_web_reader must be true or false")
+        if self.alerts not in ("app", "chat"):
+            raise ValueError('alerts must be "app" or "chat"')
+        if not isinstance(self.alerts_webhook, str) or (
+            self.alerts_webhook
+            and not self.alerts_webhook.startswith(("https://", "http://"))
+        ):
+            raise ValueError("alerts_webhook must be an http(s) address, or empty")
+        if not isinstance(self.alerts_webhook_token_file, str):
+            raise ValueError("alerts_webhook_token_file must be a path, or empty")
+        if self.alerts_webhook_format not in ("json", "text"):
+            raise ValueError('alerts_webhook_format must be "json" or "text"')
         if not isinstance(self.adult_images, bool):
             raise ValueError("adult_images must be true or false")
         if self.adult_images and not self.explicit:

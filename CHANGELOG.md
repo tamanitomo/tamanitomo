@@ -9,6 +9,11 @@
   plan (her own hours become its items, an overlap is left out with the reason),
   and the meters job gives a day she did not plan a plain one when she wakes. A
   plan that lists nothing keeps her routine on the calendar.
+- Health alerts stay out of her chat. "Nova is not well right now… Run: companion doctor"
+  was sent through the companion's own channel and sat in the conversation as something she
+  said, twice a day on a bad week. The app shows problems (the banner and Settings →
+  Diagnostics, which has a switch to send them to the chat as before), and `alerts_webhook`
+  sends them to a phone push service or an ntfy topic.
 
 ## 3.8.0 — Meters that move a day at a time, stages that unlock, and her own needs (2026-10-11)
 

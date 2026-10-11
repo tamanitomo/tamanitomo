@@ -267,6 +267,7 @@
   "tests/fake_hermes.py",
   "tests/mock_provider.py",
   "tests/support.py",
+  "tests/test_alerts.py",
   "tests/test_backup.py",
   "tests/test_chat_dock.py",
   "tests/test_chat_sync_browser.py",

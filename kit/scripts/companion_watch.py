@@ -7,10 +7,16 @@ it exists for is the one that started the v2 review: a pulse job rate-limited at
 09:30, forty-seven failed runs over two days, and nothing anywhere saying so —
 the companion did not know she had stopped, and neither did anyone else.
 
-Runs as a no-agent cron job. Silent when healthy. When something is wrong it
-sends one message through the profile's own Hermes channel, writes the same text
-into `ambient/health.md` so the companion herself can tell she is not well, and
-then stays quiet about it for six hours rather than repeating.
+Runs as a no-agent cron job. Silent when healthy. When something is wrong the
+app shows it (a banner, and the list under Diagnostics), `ambient/health.md`
+tells the companion herself she is not well, and the alert goes wherever the
+profile chose: a webhook such as a phone push service, and her own chat only
+when `alerts` is "chat". Then it stays quiet about it for six hours rather than
+repeating.
+
+Her chat is not the default because a status report sent through her channel
+lands in her conversation as something she said, and stays in her history:
+"Nova is not well right now... Run: companion doctor", twice a day.
 
 It sends for itself rather than printing for Hermes to deliver: kit jobs are
 created `--deliver local`, which Hermes resolves to no target at all, so an
@@ -354,6 +360,77 @@ def run(c, now=None, renotify=RENOTIFY_SECONDS, notify=None, record=True):
     return result
 
 
+def webhook_send(c, title, body, timeout=15):
+    """POST one alert to the profile's webhook: (ok, detail). Never raises.
+
+    JSON carries title, body and message (for push services that expect either);
+    "text" is the plain body with a Title header, which is what ntfy reads.
+    """
+    import urllib.request
+
+    headers = {"User-Agent": "tamanitomo"}
+    if c.alerts_webhook_token_file:
+        try:
+            token = (
+                pathlib.Path(c.alerts_webhook_token_file)
+                .expanduser()
+                .read_text(encoding="utf-8")
+                .strip()
+            )
+        except OSError as exc:
+            return False, f"webhook token unreadable ({exc.__class__.__name__})"
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+    if c.alerts_webhook_format == "text":
+        data = body.encode("utf-8")
+        headers["Content-Type"] = "text/plain; charset=utf-8"
+        # Header values are Latin-1; a name outside it would fail the whole send.
+        headers["Title"] = title.encode("latin-1", "replace").decode("latin-1")
+        headers["Tags"] = "warning"
+    else:
+        data = json.dumps(
+            {
+                "title": title,
+                "body": body,
+                "message": body,
+                "data": {"kind": "tamanitomo-health", "agent": c.agent},
+            }
+        ).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(
+        c.alerts_webhook, data=data, headers=headers, method="POST"
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return 200 <= response.status < 300, f"webhook answered {response.status}"
+    except Exception as exc:
+        return False, f"webhook failed ({exc.__class__.__name__})"
+
+
+def notifier(c):
+    """How this profile hears about trouble beyond the app, or None for the app alone.
+
+    One delivery that worked counts as told: a webhook that keeps failing must not
+    turn a chat alert into one every hour."""
+    sends = []
+    if c.alerts == "chat":
+        from companion_dispatch import hermes_send
+
+        sends.append(hermes_send)
+    if c.alerts_webhook:
+        sends.append(
+            lambda c, message: webhook_send(c, f"{c.agent} needs a look", message)
+        )
+    if not sends:
+        return None
+
+    def notify(c, message):
+        results = [send(c, message) for send in sends]
+        return any(ok for ok, _ in results), "; ".join(str(d) for _, d in results)
+
+    return notify
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--home", type=pathlib.Path)
@@ -365,9 +442,7 @@ def main():
     if a.json:
         print(json.dumps(run(c, record=False), ensure_ascii=False, indent=2))
         return 0
-    from companion_dispatch import hermes_send
-
-    result = run(c, notify=hermes_send)
+    result = run(c, notify=notifier(c))
     # Local job output: kept for `hermes cron` history, never the delivery path.
     if result["message"]:
         print(

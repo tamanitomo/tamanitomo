@@ -871,6 +871,9 @@ def build(home=None, token="", state_dir=None):
             "relationship_pace": c.relationship_pace,
             "peer_interaction": c.peer_interaction,
             "conversation_handoff": c.conversation_handoff,
+            "alerts": c.alerts,
+            # Whether one is set, never the address: a topic URL is often the secret.
+            "alerts_webhook": bool(c.alerts_webhook),
             "learn_rhythm": _learn_rhythm(c),
             "local_web_reader": reader["local"],
             "web_reader_other": reader["other"],
@@ -904,6 +907,7 @@ def build(home=None, token="", state_dir=None):
         "relationship_progression",
         "peer_interaction",
         "conversation_handoff",
+        "alerts",
         "local_web_reader",
         "image_style",
         "explicit",

@@ -3,6 +3,23 @@
 Start with `companion status`. It answers "how is she" the way `doctor` answers "was this installed
 correctly", and the health watch behind it looks at the same things every hour on its own.
 
+## Where health alerts go
+
+When the watch finds a problem the app shows it: a banner at the top of every page, and the list
+under Settings → Diagnostics. It is not sent into her chat unless you switch that on there
+(`"alerts": "chat"`), because a status report sent through her channel lands in your conversation as
+something she said. To get alerts on your phone, set a push address in `companion.json`:
+
+```json
+"alerts_webhook": "https://ntfy.sh/<a topic only you know>",
+"alerts_webhook_format": "text"
+```
+
+`text` is what ntfy reads (the body as text, the title in a header). The default, `json`, posts
+`{"title", "body", "message", "data"}` for push services that take JSON. A bearer token for the
+address is read from the file named by `alerts_webhook_token_file`, so no secret sits in the
+config. Alerts wait out quiet hours, and one that could not be delivered is tried again next hour.
+
 ## She thinks it is the wrong day
 
 Look for `UNCONFIRMED` in `companion status`. It means no model has confirmed the present recently,

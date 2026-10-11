@@ -769,7 +769,7 @@ const settingsPanels=[
  blurb:'What is healthy, what is full, and what it has cost',
  keywords:'health diagnostics problems memory storage vault usage tokens cost backup recovery restore export move',
  async render(host){
-  const [health,cost]=await Promise.all([api('/health'),api('/cost')]);
+  const [health,cost,s]=await Promise.all([api('/health'),api('/cost'),api('/settings')]);
   host.innerHTML=`
   <div class="section-heading" style="margin-top:0">
     <button class="quiet" id="diag-activity">Activity feed</button>
@@ -777,6 +777,12 @@ const settingsPanels=[
   ${health.problems.length
     ?`<div class="notice-strip notice-stack"><p><strong>${health.problems.length} thing${health.problems.length===1?'':'s'} to look at</strong></p><ul>${health.problems.map(p=>`<li class="warn">${esc(p)}</li>`).join('')}</ul></div>`
     :'<p><span class="pill status-good">Everything monitored is running normally</span></p>'}
+  <div class="sensor-grid" style="margin:12px 0 4px">
+    ${toggleRow('alerts-chat','Also tell me in the companion\u2019s chat','Problems always show here and in the banner at the top. Sent through the companion\u2019s own channel, a status report lands in your conversation as if they had said it.',s.alerts==='chat')}
+  </div>
+  <p class="small dim" id="alerts-note">${s.alerts_webhook
+    ?'Alerts also go to the push address set in companion.json (alerts_webhook).'
+    :'To get alerts on your phone, set alerts_webhook in companion.json to a push address, such as an ntfy topic.'}</p>
 
   <h3 class="section-subheading">Memory capacity</h3>
   <table><tbody>${health.memory.map(m=>`<tr>
@@ -797,6 +803,17 @@ const settingsPanels=[
     ?`<table><thead><tr><th>Day</th><th>Input</th><th>Output</th><th>Runs</th></tr></thead><tbody>${cost.days.slice().reverse().map(d=>`<tr><td>${esc(d.day)}</td><td>${d.input==null?'Unknown':d.input.toLocaleString()}</td><td>${d.output==null?'Unknown':d.output.toLocaleString()}</td><td>${d.runs}</td></tr>`).join('')}</tbody></table>`
     :'<p class="dim">Nothing recorded yet.</p>'}`;
   host.querySelector('#diag-activity').onclick=showGatewayActivity;
+  wireToggles(host);
+  host.querySelector('#alerts-chat').addEventListener('change',async event=>{
+    const box=event.target,note=host.querySelector('#alerts-note'),before=note.textContent;
+    try{await saveSettings({alerts:box.checked?'chat':'app'});note.textContent=box.checked?'Saved: alerts also go to the chat.':'Saved: alerts stay out of the chat.';}
+    catch(error){
+      box.checked=!box.checked;
+      const row=box.closest('[data-toggle-row]'),state=row.querySelector('.toggle-state');
+      row.classList.toggle('is-on',box.checked);if(state)state.textContent=box.checked?'On':'Off';
+      note.textContent=before+' '+error.message;
+    }
+  });
   await mountCompanionRecovery(host.querySelector('#companion-recovery'));
  }},
 
