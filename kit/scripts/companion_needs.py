@@ -406,6 +406,15 @@ def render(c, state):
     )
 
 
+def her_day(c, now=None):
+    """The day she is living now (it runs from when she woke), or None while asleep."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    night = _night(c, now)
+    if night["asleep"]:
+        return None
+    return night["woke"].astimezone(_tz(c)).date()
+
+
 def log_luck(c, now=None):
     """Note a lucky or unlucky day in that day's plan, once. Called by the meters
     job; an ordinary day, or a day with no plan yet, writes nothing."""

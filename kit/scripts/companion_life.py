@@ -706,6 +706,22 @@ def expected_day(root, day, now=None):
             "history": settled.get("history", [])[-10:],
         }
         source = "intended"
+        if not settled["items"]:
+            # A plan that says what the day is for and lists nothing keeps the
+            # routine's shape: her chosen day-shape when she picked one, else the
+            # weekday's anchors below.
+            theme = settled.get("theme")
+            rows = (
+                [
+                    dict(x)
+                    for x in catalog[theme].get("anchors", [])
+                    if isinstance(x, dict)
+                ]
+                if theme in catalog
+                else None
+            )
+            if rows is None:
+                source = "routine"
     else:
         plan = read_tomorrow_plan(root, now)
         if plan and plan.get("date") and plan["date"] != day.isoformat():
@@ -1150,6 +1166,19 @@ def main():
         if custom_anchors:
             plan_dict["anchors"] = custom_anchors
         out = save_tomorrow_plan(root, plan_dict)
+        # The day's plan is the store everything else writes into (a lucky day, a
+        # moved walk); this evening's intention is what it is for.
+        import companion_plan
+
+        items, refused = companion_plan.from_anchors(custom_anchors)
+        try:
+            companion_plan.settle(
+                c, target_date, out["intent"], theme=out["theme"], items=items, now=now
+            )
+        except ValueError as exc:
+            refused.append(f"the plan was not written: {exc}")
+        if refused:
+            out = {**out, "not_planned": refused}
     elif a.cmd == "planned-tomorrow":
         out = read_tomorrow_plan(root, now) or {"status": "no plan recorded yet"}
     elif a.cmd == "cast":

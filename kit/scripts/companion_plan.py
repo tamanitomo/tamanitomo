@@ -223,6 +223,63 @@ def settle(c, day, intent, theme="custom", items=(), author="companion", now=Non
         return _write(c, day, plan, f'settled: {plan["intent"][:120]}', now)
 
 
+WEEKDAYS = (
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+)
+
+
+def ensure(c, day, now=None):
+    """The day's plan, writing a plain one first when she made none.
+
+    Only the local-model wind-down ever settled a plan, so on every other model
+    the days had none: nothing the meters job noted (a lucky or unlucky day) and
+    nothing she moved had anywhere to be written. A day she did not plan is still
+    a day she lives. Its plan holds no items, so the calendar keeps showing her
+    routine for it, and an evening plan she writes later replaces it.
+    """
+    now = now or dt.datetime.now(dt.timezone.utc)
+    day = _date(day)
+    with file_lock(folder(c) / ".lock"):
+        existing = read(c, day)
+        if existing:
+            return existing
+        plan = empty(day, author="routine")
+        plan.update(
+            intent=f"A usual {WEEKDAYS[day.weekday()]}, nothing special planned",
+            settled_at=now.isoformat(),
+        )
+        return _write(c, day, plan, "no plan was made; the usual routine", now)
+
+
+def from_anchors(rows):
+    """Plan items from routine-style anchors she wrote for a day, and what was refused.
+
+    An anchor that is malformed or overlaps one already taken is left out with the
+    reason, rather than costing the whole evening's plan."""
+    items, refused = [], []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        try:
+            candidate = clean_item(
+                {**row, "kind": row.get("kind") or "anchor", "ref": "intended"}
+            )
+        except ValueError as exc:
+            refused.append(str(exc))
+            continue
+        if conflicts(items, candidate):
+            refused.append(f"{candidate['what'][:60]} overlaps something earlier")
+            continue
+        items.append(candidate)
+    return items, refused
+
+
 def note(c, day, text, now=None):
     """Add a line to a day's plan history, once. A day with no plan gets none."""
     now = now or dt.datetime.now(dt.timezone.utc)

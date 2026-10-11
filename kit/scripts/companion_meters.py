@@ -466,6 +466,11 @@ def tick(c, now=None):
 
     state = companion_intimacy.compute(c, now, record=True)
     try:
+        day = companion_needs.her_day(c, now)
+        if day and c.has_inner_life:
+            import companion_plan
+
+            companion_plan.ensure(c, day, now)
         companion_needs.log_luck(c, now)
     except (OSError, ValueError):
         pass

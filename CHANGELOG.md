@@ -3,6 +3,12 @@
 - Her morning, pulse, autonomy and wind-down now see her needs and the day's luck,
   which only reached the chat until now. A day that rolled "a rough night" was
   greeted with "I slept well".
+- Every day she lives has a plan again. Only the local-model wind-down ever wrote
+  one, so on other models nothing had anywhere to go: the luck roll was never
+  noted and nothing she moved was kept. Planning tomorrow now writes the day's
+  plan (her own hours become its items, an overlap is left out with the reason),
+  and the meters job gives a day she did not plan a plain one when she wakes. A
+  plan that lists nothing keeps her routine on the calendar.
 
 ## 3.8.0 — Meters that move a day at a time, stages that unlock, and her own needs (2026-10-11)
 

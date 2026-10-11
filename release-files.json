@@ -271,6 +271,7 @@
   "tests/test_chat_dock.py",
   "tests/test_chat_sync_browser.py",
   "tests/test_continuity_scenarios.py",
+  "tests/test_day_plan.py",
   "tests/test_expected_absences.py",
   "tests/test_hermes_compatibility.py",
   "tests/test_journal.py",
