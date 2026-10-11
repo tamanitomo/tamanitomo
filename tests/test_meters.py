@@ -207,3 +207,191 @@ class SettingsApiTests(AppFixture):
         )
         self.assertEqual(r.status_code, 400)
         self.assertIn("can't be changed", r.json()["detail"])
+
+
+# ---- the daily record and the per-day caps ------------------------------------
+#
+# Recorded days must be in the past: the record never writes a day ahead of the
+# real clock, so these tests use dates that have already happened.
+
+import companion_meters as meters  # noqa: E402
+
+PAST = dt.datetime(2026, 9, 1, 12, 0, tzinfo=dt.timezone.utc)
+START = {"warmth": 0.5, "trust": 0.5, "hurt": 0.0, "irritation": 0.0, "closeness": 50}
+
+
+def on(day):
+    return PAST + days(day)
+
+
+class TestDailyCaps:
+    def test_each_meter_moves_at_most_its_cap_in_a_day(self, companion):
+        meters.settle(companion, on(0), START, write=True)
+        up = meters.settle(
+            companion,
+            on(1),
+            {"warmth": 1, "trust": 1, "hurt": 1, "irritation": 1, "closeness": 120},
+        )
+        assert {k: v["value"] for k, v in up.items()} == {
+            "warmth": 0.7,
+            "trust": 0.6,
+            "hurt": 0.3,
+            "irritation": 0.3,
+            "closeness": 56,
+        }
+        assert all(v["held"] for v in up.values())
+        down = meters.settle(
+            companion, on(1), {"warmth": 0, "trust": 0, "closeness": 0}
+        )
+        assert {k: v["value"] for k, v in down.items()} == {
+            "warmth": 0.3,
+            "trust": 0.4,
+            "closeness": 44,
+        }
+
+    def test_an_ordinary_day_is_not_held_back(self, companion):
+        meters.settle(companion, on(0), START, write=True)
+        out = meters.settle(companion, on(1), {"warmth": 0.62, "closeness": 51.25})
+        assert out["warmth"] == {**out["warmth"], "value": 0.62, "held": False}
+        assert out["closeness"]["value"] == 51.25
+
+    def test_pace_scales_closeness_gains_but_not_losses(self, companion):
+        meters.settle(companion, on(0), START, write=True)
+        quick = meters.settle(companion, on(1), {"closeness": 120}, pace=1.8)
+        slow = meters.settle(companion, on(1), {"closeness": 120}, pace=0.6)
+        falling = meters.settle(companion, on(1), {"closeness": 0}, pace=1.8)
+        assert quick["closeness"]["value"] == 60.8
+        assert slow["closeness"]["value"] == 53.6
+        assert falling["closeness"]["value"] == 44
+
+    def test_the_rest_of_a_change_arrives_over_the_next_days(self, companion):
+        meters.settle(companion, on(0), START, write=True)
+        for day, expected in ((1, 0.3), (2, 0.6), (3, 0.8)):
+            out = meters.settle(companion, on(day), {"hurt": 0.8}, write=True)
+            assert out["hurt"]["value"] == expected
+        # Making up partway through stops it.
+        meters.settle(companion, on(4), {"hurt": 0.8}, write=True)
+        assert meters.settle(companion, on(5), {"hurt": 0.1})["hurt"]["value"] == 0.5
+
+    def test_days_with_no_record_each_count(self, companion):
+        meters.settle(companion, on(0), START, write=True)
+        out = meters.settle(companion, on(3), {"closeness": 120})
+        assert out["closeness"]["value"] == 68
+
+    def test_the_first_day_starts_from_the_seed_and_there_is_no_floor(self, companion):
+        first = meters.settle(
+            companion, on(0), {"closeness": 4}, seed={"closeness": 25}, write=True
+        )
+        assert first["closeness"] == {
+            "value": 25,
+            "target": 4,
+            "held": False,
+            "start": None,
+        }
+        values = [25]
+        for day in range(1, 6):
+            out = meters.settle(companion, on(day), {"closeness": 4}, write=True)
+            values.append(out["closeness"]["value"])
+        assert values == [25, 19, 13, 7, 4, 4]
+
+    def test_reading_never_writes(self, companion):
+        meters.settle(companion, on(0), START)
+        meters.kept_credits(companion, {on(0).date(): 0.8})
+        assert not meters.path(companion).exists()
+
+    def test_an_earlier_or_future_day_is_never_written(self, companion):
+        meters.settle(companion, on(3), START, write=True)
+        meters.settle(companion, on(1), {"closeness": 1}, write=True)
+        future = dt.datetime.now(dt.timezone.utc) + days(2)
+        meters.settle(companion, future, {"closeness": 1}, write=True)
+        assert [row["day"] for row in meters.history(companion, future, 60)] == [
+            on(3).date().isoformat()
+        ]
+
+    def test_a_damaged_record_is_set_aside(self, companion):
+        meters.path(companion).write_text("{not json")
+        meters.settle(companion, on(0), START, write=True)
+        assert meters.path(companion).with_name("meters.json.damaged").exists()
+        assert meters.history(companion, on(0))[0]["closeness"] == 50
+
+    def test_missing_you_is_a_live_gauge_and_not_held(self, companion):
+        state = feelings.compute(companion, on(0))
+        assert set(state["daily"]) == {"warmth", "trust", "hurt", "irritation"}
+
+
+class TestSweetMoments:
+    def moments(self, day, n=5):
+        return [
+            {
+                "id": f"m{day.isoformat()}-{i}",
+                "kind": "connection",
+                "topic": "talk",
+                "text": "A lovely evening.",
+                "evidence": "Invented conversation",
+                "strength": 1.0,
+                "related": None,
+                "at": dt.datetime.combine(
+                    day, dt.time(18, i), tzinfo=dt.timezone.utc
+                ).isoformat(),
+            }
+            for i in range(n)
+        ]
+
+    def trust(self, companion, rows, now):
+        from unittest.mock import patch
+
+        with patch.object(feelings, "experiences", return_value=rows):
+            return feelings.compute(companion, now)["meters"]["trust"]
+
+    def test_add_at_most_two_percent_trust_a_day(self, companion):
+        day = meters.RULES_FROM + days(9)
+        now = dt.datetime.combine(day, dt.time(23), tzinfo=dt.timezone.utc)
+        assert self.trust(companion, self.moments(day), now) == pytest.approx(0.72)
+
+    def test_moments_before_the_rule_keep_what_they_gave(self, companion):
+        day = meters.RULES_FROM - days(9)
+        now = dt.datetime.combine(day, dt.time(23), tzinfo=dt.timezone.utc)
+        assert self.trust(companion, self.moments(day), now) == pytest.approx(0.9)
+
+
+class TestRetention:
+    def talk(self, store, first, last):
+        for day in range(first, last):
+            for turn in range(8):
+                store.say(
+                    "owner",
+                    "user",
+                    f"{turn} An invented, long enough conversation about the garden."
+                    * 4,
+                    (on(day) + dt.timedelta(hours=turn - 8)).timestamp(),
+                )
+
+    def test_a_deleted_conversation_lowers_nothing(self, companion):
+        import companion_intimacy as intimacy
+        from tests.chat_fixtures import HermesStore
+
+        store = HermesStore(companion.home)
+        store.session("owner", "telegram", profile="")
+        self.talk(store, 0, 10)
+        before = meters.tick(companion, on(10))
+        with store.db() as database:
+            database.execute(
+                "DELETE FROM messages WHERE timestamp < ?", (on(6).timestamp(),)
+            )
+        after = intimacy.compute(companion, on(10))
+        assert before["effective_days"] >= 9
+        assert after["effective_days"] == before["effective_days"]
+        assert after["score"] == before["score"]
+
+    def test_closeness_falls_past_friends_a_capped_step_at_a_time(self, companion):
+        from tests.chat_fixtures import HermesStore
+
+        store = HermesStore(companion.home)
+        store.session("owner", "telegram", profile="")
+        self.talk(store, 0, 8)
+        scores = [meters.tick(companion, on(8))["points"]]
+        assert scores[0] >= 25
+        for day in range(9, 40):
+            scores.append(meters.tick(companion, on(day))["points"])
+        assert scores[-1] < 25
+        assert all(a - b <= 6 for a, b in zip(scores, scores[1:]))

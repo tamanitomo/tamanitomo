@@ -371,7 +371,7 @@ class OutreachGateTests(unittest.TestCase):
         self.assertEqual(sum((r["allowed"] for r in results)), 3)
 
 
-def test_maintenance_wrappers_dispatch_six_helpers_without_model_calls(tmp_path):
+def test_maintenance_wrappers_dispatch_seven_helpers_without_model_calls(tmp_path):
     """The scheduler runs deterministic helpers against the selected profile."""
     import runpy
 
@@ -388,10 +388,11 @@ def test_maintenance_wrappers_dispatch_six_helpers_without_model_calls(tmp_path)
         "watch": ("companion_watch", []),
         "dispatch": ("companion_dispatch", []),
         "sensors": ("companion_sensors", []),
+        "meters": ("companion_meters", ["tick"]),
         "quiet": ("companion_quiet", ["--apply"]),
         "vault": ("companion_vault", ["commit"]),
     }
-    assert len(expected) == 6
+    assert len(expected) == 7
     assert {key for key, spec in specs.items() if spec.get("no_agent")} == set(
         expected
     ) | {"rollover"}
@@ -427,7 +428,7 @@ def test_maintenance_wrappers_dispatch_six_helpers_without_model_calls(tmp_path)
                 [module + ".py", "--home", str(companion.home), *arguments],
             )
         complete.assert_not_called()
-    assert len(calls) == 6
+    assert len(calls) == 7
 
 
 def test_updater_drains_the_hermes_root_and_resumes_after_install_failure(tmp_path):

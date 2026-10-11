@@ -194,6 +194,26 @@
    "sends": "Reads the installed sensors into a local file."
   },
   {
+   "key": "meters",
+   "name": "{{AGENT}} meters",
+   "file": "meters.md.tmpl",
+   "expr": "4-59/15 * * * *",
+   "toolsets": [],
+   "no_agent": true,
+   "script": {
+    "module": "companion_meters",
+    "args": [
+     "tick"
+    ]
+   },
+   "types": [
+    "companion",
+    "colleague"
+   ],
+   "sensitivity": "none",
+   "sends": "Keeps the meters' daily record. Calls no model and sends nothing."
+  },
+  {
    "key": "wake",
    "name": "{{AGENT}} morning",
    "file": "wake.md.tmpl",

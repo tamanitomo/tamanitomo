@@ -233,6 +233,7 @@ Defined in `kit/templates/cron/manifest.json`. Which ones you get depends on the
 | health watch | hourly | **no** | all |
 | outbox dispatcher | every 5 min | **no** | all |
 | senses | every 15 min | **no** | companion, colleague |
+| meters | every 15 min (offset) | **no** | companion, colleague |
 | quiet-hours drift | Mon 04:40 | **no** | companion |
 | vault commit | every 15 min | **no** | all |
 | image timeline | :02, :17, :32, :47 | yes | companion, opt-in |

@@ -362,7 +362,7 @@ def test_explained_trip_does_not_expire_prior_contact_credit(companion):
     store.say("owner", "user", "hello", NOW.timestamp())
     save(companion)
 
-    def fixed_meters(c, now):
+    def fixed_meters(c, now, record=False):
         # Isolate contact decay; ordinary warmth still ages with actual time.
         return {
             "meters": {"trust": 0.7, "warmth": 0.65, "hurt": 0, "irritation": 0},

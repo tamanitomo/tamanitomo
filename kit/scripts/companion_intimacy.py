@@ -373,10 +373,13 @@ def _cadence_window(c, now, first_day, tz):
     return start, hours(start) / 24.0
 
 
-def compute(c, now=None) -> Dict[str, Any]:
-    """Compute the companion's intimacy escalation state, score (0-100), and stage."""
+def compute(c, now=None, record=False) -> Dict[str, Any]:
+    """Compute the companion's intimacy escalation state, score (0-100), and stage.
+
+    `record` is for the meters job alone (companion_meters.tick); every other
+    reader, the context hook above all, only reads."""
     now = now or dt.datetime.now(dt.timezone.utc)
-    feelings_state = feelings.compute(c, now)
+    feelings_state = feelings.compute(c, now, record=record)
     meters = feelings_state.get("meters") or {}
     trust = meters.get("trust", 0.6)
     warmth = meters.get("warmth", 0.6)
@@ -486,11 +489,21 @@ def compute(c, now=None) -> Dict[str, Any]:
         by_day = {d: rows for d, rows in by_day.items() if d >= first_day}
         connection_days = {d for d in connection_days if d >= first_day}
 
-    credits: Dict[dt.date, float] = {}
+    seen: Dict[dt.date, float] = {}
     for day, rows in by_day.items():
         earned = day_credit(rows)
         if earned:
-            credits[day] = earned
+            seen[day] = earned
+    # Each day is kept as first seen, so a conversation Hermes deletes later
+    # lowers nothing.
+    import companion_meters
+
+    seen = companion_meters.kept_credits(c, seen, write=record)
+    credits: Dict[dt.date, float] = {
+        day: value
+        for day, value in seen.items()
+        if value and (first_day is None or day >= first_day)
+    }
     for day in connection_days:
         credits[day] = max(credits.get(day, 0.0), CONNECTION_FLOOR)
 
@@ -584,6 +597,13 @@ def compute(c, now=None) -> Dict[str, Any]:
         eligible = [(at, text) for at, text in messages if window_begin <= at <= now]
         if eligible:
             recent[day] = day_credit(eligible)
+    # A day wholly inside the window counts as kept, so a deleted conversation
+    # does not thin the fortnight either.
+    window_first = window_begin.astimezone(tz).date()
+    today = now.astimezone(tz).date()
+    for day, value in credits.items():
+        if window_first < day <= today:
+            recent[day] = max(recent.get(day, 0.0), value)
     for connection in connections:
         try:
             at = dt.datetime.fromisoformat(connection["at"])
@@ -606,9 +626,15 @@ def compute(c, now=None) -> Dict[str, Any]:
     # The larger of the two, never the sum: silence is already a cadence deficit,
     # and charging for it twice would make a fortnight away unrecoverable.
     decay = max(silence_decay, cadence_drag)
+    # No floor: closeness can fall all the way (the owner's rule, 2026-10-10). The
+    # old one -- never below Friends once reached -- survives only as the starting
+    # point on the day the daily record begins, so the upgrade drops nobody at
+    # once; from then on a relationship falls at most a day's cap at a time.
+    first_record_score = earned_score
     if decay:
         floor = 25.0 if (earned_score >= 25.0 or effective_days >= 4.0) else 0.0
-        earned_score = max(floor, earned_score - decay)
+        first_record_score = max(floor, earned_score - decay)
+        earned_score = max(0.0, earned_score - decay)
 
     # Check permanent friend status (persisted on disk so 2 violations permanently lock friendship)
     perm_file = c.home / ".permanent-friend.json"
@@ -631,10 +657,21 @@ def compute(c, now=None) -> Dict[str, Any]:
     permanent_friend = perm_file.exists() or (violation_count >= 2)
     nsfw_revoked = revoked_file.exists()
 
-    # Penalties for boundary violations (can drop score below 25)
+    # Penalties for boundary violations
     earned_score -= violation_count * 30.0
+    first_record_score -= violation_count * 30.0
 
-    points = max(0, min(SCORE_CEILING, int(round(earned_score))))
+    # Held within the day's cap of where closeness ended yesterday: a fight or a
+    # long absence lands over days, and so does making up.
+    daily = companion_meters.settle(
+        c,
+        now,
+        {"closeness": earned_score},
+        seed={"closeness": first_record_score},
+        pace=pace_mult,
+        write=record,
+    )["closeness"]
+    points = max(0, min(SCORE_CEILING, int(round(daily["value"]))))
     score = points
 
     # Cap stage if adult themes were not enabled at companion creation,
@@ -733,6 +770,7 @@ def compute(c, now=None) -> Dict[str, Any]:
         "effective_days": round(effective_days, 2),
         "today_credit": round(credits.get(now.astimezone(tz).date(), 0.0), 2),
         "cadence": round(cadence, 2),
+        "daily": daily,
         "pace": pace,
         "pace_multiplier": pace_mult,
         "temperament": temperament,

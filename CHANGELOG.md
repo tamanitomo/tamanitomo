@@ -8,6 +8,15 @@
   to back in advance count as one stretch.
 - Settings → Sensors has a switch for learning your quiet hours (on by default).
 - A meter with no value yet reads 0% with an empty bar.
+- Each meter moves at most so far in a day: closeness 6 points (gains scale with pace), warmth
+  20%, trust 10%, hurt and irritation 30%. The rest of a change arrives over the following days, so
+  a fight lands over a few days and making up can stop it partway; missing you is not capped. Sweet
+  moments add at most 2% trust a day.
+- No floor: closeness can fall all the way. It used to stop at Friends once reached; that is now only
+  the starting point on the first day, so nobody drops at once on the upgrade.
+- The meters keep their own daily record (`meters.json`), kept by a new no-model **meters** job every
+  15 minutes; reading them anywhere else writes nothing. Each day's contact is kept as first seen,
+  so conversations Hermes deletes later never lower closeness or trust. Repair adds the job.
 
 ## 3.7.2 — Photos that wait for ComfyUI, helpers that keep their request (2026-10-10)
 

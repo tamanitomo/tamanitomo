@@ -1,15 +1,15 @@
 """Install profile files and separate maintenance from inference jobs.
 
 Quiet rhythms must keep working without a provider, token budget or model
-interpretation. The cron manifest declares six maintenance routines with
-``no_agent``: timeline_cleanup, watch, dispatch, sensors, quiet and vault.
-Their generated wrappers run the named Python helper with ``--script`` and
-``--no-agent``; no language-model turn is needed to prune files, check health,
-deliver already-written messages, read sensors, adjust an opted-in quiet window
-or commit the local vault. Availability still depends on each helper's actual
+interpretation. The cron manifest declares seven maintenance routines with
+``no_agent``: timeline_cleanup, watch, dispatch, sensors, meters, quiet and
+vault. Their generated wrappers run the named Python helper with ``--script``
+and ``--no-agent``; no language-model turn is needed to prune files, check
+health, deliver already-written messages, read sensors, keep the meters' daily
+record, adjust an opted-in quiet window or commit the local vault. Availability still depends on each helper's actual
 filesystem, device or network dependencies.
 
-The manifest also declares rollover as a seventh no-agent session-lifecycle
+The manifest also declares rollover as an eighth no-agent session-lifecycle
 job. It preserves old transcripts and flags reflection work rather than doing
 that reflection itself. Jobs that author presence or reflections remain a
 separate inference path. Keeping this distinction in job configuration, rather

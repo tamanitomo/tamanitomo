@@ -69,6 +69,26 @@ The companion receives a command to record supported experiences during chat. Su
 
 Warmth and trust also move on their own, slowly, from how the two of you actually are. A day counts when you wrote at least three times and she answered. Each such day adds 0.02 to warmth, fading on the temperament's own recovery time and capped at +0.20, and 0.004 to trust, summed over the whole history, never fading, capped at +0.12. Each request she was asked to do and finished (a mission marked done) adds 0.01 trust, up to +0.06. While a rupture is unrepaired, trust does not build and warmth builds at half rate: time alone does not mend what was hurt. The state includes a `slow_change` block with the counts so the numbers can be explained. Nothing here reads message text.
 
+## Daily caps and the meters' own record
+
+Each meter moves at most so far in a day, measured from where it ended the last recorded day (the owner's "stop spikes" setting):
+
+| Meter | Most it moves in a day, up or down |
+| --- | --- |
+| Closeness | 6 points; gains scale with pace (slow 3.6, quick 10.8) |
+| Warmth | 0.20 |
+| Trust | 0.10 |
+| Hurt, irritation | 0.30 |
+| Missing you | not capped: a live gauge of time apart, reset the moment you are back |
+
+The rest of a change is not lost. It arrives over the following days, so a fight still lands in full over two to four days and making up partway stops it there, while a burst of sweet talk cannot jump a meter ahead. An ordinary day moves less than its cap and is never held back. Days with nothing recorded each count, so after three days the band is three caps wide. The state shows what each meter is heading for and whether today's cap is holding it (`daily` in the feelings state and in closeness).
+
+There is no floor: closeness can fall all the way back to Just Met. It used to stop at Friends once reached; that floor survives only as the starting point on the day a companion's record begins, so the upgrade drops nobody at once; from then on a relationship falls at most a day's cap at a time.
+
+Sweet moments add at most 0.02 trust a day (connection moments recorded from 11 October 2026; earlier moments keep the trust they already gave). Trust is mostly built by time together and kept promises (slow change, above).
+
+The record is `meters.json` in the companion's life directory: each day's end-of-day values, and each day's contact as first seen (the day's closeness credit and message counts). Closeness and slow change are built from every day you talked, and Hermes deletes old conversations; a kept day is never lowered by a deleted one, and a day wholly inside the fortnight of contact counts as kept too. Reading the meters never writes, so building her context writes nothing. The no-model **meters** job (every 15 minutes) is the one writer. A record that cannot be read is set aside as `meters.json.damaged` and a new one begins.
+
 ## Files and behavior
 
 Each companion keeps `feelings-settings.json`, the append-only `relationship-feelings.jsonl`, and the append-only `expected-absences.jsonl` in its own life directory. They are not moved into the shared human-facts directory. Settings use revision checks; repeated experience IDs are idempotent and conflicting content is rejected. The screen initially shows 30 experiences. Load older experiences to browse earlier records and make them available as repair or correction targets. Older records remain in the ledger and still affect the calculation.

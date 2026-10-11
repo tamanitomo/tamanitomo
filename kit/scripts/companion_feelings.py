@@ -591,7 +591,7 @@ TRUST_PER_KEPT_ASK = 0.01
 TRUST_KEPT_CAP = 0.06
 
 
-def passive(c, now, profile, unresolved):
+def passive(c, now, profile, unresolved, record=False):
     """Slow drift from days of real two-way conversation and kept requests.
 
     A day counts when the human wrote at least three times and she answered. Warmth
@@ -601,7 +601,12 @@ def passive(c, now, profile, unresolved):
     """
     import companion_thread
 
-    days = companion_thread.contact_days(c, now)
+    import companion_meters
+
+    # Each day is kept as first seen, so a deleted conversation lowers nothing.
+    days = companion_meters.kept_counts(
+        c, companion_thread.contact_days(c, now), write=record
+    )
     counted = {
         day: counts
         for day, counts in days.items()
@@ -635,7 +640,9 @@ def passive(c, now, profile, unresolved):
     }
 
 
-def compute(c, now=None):
+def compute(c, now=None, record=False):
+    """The feelings now. `record` is for the meters job alone: every other reader,
+    the context hook above all, only reads."""
     import companion_thread
     import companion_presence
 
@@ -692,13 +699,25 @@ def compute(c, now=None):
     for row in rows:
         if row["kind"] == "repair":
             repair[row["related"]] = max(repair.get(row["related"], 0), row["strength"])
+    import companion_meters
+
+    # From the day the daily record began, sweet moments add at most a little
+    # trust a day; earlier moments keep the trust they already gave.
+    rules_from = companion_meters.RULES_FROM
+    moment_trust = {}
     for row in rows:
         age = max(0, (now.astimezone(UTC) - _stamp(row["at"])).total_seconds() / 86400)
         decay = math.exp(-age / profile["recovery_days"])
         strength = row["strength"]
         if row["kind"] == "connection":
             warmth += 0.12 * strength * decay
-            trust += 0.04 * strength
+            gain = 0.04 * strength
+            day = companion_meters.day_of(c, row["at"])
+            if day >= rules_from:
+                used = moment_trust.get(day, 0.0)
+                gain = max(0.0, min(gain, companion_meters.MOMENT_TRUST_PER_DAY - used))
+                moment_trust[day] = used + gain
+            trust += gain
         if row["kind"] == "rupture":
             counts[row["topic"]] = counts.get(row["topic"], 0) + 1
             repetition = 1 + min(2, counts[row["topic"]] - 1) * 0.4
@@ -720,7 +739,9 @@ def compute(c, now=None):
         trust = max(0, min(1, trust))
         warmth = max(0, min(1, warmth))
     try:
-        slow = passive(c, now, profile, any(row["repair"] < 0.5 for row in reasons))
+        slow = passive(
+            c, now, profile, any(row["repair"] < 0.5 for row in reasons), record
+        )
     except (OSError, ValueError, TypeError):
         slow = None
     if slow:
@@ -731,6 +752,15 @@ def compute(c, now=None):
             max(0, gap - config["connection_hours"]) * 0.003 * profile["sensitivity"]
         )
     clamp = lambda value: max(0.0, min(1.0, value))
+    # What the history says, then held within each meter's daily cap of where it
+    # ended yesterday. Missing you is a live gauge and is not held.
+    targets = {
+        "warmth": clamp(warmth),
+        "trust": clamp(trust),
+        "hurt": clamp(hurt),
+        "irritation": clamp(irritation),
+    }
+    settled = companion_meters.settle(c, now, targets, write=record)
     scene = companion_presence.current(c)
     return {
         "at": now.isoformat(),
@@ -740,12 +770,10 @@ def compute(c, now=None):
         "mood_at": scene.get("recorded_at") if scene else None,
         "private_stance": scene["state"].get("private_stance") if scene else None,
         "meters": {
-            "warmth": clamp(warmth),
-            "trust": clamp(trust),
-            "hurt": clamp(hurt),
-            "irritation": clamp(irritation),
+            **{name: settled[name]["value"] for name in targets},
             "longing": None if longing is None else clamp(longing),
         },
+        "daily": settled,
         "absence": away,
         "expected_absences": expected_absences(c, now)["absences"],
         "slow_change": slow,
