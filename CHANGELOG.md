@@ -1,4 +1,4 @@
-## Unreleased
+## 3.9.0 — Her own life carries on: places, people, storylines and luck that lasts (2026-10-11)
 
 - Her morning, pulse, autonomy and wind-down now see her needs and the day's luck,
   which only reached the chat until now. A day that rolled "a rough night" was
