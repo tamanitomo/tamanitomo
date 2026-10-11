@@ -549,7 +549,7 @@ const settingsPanels=[
       <span class="contact-label">Pace</span>
       <div class="contact-controls">
         <span>${esc(labels.pace[s.relationship_pace]||s.relationship_pace)}</span>
-        <span class="dim small">Chosen when ${esc(s.agent||'your companion')} was created; it can't be changed.</span>
+        <span class="dim small">Chosen when ${esc(($('who')?.textContent||'').trim()||'your companion')} was created; it can't be changed.</span>
       </div>
     </div>
     <div class="contact-row">
@@ -1495,7 +1495,7 @@ async function unlockRelationship(pinConfigured){
       error.innerHTML='<span class="bad">That is not their name.</span>';return;
     }
     $('product-dialog').close();
-    if(!confirm(`Changing how ${name} relates to you rewrites a dynamic the two of you have already built. Pace, progression and intimacy all feed their behaviour directly.\n\nContinue?`))return;
+    if(!confirm(`Changing how ${name} relates to you rewrites a dynamic the two of you have already built. Progression and intimacy feed their behaviour directly (pace and temperament stay as they were chosen).\n\nContinue?`))return;
     relationshipUnlocked=true;
     openSettings(null,'relationship');
   };

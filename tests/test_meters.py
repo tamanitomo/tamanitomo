@@ -542,7 +542,7 @@ class TestExplain:
         assert out["line"] == line
 
     def test_a_romance_names_the_romantic_stages(self, companion):
-        companion.boundary = "partner"
+        companion.boundary = "next-door"
         out = meters.explain(companion, feelings_state(), closeness_state(), LATER)[
             "closeness"
         ]
@@ -578,4 +578,25 @@ assert.equal(meterWhy(null), '');
 const line = closenessLine({line: 'Chemistry in about 5 good days', next: {good_days: 5}, good_day: 'a real conversation'});
 assert.ok(line.includes('Chemistry in about 5 good days') && line.includes('title="A good day: a real conversation."'));
 assert.equal(closenessLine(null), '');
+""")
+
+
+def test_setup_suggests_a_temperament_and_sends_the_choice():
+    from tests.test_chat_dock import run_browser_contract
+
+    run_browser_contract(r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync('kit/app/static/onboarding.js', 'utf8');
+const start = source.indexOf('const TEMPERAMENT_LABEL');
+const end = source.indexOf('\n', source.indexOf('const temperamentOf'));
+vm.runInThisContext(source.slice(start, end) + '\nglobalThis.temperamentOf=temperamentOf;globalThis.TEMPERAMENT_LABEL=TEMPERAMENT_LABEL;');
+assert.deepEqual(Object.keys(TEMPERAMENT_LABEL), ['steady', 'expressive', 'guarded']);
+assert.equal(temperamentOf({persona: 'romantic'}), 'expressive');
+assert.equal(temperamentOf({persona: 'shy'}), 'guarded');
+assert.equal(temperamentOf({persona: 'analytical'}), 'steady');
+assert.equal(temperamentOf({persona: 'romantic', temperament: 'guarded'}), 'guarded', 'the choice wins');
+assert.equal(temperamentOf({persona: 'shy', temperament: 'nonsense'}), 'guarded', 'an old draft falls back');
+assert.ok(source.includes('temperament:temperamentOf(derived)'), 'the answers carry it to setup');
 """)
