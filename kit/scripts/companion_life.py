@@ -459,6 +459,109 @@ def people_due(root, day=None, count=3):
     return rows[:count] if count else rows
 
 
+# --- commitments -----------------------------------------------------------
+#
+# Weekly anchors are suggestions, and suggestions lose to whatever is easiest:
+# on a live install her weekly plans were skipped for whatever she was already
+# doing, because the short form deferred any open anchor without asking. A
+# commitment is an anchor somebody expects her at -- a shift, a
+# class she signed up for, a standing evening with a friend. Going is the
+# default, missing one is a decision she states, and a missed one is noted in
+# the day's plan.
+WEEKDAY_NAMES = (
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+)
+
+
+def _routine_file(root):
+    path = pathlib.Path(root) / "routine.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or data.get("kind") != "imagined_routine":
+        raise ValueError("routine must be imagined_routine")
+    return path, data
+
+
+def commitments(root):
+    """Her weekly commitments, as they sit in her routine."""
+    try:
+        _, data = _routine_file(root)
+    except (OSError, ValueError):
+        return []
+    return [
+        x
+        for x in data.get("weekly", [])
+        if isinstance(x, dict) and x.get("commitment") is True
+    ]
+
+
+def add_commitment(root, spec):
+    """Somewhere she is expected each week. Replaces the anchor at the same day and
+    start, so an anchor she already has becomes a commitment rather than a twin."""
+    day = str(spec.get("day") or "").strip().lower()
+    if day not in WEEKDAY_NAMES:
+        raise ValueError(f"day must be one of {', '.join(WEEKDAY_NAMES)}")
+    start, end = str(spec.get("start") or ""), str(spec.get("end") or "")
+    try:
+        a, b = dt.time.fromisoformat(start), dt.time.fromisoformat(end)
+    except ValueError:
+        raise ValueError("start and end are HH:MM")
+    if b <= a:
+        raise ValueError("a commitment ends after it starts")
+    activity = str(spec.get("activity") or "").strip()
+    if not activity:
+        raise ValueError("say what the commitment is")
+    path, data = _routine_file(root)
+    weekly = [x for x in data.get("weekly", []) if isinstance(x, dict)]
+    entry = {
+        "id": "commit-"
+        + re.sub(r"[^a-z0-9]+", "-", f"{day}-{start}-{activity}".lower()).strip("-")[
+            :48
+        ],
+        "day": day,
+        "start": start,
+        "end": end,
+        "activity": activity[:120],
+        "setting": str(spec.get("setting") or "")[:160],
+        "commitment": True,
+    }
+    if spec.get("with"):
+        entry["with"] = find_people(root, spec["with"])
+    kept = [x for x in weekly if not (x.get("day") == day and x.get("start") == start)]
+    clash = [
+        x
+        for x in kept
+        if x.get("day") == day
+        and str(x.get("start", "")) < end
+        and start < str(x.get("end", ""))
+        and x.get("commitment")
+    ]
+    if clash:
+        raise ValueError(
+            f"that overlaps {clash[0].get('activity')!r}, which is already a commitment"
+        )
+    data["weekly"] = kept + [entry]
+    atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+    return entry
+
+
+def drop_commitment(root, ident):
+    """She quit, or it ended: the commitment leaves her week."""
+    path, data = _routine_file(root)
+    weekly = [x for x in data.get("weekly", []) if isinstance(x, dict)]
+    kept = [x for x in weekly if x.get("id") != ident]
+    if len(kept) == len(weekly):
+        raise ValueError(f"no commitment {ident!r}")
+    data["weekly"] = kept
+    atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+    return {"dropped": ident}
+
+
 # --- ideas for a day -------------------------------------------------------
 #
 # The complaint this answers: she stayed home and read, every day. Not because
@@ -1237,6 +1340,20 @@ def main():
         "--cadence", default="fortnightly", choices=["weekly", "fortnightly", "monthly"]
     )
     ap.add_argument("--note", default="")
+    ac = s.add_parser(
+        "add-commitment",
+        help="Somewhere you are expected each week: a shift, a class, a standing plan",
+    )
+    ac.add_argument("--day", required=True)
+    ac.add_argument("--start", required=True)
+    ac.add_argument("--end", required=True)
+    ac.add_argument("--activity", required=True)
+    ac.add_argument("--setting", default="")
+    ac.add_argument(
+        "--with", dest="with_", default="", help="people ids, comma-separated"
+    )
+    dc2 = s.add_parser("drop-commitment", help="A commitment that has ended, by id")
+    dc2.add_argument("--id", required=True)
     nw = s.add_parser(
         "news", help="What is going on in someone's own life, as you last heard it"
     )
@@ -1351,6 +1468,20 @@ def main():
         out = saw_person(root, a.person, a.day or now.date().isoformat())
     elif a.cmd == "news":
         out = add_news(root, a.person, a.text, now.date())
+    elif a.cmd == "add-commitment":
+        out = add_commitment(
+            root,
+            {
+                "day": a.day,
+                "start": a.start,
+                "end": a.end,
+                "activity": a.activity,
+                "setting": a.setting,
+                "with": [x.strip() for x in a.with_.split(",") if x.strip()],
+            },
+        )
+    elif a.cmd == "drop-commitment":
+        out = drop_commitment(root, a.id)
     elif a.cmd == "drop-person":
         out = drop_person(root, a.person)
     elif a.cmd == "suggest":

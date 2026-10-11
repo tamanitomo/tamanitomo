@@ -69,6 +69,18 @@ elapsed estimate triggers reconsideration guidance rather than invented completi
 These checks validate record consistency. They do not establish physical events or
 guarantee that a model will follow a varied routine over multiple days.
 
+### Commitments
+
+A weekly anchor marked as a commitment (`companion_life.py add-commitment --day tuesday --start
+18:00 --end 20:00 --activity "pottery class" --setting "the community studio"`) is somewhere
+someone expects her: a shift, a class she signed up for, a standing evening with a friend. Giving
+the day and start of an anchor she already has turns that anchor into one. The pre-read says where
+she is expected today. The short forms used to defer any open anchor on her behalf, which is how
+her weekly plans kept losing to whatever she was already doing; a commitment is never
+deferred for her: she goes (`--anchor <id> --decision follow`) or says why she is missing it
+(`--decision defer --reason "..."`), and a missed one is noted once in the day's plan. A week with
+no commitment at all is asked for one, and `drop-commitment --id` ends one she has quit.
+
 
 ## Independent life and continuity
 

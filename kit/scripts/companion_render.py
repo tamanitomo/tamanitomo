@@ -227,6 +227,7 @@ def mapping_for(
             "keepsake",
             "sleep",
             "soul",
+            "arcs",
         )
     }
     commands["DOCTOR_CMD"] = terminal_python_command(

@@ -84,6 +84,14 @@ def chat_parts(c, relationship_budget, compact=False):
         parts.append(
             (5, "[What you have told about your own past — fixed once told]\n" + told)
         )
+    try:
+        import companion_arcs
+
+        running = companion_arcs.render(c)
+    except (OSError, ValueError):
+        running = ""
+    if running and (companion_arcs.active(c) or not compact):
+        parts.append((5, running))
     if not relationship_budget and (places.places(c) or canon.canon(c)):
         suppressed.add("your places and history")
     if not compact:
@@ -116,4 +124,12 @@ def scheduled(c, limit=1500):
     )
     if not places.home(c):
         block = HOME_MISSING + ("\n" + block if block else "")
+    try:
+        import companion_arcs
+
+        running = companion_arcs.render(c)
+    except (OSError, ValueError):
+        running = ""
+    if running:
+        block = (block + "\n" if block else "") + running
     return block

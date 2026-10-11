@@ -131,6 +131,9 @@ def preread(c, now=None):
             ensure_ascii=False,
         )
     )
+    expected = commitments_block(c, now)
+    if expected:
+        out.append(expected)
     lifestyle = companion_lifestyle.render(c, now, scene)
     if lifestyle:
         out.append(lifestyle)
@@ -155,6 +158,47 @@ def needs_block(c, now):
         return companion_needs.render(c, companion_needs.compute(c, now))
     except (OSError, ValueError, KeyError, TypeError):
         return ""
+
+
+def commitments_block(c, now):
+    """Where she is expected today, or the invitation to have somewhere to be."""
+    try:
+        import companion_life as life
+        from companion_platform import terminal_python_command
+
+        mine = life.commitments(c.life)
+        if not (c.life / "routine.json").exists():
+            return ""
+    except (OSError, ValueError):
+        return ""
+    cmd = terminal_python_command(
+        pathlib.Path(__file__).with_name("companion_life.py"), "--home", c.home
+    )
+    if not mine:
+        return (
+            "[Nothing in your week is a commitment yet. Real weeks have somewhere to be: a "
+            "job or a shift, a class you signed up for, a standing evening with someone. "
+            f"Decide one that fits your life and record it once: `{cmd} add-commitment --day "
+            '<weekday> --start HH:MM --end HH:MM --activity "..." --setting "..."`; an '
+            "anchor you already have becomes one when you give its day and start.]"
+        )
+    today = life.WEEKDAY_NAMES[now.astimezone(_tz(c)).weekday()]
+    due = sorted(
+        (x for x in mine if x.get("day") == today), key=lambda x: str(x.get("start"))
+    )
+    if not due:
+        return ""
+    return (
+        "[Expected today: "
+        + "; ".join(
+            f"{x.get('activity')} {x.get('start')}–{x.get('end')}"
+            + (f" ({x['setting']})" if x.get("setting") else "")
+            + f" [anchor {x.get('id')}]"
+            for x in due
+        )
+        + ". Someone expects you there: going is the default. If you miss one, say why "
+        '(--anchor <id> --decision defer --reason "..."); it is noted in your day.]'
+    )
 
 
 def day_ideas(c, now):
@@ -191,7 +235,13 @@ def day_ideas(c, now):
         shopping = companion_lifestyle.shopping_offer(c, now)
     except Exception:
         shopping = ""
-    if not ideas and not people and not shopping and not own and mine >= life.OWN_ENOUGH:
+    if (
+        not ideas
+        and not people
+        and not shopping
+        and not own
+        and mine >= life.OWN_ENOUGH
+    ):
         return ""
     lines = [
         "[Ideas for today — invitations, not a schedule. Take one that appeals, combine two, or do "

@@ -762,7 +762,7 @@ class StoryInContextTests(unittest.TestCase):
         self.assertNotIn("has not written back", context.build(self.c, now=self.now))
 
     def test_a_scheduled_run_sees_her_places_but_not_her_tool_instructions(self):
-        self.assertEqual(story.scheduled(self.c), story.HOME_MISSING)
+        self.assertTrue(story.scheduled(self.c).startswith(story.HOME_MISSING))
         places.add(self.c, {"name": "Gym", "description": "Basement gym."}, self.now)
         block = story.scheduled(self.c)
         self.assertIn("Basement gym.", block)

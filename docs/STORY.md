@@ -34,6 +34,25 @@ Her home has a floor plan: a description and rooms (`set-home --room "Kitchen=ye
 
 Where she is is a field on every presence record, set by her, never read out of the location's wording: `place` is `home` (with `room`), the id of a place she has been, or `out` when she is out and about with nowhere in particular to be. The first time she goes somewhere she describes it with `new_place` in the same record, and her home is described once with `home` (a description and its rooms). Staying put carries the place forward. Until her home is on record, every scheduled run asks her to describe it; once it is, a record that moves somewhere without saying which place is refused with her rooms and places listed, so one kitchen stops being written eight ways. A room not yet on the floor plan is added when she names it. Pictures of a place carry how she described it, so the shop she goes back to looks like the same shop.
 
+## Storylines (`companion_arcs.py`)
+
+The parts of her life that take weeks: learning something, a project, a problem to sort out,
+something at work or with someone she knows. She starts one (`start --title --premise --kind
+--weeks`), records a step when it moves (`beat`, at most one a day) and ends it, resolved or
+dropped (`end`). At most two run at once. Her runs and her chats carry the running ones with how
+far along they are and their last step; one that has not moved for four days is mentioned as still,
+and one past the weeks she gave it is asked to come to an end. With none running she is invited to
+start one, and the weekly reflection looks at the week ahead: storylines, people, and somewhere to
+be.
+
+## The people in her life (`companion_life.py`)
+
+Her people are the ones setup wrote into her routine and the ones she adds (`add-person`). The
+shared seed list is offered a few at a time, a different few per companion, only while she has
+fewer than three people of her own, and she is asked to let someone in until she has. A presence
+record says who is with her (`with`), which records the meeting and counts as company, and `news`
+keeps what is going on in someone's own life so it comes back the next time they are due.
+
 ## Moments
 
 The relationship ledger (`companion_notes.py moment ...`) records jokes, nicknames, rituals, firsts and milestones with the words or occasion they came from (`--evidence`). Rituals can recur, as above.

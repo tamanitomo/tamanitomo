@@ -179,3 +179,104 @@ class TestTheMetersJobKeepsTheDay:
         night(companion, at(23, day=-1), at(7))
         meters.tick(companion, at(3))
         assert not (companion.life / "plans").exists()
+
+
+class TestSomewhereToBe:
+    """A commitment is an anchor somebody expects her at: not skipped on her behalf."""
+
+    @pytest.fixture
+    def her(self, companion):
+        import companion_presence as presence
+
+        routine = dict(ROUTINE, lifestyle={"enabled": True})
+        (companion.life / "routine.json").write_text(json.dumps(routine))
+        presence.update_wardrobe(
+            companion, [{"id": "tee", "description": "green tee", "use": "everyday"}]
+        )
+        presence.update(
+            companion,
+            {
+                "previous_id": None,
+                "outfit": ["tee"],
+                "location": "kitchen",
+                "activity": "reading the paper",
+                "mood": "content",
+                "text": "Coffee.",
+                "activity_change": "transition",
+                "routine_choice": {"anchor": "free", "decision": "free", "reason": "x"},
+            },
+            at(11, 30),
+        )
+        shift = life.add_commitment(
+            companion.life,
+            {
+                "day": "tuesday",
+                "start": "12:00",
+                "end": "14:00",
+                "activity": "lunch shift at the bookshop",
+                "setting": "Larkin's Books",
+            },
+        )
+        return companion, presence, shift
+
+    def test_an_anchor_becomes_a_commitment_not_a_twin(self, companion):
+        life.add_commitment(
+            companion.life,
+            {
+                "day": "tuesday",
+                "start": "18:00",
+                "end": "19:00",
+                "activity": "pottery class",
+                "setting": "the community studio",
+            },
+        )
+        weekly = json.loads((companion.life / "routine.json").read_text())["weekly"]
+        assert len(weekly) == 1 and weekly[0]["commitment"] is True
+        assert life.commitments(companion.life)[0]["id"].startswith("commit-tuesday")
+
+    def test_she_is_not_deferred_on_her_own_behalf(self, her):
+        c, presence, shift = her
+        with pytest.raises(ValueError, match="is a commitment and it is on now"):
+            presence.continue_scene(c, "Still reading.", now=at(12, 16))
+        with pytest.raises(ValueError, match="say why"):
+            presence.continue_scene(
+                c,
+                "Still reading.",
+                now=at(12, 16),
+                anchor=shift["id"],
+                decision="defer",
+            )
+
+    def test_missing_one_is_her_decision_and_is_noted_once(self, her):
+        c, presence, shift = her
+        for minute in (16, 31):
+            presence.continue_scene(
+                c,
+                "Still reading.",
+                now=at(12, minute),
+                anchor=shift["id"],
+                decision="defer",
+                reason="Swapped with a coworker who needed the hours",
+            )
+        notes = [r["change"] for r in plan.read(c, DAY.date())["history"]]
+        missed = [n for n in notes if n.startswith("missed")]
+        assert missed == [
+            "missed lunch shift at the bookshop (12:00–14:00): "
+            "Swapped with a coworker who needed the hours"
+        ]
+
+    def test_the_morning_knows_where_she_is_expected(self, her):
+        import companion_preread
+
+        c, _, shift = her
+        text = companion_preread.commitments_block(c, at(8))
+        assert "Expected today: lunch shift at the bookshop 12:00–14:00" in text
+        assert shift["id"] in text
+        assert companion_preread.commitments_block(c, at(8, day=1)) == ""
+
+    def test_a_week_with_nowhere_to_be_is_asked_for_one(self, companion):
+        import companion_preread
+
+        text = companion_preread.commitments_block(companion, at(8))
+        assert "Nothing in your week is a commitment yet" in text
+        assert "add-commitment" in text

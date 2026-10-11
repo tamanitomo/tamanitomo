@@ -797,6 +797,10 @@ def update(c, data, now=None, dry_run=False):
     # Outside the lock: the view is derived, so a failure to write it must not
     # cost the state that was just recorded.
     try:
+        _note_missed_commitment(c, state, parent, now)
+    except (OSError, ValueError):
+        pass
+    try:
         write_emotive(c, now)
     except OSError:
         pass
@@ -807,6 +811,44 @@ def update(c, data, now=None, dry_run=False):
     except (OSError, ValueError, ImportError):
         pass
     return result
+
+
+def _note_missed_commitment(c, state, parent, now):
+    """A commitment she said she is missing goes into the day's plan, once."""
+    choice = (state.get("lifestyle") or {}).get("routine_choice") or {}
+    if choice.get("decision") != "defer":
+        return
+    before = ((parent or {}).get("state", {}).get("lifestyle") or {}).get(
+        "routine_choice"
+    ) or {}
+    if (
+        before.get("anchor") == choice.get("anchor")
+        and before.get("decision") == "defer"
+    ):
+        return
+    import companion_life
+    import companion_plan
+
+    local = now.astimezone(ZoneInfo(c.timezone))
+    active = companion_life.routine(c.life, local, c.agent)["active_suggestions"]
+    found = next(
+        (
+            a
+            for a in active
+            if a.get("id") == choice.get("anchor") and a.get("commitment") is True
+        ),
+        None,
+    )
+    if not found:
+        return
+    companion_plan.ensure(c, local.date(), now)
+    companion_plan.note(
+        c,
+        local.date(),
+        f"missed {found.get('activity')} ({found.get('start')}–{found.get('end')}): "
+        + str(choice.get("reason") or "")[:200],
+        now,
+    )
 
 
 # ---- keeping the present honest without a model --------------------------
@@ -873,13 +915,28 @@ def _routine_choice(c, now, rec, anchor="", decision="", reason=""):
             "reason": reason or f"continuing {rec['activity']}",
         }
     ids = [a["id"] for a in active]
+    expected = [a for a in active if a.get("commitment") is True]
     if anchor and anchor in ids and decision in ("follow", "defer"):
+        if decision == "defer" and not reason and anchor in {a["id"] for a in expected}:
+            raise ValueError(
+                "missing a commitment is a decision: say why with --reason"
+            )
         return {
             "anchor": anchor,
             "decision": decision,
             "reason": reason or rec["activity"],
         }
     if not anchor and not decision:
+        if expected:
+            # A commitment is not deferred on her behalf: that is how her weekly plans
+            # kept losing to whatever she was already doing.
+            a = expected[0]
+            raise ValueError(
+                f"{a.get('activity')} ({a.get('start')}–{a.get('end')}) is a commitment and it "
+                f"is on now: go (a transition with --anchor {a['id']} --decision follow) or "
+                f"say why you are missing it (--anchor {a['id']} --decision defer --reason "
+                '"...")'
+            )
         # Staying where she is while an anchor is open is a deferral, and saying so is honest.
         return {
             "anchor": ids[0],
@@ -893,7 +950,17 @@ def _routine_choice(c, now, rec, anchor="", decision="", reason=""):
     )
 
 
-def continue_scene(c, text_, mood="", asleep=None, now=None, delay_reason=""):
+def continue_scene(
+    c,
+    text_,
+    mood="",
+    asleep=None,
+    now=None,
+    delay_reason="",
+    anchor="",
+    decision="",
+    reason="",
+):
     """Nothing has changed: the same scene, one short continuation.
 
     An activity that has run past its planned length needs a `delay_reason` to
@@ -909,7 +976,7 @@ def continue_scene(c, text_, mood="", asleep=None, now=None, delay_reason=""):
     if delay_reason:
         rec["delay_reason"] = delay_reason
     rec.update({"text": text_, "activity_change": "continue"})
-    choice = _routine_choice(c, now, rec)
+    choice = _routine_choice(c, now, rec, anchor, decision, reason)
     if choice:
         rec["routine_choice"] = choice
     return update(c, rec, now)
@@ -1165,6 +1232,11 @@ def main():
         default="",
         help="why the activity is running past its planned length",
     )
+    ct.add_argument("--anchor", default="", help="the routine anchor this answers")
+    ct.add_argument("--decision", choices=("", "follow", "defer"), default="")
+    ct.add_argument(
+        "--reason", default="", help="why, when you are missing a commitment"
+    )
     tr = sub.add_parser(
         "transition",
         help="a real change; name only what changed, code fills the rest",
@@ -1222,6 +1294,9 @@ def main():
             args.mood,
             None if args.asleep is None else args.asleep == "yes",
             delay_reason=args.delay_reason,
+            anchor=args.anchor,
+            decision=args.decision,
+            reason=args.reason,
         )
     elif args.action == "transition":
         out = transition_scene(

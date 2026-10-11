@@ -29,6 +29,16 @@
   presence record says who is with her (`with`, by id or name), which records the meeting
   and counts as company. What is going on in someone's own life is kept (`news`) and comes
   back with them the next time they are due.
+- Storylines: the parts of her life that take weeks (`companion_arcs.py`). She starts one,
+  records steps (one a day at most) and ends it, resolved or dropped; at most two run at once.
+  Her runs and chats carry them with their pace: a still one is nudged after four days, one
+  past its weeks is asked to end, and with none running she is invited to start one. The
+  weekly reflection now looks at the week ahead: storylines, people, somewhere to be.
+- Commitments: a weekly anchor somebody expects her at (`add-commitment`). The short forms
+  deferred any open anchor on her behalf, which is how her weekly plans kept losing to
+  whatever she was already doing; a commitment is never deferred for her. She goes,
+  or says why she is missing it, and a missed one is noted once in the day's plan. A week with
+  none is asked for one.
 
 ## 3.8.0 — Meters that move a day at a time, stages that unlock, and her own needs (2026-10-11)
 
