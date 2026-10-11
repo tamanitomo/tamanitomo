@@ -216,6 +216,59 @@ class TestLuck:
             assert needs.log_luck(companion, at(9)) is None
 
 
+class TestLuckThatLasts:
+    COLD = {
+        "kind": "unlucky",
+        "roll": 2,
+        "what": "caught a cold",
+        "days": 3,
+        "effect": {"energy_start": -0.25, "energy_rate": 0.008},
+        "means": "a sore throat and a heavy head",
+    }
+
+    def rolls(self, sick_on):
+        def luck(c, day):
+            if day == sick_on:
+                return {**self.COLD, "day": day.isoformat()}
+            return {"day": day.isoformat(), "kind": "ordinary", "roll": 10}
+
+        return patch.object(needs, "luck", side_effect=luck)
+
+    def test_a_cold_is_still_there_the_next_day_and_gone_after(self, companion):
+        sick_on = DAY.date() - dt.timedelta(days=1)
+        night(companion, at(23, day=-1), at(7))
+        with self.rolls(sick_on):
+            state = needs.compute(companion, at(20), stage=0)
+            text = needs.render(companion, state)
+        assert [r["what"] for r in state["going_on"]] == ["caught a cold"]
+        assert "caught a cold" in state["needs"]["energy"]["why"]
+        assert (
+            "Still going on: caught a cold (since 2026-10-19, day 2 of about 3): "
+            "a sore throat and a heavy head." in text
+        )
+        later = DAY.date() + dt.timedelta(days=2)
+        with self.rolls(sick_on):
+            assert needs.going_on(companion, later) == []
+
+    def test_the_first_day_says_how_long(self, companion):
+        night(companion, at(23, day=-1), at(7))
+        with self.rolls(DAY.date()):
+            text = needs.render(companion, needs.compute(companion, at(9), stage=0))
+        assert (
+            "Today's luck: caught a cold (the day's roll, 2 of 20); it will be part"
+            in (text)
+        )
+
+    def test_every_outcome_is_whole(self):
+        for kind, rows in needs.LUCK.items():
+            for what, days, effect, means in rows:
+                assert what and 1 <= days <= needs.LONGEST
+                assert set(effect) <= {"energy_start", "energy_rate", "social", "fun"}
+                assert (
+                    days == 1 or means
+                ), f"{what} lasts but says nothing of what it means"
+
+
 class TestHerContext:
     def test_nothing_to_say_when_all_is_well(self, companion):
         night(companion, at(23, day=-1), at(7))
@@ -314,6 +367,8 @@ const calling = needsRow({has: ['energy', 'social', 'fun'], wants: ['rest', 'som
 assert.ok(calling.includes('rest, some fun'));
 assert.ok(!/\d/.test(calling.replace(/title="[^"]*"/, '')), 'no numbers on the row');
 assert.ok(calling.includes('Today: a rough night.'));
+assert.ok(needsRow({has: ['energy'], wants: [], asleep: false,
+  going_on: [{what: 'caught a cold'}]}).includes('Still: caught a cold.'));
 assert.ok(needsRow({has: ['energy'], wants: [], asleep: false}).includes('Nothing pressing'));
 assert.ok(needsRow({has: ['energy'], wants: [], asleep: true}).includes('Asleep'));
 assert.equal(needsRow({has: []}), '');

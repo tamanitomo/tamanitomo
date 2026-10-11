@@ -143,11 +143,15 @@ next. Home shows only that she has needs, in words: **Needs: rest, some fun**, o
 **Nothing pressing**.
 
 Each day she rolls a d20, seeded by the companion and the date, so every job and page agrees:
-1 in 20 days is lucky (slept wonderfully, a happy surprise, ran into an old friend) and 5 in
-20 unlucky (a rough night, plans fell through, a lonely day, a draining day). Her day runs from
-when she woke, so a rough night belongs to the morning after it. A lucky or unlucky day is
-noted once in that day's plan by the meters job, reaches her context as part of her day, and
-shows in the Home needs tooltip.
+1 in 20 days is lucky and 5 in 20 unlucky, and the day's luck is a concrete thing that happened
+(`LUCK` in `companion_needs.py`): slept wonderfully, found money in an old coat pocket, a free
+ticket to something; a rough night, plans fell through, caught a cold, the washing machine broke,
+a cracked phone screen. Some last: a cold is three days, the broken washer means the laundromat
+until it is fixed, and while one lasts it stays in her context ("Still going on: caught a cold,
+day 2 of about 3") and in her needs; a good night never cancels a cold. Her day runs from when
+she woke, so a rough night belongs to the morning after it. A lucky or unlucky day is noted once
+in that day's plan by the meters job (every day has one now), reaches every run's context as
+part of her day, and shows in the Home needs tooltip.
 
 `companion_needs.py --home HOME show` prints the current needs; `luck` prints today's roll.
 

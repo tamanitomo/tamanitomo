@@ -74,23 +74,64 @@ LOOKBACK = dt.timedelta(hours=120)
 # upgrade does not find everyone already starved of fun.
 NEEDS_FROM = dt.date(2026, 10, 11)
 
-# The day's luck: a d20, seeded by the companion and the date.
+# The day's luck: a d20, seeded by the companion and the date. An unlucky or
+# lucky day is something that happened, and some things last: a cold is three
+# days, a broken washing machine is laundry somewhere else until it is fixed.
+# (what, days it lasts, effect on her needs while it does, what it means for her day)
 LUCK_SIDES = 20
 LUCKY_ROLLS = 1
 UNLUCKY_ROLLS = 5
 LUCK = {
     "lucky": (
-        ("slept wonderfully", {"energy_start": 1.0}),
-        ("a happy surprise", {"fun": 0.3}),
-        ("ran into an old friend", {"social": 0.3}),
+        ("slept wonderfully", 1, {"energy_start": 1.0}, ""),
+        ("a happy surprise", 1, {"fun": 0.3}, ""),
+        ("ran into an old friend", 1, {"social": 0.3}, ""),
+        ("found money in an old coat pocket", 1, {"fun": 0.2}, ""),
+        (
+            "was given a free ticket to something this week",
+            3,
+            {"fun": 0.15},
+            "something to look forward to: decide what it is and when it is",
+        ),
     ),
     "unlucky": (
-        ("a rough night", {"energy_start": -0.3}),
-        ("plans fell through", {"fun": -0.35}),
-        ("a lonely day", {"social": -0.3}),
-        ("a draining day", {"energy_rate": 0.015}),
+        ("a rough night", 1, {"energy_start": -0.3}, ""),
+        ("plans fell through", 1, {"fun": -0.35}, ""),
+        ("a lonely day", 1, {"social": -0.3}, ""),
+        ("a draining day", 1, {"energy_rate": 0.015}, ""),
+        (
+            "caught a cold",
+            3,
+            {"energy_start": -0.25, "energy_rate": 0.008},
+            "a sore throat and a heavy head; staying in and an early night are fair",
+        ),
+        (
+            "the washing machine broke",
+            3,
+            {},
+            "laundry means the laundromat or the sink until it is fixed",
+        ),
+        (
+            "the kitchen tap started leaking",
+            2,
+            {},
+            "a bowl under the drip until someone comes to fix it",
+        ),
+        (
+            "cracked the phone screen",
+            4,
+            {"fun": -0.1},
+            "texting through a spiderweb of cracks until it is repaired",
+        ),
+        (
+            "the power went out for the evening",
+            1,
+            {"fun": -0.15},
+            "candles, no wifi, and an early night",
+        ),
     ),
 }
+LONGEST = max(days for rows in LUCK.values() for _, days, _, _ in rows)
 
 
 def _tz(c):
@@ -118,14 +159,47 @@ def luck(c, day):
         kind = "unlucky"
     else:
         return {"day": day.isoformat(), "kind": "ordinary", "roll": roll + 1}
-    what, effect = LUCK[kind][int.from_bytes(seed[4:8], "big") % len(LUCK[kind])]
+    what, days, effect, means = LUCK[kind][
+        int.from_bytes(seed[4:8], "big") % len(LUCK[kind])
+    ]
     return {
         "day": day.isoformat(),
         "kind": kind,
         "roll": roll + 1,
         "what": what,
-        "effect": effect,
+        "days": days,
+        "effect": dict(effect),
+        "means": means,
     }
+
+
+def going_on(c, day):
+    """Luck from the days before that is still part of this one, oldest first:
+    the cold she caught on Monday, on Tuesday. Today's own roll is not included."""
+    out = []
+    for back in range(LONGEST - 1, 0, -1):
+        earlier = luck(c, day - dt.timedelta(days=back))
+        if earlier["kind"] != "ordinary" and earlier.get("days", 1) > back:
+            out.append({**earlier, "day_of": back + 1})
+    return out
+
+
+def _effects(today, older):
+    """The needs effect of today's luck and of whatever is still going on."""
+    merged = {}
+    for row in [today, *older]:
+        for key, value in (row.get("effect") or {}).items():
+            if key == "energy_start":
+                current = merged.get(key, 0)
+                # A good night does not cancel a cold; the worse start wins.
+                merged[key] = (
+                    min(current, value)
+                    if value < 0 or current < 0
+                    else max(current, value)
+                )
+            else:
+                merged[key] = merged.get(key, 0) + value
+    return merged
 
 
 def unlocked(c, stage):
@@ -246,13 +320,12 @@ def _night(c, now):
     return {"asleep": False, "woke": ended, "slept": length}
 
 
-def _energy(c, now, rests, night, day_luck):
+def _energy(c, now, rests, night, effect, causes=()):
     if night["asleep"]:
         return {"level": None, "asleep": True, "why": []}
     woke, slept = night["woke"], night["slept"]
     start = min(1.0, max(0.35, slept / FULL_NIGHT_HOURS))
     rate = ENERGY_PER_HOUR
-    effect = day_luck.get("effect") or {}
     if effect.get("energy_start", 0) > 0:
         start = 1.0
     elif effect.get("energy_start", 0) < 0:
@@ -268,8 +341,10 @@ def _energy(c, now, rests, night, day_luck):
         why.append(f"a short night ({round(slept)} hours)")
     if _hours(now - woke) >= 12:
         why.append(f"up since {woke.astimezone(_tz(c)).strftime('%H:%M')}")
-    if effect.get("energy_start", 0) < 0 or effect.get("energy_rate"):
-        why.append(day_luck["what"])
+    for row in causes:
+        own = row.get("effect") or {}
+        if own.get("energy_start", 0) < 0 or own.get("energy_rate", 0) > 0:
+            why.append(row["what"])
     return {"level": round(level, 3), "asleep": False, "why": why}
 
 
@@ -304,7 +379,9 @@ def compute(c, now=None, stage=None):
     night = _night(c, now)
     her_day = (night["woke"] or now).astimezone(_tz(c)).date()
     day_luck = luck(c, her_day)
-    effect = day_luck.get("effect") or {}
+    older = going_on(c, her_day)
+    effect = _effects(day_luck, older)
+    causes = [r for r in [day_luck, *older] if r["kind"] != "ordinary"]
     since = now - LOOKBACK
     began = dt.datetime.combine(NEEDS_FROM, dt.time(), tzinfo=_tz(c))
     try:
@@ -320,7 +397,12 @@ def compute(c, now=None, stage=None):
     out = {}
     if "energy" in has:
         out["energy"] = _energy(
-            c, now, [at for at, need in feeds if need == "energy"], night, day_luck
+            c,
+            now,
+            [at for at, need in feeds if need == "energy"],
+            night,
+            effect,
+            causes,
         )
     for need in ("social", "fun", "affection"):
         if need not in has:
@@ -343,8 +425,7 @@ def compute(c, now=None, stage=None):
                     "affection": f"{days} days without much closeness",
                 }[need]
             )
-        if effect.get(need, 0) < 0:
-            why.append(day_luck["what"])
+        why += [r["what"] for r in causes if (r.get("effect") or {}).get(need, 0) < 0]
         out[need] = {"level": round(level, 3), "why": why}
     for need, info in out.items():
         level = info.get("level")
@@ -359,6 +440,7 @@ def compute(c, now=None, stage=None):
         "asleep": asleep,
         "wants": [WORDS[n] for n, info in out.items() if info.get("low")],
         "luck": day_luck,
+        "going_on": older,
     }
 
 
@@ -394,9 +476,20 @@ def render(c, state):
         )
     day_luck = state.get("luck") or {}
     if day_luck.get("kind") in ("lucky", "unlucky"):
+        lasts = day_luck.get("days", 1)
         lines.append(
             f"Today's luck: {day_luck['what']} (the day's roll, {day_luck['roll']} of "
-            f"{LUCK_SIDES}). Let it be part of your day."
+            f"{LUCK_SIDES})"
+            + (f"; it will be part of the next {lasts} days" if lasts > 1 else "")
+            + (f": {day_luck['means']}" if day_luck.get("means") else "")
+            + ". Let it be part of your day."
+        )
+    for row in state.get("going_on") or ():
+        lines.append(
+            f"Still going on: {row['what']} (since {row['day']}, day {row['day_of']} of "
+            f"about {row['days']})"
+            + (f": {row['means']}" if row.get("means") else "")
+            + ". It ends on its own; let it shape the day."
         )
     if not lines:
         return ""
@@ -432,10 +525,12 @@ def log_luck(c, now=None):
     day_luck = luck(c, today)
     if day_luck["kind"] == "ordinary":
         return None
+    lasts = day_luck.get("days", 1)
     return companion_plan.note(
         c,
         today,
-        f"luck: {day_luck['what']} ({day_luck['kind']}, rolled {day_luck['roll']} of {LUCK_SIDES})",
+        f"luck: {day_luck['what']} ({day_luck['kind']}, rolled {day_luck['roll']} of "
+        f"{LUCK_SIDES})" + (f", for about {lasts} days" if lasts > 1 else ""),
         now,
     )
 

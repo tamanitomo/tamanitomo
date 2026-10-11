@@ -39,6 +39,11 @@
   whatever she was already doing; a commitment is never deferred for her. She goes,
   or says why she is missing it, and a missed one is noted once in the day's plan. A week with
   none is asked for one.
+- Luck leaves something behind. An unlucky or lucky day is now one of fourteen concrete
+  things, and some last: a cold is three days, a broken washing machine means the laundromat
+  until it is fixed, a cracked phone screen four days, a free ticket something to look forward
+  to. While one lasts it is in her context ("Still going on: caught a cold, day 2 of about 3")
+  and in her needs, a good night never cancels a cold, and Home says so in words.
 
 ## 3.8.0 — Meters that move a day at a time, stages that unlock, and her own needs (2026-10-11)
 

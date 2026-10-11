@@ -41,7 +41,8 @@ function needsRow(needs){
   if(!needs?.has?.length)return '';
   const wants=needs.wants||[];
   const say=needs.asleep?'Asleep, catching up on rest':wants.length?wants.join(', '):'Nothing pressing';
-  const luck=['lucky','unlucky'].includes(needs.luck?.kind)?` Today: ${needs.luck.what}.`:'';
+  const luck=(['lucky','unlucky'].includes(needs.luck?.kind)?` Today: ${needs.luck.what}.`:'')
+    +(needs.going_on||[]).map(x=>` Still: ${x.what}.`).join('');
   const title=`She has needs (${needs.has.map(n=>NEED_WORDS[n]||n).join(', ')}). They move with her day and your time together.${luck}`;
   return `<div class="presence-chip-row" title="${esc(title)}"><span class="chip-label">🫶 Needs:</span> <span class="chip-val">${esc(say)}</span></div>`;
 }
