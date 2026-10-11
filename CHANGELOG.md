@@ -1,4 +1,4 @@
-## Unreleased
+## 3.8.0 — Meters that move a day at a time, stages that unlock, and her own needs (2026-10-11)
 
 - Pace and temperament are chosen at setup and kept. Setup now asks for a temperament (steady,
   expressive or guarded), suggested by the personality; afterwards neither can be changed from the
@@ -6,7 +6,7 @@
 - The window before she misses you stays between 12 and 96 hours, and one time-away plan covers at
   most 14 days. A longer absence is renewed by explaining again once it has begun; plans booked back
   to back in advance count as one stretch.
-- Settings → Sensors has a switch for learning your quiet hours (on by default).
+- Settings → Awareness has a switch for learning your quiet hours (on by default).
 - A meter with no value yet reads 0% with an empty bar.
 - Each meter moves at most so far in a day: closeness 6 points (gains scale with pace), warmth
   20%, trust 10%, hurt and irritation 30%. The rest of a change arrives over the following days, so
