@@ -117,6 +117,9 @@ def preread(c, now=None):
             f" {c.human}, not a reason to stop living: carry on with your evening, record it,"
             " and let the dispatcher hold anything you queue until morning.]"
         )
+    needs = needs_block(c, now)
+    if needs:
+        out.append(needs.rstrip())
     out.append(day_ideas(c, now))
     import companion_life
     import companion_lifestyle
@@ -135,6 +138,23 @@ def preread(c, now=None):
 
     out.append(companion_day.GUIDANCE)
     return "\n".join(out) + "\n"
+
+
+def needs_block(c, now):
+    """Her needs and the day's luck, as the chat context carries them.
+
+    Needs and luck reached only the chat hook, so the runs that actually live her
+    day -- the morning, the pulse, autonomy, the wind-down -- never saw them: the
+    day she rolled "a rough night" her morning said she had slept well.
+    """
+    if not c.bars:
+        return ""
+    try:
+        import companion_needs
+
+        return companion_needs.render(c, companion_needs.compute(c, now))
+    except (OSError, ValueError, KeyError, TypeError):
+        return ""
 
 
 def day_ideas(c, now):

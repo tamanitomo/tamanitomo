@@ -232,6 +232,37 @@ class TestHerContext:
         assert "0." not in text and "%" not in text
 
 
+class TestHerScheduledRuns:
+    """The morning, pulse, autonomy and wind-down read the pre-read, not the chat
+    hook, so needs and luck have to be there too."""
+
+    UNLUCKY = {
+        **ORDINARY,
+        "kind": "unlucky",
+        "roll": 4,
+        "what": "a rough night",
+        "effect": {"energy_start": -0.3},
+    }
+
+    def test_the_morning_knows_the_days_luck(self, companion):
+        import companion_preread
+
+        night(companion, at(23, day=-1), at(7))
+        with patch.object(needs, "luck", return_value=self.UNLUCKY):
+            text = companion_preread.preread(companion, at(7, 15))
+        assert "[Your needs, yours rather than a score]" in text
+        assert "Today's luck: a rough night" in text
+
+    def test_meters_off_means_no_needs(self, companion):
+        import companion_preread
+
+        companion.bars = False
+        night(companion, at(23, day=-1), at(7))
+        with patch.object(needs, "luck", return_value=self.UNLUCKY):
+            text = companion_preread.preread(companion, at(7, 15))
+        assert "Your needs" not in text and "Today's luck" not in text
+
+
 class TestFeedsInPresence:
     def setup(self, companion):
         presence.update_wardrobe(

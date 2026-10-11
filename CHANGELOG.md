@@ -1,3 +1,9 @@
+## Unreleased
+
+- Her morning, pulse, autonomy and wind-down now see her needs and the day's luck,
+  which only reached the chat until now. A day that rolled "a rough night" was
+  greeted with "I slept well".
+
 ## 3.8.0 — Meters that move a day at a time, stages that unlock, and her own needs (2026-10-11)
 
 - Pace and temperament are chosen at setup and kept. Setup now asks for a temperament (steady,
