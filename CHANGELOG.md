@@ -1,17 +1,21 @@
-## Unreleased — Shared time that leaves a memory
+## 3.10.0 — Shared time that leaves a memory (2026-10-11)
 
-- An established relationship can cool to **Distant** below friendship while keeping
-  its history; it never becomes Just Met again. Corrected relationship experiences
+- An established relationship (one that reached Friends) can cool to **Distant**
+  below friendship while keeping its history; it never becomes Just Met again. A new
+  relationship still warming up stays Just Met. Corrected relationship experiences
   no longer count as boundary violations, and reading feelings no longer writes a lock.
-- Nightly planning preserves commitments. Changing one needs a reason; a conflicting
-  replacement does not overwrite the saved plan. Due follow-ups now wake autonomy
-  once when due, and meaningful edits are noticed without waking it every minute.
+- Nightly planning preserves commitments. Changing one needs a reason; an evening
+  activity that clashes with one is left out with the reason and the rest of the
+  plan is kept. Due follow-ups now wake autonomy once when due, and meaningful edits
+  are noticed without waking it every minute.
 - Shared memory favors relevant and recent moments while keeping nickname and ritual
   anchors in view, instead of letting early milestones crowd everything else out.
 - Us → Time together supports manual or media-server watch sessions, quiet company
   or occasional comments, pause/resume/end, progress checkpoints and personal memories.
   Those memories enter shared history and later conversation. Ended sessions do not
   imply a completed film; summaries are explicitly not scene perception.
+- A title agreed in chat matches the library's own name for it ("The Office" is
+  "The Office (US)"), but no longer a sequel that starts the same way.
 - Spotify discovery can read top or recent artists, search artists/albums, and choose
   a verified album with a personal note tied to a shared memory or real exchange.
   Suggestions appear under Us → Albums for you and can be queued through the usual

@@ -1,20 +1,23 @@
-Tamanitomo 3.9.1: she knows what you watch, and the two of you can watch something together.
+Tamanitomo 3.10.0: time together that she remembers, albums she picks for you, and messages you can listen to.
 
-- **What you watch.** A new sense reads your own Plex or Jellyfin server: what is on right now,
-  what you finished lately and where each series is up to. She keeps what she learns, so it
-  outlasts the server's own history. Only your own account is read, and only your server is
-  contacted. The titles reach her model provider like the rest of what she knows, so it is off
-  until you switch it on.
-- **Watching together.** When you agree to watch something, she records it. While that title is
-  on she is told what the episode is about, so she can watch along without inventing scenes, and
-  episodes finished in that time are remembered as watched together.
-- **Setting it up.** Settings → Awareness → Your media server: choose Plex or Jellyfin, enter the
-  server's address and its token, then press Save and check. Switch on "What you watch" under
-  Sensors. The token is kept in a private file that backups leave out, and is never shown again.
-- **The Hermes compatibility check works.** The GitHub check that runs the kit against the
-  reviewed Hermes release failed on every run since it was added; it now passes.
+- **Time together.** Us → Time together starts a watch with her, with or without a media
+  server: pause, resume and finish it, tell her where you are up to, and keep a moment from
+  it. Those moments join your shared memories and come back later in conversation. Choose
+  quiet company or occasional comments. She never claims to see the screen or spoils what
+  comes next.
+- **Albums for you.** With Spotify connected, she can look through the artists you listen to
+  and their albums, pick one with a reason that is about the two of you, and send it through
+  the usual contact settings. Picks appear under Us → Albums for you. Your top artists need
+  the `user-top-read` permission; without it she uses what you played recently.
+- **Listen to a message.** Every finished reply in the chat has a Play button that reads it
+  in her voice, long replies included.
+- **Distance is not a reset.** A relationship that cools after reaching Friends becomes
+  Distant, not Just Met: she remembers what you shared and is honest about the distance.
+- **Promises keep.** A plan she made with you survives her evening replanning, and a
+  follow-up she meant to make wakes her when it comes due.
 
-No Repair is needed after this update.
+After updating, run Repair for each companion (or `companion repair --prompts auto`): it
+teaches her autonomy about albums and time together.
 
-Coming from 3.8? 3.9.0 gave her own life places, people, storylines that take weeks and luck that
-lasts. See CHANGELOG.md.
+Coming from 3.8? 3.9 gave her own life places, people, storylines and lasting luck, and a
+sense of what you watch on Plex or Jellyfin. See CHANGELOG.md.
