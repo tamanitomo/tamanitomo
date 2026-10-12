@@ -410,7 +410,10 @@ const settingsPanels=[
       status.textContent=`Connected to ${r.server}, reading ${r.account}.`
         +(r.playing?` On now: ${r.playing}.`:'')
         +(r.latest?` Last finished: ${r.latest}, ${r.latest_when}.`:' Nothing finished in the last two weeks.');
-    }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
+    }catch(error){
+      const said=String(error.message||'The check failed');
+      status.innerHTML=`<span class="bad">${esc(said.charAt(0).toUpperCase()+said.slice(1))}.</span>`;
+    }
   };
   const recount=()=>{
     const live=[...host.querySelectorAll('[data-sensor]')].filter(x=>x.checked).length;
