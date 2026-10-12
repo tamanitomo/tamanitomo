@@ -100,6 +100,44 @@ class PhotoContextTests(unittest.TestCase):
             self.assertNotIn("--wardrobe", out)
             self.assertIn("as you are right now", out)
 
+    def test_saying_the_photo_is_on_its_way_is_not_taking_it(self):
+        # She said she would grab a towel and take one, and ended the turn.
+        for window in (4096, 131072):
+            self.assertIn("Take it before you reply", self.build(self.make(context_tokens=window)))
+
+    def now_line(self, state, standing=None):
+        standing = standing or {"undressed": False, "towel": False, "why": "you are not there with Robin yet"}
+        with patch("companion_presence.current", return_value={"state": state}), \
+                patch("companion_presence.wardrobe", return_value={"items": []}), \
+                patch("companion_media.photo_standing", return_value=standing):
+            return ctx.photo_now(self.make(explicit=True, boundary="girlfriend"))
+
+    def test_she_knows_what_a_photo_of_her_right_now_would_show(self):
+        line = self.now_line({"activity": "reading", "location": "the porch",
+                              "outfit": [{"id": "x", "description": "jeans"}]})
+        self.assertEqual(line, "Right now a photo of you would show: reading at the porch, wearing jeans.")
+
+    def test_undressed_and_not_ready_she_is_given_real_steps(self):
+        bare = {"activity": "drying off", "location": "bathroom", "outfit": []}
+        line = self.now_line(bare)
+        self.assertIn("not ready to send Robin (you are not there with Robin yet)", line)
+        self.assertNotIn("towel", line)
+        self.assertIn("get dressed first", line)
+        ready = {"undressed": False, "towel": True, "why": "you are not there with Robin yet"}
+        line = self.now_line(bare, ready)
+        self.assertIn('put a towel on first (', line)
+        self.assertIn('transition --activity "wrapped in a towel" --outfit towel', line)
+
+    def test_a_towel_she_is_ready_to_send_is_simply_hers(self):
+        ready = {"undressed": False, "towel": True, "why": ""}
+        line = self.now_line({"activity": "drying off", "location": "bathroom",
+                              "outfit": [{"id": "towel", "description": "wrapped in a bath towel"}]}, ready)
+        self.assertEqual(line, "Right now you are in a towel, and a photo of that is one you may send if you want to, as a tease.")
+
+    def test_a_moment_she_marked_private_has_no_photo(self):
+        line = self.now_line({"activity": "a quiet moment", "private": True, "outfit": []})
+        self.assertIn("marked this moment private", line)
+
     def test_no_image_studio_means_no_photo_line(self):
         c = self.make()
         with patch("companion_media.effective", return_value={"presets": []}):

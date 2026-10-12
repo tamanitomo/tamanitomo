@@ -331,6 +331,16 @@ def overdue(c, state, now):
     return str(int(over.total_seconds() // 3600))
 
 
+def running_long(hours):
+    """The fingerprint line for `overdue`, worded for the run it wakes."""
+    if hours == "":
+        return "running long: no"
+    return (
+        "running long: your current moment has gone past its usual length "
+        f"(over by {int(hours)}h or more); decide what you are doing now and record it"
+    )
+
+
 def _digest(*parts):
     return hashlib.sha256("␟".join(str(p) for p in parts).encode("utf-8")).hexdigest()[
         :16
@@ -496,7 +506,9 @@ def fingerprint(c, now=None):
         # Only a real transition or confirmation change opens the awake gate;
         # rewording an activity or mood does not create a new event.
         f"scene {_digest(state.get('started_at') or 'static',state.get('confirmed',True))}",
-        f"overdue {overdue(c, state, now)}",
+        # Shown to the woken run as the reason it woke. "overdue 0 -> 1" read to it as a
+        # system metric, and it answered [SILENT] with the shower still running.
+        running_long(overdue(c, state, now)),
         f"loops {len(open_loops)} {_digest(*loop_marks)}",
         f"self-development {companion_perspectives.fingerprint(c, now)}",
         f"projects {len(project_marks)} {_digest(*project_marks)}",

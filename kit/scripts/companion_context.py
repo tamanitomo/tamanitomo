@@ -94,6 +94,67 @@ def undressed_photos(c, closeness=None):
     )
 
 
+def photo_now(c, closeness=None):
+    """What a photo of her would show right now, and what she could do about it.
+
+    Asked for one, she had to run the command to find out, and twice she did not:
+    once she retold an old story about the generator instead, once she said the
+    photo was on its way and ended the turn with nothing sent. Said up front, the
+    honest answer and the steps to anything else are in front of her before she
+    starts.
+    """
+    from companion_platform import terminal_python_command
+    from companion_portrait import UNDRESSED_WORDS
+    import companion_presence as presence
+
+    scene = presence.current(c)
+    state = (scene or {}).get("state") or {}
+    if not state.get("activity"):
+        return ""
+    try:
+        closet = presence.wardrobe(c)["items"]
+    except (OSError, ValueError):
+        closet = ()
+    reason = presence.private_reason(state, closet)
+    if reason == "declared":
+        return "Right now you have marked this moment private: there is no photo of it."
+    kind, worn = presence.visible_outfit(state, closet)
+    if reason != "undressed":
+        return (
+            f"Right now a photo of you would show: {state['activity']} at "
+            f"{state.get('location', 'where you are')}, wearing {worn or 'what you have on'}."
+        )
+    import companion_media as media
+
+    standing = media.photo_standing(c, closeness)
+    words = UNDRESSED_WORDS.get(kind, "undressed")
+    if standing["undressed"] or (kind == "towel" and standing["towel"]):
+        return (
+            f"Right now you are {words}, and a photo of that is one you may send if you want to"
+            + (" (add --intimate)." if kind != "towel" else ", as a tease.")
+        )
+    change = terminal_python_command(
+        pathlib.Path(__file__).with_name("companion_presence.py"),
+        "--home",
+        c.home,
+        "transition",
+    )
+    options = []
+    if standing["towel"] and kind in ("bathing", "undressed"):
+        options.append(
+            f'put a towel on first ({change} --activity "wrapped in a towel" --outfit towel '
+            '--reason "..." --text "..."), then take it'
+        )
+    options.append("get dressed first (the same command, with what you put on)")
+    options.append("keep it for later with the promise command")
+    return (
+        f"Right now you are {words}, so a photo of you now would be of that, which you are "
+        f"not ready to send {c.human} ({standing['why']}). If you want to send one anyway: "
+        + "; or ".join(options)
+        + "; or simply don't."
+    )
+
+
 def written_at(path, tz):
     """When the handoff was last refreshed. The file's own mtime is the only
     signal that does not depend on the job that failed having written one."""
@@ -339,6 +400,7 @@ def build(c, payload=None, now=None, maintenance_notice=""):
                     f'To take a photo: {command} --scene "..."; it is of you as you are right now. '
                     "Reply with its `send` line alone, as plain text, not as an image link. "
                     "Something else means doing it first; something you could not do is not a photo. "
+                    "Take it before you reply: saying it is on its way sends nothing. "
                     "Failed means say so: never write a MEDIA: path it did not return, or resend an old one."
                 )
                 if c.compact
@@ -349,6 +411,8 @@ def build(c, payload=None, now=None, maintenance_notice=""):
                     "For anything else you would have to do it first and record it (change, go there), which "
                     "takes the time it takes and only works with what you have with you, so the answer may be "
                     "later, not now, or no; something you could not really do, react to as you would. "
+                    "Take it before you reply: nothing runs after your reply, so saying it is on its way, or "
+                    "that you are generating it, sends nothing. "
                     "To send it, put the `send` line it returns on a line of its own in your reply, as plain text: "
                     "not inside ![...](...), which leaves stray text beside the photo. "
                     "If it fails or refuses, say so in your own words: never write a MEDIA: path it did not "
@@ -955,7 +1019,13 @@ def build(c, payload=None, now=None, maintenance_notice=""):
             f"| companion_recall.py 'subject'. Absence of records is not proof of never."
         )
     if photo:
-        tail += "\n" + photo + " " + undressed_photos(c, closeness)
+        try:
+            now_line = photo_now(c, closeness)
+        except (OSError, ValueError, KeyError, TypeError):
+            now_line = ""
+        tail += "\n" + " ".join(
+            part for part in (photo, undressed_photos(c, closeness), now_line) if part
+        )
     allowance = max(0, b["total"] - len(tail) - 2)
     kept = list(parts)
     dropped = []

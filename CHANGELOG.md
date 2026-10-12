@@ -1,3 +1,19 @@
+## 3.12.2 — She knows what a photo would show, and does it before she replies (2026-10-12)
+
+- Her photo line now says what a photo of her right now would show. When it is not
+  one she is ready to send, it gives the real ways forward: put a towel on first
+  (with the exact command) when that is one she would send, get dressed first, keep
+  it for later with `promise`, or not at all. Asked for a photo, she no longer has
+  to run the command to find out, which she sometimes skipped and filled in with
+  an old story instead.
+- "Take it before you reply." Agreeing to send a photo, she said it was on its way
+  and ended the turn, and nothing was sent. The photo line now says that nothing
+  runs after her reply.
+- The pulse woken because a moment ran long is told so in words ("running long:
+  ... decide what you are doing now and record it") instead of an `overdue 0 -> 1`
+  it read as a system metric, and its prompt says a pulse is complete only once
+  the presence command has succeeded: `[SILENT]` without it left her day frozen.
+
 ## 3.12.1 — A long moment says so (2026-10-12)
 
 - The pulse that wakes because a moment has run long is now told so. With no
