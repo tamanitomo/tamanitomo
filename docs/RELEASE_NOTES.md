@@ -1,4 +1,11 @@
-Tamanitomo 3.13.1: routine jobs get only the tools they need.
+Tamanitomo 3.14.0: a week you can measure, and plans that follow the weather.
+
+- **Her week as numbers.** Things done, hours out versus home, places, people, nights she planned. Her weekly reflection reads it and decides what to change, such as who is in her life or a weekly commitment.
+- **Plans follow the forecast** and include getting out of the house, with a named place.
+
+After updating, run Repair (`companion repair --prompts auto`).
+
+Previous: 3.13.1 routine jobs get only the tools they need.
 
 - **Only the tools each job needs.** Her day pulse, morning, wind-down and check-in now run with
   files and the terminal only; autonomy and reflections add conversation search, the research window
