@@ -1445,7 +1445,9 @@ def main():
         # moved walk); this evening's intention is what it is for.
         import companion_plan
 
-        items, refused = companion_plan.from_anchors(custom_anchors)
+        items, refused = companion_plan.from_anchors(
+            custom_anchors, companion_plan.promises(c, target_date)
+        )
         try:
             companion_plan.settle(
                 c, target_date, out["intent"], theme=out["theme"], items=items, now=now

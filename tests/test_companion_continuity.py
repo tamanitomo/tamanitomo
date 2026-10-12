@@ -64,6 +64,28 @@ def test_new_companion_really_is_just_met(companion):
     assert "You have just met Alex" in intimacy.render(companion, state)
 
 
+def test_a_new_relationship_warming_up_is_not_distant(companion):
+    # Four days of real conversation, each recorded a day's cap above the last:
+    # still short of Friends, and nothing about it is a history gone cold.
+    days = [(NOW - dt.timedelta(days=n)).date().isoformat() for n in (3, 2, 1, 0)]
+    (companion.life / "meters.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "days": {d: {"closeness": v} for d, v in zip(days, (6, 12, 18))},
+                "contact": {d: {"credit": 1.0} for d in days},
+            }
+        )
+    )
+    state = intimacy.compute(companion, NOW)
+    assert state["stage"] == 0 and state["effective_days"] >= 4
+    assert state["stage_name"] == "Just Met"
+    assert not state["established"]
+    assert "distant" not in intimacy.render(companion, state).lower()
+    assert intimacy.level_event(companion, state) is None
+    assert intimacy._read_levels(companion)["highest"] == 0
+
+
 def test_old_level_record_retains_familiarity_before_meter_migration(companion):
     path = companion.home / intimacy.LEVELS_FILE
     path.parent.mkdir(parents=True)

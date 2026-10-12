@@ -156,7 +156,40 @@ class TestHerEveningPlan:
         shape = life.expected_day(companion.life, tomorrow)
         assert shape["anchors"][0]["activity"] == self.PROMISE["what"]
 
-    def test_conflicting_plan_changes_neither_promise_nor_summary(
+    def test_an_anchor_on_a_promise_is_left_out_and_the_rest_is_planned(
+        self, companion, tmp_path
+    ):
+        tomorrow = dt.datetime.now(UTC).date() + dt.timedelta(days=1)
+        promise = {**self.PROMISE, "start": "18:00", "end": "19:00"}
+        kept = plan.add(companion, tomorrow, promise)["items"][0]
+        anchors = tmp_path / "anchors.json"
+        anchors.write_text(
+            json.dumps(
+                [
+                    {"start": "08:00", "end": "09:00", "activity": "walk"},
+                    {"start": "12:00", "end": "13:00", "activity": "lunch out"},
+                    {"start": "18:30", "end": "19:30", "activity": "dinner"},
+                ]
+            )
+        )
+        out = run_life(
+            companion,
+            "plan-tomorrow",
+            "--intent",
+            "A full day",
+            "--anchors-file",
+            str(anchors),
+        )
+        assert out.get("saved") is not False
+        assert len(out["not_planned"]) == 1
+        assert "dinner overlaps" in out["not_planned"][0]
+        assert "already promised" in out["not_planned"][0]
+        items = plan.read(companion, tomorrow)["items"]
+        assert [i["what"] for i in items] == ["walk", "lunch out", promise["what"]]
+        assert kept in items
+        assert life.read_tomorrow_plan(companion.life)["intent"] == "A full day"
+
+    def test_a_refused_plan_changes_neither_promise_nor_summary(
         self, companion, tmp_path
     ):
         tomorrow = dt.datetime.now(UTC).date() + dt.timedelta(days=1)
@@ -166,20 +199,19 @@ class TestHerEveningPlan:
             companion.life,
             {"date": tomorrow.isoformat(), "intent": "Our film tonight"},
         )
+        # The promise restated as a passing idea, with no reason: settling refuses it.
         anchors = tmp_path / "anchors.json"
-        anchors.write_text(
-            json.dumps([{"start": "19:00", "end": "23:00", "activity": "class"}])
-        )
+        anchors.write_text(json.dumps([{**self.PROMISE, "kind": "idea"}]))
         out = run_life(
             companion,
             "plan-tomorrow",
             "--intent",
-            "Go to class",
+            "Maybe a film",
             "--anchors-file",
             str(anchors),
         )
         assert out["saved"] is False
-        assert "overlaps" in out["not_planned"][0]
+        assert "commitment" in out["not_planned"][0]
         assert plan.read(companion, tomorrow) == original
         assert life.read_tomorrow_plan(companion.life) == summary
 

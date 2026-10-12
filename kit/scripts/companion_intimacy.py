@@ -643,12 +643,13 @@ def compute(c, now=None, record=False) -> Dict[str, Any]:
     # once; from then on a relationship falls at most a day's cap at a time.
     # Familiarity is history, not today's warmth. Keep the same closeness decay
     # and permissions, but never tell old friends that they have just met again.
-    established = (
-        effective_days >= 4
-        or earned_score >= 25
-        or companion_meters.highest_closeness(c) >= 25
-        or (_read_levels(c) or {}).get("highest", 0) in (1, 2, 3, 4)
-    )
+    # Only a relationship that has actually been Friends has a history to keep:
+    # days of contact alone are a new relationship warming up, which the daily
+    # cap holds below Friends for its first few days.
+    friends = next(s["min_score"] for s in stages_for(c) if s["stage"] == 1)
+    established = companion_meters.highest_closeness(c) >= friends or (
+        _read_levels(c) or {}
+    ).get("highest", 0) in (1, 2, 3, 4)
     first_record_score = earned_score
     if decay:
         floor = 25.0 if (earned_score >= 25.0 or effective_days >= 4.0) else 0.0

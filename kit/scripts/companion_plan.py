@@ -292,11 +292,12 @@ def ensure(c, day, now=None):
         return _write(c, day, plan, "no plan was made; the usual routine", now)
 
 
-def from_anchors(rows):
+def from_anchors(rows, promised=()):
     """Plan items from routine-style anchors she wrote for a day, and what was refused.
 
-    An anchor that is malformed or overlaps one already taken is left out with the
-    reason, rather than costing the whole evening's plan."""
+    An anchor that is malformed, overlaps one already taken, or sits on a promise
+    the day already holds is left out with the reason, rather than costing the
+    whole evening's plan. The promise stays; moving it is its own change."""
     items, refused = [], []
     for row in rows or []:
         if not isinstance(row, dict):
@@ -308,11 +309,25 @@ def from_anchors(rows):
         except ValueError as exc:
             refused.append(str(exc))
             continue
+        kept = conflicts(promised, candidate)
+        if kept:
+            refused.append(
+                f"{candidate['what'][:60]} overlaps {kept[0]['what'][:60]!r}, "
+                "which you already promised; change that promise first if it moves"
+            )
+            continue
         if conflicts(items, candidate):
             refused.append(f"{candidate['what'][:60]} overlaps something earlier")
             continue
         items.append(candidate)
     return items, refused
+
+
+def promises(c, day):
+    """The commitments a day's plan already holds, which settling keeps."""
+    return [
+        i for i in (read(c, day) or {}).get("items", []) if i["kind"] == "commitment"
+    ]
 
 
 def note(c, day, text, now=None):

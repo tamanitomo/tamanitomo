@@ -201,6 +201,23 @@ def test_title_identity_handles_unicode_without_confusing_sequels(
     assert viewing.matches(title, item) is expected
 
 
+@pytest.mark.parametrize(
+    "title,item,expected",
+    [
+        # A library's qualifier is the same show the two of them named in chat.
+        ("The Office", {"show": "The Office (US)", "title": "Diversity Day"}, True),
+        ("Doctor Who", {"show": "Doctor Who (2005)", "title": "Blink"}, True),
+        ("Doctor Who (2005)", {"show": "Doctor Who", "title": "Blink"}, True),
+        # ...but two qualifiers are two shows, and a named year is the film's.
+        ("The Office (UK)", {"show": "The Office (US)", "title": "Pilot"}, False),
+        ("Doctor Who (1963)", {"show": "Doctor Who (2005)", "title": "Rose"}, False),
+        ("Dune (1984)", {"title": "Dune", "year": 2021}, False),
+        ("Dune", {"title": "Dune: Part Two", "year": 2024}, False),
+    ],
+)
+def test_a_library_qualifier_is_the_same_title(title, item, expected):
+    assert viewing.matches(title, item) is expected
+
 
 def test_legacy_sessions_still_end_without_grace(companion):
     path = viewing.path_for(companion)

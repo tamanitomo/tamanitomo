@@ -426,16 +426,39 @@ def _norm(text):
     return " ".join(re.findall(r"[^\W_]+", text, re.UNICODE))
 
 
+QUALIFIER = re.compile(r"\s*\(([^()]*)\)\s*$")
+
+
+def _bare(text):
+    """A title and the qualifier a library adds to it: 'Doctor Who (2005)'."""
+    text = str(text or "")
+    found = QUALIFIER.search(text)
+    if not found:
+        return _norm(text), ""
+    return _norm(text[: found.start()]), _norm(found.group(1))
+
+
 def matches(title, item):
-    """Whether something played is the title agreed on: the series, or the film."""
-    want, have = _norm(title), _norm(item.get("show") or item.get("title"))
+    """Whether what is playing is the title they agreed on.
+
+    A prefix is not enough -- 'Dune' is not 'Dune: Part Two' -- but a library's
+    qualifier is not a different title: 'The Office' agreed in chat is the show a
+    server files as 'The Office (US)'. Two different qualifiers are two shows, and
+    a year she names for a film has to be the film's year."""
+    shown = item.get("show") or item.get("title")
+    want, have = _norm(title), _norm(shown)
     if not want or not have:
         return False
-    # Prefixes confuse sequels and remakes. A year may disambiguate a film, but
-    # an otherwise different title needs a separate agreement.
-    return have == want or bool(
-        item.get("year") and want == _norm(f"{item.get('title')} {item['year']}")
-    )
+    year = str(item.get("year") or "")
+    if have == want or (year and want == _norm(f"{item.get('title')} {year}")):
+        return True
+    want_bare, want_tag = _bare(title)
+    have_bare, have_tag = _bare(shown)
+    if not want_bare or want_bare != have_bare:
+        return False
+    if want_tag and have_tag and want_tag != have_tag:
+        return False
+    return not (want_tag.isdigit() and year and want_tag != year)
 
 
 def seen(c):
