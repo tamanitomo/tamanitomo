@@ -59,6 +59,42 @@ def test_probe_guard_blocks_network_and_writes_outside_scratch(tmp_path):
     assert (scratch / "network-attempted").is_file()
 
 
+def test_probe_guard_reads_the_kit_when_hermes_is_checked_out_inside_it(tmp_path):
+    # CI checks Hermes out inside this repository, so the folder around the checkout
+    # is the kit itself; an ordinary install keeps it inside ~/.hermes, beside real
+    # profile data. The base interpreter is used because a virtualenv inside the
+    # repository would count as the runtime and hide the difference.
+    scratch = tmp_path / "isolated"
+    (scratch / "guard").mkdir(parents=True)
+    (scratch / "guard/sitecustomize.py").write_text(
+        compatibility.GUARD, encoding="utf-8"
+    )
+    profile = tmp_path / "hermes"
+    (profile / "hermes-agent").mkdir(parents=True)
+    (profile / "config.yaml").write_text("model: real\n", encoding="utf-8")
+    manifest = compatibility.ROOT / "kit/templates/cron/manifest.json"
+    read_kit = f"import pathlib\npathlib.Path({str(manifest)!r}).read_text()\n"
+    profile_hidden = (
+        f"try: pathlib.Path({str(profile / 'config.yaml')!r}).read_text()\n"
+        "except PermissionError: pass\n"
+        "else: raise AssertionError('real profile data readable')\n"
+    )
+    interpreter = getattr(sys, "_base_executable", None) or sys.executable
+    for checkout, program in (
+        (compatibility.ROOT / ".hermes-compat", read_kit),
+        (profile / "hermes-agent", read_kit + profile_hidden),
+    ):
+        result = subprocess.run(
+            [interpreter, "-c", program],
+            env=compatibility.isolated_environment(scratch, checkout),
+            cwd=scratch,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 0, result.stderr
+
+
 def test_reviewed_revision_required_before_runtime_is_started(tmp_path, monkeypatch):
     monkeypatch.setattr(
         compatibility, "revision", lambda _: "different-upstream-commit"

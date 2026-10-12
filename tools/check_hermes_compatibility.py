@@ -22,11 +22,18 @@ SUPPORTED_REVISION = "bddd22be7c2e5f7630c3d90507e6e7280ff092e3"
 
 # Also inherited by the genuine shell-hook subprocesses. Synthetic homes are the
 # only writable location. Environment credentials are not inherited by the probe.
+# The folder around the checkout is treated as real profile data (an install keeps
+# hermes-agent inside ~/.hermes), except for the kit itself: CI checks Hermes out
+# inside this repository, and without the exception the probe could not open its
+# own script, so the workflow failed with exit 2 on every run. The runtime is the
+# interpreter's own prefix: its parent was "/" for a system Python in /usr, which
+# let every read through.
 GUARD = r"""
 import os, pathlib, sys
 scratch = pathlib.Path(os.environ["TAMANITOMO_COMPAT_SCRATCH"]).resolve()
 checkout = pathlib.Path(os.environ["TAMANITOMO_COMPAT_CHECKOUT"]).resolve()
-runtime_roots = (pathlib.Path(sys.prefix).resolve().parent, pathlib.Path(sys.base_prefix).resolve())
+kit = pathlib.Path(os.environ["TAMANITOMO_COMPAT_KIT"]).resolve()
+runtime_roots = (pathlib.Path(sys.prefix).resolve(), pathlib.Path(sys.base_prefix).resolve())
 def inside(path, root):
     try: return pathlib.Path(path).resolve().is_relative_to(root)
     except (TypeError, ValueError, OSError): return False
@@ -41,7 +48,7 @@ def guard(event, args):
             raise PermissionError("Compatibility probe writes only to its disposable directory")
         resolved = pathlib.Path(path).resolve()
         if not inside(resolved, scratch):
-            if inside(resolved, checkout.parent) and not inside(resolved, checkout) and not any(inside(resolved, root) for root in runtime_roots):
+            if inside(resolved, checkout.parent) and not any(inside(resolved, root) for root in (checkout, kit, *runtime_roots)):
                 raise PermissionError("Real Hermes profile data is outside this probe")
             if resolved.name in (".env", "auth.json", "companion.json", ".netrc"):
                 raise PermissionError("Real credentials are outside this probe")
@@ -68,6 +75,7 @@ def isolated_environment(scratch, checkout):
         HERMES_TIMEZONE="UTC",
         TAMANITOMO_COMPAT_SCRATCH=str(scratch),
         TAMANITOMO_COMPAT_CHECKOUT=str(checkout),
+        TAMANITOMO_COMPAT_KIT=str(ROOT),
         PYTHONPATH=os.pathsep.join(
             (
                 str(scratch / "guard"),
