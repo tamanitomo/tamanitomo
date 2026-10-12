@@ -86,6 +86,15 @@ class CompileTests(unittest.TestCase):
             parts = media.compile(self.c, overrides={"scene": "on the back steps"}, draft=draft)["parts"]
         self.assertEqual(parts["wardrobe"], "grey hoodie")
 
+    def test_an_intimate_render_never_borrows_the_presets_outfit(self):
+        # An empty recorded outfit took the preset's, and a capture of her bath came
+        # back in a tee.
+        draft = dict(DRAFT, parts={"quality": "best quality", "wardrobe": "grey hoodie"}, mappings={"negative": ["201", "text"]}, workflow={"201": {"inputs": {"text": ""}}})
+        with patch.object(portrait, "recorded_parts", return_value=dict(RECORDED, wardrobe="")), \
+                patch.object(media, "intimacy_gate", return_value=(True, [])):
+            parts = media.compile(self.c, draft=draft, intimate=True)["parts"]
+        self.assertEqual(parts["wardrobe"], "")
+
     def test_a_preset_nobody_saved_is_named_with_the_ones_that_were(self):
         (self.c.home / media.CONFIG).write_text(json.dumps({"version": 1, "presets": [dict(DRAFT, id="studio")]}))
         with self.assertRaisesRegex(ValueError, r"no image preset called 'nightlight'.*studio"):
@@ -98,6 +107,9 @@ class CompileTests(unittest.TestCase):
 
 
 SHOWERING = {"state": {"activity": "taking a shower", "outfit": [{"id": "bathing"}]}}
+TOWEL = {"state": {"activity": "drying off", "outfit": [{"id": "towel", "description": "wrapped in a bath towel"}]}}
+DRESSED = {"state": {"activity": "reading", "outfit": [{"id": "x", "description": "jeans"}]}}
+NOT_YET = (False, "you are not there with Alex yet")
 
 
 class UndressedPhotoTests(unittest.TestCase):
@@ -110,7 +122,7 @@ class UndressedPhotoTests(unittest.TestCase):
         self.c = cc.Companion(agent="Nova", human="Alex", hermes_root=root / "home", vault=root / "vault")
         self.c.home.mkdir(parents=True, exist_ok=True)
 
-    def run_generate(self, *flags, now=SHOWERING, allowed=(False, "Adult images are switched off.")):
+    def run_generate(self, *flags, now=SHOWERING, allowed=NOT_YET):
         import companion_presence as presence
 
         argv = ["companion_portrait.py", "--home", str(self.c.home), "generate", "--scene", "after a shower", *flags]
@@ -118,23 +130,52 @@ class UndressedPhotoTests(unittest.TestCase):
         with patch.object(sys, "argv", argv), patch.object(cc, "load", return_value=self.c), \
                 patch.object(presence, "current", return_value=now), \
                 patch.object(presence, "wardrobe", return_value={"items": []}), \
-                patch.object(portrait, "undressed_render_allowed", return_value=allowed), \
+                patch.object(portrait, "undressed_render_allowed", **(
+                    {"side_effect": allowed} if callable(allowed) else {"return_value": allowed})), \
                 patch.object(media, "generate", return_value=made) as generate, redirect_stdout(io.StringIO()):
             portrait.main()
         return generate.call_args
 
     def test_not_yet_is_said_rather_than_painted_over_with_clothes(self):
-        with self.assertRaisesRegex(ValueError, "in the bath or shower.*not a photo you send yet: Adult images"):
+        with self.assertRaisesRegex(
+            ValueError, "in the bath or shower.*not a photo you are ready to send Alex: you are not there with Alex yet"
+        ):
             self.run_generate()
+
+    def test_the_refusal_is_hers_to_say_never_a_setting(self):
+        with self.assertRaisesRegex(ValueError, "never explain it as a setting, a filter or a model"):
+            self.run_generate()
+
+    def test_it_offers_only_what_she_could_really_send(self):
+        with self.assertRaisesRegex(ValueError, "one once you are dressed"):
+            self.run_generate()
+        towel_only = lambda c, kind=None: (True, "") if kind == "towel" else NOT_YET
+        with self.assertRaisesRegex(ValueError, "one wrapped in a towel once you are out.*promise"):
+            self.run_generate(allowed=towel_only)
 
     def test_once_it_is_hers_to_choose_the_refusal_names_how(self):
         with self.assertRaisesRegex(ValueError, "--intimate"):
             self.run_generate(allowed=(True, ""))
 
-    def test_something_put_on_for_the_photo_can_be_photographed(self):
-        call = self.run_generate("--wardrobe", "a white bath towel")
-        self.assertEqual(call.args[3]["wardrobe"], "a white bath towel")
+    def test_a_towel_she_is_ready_to_send_is_photographed_as_it_is(self):
+        towel_only = lambda c, kind=None: (True, "") if kind == "towel" else NOT_YET
+        call = self.run_generate(now=TOWEL, allowed=towel_only)
         self.assertFalse(call.kwargs["intimate"])
+
+    def test_a_towel_she_is_not_ready_to_send_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "in a towel right now.*not a photo you are ready to send"):
+            self.run_generate(now=TOWEL)
+
+    def test_a_photo_cannot_dress_her_in_something_she_does_not_have_on(self):
+        # A flag that dressed her for the picture could show a dress she does not have on.
+        with self.assertRaisesRegex(ValueError, "A photo shows what you have on: jeans.*change first"):
+            self.run_generate("--wardrobe", "the white dress", now=DRESSED)
+        with self.assertRaisesRegex(ValueError, "what you have on: in the bath or shower"):
+            self.run_generate("--wardrobe", "a white bath towel")
+
+    def test_with_nothing_recorded_the_wardrobe_still_describes_her(self):
+        call = self.run_generate("--wardrobe", "a yellow raincoat", now=None)
+        self.assertEqual(call.args[3]["wardrobe"], "a yellow raincoat")
 
     def test_an_intimate_photo_she_chose_has_no_wardrobe_box(self):
         call = self.run_generate("--intimate", allowed=(True, ""))
@@ -142,8 +183,8 @@ class UndressedPhotoTests(unittest.TestCase):
         self.assertEqual(call.args[3]["wardrobe"], "")
 
     def test_an_intimate_photo_is_refused_before_anything_renders_when_not_allowed(self):
-        with self.assertRaisesRegex(ValueError, "not one you send yet: Adult images"):
-            self.run_generate("--intimate", now={"state": {"activity": "reading", "outfit": [{"id": "x", "description": "jeans"}]}})
+        with self.assertRaisesRegex(ValueError, "not a photo you are ready to send Alex"):
+            self.run_generate("--intimate", now=DRESSED)
 
     def test_no_record_at_all_is_not_undressed(self):
         call = self.run_generate(now=None)

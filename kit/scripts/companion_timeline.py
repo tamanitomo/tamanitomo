@@ -379,7 +379,7 @@ def _refusal(c, now):
     if reason == "undressed":
         from companion_portrait import undressed_render_allowed
 
-        allowed, why = undressed_render_allowed(c)
+        allowed, why = undressed_render_allowed(c, undressed_kind(c, scene["state"]))
         if not allowed:
             return (
                 {
@@ -600,6 +600,17 @@ def private_reason(c, state):
     except (OSError, ValueError):
         closet = ()
     return reason(state, closet)
+
+
+def undressed_kind(c, state):
+    """'undressed', 'bathing', 'towel', 'underwear' or None -- see companion_presence.undress."""
+    from companion_presence import undress, wardrobe
+
+    try:
+        closet = wardrobe(c)["items"]
+    except (OSError, ValueError):
+        closet = ()
+    return undress(state, closet)[0]
 
 
 def is_private(state, c=None):
@@ -1090,7 +1101,7 @@ def fingerprint(c, now=None):
     if reason == "undressed":
         from companion_portrait import undressed_render_allowed
 
-        if not undressed_render_allowed(c)[0]:
+        if not undressed_render_allowed(c, undressed_kind(c, state))[0]:
             return "private moment\n"
     # A ComfyUI that stops answering is a change (the run that follows is skipped by
     # gate), and so is one that comes back, which is when the next photo is due.

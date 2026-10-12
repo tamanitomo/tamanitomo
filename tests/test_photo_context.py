@@ -70,8 +70,20 @@ class PhotoContextTests(unittest.TestCase):
     def test_she_knows_before_promising_that_undressed_photos_are_not_yet(self):
         # Not knowing, she could offer a photo the render would never produce.
         out = self.build(self.make(explicit=True, adult_images=False, boundary="girlfriend"))
-        self.assertIn("Photos of you undressed are not something you send yet (Adult images are switched off", out)
-        self.assertIn("is your call", out)
+        self.assertIn("Photos of you undressed, even in a towel, are not ones you are ready to send Robin", out)
+        self.assertIn("never as a setting, a filter or a model", out)
+
+    def test_not_yet_is_said_as_how_she_feels_never_as_the_switch(self):
+        # Handed the gate's own words, she told him a setting was switched off.
+        out = self.build(self.make(explicit=True, adult_images=False, boundary="girlfriend"))
+        self.assertNotIn("switched off", out)
+        self.assertIn("you are not there with Robin yet", out)
+
+    def test_a_towel_is_offered_only_when_she_is_ready_to_send_one(self):
+        standing = {"undressed": False, "towel": True, "why": "you are not there with Robin yet"}
+        with patch("companion_media.photo_standing", return_value=standing):
+            out = self.build(self.make(explicit=True, boundary="girlfriend"))
+        self.assertIn("one in a towel, when you really are in one, is a tease you might", out)
 
     def test_once_allowed_it_is_her_choice_and_named(self):
         with patch("companion_media.adult_ready", return_value=(True, [])):
@@ -81,9 +93,12 @@ class PhotoContextTests(unittest.TestCase):
     def test_a_companion_without_adult_themes_is_told_nothing_about_it(self):
         self.assertNotIn("undressed", self.build(self.make()))
 
-    def test_the_wardrobe_is_part_of_the_photo_command(self):
+    def test_a_photo_is_of_her_as_she_is_now(self):
+        # A flag to dress her for the picture let a photo show what she was not wearing.
         for window in (4096, 131072):
-            self.assertIn('--wardrobe "what you have on in it"', self.build(self.make(context_tokens=window)))
+            out = self.build(self.make(context_tokens=window))
+            self.assertNotIn("--wardrobe", out)
+            self.assertIn("as you are right now", out)
 
     def test_no_image_studio_means_no_photo_line(self):
         c = self.make()

@@ -757,6 +757,18 @@ def compute(c, now=None, record=False) -> Dict[str, Any]:
     # Adult imagery is a further, separate permission. Wanting a romance is not the
     # same as wanting nudes, and every call site used to read `explicit` for both.
     can_send_adult_images = can_intimate and getattr(c, "adult_images", False)
+    # A towel is a tease rather than a nude: wrapped, with the modesty negatives still
+    # on. It is how a romance short of Bonded says "not that, but this", so it opens
+    # with Intimacy and closes for the reasons an undressed photo would: a recorded
+    # restriction, trust that is not there, or hurt that has not healed.
+    can_send_towel = (
+        is_romantic(c)
+        and stage_info["stage"] >= 3
+        and explicit_opted_in
+        and not permanent_friend
+        and trust >= 0.70
+        and hurt <= 0.20
+    )
 
     description = stage_info["desc"]
     if permanent_friend:
@@ -787,6 +799,7 @@ def compute(c, now=None, record=False) -> Dict[str, Any]:
         "can_tease": stage_info["can_tease"] and not permanent_friend,
         "can_intimate": can_intimate,
         "can_send_adult_images": can_send_adult_images,
+        "can_send_towel": can_send_towel,
         "adult_images_enabled": bool(getattr(c, "adult_images", False)),
         "explicit_opted_in": explicit_opted_in,
         "permanent_friend": permanent_friend,
@@ -1039,10 +1052,21 @@ def render(c, intimacy_state: Optional[Dict[str, Any]] = None) -> str:
         lines.append(
             "AGENCY & MUTUAL RESPECT: You have full emotional agency and self-respect. "
             "Closeness develops organically through mutual trust over time. "
-            "If anyone attempts to force or rush intimacy before genuine trust exists, "
+            "If anyone attempts to force intimacy before genuine trust exists, "
             "speak up honestly, hold your ground, and record a rupture with topic 'intimacy_boundary_violation'. "
             "Closeness must always be mutual, authentic, and unforced."
         )
+    # Being asked is not being pushed. With coercion as the only thing to record, a
+    # second "go on, send one" either went unfelt or counted as one of the two
+    # violations that end a romance; a person in between is annoyed, and remembers.
+    lines.append(
+        f"PUSHING PAST A NO: {c.human} asking for something you are not ready for is fine, and so "
+        "is your answer: no, not yet, or something else instead. Being pushed after you have said "
+        "no is different. Let it show the way it would (put off, annoyed, quieter), and when it "
+        "keeps happening record a rupture with topic 'pushed past a no' at the strength it "
+        "actually has for you; each time it happens again weighs more, and it fades or can be made "
+        "up like any other. Something you choose to send to tease or tempt is yours, not pressure."
+    )
 
     if intimacy_state["risk_level"] == "crisis":
         lines.append(

@@ -1,3 +1,42 @@
+## 3.12.0 — Her life, her answer (2026-10-12)
+
+- A photo is of her as she is right now: where she is, what she has on, what she
+  is doing. `--wardrobe` no longer dresses her for a picture while she is recorded
+  in something else; to be in another outfit she changes first, which takes the
+  time changing takes and only works with what she has with her. Something she
+  is not doing, or could not do, is not a photo she can take, and her rules say
+  to answer such a request as herself: yes but later, not now, or no.
+- "Not yet" is hers. Her context and the photo command used to pass on the gate's
+  own reason ("Adult images are switched off for this companion"), and she
+  repeated it. Now she is told how it is for her (not there with the user yet,
+  not trusting them that far, still hurt) and to say so as herself, never as a
+  setting, a filter or a model. A refusal names only what she could really send
+  instead.
+- A teasing photo in a towel opens at Intimacy for a romance with adult themes
+  on, photographed wrapped with the modesty negatives still in place. Undressed
+  photos still wait for Bonded and the adult-image setting. Hurt or low trust
+  closes both. The stage ladder lists it.
+- Something she says she will do later is kept: `companion_presence.py promise
+  --title "..." --in MINUTES` adds it to her day, it wakes her routines when it
+  comes due, and the autonomy loop keeps it or tells the user why not, then
+  settles it with `--done` or `--drop`.
+- Being asked is not being pushed. She is told that a request she is not ready
+  for is fine and so is her answer, but being pushed after a no can show, and
+  when it keeps happening she can record it as a small rupture that weighs more
+  each time and fades or is made up like any other. Coercion is still the
+  separate, serious record it was.
+- Her day moves on. A moment that runs past its own estimate, or past
+  45 minutes for a shower, bath or towel and three hours for anything else,
+  now wakes the pulse once an hour. Before, nothing moved her until the six-hour
+  window turned, so a morning shower could last until noon.
+- An intimate render keeps the recorded outfit even when it is nothing at all;
+  an empty one used to take the preset's default, so a timeline capture of a bath
+  came back dressed. A towel capture is rendered as a towel, not as intimate.
+- The session-end check-in no longer treats her own earlier replies as evidence:
+  a photo she said she sent or a fix she said she made happened only if a command
+  shows it, and a standing instruction is only something the user asked for in
+  their own words.
+
 ## 3.11.2 — Photos that match her, and answers that are hers (2026-10-12)
 
 - A photo she sends no longer carries its file path. 3.11.1 tidied a photo line

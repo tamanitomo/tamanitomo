@@ -219,6 +219,36 @@ def adult_ready(c, state=None):
     )
 
 
+def photo_standing(c, state=None):
+    """What of herself she is ready to send, and when not, why: as she would feel it.
+
+    {"undressed": bool, "towel": bool, "why": str}. `why` is never the gate's own
+    words. Handed "Adult images are switched off for this companion", she repeated
+    it, and a person who asked her for a photo heard a setting instead of her.
+    """
+    if state is None:
+        try:
+            import companion_intimacy as intimacy
+
+            state = intimacy.compute(c)
+        except Exception:
+            state = {}
+    undressed = adult_ready(c, state)[0]
+    towel = undressed or bool(state.get("can_send_towel"))
+    meters = state.get("meters") or {}
+    if undressed:
+        why = ""
+    elif state.get("permanent_friend") or state.get("nsfw_revoked"):
+        why = f"that is not what things are between you and {c.human}"
+    elif meters.get("hurt", 0.0) > 0.20:
+        why = f"something between you and {c.human} still hurts"
+    elif meters.get("trust", 1.0) < 0.70:
+        why = f"you do not trust {c.human} that far yet"
+    else:
+        why = f"you are not there with {c.human} yet"
+    return {"undressed": undressed, "towel": towel, "why": why}
+
+
 def load(c):
     path = c.home / CONFIG
     if path.exists():
@@ -688,8 +718,11 @@ def compile(
     # A preset's wardrobe is a default for when nothing is recorded, not a uniform.
     # Filled in first, it dressed every picture from that workflow in the same
     # outfit, over whatever she had on.
-    if recorded.get("wardrobe"):
-        parts["wardrobe"] = recorded["wardrobe"]
+    # An intimate render is of her undressed, so the record's outfit stands even when
+    # it is nothing at all: the empty box used to take the preset's, and a timeline
+    # capture of her bath came back in a tee.
+    if recorded.get("wardrobe") or intimate:
+        parts["wardrobe"] = recorded.get("wardrobe", "")
     for key in ("scene", "wardrobe", "feeling", "lighting", "camera"):
         if requested and key in ("feeling", "lighting", "camera"):
             continue

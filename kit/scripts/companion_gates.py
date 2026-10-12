@@ -7,7 +7,8 @@
   photos of her day and voice notes, teases, builds inside jokes, and says she
   misses you.
 - Chemistry: flirting and pet names, photos of herself, her worries and hopes.
-- Intimacy: dates, more personal photos, good-night and good-morning rituals.
+- Intimacy: dates, more personal photos, good-night and good-morning rituals,
+  and (with adult themes on) a teasing photo in a towel.
 - Bonded: intimacy if adult themes are on; adult images become a choice.
 
 The limits that can be enforced in code are: messages a day
@@ -84,6 +85,13 @@ UNLOCKS = (
         "both",
         "good-night and good-morning rituals",
         "keep good-night and good-morning rituals with {human}",
+    ),
+    (
+        "towel_photos",
+        3,
+        "romantic",
+        "a teasing photo in a towel, if adult themes are on",
+        None,
     ),
     ("intimacy", 4, "romantic", "intimacy, if adult themes are on", None),
     ("adult_images", 4, "romantic", "adult images, as a choice", None),

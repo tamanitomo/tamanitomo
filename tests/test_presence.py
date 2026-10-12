@@ -1651,3 +1651,80 @@ class ShortFormSceneTests(AwakeFingerprintProseTests):
             now=self.now + dt.timedelta(minutes=16),
         )
         self.assertFalse(presence.current(self.c)["state"].get("asleep", False))
+
+
+class PromiseTests(AwakeFingerprintProseTests):
+    """A "later" she says out loud is kept in her day, so it is still hers then."""
+
+    def test_a_promise_leaves_the_scene_as_it_was_and_comes_due(self):
+        said = self.now + dt.timedelta(minutes=5)
+        before = preread.fingerprint(self.c, said)
+        out = presence.promise(
+            self.c, "send a photo once I am out of the shower", 20, now=said
+        )
+        item = out["commitment"]
+        self.assertTrue(item["id"].startswith(presence.PROMISE_PREFIX))
+        self.assertEqual(item["status"], "planned")
+        current = presence.current(self.c)
+        self.assertEqual(current["state"]["activity"], "eating lunch")
+        self.assertEqual(current["text"], "Lunch.")
+        added = preread.fingerprint(self.c, said + dt.timedelta(minutes=1))
+        due = preread.fingerprint(self.c, said + dt.timedelta(minutes=21))
+        self.assertNotEqual(before, added)
+        self.assertNotEqual(added, due, "coming due must wake the jobs that keep it")
+
+    def test_a_promise_is_settled_with_what_happened(self):
+        said = self.now + dt.timedelta(minutes=5)
+        item = presence.promise(self.c, "call back", 30, now=said)["commitment"]
+        with self.assertRaisesRegex(ValueError, "--reason"):
+            presence.promise(self.c, drop=item["id"], now=said + dt.timedelta(minutes=40))
+        presence.promise(
+            self.c, drop=item["id"], reason="Fell asleep early.", now=said + dt.timedelta(minutes=40)
+        )
+        held = presence.current(self.c)["state"]["commitments"]
+        self.assertEqual([i["status"] for i in held if i["id"] == item["id"]], ["cancelled"])
+        with self.assertRaisesRegex(ValueError, "no commitment 'nope'"):
+            presence.promise(self.c, done="nope", reason="x", now=said + dt.timedelta(minutes=41))
+
+
+class OverdueFingerprintTests(AwakeFingerprintProseTests):
+    """A moment that has run long wakes a run, so she does not stay in it all morning."""
+
+    def test_a_shower_is_brief_and_wakes_a_run_when_it_runs_long(self):
+        presence.transition_scene(
+            self.c,
+            "taking a shower",
+            "Finished lunch, went to wash.",
+            "Hot water.",
+            location="bathroom",
+            outfit=["bathing"],
+            setting="private",
+            now=self.now + dt.timedelta(minutes=15),
+        )
+        started = self.now + dt.timedelta(minutes=15)
+        within = preread.fingerprint(self.c, started + dt.timedelta(minutes=30))
+        self.assertEqual(within, preread.fingerprint(self.c, started + dt.timedelta(minutes=44)))
+        overdue = preread.fingerprint(self.c, started + dt.timedelta(minutes=46))
+        self.assertNotEqual(within, overdue)
+        later = preread.fingerprint(self.c, started + dt.timedelta(minutes=46 + 60))
+        self.assertNotEqual(overdue, later, "and again each hour it carries on")
+
+    def test_an_ordinary_moment_is_left_alone_for_an_afternoon(self):
+        first = preread.fingerprint(self.c, self.now + dt.timedelta(minutes=10))
+        self.assertEqual(first, preread.fingerprint(self.c, self.now + dt.timedelta(hours=2, minutes=50)))
+        self.assertNotEqual(first, preread.fingerprint(self.c, self.now + dt.timedelta(hours=3, minutes=5)))
+
+    def test_its_own_estimate_decides_when_it_has_run_long(self):
+        presence.transition_scene(
+            self.c,
+            "cooking dinner",
+            "Lunch done, started dinner early.",
+            "Onions first.",
+            duration=30,
+            now=self.now + dt.timedelta(minutes=15),
+        )
+        started = self.now + dt.timedelta(minutes=15)
+        self.assertNotEqual(
+            preread.fingerprint(self.c, started + dt.timedelta(minutes=20)),
+            preread.fingerprint(self.c, started + dt.timedelta(minutes=35)),
+        )

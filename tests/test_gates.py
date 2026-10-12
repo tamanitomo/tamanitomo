@@ -63,6 +63,7 @@ class TestTheLadder:
                 "planning dates with you",
                 "more personal photos",
                 "good-night and good-morning rituals",
+                "a teasing photo in a towel, if adult themes are on",
             ],
             "Bonded": ["intimacy, if adult themes are on", "adult images, as a choice"],
         }

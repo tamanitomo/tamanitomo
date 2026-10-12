@@ -982,6 +982,82 @@ def continue_scene(
     return update(c, rec, now)
 
 
+PROMISE_PREFIX = "promise-"
+
+
+def promise(
+    c,
+    title="",
+    minutes=None,
+    length=30,
+    done="",
+    drop="",
+    reason="",
+    delay_reason="",
+    now=None,
+):
+    """Something she said she will do later, kept in her day so it is still hers then.
+
+    Said and not written down, "I'll send you one when I'm out" was gone by the next
+    turn: nothing runs after a reply, and the jobs that keep her day act only on what
+    the record holds. A commitment comes due, wakes them, and is in front of them.
+    `done` or `drop` with an id settles one, with the reason it went that way.
+    """
+    now = now or dt.datetime.now(ZoneInfo(c.timezone))
+    cur = current(c)
+    rec = _carried_record(c)
+    settle = done or drop
+    if settle:
+        held = {item["id"]: item for item in cur["state"].get("commitments", [])}
+        if settle not in held:
+            raise ValueError(
+                f"There is no commitment {settle!r}; the open ones are: "
+                + (
+                    ", ".join(i for i, v in held.items() if v["status"] == "planned")
+                    or "none"
+                )
+            )
+        if not reason.strip():
+            raise ValueError("Say what happened with --reason")
+        item = {
+            **held[settle],
+            "status": "completed" if done else "cancelled",
+            "reason": reason.strip()[:300],
+        }
+    else:
+        title = " ".join(str(title or "").split())
+        if not title:
+            raise ValueError("Say what you will do with --title")
+        if minutes is None or not 0 <= minutes <= 7 * 24 * 60:
+            raise ValueError("--in is minutes from now, at most a week")
+        if not 5 <= length <= 24 * 60:
+            raise ValueError("--for is how many minutes it takes, 5 to 1440")
+        start = (now + dt.timedelta(minutes=minutes)).replace(second=0, microsecond=0)
+        item = {
+            "id": PROMISE_PREFIX
+            + hashlib.sha256(
+                (title.lower() + start.date().isoformat()).encode()
+            ).hexdigest()[:12],
+            "title": title[:160],
+            "starts_at": start.isoformat(),
+            "ends_at": (start + dt.timedelta(minutes=length)).isoformat(),
+            "buffer_minutes": 0,
+            "status": "planned",
+            "reason": (reason.strip() or f"I told {c.human} I would.")[:300],
+        }
+    rec.update(
+        {
+            "text": cur.get("text") or rec["activity"],
+            "activity_change": "continue",
+            "commitments": [item],
+        }
+    )
+    if delay_reason:
+        rec["delay_reason"] = delay_reason
+    out = update(c, rec, now)
+    return {**out, "commitment": item}
+
+
 def transition_scene(
     c,
     activity,
@@ -1276,6 +1352,23 @@ def main():
         default=None,
         help="who you are with now, comma-separated ids or names; empty for nobody",
     )
+    pm = sub.add_parser(
+        "promise",
+        help="something you said you will do later, kept in your day until it is due",
+    )
+    pm.add_argument("--title", default="", help="what you will do, in a few words")
+    pm.add_argument("--in", dest="in_", type=int, help="minutes from now")
+    pm.add_argument(
+        "--for", dest="for_", type=int, default=30, help="how many minutes it takes"
+    )
+    pm.add_argument("--done", default="", help="the id of one you kept")
+    pm.add_argument("--drop", default="", help="the id of one you will not keep")
+    pm.add_argument("--reason", default="", help="why, or what happened")
+    pm.add_argument(
+        "--delay-reason",
+        default="",
+        help="why the current activity is running past its planned length",
+    )
     for name in ("update", "wardrobe"):
         p = sub.add_parser(name)
         p.add_argument("--file", type=pathlib.Path, required=True)
@@ -1287,6 +1380,17 @@ def main():
         out = {"written": str(write_emotive(c))}
     elif args.action == "advance":
         out = advance(c)
+    elif args.action == "promise":
+        out = promise(
+            c,
+            args.title,
+            args.in_,
+            args.for_,
+            done=args.done,
+            drop=args.drop,
+            reason=args.reason,
+            delay_reason=args.delay_reason,
+        )
     elif args.action == "continue":
         out = continue_scene(
             c,

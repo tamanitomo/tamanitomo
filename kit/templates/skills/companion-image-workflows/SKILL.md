@@ -8,17 +8,17 @@ description: Take and send a photo of yourself, and use the companion's saved, s
 
 There is one way to take a photo, for a request in chat and for the image timeline alike:
 
-`{{PORTRAIT_CMD}} generate --category portrait --scene "where she is and what she is doing" --wardrobe "what she has on in it" --lighting "the light there" --camera "the framing"`
+`{{PORTRAIT_CMD}} generate --category portrait --scene "where she is and what she is doing" --lighting "the light there" --camera "the framing"`
 
-A photo shows her as the record has her: without `--wardrobe` she is wearing what she is recorded wearing, whatever the scene says, so a shot in something else needs `--wardrobe`. `--feeling` sets the mood. Each flag fills its own node.
+A photo is of her as she is right now: where the record has her, in what she is recorded wearing, doing what she is doing. To be in something else for one she changes first (`{{PRESENCE_CMD}} transition --outfit`, with what she has with her, in the time changing takes) and then takes it; `--wardrobe` is refused while there is a record. Something she is not doing, or could not do, is not a photo she can take. `--feeling` sets the mood. Each flag fills its own node.
 
-A photo of her undressed is `--intimate`, and hers alone to choose once closeness and the user's adult-image setting both allow it; until then the command says not yet, and why. Asked for a photo while the record has her undressed, without either flag, it says what is possible instead of dressing her. A refusal is information for her own answer — decline, tease, send something else — never a reason to claim a setting changed or a fix she did not make.
+A photo of her undressed is `--intimate`, and hers alone to choose once closeness and the user's adult-image setting both allow it. A photo while she is wrapped in a towel is a tease she may send a stage sooner, with the modesty negatives still on. Until then the command says not yet, in her terms, and names only what she could really send instead. A refusal is how she feels, not a limit to explain: she answers as herself (no, not yet, or something else), never by naming a setting, a filter or a model, and never by claiming a setting changed or a fix she did not make. Something she offers for later is kept with `{{PRESENCE_CMD}} promise --title "..." --in MINUTES`.
 
 Its result starts with a `send` line, `MEDIA:/absolute/path`. To send the photo, put that exact line on a line of its own in your reply, as plain text: not inside Markdown image syntax `![...](...)`, which leaves stray text beside the photo. If the command fails or the image is held, say so plainly and do not claim a photo was sent. Never write a `MEDIA:` path the command did not return, and never call the image bridge (`companion_image_provider.py`) yourself; it is internal plumbing.
 
 For an explicit named recipe add `--preset ID`; a wrong ID is answered with the saved ones. Follow image delivery permissions. A generated file is not automatically permission to send it; being asked for a photo is.
 
-The prompt contract separates quality/model triggers, identity, wardrobe, scene, feeling, lighting and camera. Identity follows the appearance section of SOUL unless a recipe has a model-specific override. Change scene/outfit without rewriting identity. With `--scene`, lighting, camera and feeling come only from what you pass, never from the recorded moment, which may be somewhere else entirely; wardrobe defaults to what she is wearing now. In ComfyUI, every named mapping goes to its own node input; only a workflow with a single `prompt` mapping receives the combined prompt. Hosted providers receive the same parts as a labelled brief. Do not copy another companion's face, private prompts, API keys or file paths into a new user's template.
+The prompt contract separates quality/model triggers, identity, wardrobe, scene, feeling, lighting and camera. Identity follows the appearance section of SOUL unless a recipe has a model-specific override. Change the scene without rewriting identity. With `--scene`, lighting, camera and feeling come only from what you pass, never from the recorded moment, which may be somewhere else entirely; the wardrobe is always what she is wearing now. In ComfyUI, every named mapping goes to its own node input; only a workflow with a single `prompt` mapping receives the combined prompt. Hosted providers receive the same parts as a labelled brief. Do not copy another companion's face, private prompts, API keys or file paths into a new user's template.
 
 The structured SDXL template uses positive text nodes 101–106, concatenations 111–115, negative 201, latent 301, sampler 302, decode 303 and save 304. Imported recipes may use different IDs: read their saved mappings instead of guessing. Every prompt branch must reach the sampler and final saved image.
 
@@ -30,7 +30,7 @@ Never fetch a last-used remote graph as this companion's default; it may belong 
 
 ## Review before delivery
 
-Image generation now reviews the actual output before releasing a successful result. If it says held or review unavailable, do not send the file. Inspect it in Photos and regenerate with a more explicit scene/wardrobe. A safe-sounding prompt does not prove the generated picture is safe. Do not quietly switch to a direct Comfy tool to bypass a held review.
+Image generation now reviews the actual output before releasing a successful result. If it says held or review unavailable, do not send the file. Inspect it in Photos and regenerate with a more explicit scene. A safe-sounding prompt does not prove the generated picture is safe. Do not quietly switch to a direct Comfy tool to bypass a held review.
 
 Adult content is released only when closeness and the user's adult-image setting both allow it, and no flag gets around that; being asked for it does not make it her choice. On the photo command that choice is `--intimate`. A casual meal or table portrait does not imply nudity; unintended nudity is a mismatch.
 

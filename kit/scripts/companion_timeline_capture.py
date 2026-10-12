@@ -38,7 +38,15 @@ def capture(c, now=None):
         # it is, so reaching here with an undressed scene means the permissions hold.
         # Saying so lifts the modesty negatives; leaving them on is what put clothes
         # back into the shower.
-        intimate = timeline.private_reason(c, claimed["scene"]["state"]) == "undressed"
+        # A towel is the exception: photographed as it is, wrapped, negatives on.
+        state = claimed["scene"]["state"]
+        intimate = timeline.private_reason(
+            c, state
+        ) == "undressed" and timeline.undressed_kind(c, state) in (
+            "undressed",
+            "bathing",
+            "underwear",
+        )
         # A capture is a look at what she is doing, not something she made, so it
         # is rendered out of sight and the timeline becomes its only home. It used
         # to land in Creations as well, which filed every automatic moment as her
