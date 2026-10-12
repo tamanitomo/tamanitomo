@@ -46,6 +46,14 @@ def instructions(c):
             f'{_command(c, "companion_places.py")} set-home --description D --room "Kitchen=what it is like" '
             "--room ... Until you do, do not describe the inside of your home in detail."
         )
+    if "viewing" in (c.sensors or []) and c.media_server:
+        lines.append(
+            f"When you and {c.human} agree to watch something together, record it: "
+            f'{_command(c, "companion_viewing.py")} together --title "the series or film" '
+            "(--hours N for a long evening). While it holds you are told what is on and what "
+            "the episode is about, so you can watch along without inventing scenes; it ends by "
+            "itself, or with `stop`."
+        )
     lines.append(
         f"When something between you becomes a running joke, a nickname, a ritual or a first: "
         f'{_command(c, "companion_notes.py")} moment --moment joke|nickname|ritual|first|milestone --text T '

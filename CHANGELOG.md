@@ -1,3 +1,17 @@
+## Unreleased
+
+- What you watch: a new sense reads your own Plex or Jellyfin server. She knows what
+  is on, what you finished lately and where each series is up to, and when the two of
+  you agree to watch something together she is told what the episode is about and
+  remembers it as watched together. Set the server in Settings → Awareness and switch
+  on "What you watch". Only your server is contacted; the token is kept in a private
+  file that backups leave out and is never shown again.
+- The GitHub "Hermes compatibility" check failed on every run since it was added: CI
+  checks Hermes out inside this repository, and the probe's guard treated that folder
+  as private profile data, so it could not open its own script. The guard now lets the
+  probe read the kit, and no longer waves every read through for a Python installed
+  in /usr.
+
 ## 3.9.0 — Her own life carries on: places, people, storylines and luck that lasts (2026-10-11)
 
 - Her morning, pulse, autonomy and wind-down now see her needs and the day's luck,

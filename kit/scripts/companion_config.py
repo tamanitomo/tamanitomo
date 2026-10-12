@@ -387,6 +387,14 @@ class Companion:
     alerts_webhook: str = ""
     alerts_webhook_token_file: str = ""
     alerts_webhook_format: str = "json"  # json | text (ntfy)
+    # The human's own Plex or Jellyfin server, read by the "viewing" sensor: what is
+    # on, what was finished, what the two of them watch together. media_user names
+    # the human's account on it (empty: the server's owner). The token is read from
+    # media_token_file so no secret sits in this file.
+    media_server: str = ""
+    media_kind: str = "plex"  # plex | jellyfin
+    media_user: str = ""
+    media_token_file: str = ""
     # Which sensors this profile has switched on, by name.
     sensors: list = dataclasses.field(default_factory=list)
     # Per-job model choices, written by `tamanitomo models`. Empty means "whatever
@@ -428,6 +436,23 @@ class Companion:
             raise ValueError("alerts_webhook_token_file must be a path, or empty")
         if self.alerts_webhook_format not in ("json", "text"):
             raise ValueError('alerts_webhook_format must be "json" or "text"')
+        if not isinstance(self.media_server, str) or (
+            self.media_server
+            and not self.media_server.startswith(("https://", "http://"))
+        ):
+            raise ValueError("media_server must be an http(s) address, or empty")
+        if any(mark in self.media_server for mark in ("?", "#", "@")):
+            # A pasted address can carry the token; it belongs in its own file.
+            raise ValueError(
+                "media_server must be the server's address alone, like "
+                "http://192.168.1.10:32400 (the token goes in its own field)"
+            )
+        if self.media_kind not in ("plex", "jellyfin"):
+            raise ValueError('media_kind must be "plex" or "jellyfin"')
+        if not isinstance(self.media_user, str) or len(self.media_user) > 100:
+            raise ValueError("media_user must be an account name, or empty")
+        if not isinstance(self.media_token_file, str):
+            raise ValueError("media_token_file must be a path, or empty")
         if not isinstance(self.adult_images, bool):
             raise ValueError("adult_images must be true or false")
         if self.adult_images and not self.explicit:

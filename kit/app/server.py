@@ -843,6 +843,7 @@ def build(home=None, token="", state_dir=None):
         import companion_render as render
         import companion_integrity
         import companion_intimacy
+        import companion_viewing as viewing
 
         from companion_routing import reader_status
 
@@ -874,6 +875,11 @@ def build(home=None, token="", state_dir=None):
             "alerts": c.alerts,
             # Whether one is set, never the address: a topic URL is often the secret.
             "alerts_webhook": bool(c.alerts_webhook),
+            "media_server": c.media_server,
+            "media_kind": c.media_kind,
+            "media_user": c.media_user,
+            # Whether one is kept, never the token itself.
+            "media_token_set": viewing.configured(c) or bool(c.media_token_file),
             "learn_rhythm": _learn_rhythm(c),
             "local_web_reader": reader["local"],
             "web_reader_other": reader["other"],
@@ -908,6 +914,9 @@ def build(home=None, token="", state_dir=None):
         "peer_interaction",
         "conversation_handoff",
         "alerts",
+        "media_server",
+        "media_kind",
+        "media_user",
         "local_web_reader",
         "image_style",
         "explicit",
@@ -990,6 +999,11 @@ def build(home=None, token="", state_dir=None):
         if learn is not None and not payload:
             save_learn_rhythm()
             return {"saved": ["learn_rhythm"]}
+        # The media server token is written to its own private file and never kept
+        # in companion.json or sent back; an empty field leaves the saved one alone.
+        media_token = payload.pop("media_token", None)
+        if media_token is not None and not isinstance(media_token, str):
+            raise HTTPException(400, "media_token must be text")
         unknown = sorted(set(payload) - ALLOWED)
         if unknown:
             raise HTTPException(400, f'not settable from here: {", ".join(unknown)}')
@@ -999,6 +1013,27 @@ def build(home=None, token="", state_dir=None):
             c.__post_init__()  # the same validation the CLI gets
         except ValueError as exc:
             raise HTTPException(400, str(exc))
+        import companion_platform as cp
+        import companion_viewing as viewing
+
+        if media_token and media_token.strip():
+            token = media_token.strip()
+            if len(token) > 500 or any(ch.isspace() for ch in token):
+                raise HTTPException(400, "That does not look like a server token")
+            path = viewing.token_path(c)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if os.name != "nt":
+                path.parent.chmod(0o700)
+            cp.atomic_write(path, token + "\n")
+            if os.name != "nt":
+                path.chmod(0o600)
+            c.media_token_file = str(path)
+            payload["media_token"] = "(saved)"
+        if "media_server" in payload and not c.media_server:
+            # Removing the server forgets the token the app kept for it.
+            if c.media_token_file == str(viewing.token_path(c)):
+                viewing.token_path(c).unlink(missing_ok=True)
+                c.media_token_file = ""
         from .settings_service import validate, preserve_human_records, synchronize
 
         validate(c)
@@ -1052,6 +1087,16 @@ def build(home=None, token="", state_dir=None):
             resp.delete_cookie("tamanitomo_pin_session")
             resp.delete_cookie("companion_pin_session")
         return resp
+
+    @app.post("/api/viewing/check")
+    def check_viewing():
+        """Whether the saved media server answers, and whose viewing it reads."""
+        import companion_viewing as viewing
+
+        try:
+            return viewing.check(load())
+        except ValueError as exc:
+            return {"ok": False, "detail": str(exc)}
 
     @app.post("/api/auth/pin")
     def verify_pin(request: Request, payload: dict = Body(...)):

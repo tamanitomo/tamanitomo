@@ -284,6 +284,7 @@ Optional, cheap, silent when they have nothing. Chosen at setup, changeable in t
 | `care` | Things worth asking about again | a `care.md` you write |
 | `durations` | "married 13 years", counted from the date | dated lines in `dates.md` |
 | `thread` | How long since either of you wrote, and what that gap means | nothing |
+| `viewing` | What you watch on your own Plex or Jellyfin: what is on, what you finished lately, what you watch together | the server's address and token, set in Settings → Awareness |
 
 **A sensor that cannot report writes nothing and deletes its old file.** Not knowing the weather is
 fine; yesterday's weather presented as today's is not.

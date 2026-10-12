@@ -14,6 +14,17 @@ Your birthday is stored once you have told her: `companion_together.py set --hum
 
 Public holidays a week ahead, in the country of her timezone (read from the IANA `zone.tab`, so there is no country question at setup). It asks Nager.Date for the country and year, once, and keeps the answer in `state/`; nothing about you leaves the machine. Regional holidays are skipped. Offline with no kept copy, or a timezone with no country, it says nothing. It is off until you switch it on.
 
+## What you watch (`viewing` sense)
+
+From your own Plex or Jellyfin server, set in Settings → Awareness → Your media server (address, which server, your account, and a token; Save and check shows what it can read). Switched on as "What you watch". Only your server is contacted. The titles reach her model provider like everything else she knows, which is why it is off until you switch it on.
+
+- **What is on.** "At 20:51 Robin was watching Severance S2E3 on Plex, 24 of 51 minutes in." Music is left to the music sense.
+- **Lately.** The latest of each series or film you finished in the last ten days: "Severance up to S2E2, last night; Paddington 2 (2017), on Saturday". A viewing day runs to 4 am, so a film finished at 1 am was last night.
+- **Kept.** Every episode or film the server reports finished goes into `viewing.jsonl` once, so the memory outlasts the server's own history.
+- **Watching together.** When you agree to watch something, she records it: `companion_viewing.py together --title "Severance"` (three hours unless `--hours` says otherwise, `stop` to end it). While it holds and that title is on, she is told what the episode is about, and the chat checks what is on at most once a minute instead of every fifteen. Episodes finished in that time are kept as watched together.
+
+Only your own account is read: the server's owner on Plex unless you name another, the administrator on Jellyfin unless you name another. The token sits in `secrets/` in the profile, which backups leave out, and is never shown again; removing the server address forgets it. A server that cannot be read says nothing rather than half a picture.
+
 ## Things she could notice
 
 Added to chat context while relationship indicators are on, from timestamps and message lengths counted in the database (no message text is read for this):

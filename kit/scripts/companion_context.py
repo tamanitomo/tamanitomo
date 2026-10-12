@@ -17,6 +17,7 @@ import os
 import pathlib
 import re
 import sys
+import time
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -784,6 +785,33 @@ def build(c, payload=None, now=None, maintenance_notice=""):
                     )
                 )
 
+    watching_together = False
+    if "viewing" in (c.sensors or []):
+        # While the two of them are watching something together, what is on moves by
+        # the minute; the senses job is fifteen minutes apart. At most once a minute,
+        # with short waits, so a server that is down cannot hold every reply up.
+        try:
+            import companion_viewing
+
+            watching_together = bool(companion_viewing.active(c))
+            stamp = c.home / "state" / "viewing-refreshed"
+            fresh = stamp.exists() and time.time() - stamp.stat().st_mtime < 60
+            if watching_together and not fresh:
+                import companion_sensors
+
+                stamp.parent.mkdir(parents=True, exist_ok=True)
+                stamp.touch()
+                with companion_viewing.quick():
+                    companion_sensors.run_one(
+                        c, "viewing", dt.datetime.now(dt.timezone.utc)
+                    )
+        except (OSError, ValueError, ImportError):
+            pass
+        # Its own short slot rather than a share of the ambient budget, which is a few
+        # hundred characters: while they watch something together, this is the turn.
+        watching = read(c.soul_dir / "ambient/viewing.md", 800).strip()
+        if watching and (b["ambient"] or watching_together):
+            parts.append((4, f"[What {c.human} is watching]\n" + watching))
     if b["ambient"]:
         amb = []
         for p in (
@@ -791,6 +819,8 @@ def build(c, payload=None, now=None, maintenance_notice=""):
             if (c.soul_dir / "ambient").is_dir()
             else []
         ):
+            if p.stem == "viewing":
+                continue
             t = read(p, 1000).strip()
             if t:
                 amb.append(f"{p.stem}: {t}")

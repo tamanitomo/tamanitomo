@@ -352,10 +352,66 @@ const settingsPanels=[
   </div>
   <div class="sensor-grid">
     ${Object.entries(s.available_sensors).map(([k,blurb])=>
-      toggleRow('sensor-'+k,({dates:'Important dates',care:'Follow-ups',durations:'Milestones',together:'Your story together',holidays:'Holidays',thread:'Conversation rhythm',daylight:'Daylight',weather:'Weather',music:'Music'})[k]||k,({weather:'Local conditions, updated hourly.',daylight:'Seasons, moon and daylight.',dates:'Upcoming birthdays and anniversaries.',care:'Things worth checking in about.',durations:'Time since important dates.',together:'Anniversaries and day counts from your first conversation.',holidays:'Public holidays where you live, looked up once.',thread:'Time since your last conversation.',music:'Spotify playback, when connected.'})[k]||blurb,s.sensors.includes(k),`data-sensor="${esc(k)}"`)).join('')}
+      toggleRow('sensor-'+k,({dates:'Important dates',care:'Follow-ups',durations:'Milestones',together:'Your story together',holidays:'Holidays',thread:'Conversation rhythm',daylight:'Daylight',weather:'Weather',music:'Music',viewing:'What you watch'})[k]||k,({weather:'Local conditions, updated hourly.',daylight:'Seasons, moon and daylight.',dates:'Upcoming birthdays and anniversaries.',care:'Things worth checking in about.',durations:'Time since important dates.',together:'Anniversaries and day counts from your first conversation.',holidays:'Public holidays where you live, looked up once.',thread:'Time since your last conversation.',music:'Spotify playback, when connected.',viewing:'What is on and what you finished on your Plex or Jellyfin, and what you watch together. Set the server below.'})[k]||blurb,s.sensors.includes(k),`data-sensor="${esc(k)}"`)).join('')}
+  </div>
+
+  <div class="section-heading" style="margin-top:20px">
+    <h3 class="section-subheading">Your media server</h3>
+  </div>
+  <p class="small dim">For “What you watch”. Only your own server is contacted. The titles reach her model provider like the rest of what she knows.</p>
+  <div class="contact-settings">
+    <div class="contact-row">
+      <label class="contact-label" for="media-server">Server</label>
+      <div class="contact-controls">
+        <select id="media-kind">${options([['plex','Plex'],['jellyfin','Jellyfin']],s.media_kind)}</select>
+        <input id="media-server" value="${esc(s.media_server)}" placeholder="http://192.168.1.10:32400" style="max-width:280px">
+      </div>
+    </div>
+    <div class="contact-row">
+      <label class="contact-label" for="media-user">Your account</label>
+      <div class="contact-controls">
+        <input id="media-user" value="${esc(s.media_user)}" placeholder="the server's owner" style="max-width:220px">
+      </div>
+    </div>
+    <div class="contact-row">
+      <label class="contact-label" for="media-token">Token</label>
+      <div class="contact-controls">
+        <input id="media-token" type="password" autocomplete="off" spellcheck="false" placeholder="${s.media_token_set?'Saved. Type to replace it':'Paste the server token'}" style="max-width:280px">
+        <button class="quiet" id="media-check" type="button">Save and check</button>
+      </div>
+    </div>
+    <p class="small dim" id="media-help"></p>
+    <p class="small" id="media-status" role="status"></p>
   </div>
   ${settingsFooter('Save')}`;
   wireToggles(host);
+  const kind=host.querySelector('#media-kind');
+  const help=()=>{host.querySelector('#media-help').textContent=kind.value==='plex'
+    ?'Plex: in Plex Web, open any film or episode, choose Get Info, then View XML. The token is the X-Plex-Token at the end of the address that opens. Leave the account empty to read the server owner’s viewing.'
+    :'Jellyfin: Dashboard, then API Keys, then add one. Leave the account empty to read the administrator’s viewing.';};
+  kind.addEventListener('change',help);help();
+  const media=()=>{
+    const payload={media_kind:kind.value,media_server:host.querySelector('#media-server').value.trim(),
+      media_user:host.querySelector('#media-user').value.trim()};
+    // Sent only when typed, so saving never clears a token it cannot show.
+    const typed=host.querySelector('#media-token').value.trim();
+    if(typed)payload.media_token=typed;
+    return payload;
+  };
+  host.querySelector('#media-check').onclick=async()=>{
+    const status=host.querySelector('#media-status');
+    status.className='small dim';status.textContent='Checking…';
+    try{
+      await saveSettings(media());
+      host.querySelector('#media-token').value='';
+      const r=await api('/viewing/check',{method:'POST'});
+      if(!r.ok)throw Error(r.detail);
+      status.className='small';
+      status.textContent=`Connected to ${r.server}, reading ${r.account}.`
+        +(r.playing?` On now: ${r.playing}.`:'')
+        +(r.latest?` Last finished: ${r.latest}, ${r.latest_when}.`:' Nothing finished in the last two weeks.');
+    }catch(error){status.innerHTML=`<span class="bad">${esc(error.message)}</span>`;}
+  };
   const recount=()=>{
     const live=[...host.querySelectorAll('[data-sensor]')].filter(x=>x.checked).length;
     const pill=host.querySelector('#sensor-count');
@@ -368,7 +424,8 @@ const settingsPanels=[
       location:host.querySelector('#loc').value,
       conversation_handoff:host.querySelector('#conversation-handoff').checked,
       learn_rhythm:host.querySelector('#learn-rhythm').checked,
-      sensors:[...host.querySelectorAll('[data-sensor]')].filter(x=>x.checked).map(x=>x.dataset.sensor)};
+      sensors:[...host.querySelectorAll('[data-sensor]')].filter(x=>x.checked).map(x=>x.dataset.sensor),
+      ...media()};
     // Sent only when switched, so saving a location never overrides a reader chosen in Hermes.
     const reader=host.querySelector('#local-web-reader').checked;
     if(reader!==s.local_web_reader)payload.local_web_reader=reader;

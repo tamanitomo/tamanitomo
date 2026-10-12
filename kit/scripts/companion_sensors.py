@@ -509,6 +509,14 @@ def music(c, now):
     return None, "Spotify is not connected, or has nothing to report"
 
 
+# ---- what the human watches ------------------------------------------------
+def viewing(c, now):
+    """What the human watches on their own Plex or Jellyfin server. Nothing, if it cannot say."""
+    import companion_viewing
+
+    return companion_viewing.sense(c, now)
+
+
 # ---- the dates two people keep -------------------------------------------
 def together(c, now):
     """First conversation, anniversaries, day counts, birthday, traditions: all counted."""
@@ -645,6 +653,14 @@ REGISTRY = {
         "fn": "music",
         "needs": "Spotify auth",
         "blurb": "What the human is playing on Spotify. Silent when Spotify is not connected.",
+    },
+    "viewing": {
+        "fn": "viewing",
+        "needs": "a Plex or Jellyfin server",
+        "blurb": "What you watch on your own Plex or Jellyfin server: what is on, what you "
+        "finished lately and where each series is up to, and what the two of you watch "
+        "together. Only your server is contacted; the titles reach her model provider "
+        "like the rest of her context.",
     },
 }
 
