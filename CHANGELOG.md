@@ -1,4 +1,4 @@
-## Unreleased
+## 3.9.1 — What you watch, and watching together (2026-10-11)
 
 - What you watch: a new sense reads your own Plex or Jellyfin server. She knows what
   is on, what you finished lately and where each series is up to, and when the two of
