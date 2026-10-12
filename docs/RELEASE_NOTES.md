@@ -1,4 +1,7 @@
-Tamanitomo 3.12.1: her life, her answer.
+Tamanitomo 3.12.2: her life, her answer.
+
+3.12.2: she knows what a photo of her right now would show, and how to get to one she would
+send; she takes it before replying; and a routine woken for a long moment records what she does next.
 
 3.12.1: a moment that has run long (a shower begun hours ago) now says so in her day, so the
 routine that wakes for it moves her on.
