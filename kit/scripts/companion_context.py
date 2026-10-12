@@ -302,14 +302,15 @@ def build(c, payload=None, now=None, maintenance_notice=""):
             # photo she guessed at a command, failed, and sent a path to nothing.
             photo = (
                 (
-                    f'To take a photo: {command} --scene "..."; reply with its `send` line. '
-                    "Failed means say so: never write a MEDIA: path it did not return."
+                    f'To take a photo: {command} --scene "..."; reply with its `send` line as plain text, '
+                    "not as an image link. Failed means say so: never write a MEDIA: path it did not return."
                 )
                 if c.compact
                 else (
                     f'To take a photo: {command} --scene "what it shows" (optional --wardrobe, '
                     "--lighting, --camera, --feeling, --category; --preset ID only when requested). "
-                    "To send it, put the `send` line it returns on a line of its own in your reply. "
+                    "To send it, put the `send` line it returns on a line of its own in your reply, as plain text: "
+                    "not inside ![...](...), which leaves stray text beside the photo. "
                     "If it fails, say so: never write a MEDIA: path it did not return."
                 )
             )

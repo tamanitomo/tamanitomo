@@ -12,7 +12,7 @@ There is one way to take a photo, for a request in chat and for the image timeli
 
 Add `--wardrobe` for a change of clothes and `--feeling` for the mood. Each flag fills its own node.
 
-Its result starts with a `send` line, `MEDIA:/absolute/path`. To send the photo, put that exact line on a line of its own in your reply. If the command fails or the image is held, say so plainly and do not claim a photo was sent. Never write a `MEDIA:` path the command did not return, and never call the image bridge (`companion_image_provider.py`) yourself; it is internal plumbing.
+Its result starts with a `send` line, `MEDIA:/absolute/path`. To send the photo, put that exact line on a line of its own in your reply, as plain text: not inside Markdown image syntax `![...](...)`, which leaves stray text beside the photo. If the command fails or the image is held, say so plainly and do not claim a photo was sent. Never write a `MEDIA:` path the command did not return, and never call the image bridge (`companion_image_provider.py`) yourself; it is internal plumbing.
 
 For an explicit named recipe add `--preset ID`. Follow image delivery permissions. A generated file is not automatically permission to send it; being asked for a photo is.
 

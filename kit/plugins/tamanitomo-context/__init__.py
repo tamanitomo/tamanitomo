@@ -14,11 +14,30 @@ is untouched. Installed and kept current by the kit (companion_routing.install).
 
 import json
 import pathlib
+import re
 
 NAME = "tamanitomo-context"
 
+# A photo is sent by a bare `MEDIA:/path` line. Written as a Markdown image,
+# `![a stretch](MEDIA:/path)`, Hermes still sends the photo but strips only the tag,
+# and `![a stretch]()` arrived in the chat as stray text beside every picture.
+WRAPPED_MEDIA = re.compile(r"!?\[[^\]\n]*\]\(\s*<?(MEDIA:[^\s()<>]+)>?\s*\)")
+
+
+def unwrap_media(response_text="", **_):
+    """The reply with each Markdown-wrapped MEDIA tag left bare; None when there is none.
+
+    Runs as Hermes's transform_llm_output, which also corrects a reply that was
+    already streamed, so the stray text is edited away rather than left behind."""
+    if "MEDIA:" not in (response_text or ""):
+        return None
+    fixed = WRAPPED_MEDIA.sub(r"\1", response_text)
+    return fixed if fixed != response_text else None
+
 
 def register(ctx):
+    if hasattr(ctx, "register_hook"):
+        ctx.register_hook("transform_llm_output", unwrap_media)
     here = pathlib.Path(__file__).resolve().parent
     try:
         agent = json.loads((here / "companion.json").read_text(encoding="utf-8"))[
