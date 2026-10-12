@@ -90,11 +90,13 @@ MODESTY_TERMS = {
     "suggestive",
     "suggestive pose",
     "provocative",
+    "provocative pose",
     "seductive",
     "seductive pose",
     "bedroom eyes",
     "pinup",
     "pin-up",
+    "cleavage",
     "cleavage focus",
     "breast focus",
     "ass focus",
@@ -182,23 +184,25 @@ def negative_prompt(preset, intimate=False):
     return ", ".join(seen)
 
 
-def intimacy_gate(c):
+def intimacy_gate(c, state=None):
     """Whether the companion is free to choose an intimate render right now.
 
     The judgement already exists and is not re-made here: `companion_intimacy`
     weighs stage, opt-in, trust, unresolved hurt and boundary history, and this
     only asks it. One place decides, so there are never two that disagree.
+    `state` is that judgement when the caller has already computed it.
     """
-    try:
-        import companion_intimacy as intimacy
+    if state is None:
+        try:
+            import companion_intimacy as intimacy
 
-        state = intimacy.compute(c)
-    except Exception as exc:
-        return False, ["The closeness state could not be read: " + str(exc)[:200]]
+            state = intimacy.compute(c)
+        except Exception as exc:
+            return False, ["The closeness state could not be read: " + str(exc)[:200]]
     return bool(state.get("intimacy_ready")), list(state.get("intimacy_blockers") or [])
 
 
-def adult_ready(c):
+def adult_ready(c, state=None):
     """Whether adult imagery may be produced or released for this companion right now.
 
     The two switches say the user is willing; they do not say the relationship is
@@ -209,7 +213,7 @@ def adult_ready(c):
     """
     if not getattr(c, "adult_images_allowed", False):
         return False, ["Adult images are switched off for this companion."]
-    allowed, blockers = intimacy_gate(c)
+    allowed, blockers = intimacy_gate(c, state)
     return allowed, (
         [] if allowed else (blockers or ["Closeness has not reached that point."])
     )
@@ -632,6 +636,13 @@ def compile(
             or data.get("default_preset")
         )
         preset = next((p for p in data["presets"] if p["id"] == ident), None)
+        # A name nobody saved used to get "choose and save a preset first", which
+        # sent a companion off looking for a setting rather than at a typo.
+        if not preset and preset_id and data["presets"]:
+            raise ValueError(
+                f"There is no image preset called {preset_id!r}. Saved presets: "
+                + ", ".join(p["id"] for p in data["presets"])
+            )
     if not preset:
         raise ValueError("Choose and save an image preset first")
     p = copy.deepcopy(preset)
@@ -674,6 +685,11 @@ def compile(
     # carrying them over put "the back steps at dawn" under "bathroom light softened
     # by steam". What she is wearing still carries over; she has not changed.
     requested = bool(str(overrides.get("scene") or "").strip())
+    # A preset's wardrobe is a default for when nothing is recorded, not a uniform.
+    # Filled in first, it dressed every picture from that workflow in the same
+    # outfit, over whatever she had on.
+    if recorded.get("wardrobe"):
+        parts["wardrobe"] = recorded["wardrobe"]
     for key in ("scene", "wardrobe", "feeling", "lighting", "camera"):
         if requested and key in ("feeling", "lighting", "camera"):
             continue

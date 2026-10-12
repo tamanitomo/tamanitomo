@@ -1,3 +1,32 @@
+## Unreleased
+
+- A photo she sends no longer carries its file path. 3.11.1 tidied a photo line
+  written as `![alt](MEDIA:/path)` after the reply was written, but Hermes puts a
+  tidied reply over the message already shown as raw text, so the whole
+  `MEDIA:/path` line appeared beside every picture. The tidying is gone; her
+  instructions still ask for the plain line.
+- A photo shows what she has on. A preset's own wardrobe used to win over the
+  outfit she was recorded in, so every picture from that workflow had the same
+  outfit, wherever she was. The preset's outfit is now
+  the fallback for when nothing is recorded, and the photo command asks for
+  `--wardrobe` whenever the shot shows her in something else.
+- Asked for a photo while she is recorded undressed, the command says what is
+  possible instead of drawing her dressed: not yet, and why, or how to choose
+  one.
+- She knows where she stands on photos of herself undressed before she offers
+  one. Her context says whether they are hers to choose, and if not, why not.
+  When they are, `--intimate` on the photo command is the choice, checked
+  against closeness and the adult-image setting before anything renders.
+- Her rules now say that nothing runs after her reply, that she never claims a
+  change to her own tools or settings she did not make, and that her wants count:
+  she decides, declines or teases instead of asking what the user wants. A
+  companion whose photo would not render could otherwise explain the gap with
+  changes she had not made.
+- A preset name nobody saved is answered with the saved ones, not "choose and
+  save a preset first".
+- `cleavage` and `provocative pose` sort into the modesty bucket with the other
+  modesty words.
+
 ## 3.11.1 — Photos without stray text (2026-10-12)
 
 - A photo she sends arrives as just the photo. Writing its line as a Markdown

@@ -1029,7 +1029,7 @@ def render(c, intimacy_state: Optional[Dict[str, Any]] = None) -> str:
         )
         if intimacy_state.get("can_send_adult_images"):
             lines.append(
-                "YOUR CHOICE IN PICTURES: When you send a picture, `companion_media.py generate --intimate` "
+                "YOUR CHOICE IN PICTURES: When you take a photo, `--intimate` on the photo command "
                 "sets that workflow's modesty negatives aside. It is yours to use or not; nobody can ask for it "
                 "on your behalf, and declining needs no reason. Judge each moment on its own — whether it is "
                 "private, whether it is wanted, whether you want it. Some always-on negatives are never set "

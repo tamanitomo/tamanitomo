@@ -8,13 +8,15 @@ description: Take and send a photo of yourself, and use the companion's saved, s
 
 There is one way to take a photo, for a request in chat and for the image timeline alike:
 
-`{{PORTRAIT_CMD}} generate --category portrait --scene "where she is and what she is doing" --lighting "the light there" --camera "the framing"`
+`{{PORTRAIT_CMD}} generate --category portrait --scene "where she is and what she is doing" --wardrobe "what she has on in it" --lighting "the light there" --camera "the framing"`
 
-Add `--wardrobe` for a change of clothes and `--feeling` for the mood. Each flag fills its own node.
+A photo shows her as the record has her: without `--wardrobe` she is wearing what she is recorded wearing, whatever the scene says, so a shot in something else needs `--wardrobe`. `--feeling` sets the mood. Each flag fills its own node.
+
+A photo of her undressed is `--intimate`, and hers alone to choose once closeness and the user's adult-image setting both allow it; until then the command says not yet, and why. Asked for a photo while the record has her undressed, without either flag, it says what is possible instead of dressing her. A refusal is information for her own answer — decline, tease, send something else — never a reason to claim a setting changed or a fix she did not make.
 
 Its result starts with a `send` line, `MEDIA:/absolute/path`. To send the photo, put that exact line on a line of its own in your reply, as plain text: not inside Markdown image syntax `![...](...)`, which leaves stray text beside the photo. If the command fails or the image is held, say so plainly and do not claim a photo was sent. Never write a `MEDIA:` path the command did not return, and never call the image bridge (`companion_image_provider.py`) yourself; it is internal plumbing.
 
-For an explicit named recipe add `--preset ID`. Follow image delivery permissions. A generated file is not automatically permission to send it; being asked for a photo is.
+For an explicit named recipe add `--preset ID`; a wrong ID is answered with the saved ones. Follow image delivery permissions. A generated file is not automatically permission to send it; being asked for a photo is.
 
 The prompt contract separates quality/model triggers, identity, wardrobe, scene, feeling, lighting and camera. Identity follows the appearance section of SOUL unless a recipe has a model-specific override. Change scene/outfit without rewriting identity. With `--scene`, lighting, camera and feeling come only from what you pass, never from the recorded moment, which may be somewhere else entirely; wardrobe defaults to what she is wearing now. In ComfyUI, every named mapping goes to its own node input; only a workflow with a single `prompt` mapping receives the combined prompt. Hosted providers receive the same parts as a labelled brief. Do not copy another companion's face, private prompts, API keys or file paths into a new user's template.
 
@@ -30,12 +32,10 @@ Never fetch a last-used remote graph as this companion's default; it may belong 
 
 Image generation now reviews the actual output before releasing a successful result. If it says held or review unavailable, do not send the file. Inspect it in Photos and regenerate with a more explicit scene/wardrobe. A safe-sounding prompt does not prove the generated picture is safe. Do not quietly switch to a direct Comfy tool to bypass a held review.
 
-Use `--allow-nsfw` when adult content is intentionally part of the requested image — including when the human asked for it in the conversation. A casual meal or table portrait does not imply nudity. Intentional adult content is allowed; unintended nudity is a mismatch.
+Adult content is released only when closeness and the user's adult-image setting both allow it, and no flag gets around that; being asked for it does not make it her choice. On the photo command that choice is `--intimate`. A casual meal or table portrait does not imply nudity; unintended nudity is a mismatch.
 
-The companion's `explicit` setting does NOT pass this flag for you. It only shapes prompt wording, so a companion configured for adult content still holds every adult image unless this flag is on the command. If the human asked for something adult and you omit it, the generation fails rather than arriving.
+The local scanner has three bands, not two: `safe`, `unknown` (uncertain) and `nsfw`. A mildly suggestive image — lingerie, partial coverage, an ambiguous pose — often lands in `unknown` rather than `nsfw`. Outside an allowed adult render both are held, and one clothed replacement is tried.
 
-The local scanner has three bands, not two: `safe`, `unknown` (uncertain) and `nsfw`. A mildly suggestive image — lingerie, partial coverage, an ambiguous pose — often lands in `unknown` rather than `nsfw`, so judge by what was *requested*, not by how explicit you expect the output to be. Both `unknown` and `nsfw` need the flag to be released.
-
-For an image made outside the studio, run `{{PORTRAIT_CMD}} review --source /absolute/image/path --scene "the actual intended scene and clothing"` and wait for status `passed` before sending. Add `--allow-nsfw` only for an intentionally adult image. Review is fallible; use your own visual inspection too. Do not send a held or unreviewed image through another messaging path.
+For an image made outside the studio, run `{{PORTRAIT_CMD}} review --source /absolute/image/path --scene "the actual intended scene and clothing"` and wait for status `passed` before sending. An adult image passes only under the same rule as above, whatever flag is passed. Review is fallible; use your own visual inspection too. Do not send a held or unreviewed image through another messaging path.
 
 The app lets the user mark safe/NSFW, reveal blurred photos and delete unwanted files. Deleting a vault copy does not remove previously sent Telegram messages or Comfy output copies.

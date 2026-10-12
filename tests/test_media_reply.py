@@ -1,8 +1,9 @@
-"""A photo line written as a Markdown image still arrives as just a photo.
+"""The context plugin leaves a companion's finished reply exactly as she wrote it.
 
-Hermes sends the file named by a `MEDIA:/path` tag and strips the tag from the text.
-Wrapped as `![a stretch](MEDIA:/path)`, only the tag went, and `![a stretch]()` was
-left in the chat beside every picture. The context plugin unwraps it before delivery."""
+It once registered an output transform to unwrap `![alt](MEDIA:/path)`. On a streamed
+reply Hermes writes a transformed answer over the message already shown, as raw
+text, so the transform put the whole `MEDIA:/path` line into the chat beside every
+photo -- where Hermes's own handling would have hidden it."""
 
 import importlib.util
 import pathlib
@@ -29,36 +30,10 @@ class Hooks:
 
 
 class MediaReplyTests(unittest.TestCase):
-    def setUp(self):
-        self.unwrap = plugin().unwrap_media
-
-    def test_a_markdown_image_becomes_the_bare_photo_line(self):
-        reply = "Here's one.\n\n![morning stretch](MEDIA:/vault/a.png)\n\nNow tell me."
-        self.assertEqual(
-            self.unwrap(response_text=reply),
-            "Here's one.\n\nMEDIA:/vault/a.png\n\nNow tell me.",
-        )
-
-    def test_a_link_spaces_and_angle_brackets_are_unwrapped_too(self):
-        reply = "[photo](MEDIA:/vault/a.png) and ![b]( <MEDIA:/vault/b.png> )"
-        self.assertEqual(
-            self.unwrap(response_text=reply), "MEDIA:/vault/a.png and MEDIA:/vault/b.png"
-        )
-
-    def test_everything_else_is_left_alone(self):
-        for reply in (
-            "",
-            "No photo today.",
-            "MEDIA:/vault/a.png",
-            "![a map](https://example.com/map.png)",
-        ):
-            self.assertIsNone(self.unwrap(response_text=reply), reply)
-
-    def test_the_plugin_registers_the_hook_without_a_kit_install(self):
+    def test_the_plugin_rewrites_no_reply(self):
         ctx = Hooks()
-        module = plugin()
-        module.register(ctx)
-        self.assertIs(ctx.hooks["transform_llm_output"], module.unwrap_media)
+        plugin().register(ctx)
+        self.assertNotIn("transform_llm_output", ctx.hooks)
 
 
 if __name__ == "__main__":

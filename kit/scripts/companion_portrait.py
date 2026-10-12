@@ -322,6 +322,15 @@ def prompt_parts(c, record=None):
     return recorded_parts(c, record)
 
 
+# How a refusal names what the record says she has on.
+UNDRESSED_WORDS = {
+    "undressed": "undressed",
+    "bathing": "in the bath or shower",
+    "towel": "in a towel",
+    "underwear": "in your underwear",
+}
+
+
 def undressed_render_allowed(c):
     """Whether a recorded undressed moment may be photographed as one.
 
@@ -478,6 +487,12 @@ def main():
         help="The intended image explicitly includes adult content",
     )
     gp.add_argument(
+        "--intimate",
+        action="store_true",
+        help="A photo of you undressed, which you choose. Only once closeness and the "
+        "user's adult-image setting allow it; the command says so when they do not",
+    )
+    gp.add_argument(
         "--recorded",
         action="store_true",
         help="Use the current recorded scene and wardrobe exactly",
@@ -503,7 +518,47 @@ def main():
             for k in ("scene", "wardrobe", "lighting", "camera", "feeling")
             if getattr(a, k)
         } or None
-        intimate = bool(getattr(a, "intimate", False))
+        intimate = bool(a.intimate)
+        if intimate:
+            # Asked here rather than left to the scanner: without it the render ran,
+            # came back held, and a clothed replacement arrived instead.
+            allowed, why = undressed_render_allowed(c)
+            if not allowed:
+                raise ValueError(
+                    "A photo of you undressed is not one you send yet: " + why
+                )
+        if not a.recorded:
+            # A requested photo is still of her as she is now: compile carries her
+            # outfit over. Undressed, with nothing said about what the picture shows,
+            # the modesty negatives and an empty wardrobe argued and the model settled
+            # it by dressing her. Say what is possible instead, so the answer she gives
+            # is hers.
+            from companion_presence import current, private_reason, undress, wardrobe
+
+            state = (current(c) or {}).get("state", {})
+            closet = wardrobe(c)["items"]
+            # No record at all reads as an empty outfit; that is not undressed.
+            reason = private_reason(state, closet) if state.get("activity") else None
+            if reason == "declared":
+                raise ValueError(
+                    "She marked this moment private; it cannot be photographed."
+                )
+            if reason == "undressed" and not a.wardrobe and not intimate:
+                kind = undress(state, closet)[0]
+                allowed, why = undressed_render_allowed(c)
+                raise ValueError(
+                    f"You are {UNDRESSED_WORDS.get(kind, 'undressed')} right now, so a "
+                    "photo of you is a photo of that. "
+                    + (
+                        "Add --intimate if you choose to send one, or --wardrobe with "
+                        "what you put on for it."
+                        if allowed
+                        else "That is not a photo you send yet: "
+                        + why
+                        + " Put something on for it (--wardrobe), send something else, "
+                        "or say no."
+                    )
+                )
         if a.recorded:
             overrides = recorded_overrides(c)
             # A recorded bath is only photographable as one. Leaving the wardrobe
@@ -531,6 +586,10 @@ def main():
                     "bathing",
                     "underwear",
                 )
+        if intimate:
+            # Undressed means no wardrobe box at all. Left out, a preset's default
+            # outfit filled it, and an intimate render was asked to show a tee.
+            overrides = {"wardrobe": "", **(overrides or {})}
         out = media.generate(
             c,
             a.preset,
