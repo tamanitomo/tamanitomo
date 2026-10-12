@@ -331,6 +331,21 @@ def overdue(c, state, now):
     return str(int(over.total_seconds() // 3600))
 
 
+def routine_mark(c, now):
+    """The fingerprint line for the routine anchors active now: it changes when one
+    starts or ends, so a run gets to decide whether she goes."""
+    try:
+        import companion_life
+
+        active = companion_life.routine(c.life, now.astimezone(_tz(c)), c.agent).get(
+            "active_suggestions", []
+        )
+    except (OSError, ValueError, TypeError):
+        return "routine unknown"
+    names = sorted(str(x.get("id") or x.get("activity") or "") for x in active)
+    return "routine now: " + (", ".join(names) or "nothing scheduled")
+
+
 def running_long(hours):
     """The fingerprint line for `overdue`, worded for the run it wakes."""
     if hours == "":
@@ -506,6 +521,10 @@ def fingerprint(c, now=None):
         # Only a real transition or confirmation change opens the awake gate;
         # rewording an activity or mood does not create a new event.
         f"scene {_digest(state.get('started_at') or 'static',state.get('confirmed',True))}",
+        # Her routine's own times. Nothing else moves while she stays put, so the walk
+        # her day holds at ten never got a run to take it; the next came at noon, and
+        # the days settled into reading at home.
+        routine_mark(c, now),
         # Shown to the woken run as the reason it woke. "overdue 0 -> 1" read to it as a
         # system metric, and it answered [SILENT] with the shower still running.
         running_long(overdue(c, state, now)),

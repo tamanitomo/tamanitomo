@@ -1758,3 +1758,26 @@ class OutfitIdErrorTests(AwakeFingerprintProseTests):
                 outfit=["soft white towel"], setting="private",
                 now=self.now + dt.timedelta(minutes=5),
             )
+
+
+class RoutineWakeTests(AwakeFingerprintProseTests):
+    """A routine time wakes a run, so the walk at ten is somebody's decision."""
+
+    def test_the_start_and_end_of_a_routine_anchor_open_the_gate(self):
+        (self.c.life / "routine.json").write_text(
+            json.dumps(
+                {
+                    "kind": "imagined_routine",
+                    "daily": [
+                        {"start": "13:00", "end": "14:30", "activity": "a walk outside", "setting": "the park"}
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        at = lambda h, m: self.now.replace(hour=h, minute=m)
+        before = preread.fingerprint(self.c, at(12, 55))
+        during = preread.fingerprint(self.c, at(13, 5))
+        self.assertNotEqual(before, during, "the walk starting must wake a run")
+        self.assertEqual(during, preread.fingerprint(self.c, at(13, 40)))
+        self.assertNotEqual(during, preread.fingerprint(self.c, at(14, 35)))

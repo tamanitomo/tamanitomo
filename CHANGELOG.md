@@ -1,3 +1,17 @@
+## 3.12.4 — Her routine's times wake her day (2026-10-12)
+
+- A routine anchor starting or ending now wakes the pulse and autonomy runs.
+  Since the fingerprint stopped opening on reworded prose, nothing moved it while
+  she stayed put: the walk her routine holds at ten never got a run to take it,
+  the next one came when the six-hour window turned at noon, and days came out as
+  three or four long stretches at home. Now each anchor (a morning walk, an
+  afternoon interest, a weekly swim) gets a run that decides whether she goes,
+  puts it off with a reason, or carries on.
+- The pulse and autonomy prompts say to run the command and follow its refusal
+  message rather than reading the app's source to learn the rules first. A
+  careful model read the code before every update, about fifteen file reads a
+  run.
+
 ## 3.12.3 — A wrong outfit id says which one she meant (2026-10-12)
 
 - Recording an outfit by its description instead of its id ("soft white towel")
