@@ -147,6 +147,13 @@ if __name__ == "__main__":
         pass
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     try:
+        if sys.argv[1:2] not in (["catalog"], ["generate"], ["review"]):
+            # Plumbing between the kit and Hermes, not a camera. Called by hand it
+            # used to wait on stdin and fail with a JSON error that named nothing.
+            raise ValueError(
+                "companion_image_provider.py is internal; take a photo with "
+                'companion_portrait.py generate --scene "..."'
+            )
         result = (
             catalog()
             if sys.argv[1] == "catalog"

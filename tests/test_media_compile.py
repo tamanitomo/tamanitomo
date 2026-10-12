@@ -1,8 +1,12 @@
 """Which moment each structured box describes when a picture is compiled."""
 
+import io
+import json
 import pathlib
+import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import patch
 
 import companion_config as cc
@@ -58,6 +62,19 @@ class CompileTests(unittest.TestCase):
         parts = self.parts()
         for key in ("scene", "wardrobe", "feeling", "lighting", "camera"):
             self.assertEqual(parts[key], RECORDED[key])
+
+    def test_a_photo_comes_back_with_the_line_that_sends_it(self):
+        # Left to write the MEDIA line herself, a companion once sent a path to a
+        # file that never existed and the reply arrived as bare alt text.
+        made = {"path": "/vault/creations/image-studio/a.png", "file": "a.png"}
+        argv = ["companion_portrait.py", "--home", str(self.c.home), "generate", "--scene", "on the back steps"]
+        out = io.StringIO()
+        with patch.object(sys, "argv", argv), patch.object(cc, "load", return_value=self.c), patch.object(media, "generate", return_value=dict(made)), redirect_stdout(out):
+            portrait.main()
+        result = json.loads(out.getvalue())
+        self.assertEqual(next(iter(result)), "send")
+        self.assertEqual(result["send"], "MEDIA:/vault/creations/image-studio/a.png")
+        self.assertEqual(result["path"], made["path"])
 
 
 if __name__ == "__main__":

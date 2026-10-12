@@ -283,6 +283,7 @@ def build(c, payload=None, now=None, maintenance_notice=""):
         (0, f'[Current time: {now.astimezone(tz).isoformat(timespec="minutes")}]'),
         (0, rules),
     ]
+    photo = ""
     try:
         import companion_media as media
 
@@ -296,6 +297,22 @@ def build(c, payload=None, now=None, maintenance_notice=""):
                 c.home,
                 "generate",
             )
+            # How to take a picture rides in the tail, which is never dropped. As part
+            # of this section it went whenever the snapshot ran long, and asked for a
+            # photo she guessed at a command, failed, and sent a path to nothing.
+            photo = (
+                (
+                    f'To take a photo: {command} --scene "..."; reply with its `send` line. '
+                    "Failed means say so: never write a MEDIA: path it did not return."
+                )
+                if c.compact
+                else (
+                    f'To take a photo: {command} --scene "what it shows" (optional --wardrobe, '
+                    "--lighting, --camera, --feeling, --category; --preset ID only when requested). "
+                    "To send it, put the `send` line it returns on a line of its own in your reply. "
+                    "If it fails, say so: never write a MEDIA: path it did not return."
+                )
+            )
             available = ", ".join(
                 p["id"] + " (" + p["category"] + ")" for p in recipes["presets"]
             )
@@ -304,11 +321,9 @@ def build(c, payload=None, now=None, maintenance_notice=""):
                     3,
                     "[Image Studio: user-selected image providers]\n"
                     + available
-                    + "\nGenerate using "
-                    + command
-                    + " --category portrait|anime|realistic|landscape|other; use --preset ID only when requested. "
+                    + "\nCategories: portrait|anime|realistic|landscape|other. "
                     "The saved workflow composes identity, scene, wardrobe, lighting and camera. "
-                    "For a requested custom scene add --scene TEXT. This saves a local image; delivery still follows permissions.",
+                    "A photo saves locally; sharing one still follows permissions.",
                 )
             )
     except (ValueError, OSError):
@@ -881,6 +896,8 @@ def build(c, payload=None, now=None, maintenance_notice=""):
             f"[Lookups] companion_life.py history | companion_self.py profile|pref-history|wonder|soul "
             f"| companion_recall.py 'subject'. Absence of records is not proof of never."
         )
+    if photo:
+        tail += "\n" + photo
     allowance = max(0, b["total"] - len(tail) - 2)
     kept = list(parts)
     dropped = []

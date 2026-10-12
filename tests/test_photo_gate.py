@@ -4,6 +4,7 @@ Before the gate, every capture during one ComfyUI outage was a whole model run t
 could only fail: 29 of them over three days on one install."""
 
 import http.server
+import io
 import json
 import pathlib
 import subprocess
@@ -11,6 +12,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import patch
 
 import companion_config as cc
@@ -169,6 +171,21 @@ class PhotoGateTests(unittest.TestCase):
         self.assertEqual(
             json.loads(last), {"wakeAgent": False, "reason": "Image timeline is off"}
         )
+
+    def test_a_photo_that_should_go_ahead_says_so(self):
+        # Hermes skips a run whose pre-run script printed nothing, so a silent "go"
+        # was a skip too: no timeline photo was taken once the gate shipped.
+        out = io.StringIO()
+        with (
+            patch.object(
+                sys, "argv", ["companion_timeline.py", "--home", str(self.c.home), "gate"]
+            ),
+            patch.object(tl, "gate", return_value=None),
+            redirect_stdout(out),
+        ):
+            tl.main()
+        last = [line for line in out.getvalue().splitlines() if line.strip()][-1]
+        self.assertEqual(json.loads(last), {"wakeAgent": True})
 
     def test_the_photo_job_is_gated_in_place_of_a_pre_read(self):
         specs = json.loads((ROOT / "kit/templates/cron/manifest.json").read_text())[

@@ -539,6 +539,10 @@ def main():
             allow_nsfw=a.allow_nsfw,
             intimate=intimate,
         )
+        # First, and copied verbatim: the line that sends this picture in a reply.
+        # Left to compose it herself she once wrote a path that did not exist, and
+        # what arrived was the leftover alt text instead of a photo.
+        out = {"send": "MEDIA:" + out["path"], **out}
     elif a.cmd == "review":
         import companion_media_review as review
 

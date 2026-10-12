@@ -127,6 +127,21 @@ class BridgeRerunTests(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertEqual(out["prompt"], "a lighthouse at dusk")
 
+    def test_the_image_bridge_called_by_hand_names_the_real_camera(self):
+        # Asked for a photo, a companion once ran the bridge as if it were a camera;
+        # it read the empty stdin and answered "Expecting value", which named nothing.
+        code, out = self.bridge(
+            "companion_image_provider.py",
+            {},
+            "--home",
+            str(self.hermes),
+            "take_photo",
+            "--prompt",
+            "a quiet evening",
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("companion_portrait.py generate", out["error"])
+
     def test_the_voice_bridge_keeps_its_request(self):
         code, out = self.bridge(
             "companion_voice_chat.py",

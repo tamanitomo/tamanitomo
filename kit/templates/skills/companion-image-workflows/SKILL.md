@@ -1,16 +1,20 @@
 ---
 name: companion-image-workflows
-description: Use the companion's saved, structured image workflows without changing identity or confusing model architectures.
+description: Take and send a photo of yourself, and use the companion's saved, structured image workflows without changing identity or confusing model architectures.
 ---
 <!-- tamanitomo managed image workflow guide -->
 
-Use the selected companion's saved Image Studio presets. Generate with:
+## Taking and sending a photo
+
+There is one way to take a photo, for a request in chat and for the image timeline alike:
 
 `{{PORTRAIT_CMD}} generate --category portrait --scene "where she is and what she is doing" --lighting "the light there" --camera "the framing"`
 
 Add `--wardrobe` for a change of clothes and `--feeling` for the mood. Each flag fills its own node.
 
-For an explicit named recipe add `--preset ID`. Follow image delivery permissions. A generated file is not automatically permission to send it.
+Its result starts with a `send` line, `MEDIA:/absolute/path`. To send the photo, put that exact line on a line of its own in your reply. If the command fails or the image is held, say so plainly and do not claim a photo was sent. Never write a `MEDIA:` path the command did not return, and never call the image bridge (`companion_image_provider.py`) yourself; it is internal plumbing.
+
+For an explicit named recipe add `--preset ID`. Follow image delivery permissions. A generated file is not automatically permission to send it; being asked for a photo is.
 
 The prompt contract separates quality/model triggers, identity, wardrobe, scene, feeling, lighting and camera. Identity follows the appearance section of SOUL unless a recipe has a model-specific override. Change scene/outfit without rewriting identity. With `--scene`, lighting, camera and feeling come only from what you pass, never from the recorded moment, which may be somewhere else entirely; wardrobe defaults to what she is wearing now. In ComfyUI, every named mapping goes to its own node input; only a workflow with a single `prompt` mapping receives the combined prompt. Hosted providers receive the same parts as a labelled brief. Do not copy another companion's face, private prompts, API keys or file paths into a new user's template.
 

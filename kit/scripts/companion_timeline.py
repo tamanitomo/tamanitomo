@@ -574,7 +574,8 @@ def provider_status(c, now=None):
 def gate(c, now=None):
     """Hermes runs this before the model. A photo prepare would decline, or one whose
     image service is not answering, never wakes the model: the run is skipped with
-    {"wakeAgent": false}. None means wake as usual."""
+    {"wakeAgent": false}. None means wake as usual, which the CLI prints as
+    {"wakeAgent": true}."""
     now = now or now_utc()
     refusal, scene, _ = _refusal(c, now)
     if refusal:
@@ -1142,10 +1143,10 @@ def main():
         sys.stdout.write(fingerprint(c))
         return
     if args.action == "gate":
-        # Hermes reads the last line; nothing printed means wake the model as usual.
-        verdict = gate(c)
-        if verdict:
-            print(json.dumps(verdict, ensure_ascii=False))
+        # Hermes reads the last line, and "go" has to be said out loud: a pre-run
+        # script that prints nothing is skipped as having nothing to report, so a
+        # silent go meant no timeline photo was ever taken.
+        print(json.dumps(gate(c) or {"wakeAgent": True}, ensure_ascii=False))
         return
     if args.action == "prepare":
         out = prepare(c)
