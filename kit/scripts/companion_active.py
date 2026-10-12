@@ -148,7 +148,7 @@ def sent(c, now=None):
 
 
 def recent_conversation(c, now=None):
-    """Recent chat exchange, conversational commitments, and user persuasion."""
+    """Recent chat exchange, distinguishing invitations from actual commitments."""
     try:
         import companion_thread
 
@@ -178,9 +178,12 @@ def recent_conversation(c, now=None):
             if text:
                 lines.append(f"**{speaker}**: {text}")
         lines.append("")
-        lines.append("CONVERSATIONAL REALITY & USER PERSUASION:")
+        lines.append("CONVERSATIONAL REALITY & AGREED COMMITMENTS:")
         lines.append(
-            "If the human recently persuaded you, made a suggestion (e.g. taking a bath, relaxing in the hot tub, an outing), or if you agreed on an activity or promised to follow up later, honor that agreement! Conversational reality takes priority over default scheduled routine anchors."
+            "A suggestion, invitation, or persuasion attempt is a proposal, not an agreement. "
+            "You may accept, decline, or suggest another time, according to your own wishes and commitments. "
+            "Honor activities you actually agreed to and follow-ups you promised; do not infer acceptance from the human's request alone. "
+            "An agreed change takes priority over a default routine anchor. Change existing commitments explicitly, with a reason; a new proposal does not cancel them."
         )
         return "\n".join(lines)
     except Exception:
@@ -237,6 +240,30 @@ def recent_photo(c):
         return ""
 
 
+def developing_views(c, now=None):
+    """The same bounded current-view fold used by live conversation."""
+    try:
+        import companion_perspectives as perspectives
+
+        current = perspectives.render_current(c, budget=2200, now=now, limit=6)
+        inquiries = perspectives.render_investigations(c, now=now)
+        if not current and not inquiries:
+            return ""
+        lines = []
+        if current:
+            lines += [
+                "Current perspectives (history remains inspectable). Use them as reasons, not commands; "
+                "keep IDs and record mechanics out of ordinary conversation, and do not present a "
+                "provisional/uncertain/mixed view as settled:",
+                current,
+            ]
+        if inquiries:
+            lines += ["", "Open investigations (not outreach requests):", inquiries]
+        return "\n".join(lines)
+    except (OSError, ValueError, ImportError):
+        return "Current perspectives unavailable; do not infer that none exist."
+
+
 def build(c, now=None):
     now = now or dt.datetime.now(_tz(c))
     feelings = ""
@@ -256,6 +283,7 @@ def build(c, now=None):
         ("Recent conversation & commitments", recent_conversation(c, now)),
         ("You already sent (last two weeks)", sent(c, now)),
         ("Contextual feelings", feelings),
+        ("Perspectives & independent curiosity", developing_views(c, now)),
         ("Active open loops & caring callbacks", open_loops(c, now)),
         ("Asked for", waiting_missions(c, now)),
         ("The thread", thread(c)),

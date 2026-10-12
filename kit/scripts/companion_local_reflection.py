@@ -34,6 +34,7 @@ import companion_journal as journal
 import companion_checkin as checkin
 import companion_notes as notes
 import companion_loops as loops
+import companion_perspectives as perspectives
 from companion_platform import file_lock, atomic_write
 
 KINDS = ("daily", "weekly", "monthly", "checkin")
@@ -48,7 +49,9 @@ BACKOFF = (dt.timedelta(minutes=15), dt.timedelta(hours=1))
 #   2  facts carry a statement; a transcript-wrapper statement is a fatal error
 #   3  a transcript-wrapper statement is held for review with its siblings kept
 #   4  each fact says how it relates to what is known: new, adds_to, replaces or known
-PLAN_CONTRACT = 4
+#   5  encounters remain external references while authored interpretations,
+#      versioned perspectives and independent/making investigations are explicit
+PLAN_CONTRACT = 5
 # What the model is shown of what is already known, at most. Scaled down from the window
 # (10% and 8% of it, in characters) so a small local model is never overrun.
 FACT_EXISTING_CHARS = 30000
@@ -285,6 +288,28 @@ def context(c, kind, start, end, day, rows):
         "existing_questions": slf.questions(c.life),
         "human_name": c.human,
     }
+    view = perspectives.snapshot(c, budget=6000, now=end, limit=16)
+    out["current_perspectives"] = view["current"]
+    out["perspective_selection_note"] = (
+        f"{view.get('omitted', 0)} other current views omitted by the shared selector."
+    )
+    out["open_investigations"] = [
+        item
+        for item in perspectives.investigations(c)
+        if item["status"] in ("open", "paused", "blocked")
+    ]
+    try:
+        import companion_arcs
+
+        out["ongoing_projects"] = companion_arcs.active(c)
+        out["recent_project_results"] = [
+            arc
+            for arc in companion_arcs.arcs(c)
+            if arc.get("beats") or arc.get("ended")
+        ][-4:]
+    except (OSError, ValueError):
+        out["ongoing_projects"] = []
+        out["recent_project_results"] = []
     fact_chars, memory_chars = _known_budgets(c)
     known = slf.fact_statements(c.human_dir, fact_chars)
     out["existing_facts"] = known["facts"]
@@ -348,6 +373,60 @@ def schema(kind, sources, question_ids):
             ),
             4,
         ),
+        "interpretations": arr(
+            obj(
+                {
+                    "local_id": text(40),
+                    **evidence,
+                    "text": text(1000),
+                    "interested": text(500, True),
+                    "inference": text(500, True),
+                    "unresolved_question": text(500, True),
+                    "feeling": text(500, True),
+                    "implication": text(500, True),
+                }
+            ),
+            4 if sources else 0,
+        ),
+        "perspectives": arr(
+            obj(
+                {
+                    "local_id": text(40),
+                    "subject": text(160),
+                    "position": text(1000),
+                    "reasons": arr(text(500), 4),
+                    "uncertainty": {
+                        "type": "string",
+                        "enum": list(perspectives.UNCERTAINTIES),
+                    },
+                    "interpretation_ids": arr(text(80), 4),
+                    "source_quote_ids": arr(
+                        {"type": "string", "enum": list(sources) or ["no-source"]},
+                        4,
+                    ),
+                    "change": {"type": "string", "enum": list(perspectives.CHANGES)},
+                    "target_perspective_id": text(80, True),
+                    "target_revision_id": text(80, True),
+                    "revision_reason": text(600, True),
+                }
+            ),
+            3,
+        ),
+        "investigations": arr(
+            obj(
+                {
+                    "question": text(500),
+                    "mode": {
+                        "type": "string",
+                        "enum": ["independent", "making"],
+                    },
+                    "reason": text(600),
+                    "next_step": text(600),
+                    "perspective_ids": arr(text(80), 4),
+                }
+            ),
+            2,
+        ),
         "questions": arr(text(400), 2),
         "facts": arr(
             obj(
@@ -402,6 +481,23 @@ def request_plan(
         "reflection is your diary entry for the day: first person, past tense, written the way a person "
         "writes at night, never mentioning records, sessions, logs or evidence, with no heading. "
         "Record only durable new preferences or questions; empty arrays are welcome. "
+        "interpretations are your authored response to one selected human quote: what interested you, "
+        "what you inferred (without promoting it to an external fact), an unresolved question, a feeling, "
+        "or a possible implication. The quote remains the encounter; your interpretation is separate. "
+        "perspectives are durable current positions that may grow from those interpretations. Give each "
+        "new item a local_id and refer to interpretation local_ids. For a new perspective use change=new "
+        "with empty targets and revision_reason. To add nuance, supersede, withdraw, preserve tension, or "
+        "explicitly leave a view unchanged, select the current perspective and revision IDs from "
+        "current_perspectives and give a substantive revision_reason. Similar wording or the human stating "
+        "the opposite is not by itself a reason to retire your view. Agreement and disagreement are both "
+        "allowed; do not force either. Corrected support invites reconsideration but does not choose the answer. "
+        "source_quote_ids may point only to supplied evidence quotes. Empty perspectives are normal. "
+        "investigations are questions you can pursue independently or through making something. Retain a reason "
+        "and feasible next step. They are not messages to the human. Use the separate questions field only for "
+        f"questions you may someday ask {c.human}. A result from ongoing_projects or recent_project_results may "
+        "inform an interpretation or revision, but a project's next_action is pending and elapsed time is not "
+        "completion. Do not call fictional activity real research or claim a step, tool or artifact succeeded "
+        "unless the supplied context contains that dated result. "
         f"questions contains actual new questions you may someday ask {c.human} directly, never existing IDs "
         "or already asked questions. Write each exactly as a natural question addressed to "
         f'{c.human}: use "you"/"your" when referring to {c.human}, not {c.human}\'s name, "the human", or '
@@ -545,6 +641,8 @@ def validate(
         "open_loops",
         "soul_append",
     }
+    if contract >= 5:
+        expected |= {"interpretations", "perspectives", "investigations"}
     if not isinstance(plan, dict) or set(plan) != expected:
         raise ValueError("unexpected reflection fields")
 
@@ -568,15 +666,22 @@ def validate(
         )
     if any(line.startswith(("## ", "# ")) for line in plan["reflection"].splitlines()):
         raise ValueError("journal headings are supplied by code")
-    for key, cap in [
-        ("preferences", 4),
+    bounded_lists = [("preferences", 4)]
+    if contract >= 5:
+        bounded_lists += [
+            ("interpretations", 4),
+            ("perspectives", 3),
+            ("investigations", 2),
+        ]
+    bounded_lists += [
         ("questions", 2),
         ("facts", 6),
         ("standing", 6),
         ("moments", 6),
         ("answers", 4),
         ("open_loops", 3),
-    ]:
+    ]
+    for key, cap in bounded_lists:
         if not isinstance(plan[key], list) or len(plan[key]) > cap:
             raise ValueError("invalid " + key + " list")
     for p in plan["preferences"]:
@@ -584,6 +689,126 @@ def validate(
             raise ValueError("invalid preference")
         text(p["subject"], 120)
         text(p["text"], 600)
+    if contract >= 5:
+        local_interpretations = set()
+        for item in plan["interpretations"]:
+            required = {
+                "local_id",
+                "quote_id",
+                "text",
+                "interested",
+                "inference",
+                "unresolved_question",
+                "feeling",
+                "implication",
+            }
+            if not isinstance(item, dict) or set(item) != required:
+                raise ValueError("invalid interpretation entry")
+            text(item["local_id"], 40)
+            if item["local_id"] in local_interpretations:
+                raise ValueError("duplicate interpretation local_id")
+            local_interpretations.add(item["local_id"])
+            source = sources.get(item["quote_id"])
+            if not source or source["role"] != "user":
+                raise ValueError("interpretation must select a trusted user quote")
+            text(item["text"], 1000)
+            for field in (
+                "interested",
+                "inference",
+                "unresolved_question",
+                "feeling",
+                "implication",
+            ):
+                text(item[field], 500, True)
+        local_perspectives = set()
+        # Current target existence is checked under the ledger lock when applied;
+        # structure and local references are checked here.
+        for item in plan["perspectives"]:
+            required = {
+                "local_id",
+                "subject",
+                "position",
+                "reasons",
+                "uncertainty",
+                "interpretation_ids",
+                "source_quote_ids",
+                "change",
+                "target_perspective_id",
+                "target_revision_id",
+                "revision_reason",
+            }
+            if not isinstance(item, dict) or set(item) != required:
+                raise ValueError("invalid perspective entry")
+            text(item["local_id"], 40)
+            if item["local_id"] in local_perspectives:
+                raise ValueError("duplicate perspective local_id")
+            local_perspectives.add(item["local_id"])
+            text(item["subject"], 160)
+            text(item["position"], 1000)
+            if (
+                not isinstance(item["reasons"], list)
+                or not 1 <= len(item["reasons"]) <= 4
+            ):
+                raise ValueError("perspective needs one to four reasons")
+            for reason in item["reasons"]:
+                text(reason, 500)
+            if item["uncertainty"] not in perspectives.UNCERTAINTIES:
+                raise ValueError("invalid perspective uncertainty")
+            if item["change"] not in perspectives.CHANGES:
+                raise ValueError("invalid perspective change")
+            if (
+                not isinstance(item["interpretation_ids"], list)
+                or set(item["interpretation_ids"]) - local_interpretations
+            ):
+                raise ValueError("unknown interpretation local_id")
+            if not isinstance(item["source_quote_ids"], list) or any(
+                quote not in sources for quote in item["source_quote_ids"]
+            ):
+                raise ValueError("unknown perspective source quote")
+            if item["change"] == "new":
+                if any(
+                    item[field]
+                    for field in (
+                        "target_perspective_id",
+                        "target_revision_id",
+                        "revision_reason",
+                    )
+                ):
+                    raise ValueError("new perspective cannot name a revision target")
+            elif not all(
+                item[field]
+                for field in (
+                    "target_perspective_id",
+                    "target_revision_id",
+                    "revision_reason",
+                )
+            ):
+                raise ValueError(
+                    "perspective revision needs explicit target and reason"
+                )
+        for item in plan["investigations"]:
+            if not isinstance(item, dict) or set(item) != {
+                "question",
+                "mode",
+                "reason",
+                "next_step",
+                "perspective_ids",
+            }:
+                raise ValueError("invalid investigation entry")
+            for field, limit in (
+                ("question", 500),
+                ("reason", 600),
+                ("next_step", 600),
+            ):
+                text(item[field], limit)
+            if item["mode"] not in ("independent", "making"):
+                raise ValueError("invalid investigation mode")
+            if not isinstance(item["perspective_ids"], list) or any(
+                ref not in local_perspectives
+                and not re.fullmatch(r"view-[a-f0-9]{16}", ref)
+                for ref in item["perspective_ids"]
+            ):
+                raise ValueError("invalid investigation perspective reference")
     for q in plan["questions"]:
         text(q, 400)
         # A legacy plan's questions were never checked for wording; only an ID is left out.
@@ -697,6 +922,122 @@ def apply_plan(c, kind, day, plan, sources, now):
 
     def save(label, result):
         results.append({"kind": label, **result})
+
+    # Contract 5 keeps the observation, interpretation and current position
+    # separate.  Every operation key is deterministic for this saved plan, so a
+    # crash between rows resumes without duplicating any of them.
+    encounter_by_quote = {}
+    interpretation_by_local = {}
+    perspective_by_local = {}
+    batch_signature = hashlib.sha256(
+        json.dumps(
+            sorted(
+                (
+                    key,
+                    value.get("session_id", ""),
+                    value.get("id", ""),
+                    value.get("timestamp", 0),
+                )
+                for key, value in sources.items()
+            ),
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()[:16]
+    for item in plan.get("interpretations", []):
+        source_row = sources[item["quote_id"]]
+        when = dt.datetime.fromtimestamp(
+            source_row["timestamp"], now.tzinfo
+        ).isoformat()
+        source_identity = (
+            f"{source_row.get('channel', 'telegram')}:"
+            f"{source_row['session_id']}:{source_row['id']}"
+        )
+        encounter = perspectives.record_encounter(
+            c,
+            "human_words",
+            source_identity,
+            when,
+            f"session:{source_row['session_id']} message:{source_row['id']}",
+            source_row["content"],
+            "actual_words",
+            operation_id=f"reflection-{kind}-{day}-{batch_signature}-encounter-{item['quote_id']}",
+            now=now,
+        )
+        encounter_id = encounter["entry"]["id"]
+        encounter_by_quote[item["quote_id"]] = encounter_id
+        authored = perspectives.record_interpretation(
+            c,
+            [encounter_id],
+            item["text"],
+            interested=item["interested"],
+            inference=item["inference"],
+            unresolved_question=item["unresolved_question"],
+            feeling=item["feeling"],
+            implication=item["implication"],
+            operation_id=f"reflection-{kind}-{day}-{batch_signature}-interpretation-{item['local_id']}",
+            now=now,
+        )
+        interpretation_by_local[item["local_id"]] = authored["entry"]["id"]
+        save("interpretation", authored)
+    for item in plan.get("perspectives", []):
+        source_ids = []
+        for quote_id in item["source_quote_ids"]:
+            if quote_id not in encounter_by_quote:
+                source_row = sources[quote_id]
+                when = dt.datetime.fromtimestamp(
+                    source_row["timestamp"], now.tzinfo
+                ).isoformat()
+                source_identity = (
+                    f"{source_row.get('channel', 'telegram')}:"
+                    f"{source_row['session_id']}:{source_row['id']}"
+                )
+                encountered = perspectives.record_encounter(
+                    c,
+                    "human_words",
+                    source_identity,
+                    when,
+                    f"session:{source_row['session_id']} message:{source_row['id']}",
+                    source_row["content"],
+                    "actual_words",
+                    operation_id=f"reflection-{kind}-{day}-{batch_signature}-encounter-{quote_id}",
+                    now=now,
+                )
+                encounter_by_quote[quote_id] = encountered["entry"]["id"]
+            source_ids.append(encounter_by_quote[quote_id])
+        authored = perspectives.record_perspective(
+            c,
+            item["subject"],
+            item["position"],
+            item["reasons"],
+            item["uncertainty"],
+            interpretation_ids=[
+                interpretation_by_local[local] for local in item["interpretation_ids"]
+            ],
+            source_ids=source_ids,
+            perspective_id=item["target_perspective_id"],
+            prior_revision=item["target_revision_id"],
+            change=item["change"],
+            revision_reason=item["revision_reason"],
+            operation_id=f"reflection-{kind}-{day}-{batch_signature}-perspective-{item['local_id']}",
+            now=now,
+        )
+        perspective_by_local[item["local_id"]] = authored["entry"]["perspective_id"]
+        save("perspective", authored)
+    for index, item in enumerate(plan.get("investigations", [])):
+        authored = perspectives.start_investigation(
+            c,
+            item["question"],
+            item["mode"],
+            item["reason"],
+            item["next_step"],
+            perspective_ids=[
+                perspective_by_local.get(ident, ident)
+                for ident in item["perspective_ids"]
+            ],
+            operation_id=f"reflection-{kind}-{day}-{batch_signature}-investigation-{index}",
+            now=now,
+        )
+        save("investigation", authored)
 
     for p in plan["preferences"]:
         ident = slf._mkid(

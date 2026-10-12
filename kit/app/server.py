@@ -160,6 +160,9 @@ def build(home=None, token="", state_dir=None):
     from .shared_sessions import register as register_shared_sessions
 
     register_shared_sessions(app, load)
+    from .relationship_review import register as register_relationship_review
+
+    register_relationship_review(app, load)
     from .updates import register as register_updates
 
     register_updates(app)
@@ -748,15 +751,35 @@ def build(home=None, token="", state_dir=None):
         c = load()
         import companion_self as slf
         import companion_notes as notes
+        import companion_perspectives as perspectives
+        import companion_arcs
+
+        growth = perspectives.inspection(c)
+        current = [
+            {
+                **item,
+                "text": item.get("position", ""),
+                "valence": item.get("valence", "mixed"),
+            }
+            for item in growth["current"]
+        ]
 
         return {
             "facts": slf.facts(c.human_dir),
             "standing": notes.standing(c),
             "relationship": notes.moments(c),
             "questions": slf.questions(c.life, "open"),
-            "preferences": slf._read(
-                c.life / "preferences.jsonl", kind="companion_preference"
-            )[-40:],
+            # Compatibility name for the existing Us renderer.  These are the
+            # authoritative current views, not raw recent history.
+            "preferences": current,
+            "perspectives": {
+                "status": growth["status"],
+                "errors": growth["errors"],
+                "current": current,
+                "history": growth["history"],
+            },
+            "investigations": growth["investigations"],
+            "projects": companion_arcs.arcs(c),
         }
 
     @app.post("/api/facts/{fact_id}/forget")

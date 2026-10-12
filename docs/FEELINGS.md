@@ -65,6 +65,32 @@ Every experience needs supporting words or context. Silence alone cannot establi
 
 The companion receives a command to record supported experiences during chat. Successful execution is required before it claims to have saved one. Existing shared-history notes and private stance remain in context; they are not automatically reclassified into new rupture records.
 
+## Understanding and reviewing restrictions
+
+**Us → Why these boundaries?** separates configured permissions, calculated readiness,
+recorded restrictions and the incidents supporting them. Opening the report makes no
+changes. Authored identity, standing instructions, memories and provider rules can also
+affect a reply; the report does not interpret those sources or infer the companion's
+present wishes.
+
+A restriction with identified source incidents can be reviewed when explicit corrections
+leave fewer than two active boundary incidents. The review requires a reason and the
+current report revision. Changed evidence requires a fresh report. Original incidents,
+corrections, restrictions and earlier reviews remain in history. Repair is different
+from correction: making amends does not establish that the original record was mistaken.
+Missing or malformed source history requires inspection and cannot be automatically
+retired. A saved restriction by itself does not establish wrongdoing or current feelings.
+
+Review changes the recorded application restriction only. It neither changes adult-theme
+settings nor rewrites the companion's authored position. The same current restriction
+state reaches the app and model context. One new boundary incident does not resurrect a
+previously corrected pair; two current incidents enforce a restriction on their own.
+When maintenance encounters a newly supported restriction, it saves a separate
+generation without overwriting the original. Correcting one of that generation's
+sources does not silently retire it: each saved generation needs its own review.
+The report shows the newest effective restriction, while preserving earlier
+generations and their reviews.
+
 ## Slow change
 
 Warmth and trust also move on their own, slowly, from how the two of you actually are. A day counts when you wrote at least three times and she answered. Each such day adds 0.02 to warmth, fading on the temperament's own recovery time and capped at +0.20, and 0.004 to trust, summed over the whole history, never fading, capped at +0.12. Each request she was asked to do and finished (a mission marked done) adds 0.01 trust, up to +0.06. While a rupture is unrepaired, trust does not build and warmth builds at half rate: time alone does not mend what was hurt. The state includes a `slow_change` block with the counts so the numbers can be explained. Nothing here reads message text.
@@ -83,7 +109,7 @@ Each meter moves at most so far in a day, measured from where it ended the last 
 
 The rest of a change is not lost. It arrives over the following days, so a fight still lands in full over two to four days and making up partway stops it there, while a burst of sweet talk cannot jump a meter ahead. An ordinary day moves less than its cap and is never held back. Days with nothing recorded each count, so after three days the band is three caps wide. The state shows what each meter is heading for and whether today's cap is holding it (`daily` in the feelings state and in closeness).
 
-There is no floor: closeness can fall all the way back to Just Met. It used to stop at Friends once reached; that floor survives only as the starting point on the day a companion's record begins, so the upgrade drops nobody at once; from then on a relationship falls at most a day's cap at a time.
+There is no numerical floor: closeness can fall below friendship. An established relationship at that level is called **Distant**, because shared history remains even when closeness fades. **Just Met** describes a new relationship. The former Friends floor survives only as the starting point on the day a companion's meter record begins, so the upgrade drops nobody at once; from then on a relationship falls at most a day's cap at a time.
 
 Sweet moments add at most 0.02 trust a day (connection moments recorded from 11 October 2026; earlier moments keep the trust they already gave). Trust is mostly built by time together and kept promises (slow change, above).
 

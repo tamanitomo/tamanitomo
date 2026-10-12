@@ -103,3 +103,14 @@ class TestThePace:
         assert ident in story.scheduled(companion)
         parts, _ = story.chat_parts(companion, 4000)
         assert any(ident in text for _, text in parts)
+
+    def test_story_surfaces_use_the_callers_clock(self, companion):
+        begin(companion, weeks=2)
+        scheduled = story.scheduled(companion, now=day(15))
+        parts, _ = story.chat_parts(companion, 4000, now=day(15))
+        chat = "\n".join(text for _, text in parts)
+
+        assert "week 3 of about 2" in scheduled
+        assert "It has run its course" in scheduled
+        assert "week 3 of about 2" in chat
+        assert "It has run its course" in chat

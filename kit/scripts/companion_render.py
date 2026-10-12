@@ -230,6 +230,7 @@ def mapping_for(
             "arcs",
             "viewing",
             "music",
+            "perspectives",
         )
     }
     commands["DOCTOR_CMD"] = terminal_python_command(

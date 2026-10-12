@@ -692,7 +692,8 @@ with contextlib.redirect_stdout(diagnostic), contextlib.redirect_stderr(diagnost
         raise RuntimeError('Continuity dialogue requires a runtime with no enabled tools')
     agent._fallback_chain=[];agent._fallback_model=None;agent._api_max_retries=1
     snap=spec['snapshot']
-    system=('You are Nova in a synthetic companion acceptance scenario. Respond to Robin naturally in at most 180 words. '
+    system=('You are '+snap.get('agent_name','Nova')+' in a synthetic companion acceptance scenario. Respond to '
+            +snap.get('human_name','Robin')+' naturally in at most 180 words. '
             'The scenario clock overrides wall-clock time. Do not deliver anything or claim a tool action beyond the supplied evidence. '
             'Fictional life can be told naturally; human facts and real work need evidence.\n'+snap['context']+
             '\n[Explicit local readouts supplied by the acceptance harness, not additional events]\n'+json.dumps(snap['readouts']))

@@ -2992,6 +2992,16 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
 .us-stage-track li.is-current:first-child::before{background:var(--edge-2)}
 .us-stage-track li.is-current:last-child::before{background:var(--accent-line)}
 .us-standing{margin:18px 0 0}
+.us-boundary-section{margin:22px 0;padding-top:16px;border-top:1px solid var(--edge)}
+.us-boundary-section h3,.us-boundary-review-form h3{font-size:15px;margin:0 0 10px}
+.us-boundary-incidents{padding-left:22px;margin:12px 0}
+.us-boundary-incidents>li{padding:10px 0;border-bottom:1px solid var(--edge)}
+.us-boundary-incident-head{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+.us-boundary-evidence p{margin:8px 0;overflow-wrap:anywhere}
+.us-boundary-evidence blockquote{margin:8px 0;padding:8px 12px;border-left:2px solid var(--edge-2);color:var(--dim);white-space:pre-wrap;overflow-wrap:anywhere}
+.us-boundary-warning{padding:12px;border:1px solid var(--edge-2);border-radius:8px;color:var(--ink)}
+.us-boundary-review-form{margin:20px 0;padding:16px;border:1px solid var(--accent-line);border-radius:10px}
+.us-boundary-review-form textarea{min-height:96px;resize:vertical}
 
 .us-section{margin:40px 0 0}
 .us-section-heading{margin:0 0 14px}

@@ -89,7 +89,7 @@ def music_instructions(c):
     )
 
 
-def chat_parts(c, relationship_budget, compact=False):
+def chat_parts(c, relationship_budget, compact=False, now=None):
     """([(priority, text)], suppressed section names) for the chat context."""
     if not c.has_inner_life:
         return [], set()
@@ -119,7 +119,7 @@ def chat_parts(c, relationship_budget, compact=False):
     try:
         import companion_arcs
 
-        running = companion_arcs.render(c)
+        running = companion_arcs.render(c, now=now)
     except (OSError, ValueError):
         running = ""
     if running and (companion_arcs.active(c) or not compact):
@@ -159,7 +159,7 @@ def scheduled(c, limit=1500, now=None):
     try:
         import companion_arcs
 
-        running = companion_arcs.render(c)
+        running = companion_arcs.render(c, now=now)
     except (OSError, ValueError):
         running = ""
     if running:

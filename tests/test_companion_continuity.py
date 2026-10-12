@@ -283,6 +283,10 @@ def test_real_boundary_violations_are_enforced_on_read_persisted_only_by_mainten
     state = intimacy.compute(companion, NOW)
     assert state["violations_count"] == 2
     assert state["permanent_friend"] and not state["can_intimate"]
+    assert state["risk_level"] == "crisis"
+    assert "Multiple uncorrected boundary incidents" in intimacy.render(
+        companion, state
+    )
     path = companion.home / ".permanent-friend.json"
     assert not path.exists()
     intimacy.compute(companion, NOW, record=True)
@@ -300,3 +304,11 @@ def test_legacy_permanent_decision_without_evidence_is_not_silently_reversed(com
     assert state["violations_count"] == 0
     assert state["permanent_friend"]
     assert path.read_bytes() == original
+    assert state["risk_level"] == "healthy"
+    assert not state["can_intimate"]
+    rendered = intimacy.render(companion, state)
+    assert "restriction alone does not establish what happened" in rendered
+    assert "Trust was broken" not in rendered
+    assert "coercion occurred" not in rendered
+    assert "crisis" not in rendered.lower()
+    assert "violations occurred" not in " ".join(state["intimacy_blockers"])

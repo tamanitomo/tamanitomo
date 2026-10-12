@@ -83,12 +83,12 @@ function relationshipStateSummary(meters,companionName){
 function usStanding(intimacy,companionName){
   if(!intimacy)return '';
   if(intimacy.permanent_friend)return `<div class="notice-strip rel-standing is-firm us-standing" data-standing="permanent_friend"><p><strong>Friendship established.</strong>
-    After repeated boundary violations, ${esc(companionName)} has stepped back to friendship. This does not reopen.</p></div>`;
+    A recorded friendship boundary is in effect. Its source records and any corrections are available below.</p></div>`;
   if(intimacy.nsfw_revoked)return `<div class="notice-strip rel-standing us-standing" data-standing="nsfw_revoked"><p><strong>Stepped back to friendship.</strong>
     Your relationship is rooted in friendship and affectionate companionship.</p></div>`;
   const n=intimacy.violations_count|0;
-  if(n>0)return `<div class="notice-strip rel-standing us-standing" data-standing="violation"><p><strong>A boundary was crossed${n>1?` ${n} times`:''}.</strong>
-    Mutual respect is the condition of closeness here; repeated violations step the relationship back to friendship for good.</p></div>`;
+  if(n>0)return `<div class="notice-strip rel-standing us-standing" data-standing="violation"><p><strong>${n===1?'A boundary incident is':'Boundary incidents are'} recorded.</strong>
+    ${n===1?'A recorded incident is':'Recorded incidents are'} affecting the current boundaries. You can inspect the evidence and corrections below.</p></div>`;
   return '';
 }
 function usStageTrack(intimacy){
@@ -118,6 +118,7 @@ function relationshipHero(relationship,feelings,companionName){
     ${closenessNext(relationship?.explain?.closeness)}
     ${usWhy(relationship?.explain)}
     ${usStanding(intimacy,companionName)}
+    <button type="button" class="link-button" data-us-action="boundary-review">Why these boundaries?</button>
   </section>`;
 }
 /* Everything moving the meters, folded away: Home shows the first lines, this
@@ -377,14 +378,24 @@ function openMemoryLibrary(facts,onForget,review=null,onDecide=null,startInRevie
 
 /* ----------------------------------------------- the companion's own tastes */
 /* Read-only by design: these are theirs to write, not yours to edit. */
-function usDiscoveriesHTML(prefs,limit=US_LIMITS.discoveries,companionName='Your companion',pronounSet=''){
+function usDiscoveriesHTML(prefs,limit=US_LIMITS.discoveries,companionName='Your companion',pronounSet='',history={}){
   if(!prefs.length)return `<p class="dim us-empty">${esc(companionName)} has not recorded any preferences of ${usPronouns(pronounSet).poss} own yet.</p>`;
   const rows=prefs.slice(0,limit);
-  return `<ul class="us-discoveries">${rows.map(p=>{const [mark,word]=PREF_MARK[p.valence]||PREF_MARK.mixed;return `<li class="us-discovery pref-${esc(p.valence||'mixed')}">
+  return `<ul class="us-discoveries">${rows.map(p=>{const [mark,word]=PREF_MARK[p.valence]||PREF_MARK.mixed;const revisions=(history[p.perspective_id]||[]).slice().reverse();return `<li class="us-discovery pref-${esc(p.valence||'mixed')}">
       <span class="us-discovery-mark" aria-label="${esc(word)}">${mark}</span>
-      <div><p class="us-discovery-subject">${esc(p.subject||p.text)}</p>${p.text&&p.text!==p.subject?`<p class="dim small">${esc(p.text)}</p>`:''}</div>
+      <div><p class="us-discovery-subject">${esc(p.subject||p.text)}</p>${p.text&&p.text!==p.subject?`<p class="dim small">${esc(p.text)}</p>`:''}
+      ${p.uncertainty?`<p class="dim small">${p.legacy?'Earlier authored preference; source links are unknown.':`Current view · ${esc(p.uncertainty)}`}</p>`:''}
+      ${revisions.length>1?`<details><summary>${revisions.length} revisions</summary><ol>${revisions.map(r=>`<li><span class="dim small">${esc((r.recorded_at||'').slice(0,10))} · ${esc(r.change||'revision')}</span><br>${esc(r.position||'')}${r.revision_reason?`<br><span class="dim small">Why it changed: ${esc(r.revision_reason)}</span>`:''}</li>`).join('')}</ol></details>`:''}</div>
     </li>`;}).join('')}</ul>`+
     (prefs.length>rows.length?`<button type="button" class="link-button" data-us-action="discoveries-all">See all ${prefs.length} →</button>`:'');
+}
+
+function usIndependentGrowthHTML(investigations,projects){
+  const inquiries=(investigations||[]).filter(x=>['open','paused','blocked'].includes(x.status));
+  const running=(projects||[]).filter(x=>!x.ended);
+  if(!inquiries.length&&!running.length)return '<p class="dim us-empty">No independent investigation or ongoing project is in progress.</p>';
+  return `<div class="us-growth">${inquiries.length?`<h3>Questions being explored</h3><ul>${inquiries.map(x=>`<li><strong>${esc(x.question||'')}</strong><br><span class="dim small">${esc(x.mode||'independent')} · ${esc(x.status||'open')}</span>${x.reason?`<br>${esc(x.reason)}`:''}${x.next_step?`<br><span class="small">Next: ${esc(x.next_step)}</span>`:''}${x.obstacle?`<br><span class="small">Obstacle: ${esc(x.obstacle)}</span>`:''}</li>`).join('')}</ul>`:''}
+  ${running.length?`<h3>Projects in progress</h3><ul>${running.map(x=>{const last=(x.beats||[]).slice(-1)[0]||{};return `<li><strong>${esc(x.title||'')}</strong>${x.next_action?`<br><span class="small">Next: ${esc(x.next_action)}</span>`:''}${x.obstacle?`<br><span class="small">Obstacle: ${esc(x.obstacle)}</span>`:''}${last.result?`<br>${esc(last.result)}`:''}</li>`;}).join('')}</ul>`:''}</div>`;
 }
 
 /* ------------------------------------------------------ still between you */
@@ -455,9 +466,104 @@ function relationshipDetails(relationship,feelings,standing,companionName){
     <div class="actions"><button type="button" class="quiet" data-us-action="history">View emotional history</button></div>
     ${platonic?'<p class="dim small">Shared experience builds familiarity and trust. This connection has no romantic stages.</p>'
       :'<p class="dim small">Closeness grows through shared experience over time. Companions banter, tease and reciprocate affection as mutual trust deepens; at Bonded, warmth is expressed freely and naturally.</p>'}
-    <p class="dim small">${esc(companionName)} holds genuine agency and has preferences and boundaries of ${usPronouns(relationship?.pronoun_set).poss} own. Mutual respect is the condition of all of it — repeated boundary violations step the relationship back to friendship permanently.</p>
+    <p class="dim small">${esc(companionName)} has preferences and boundaries of ${usPronouns(relationship?.pronoun_set).poss} own. Settings, recorded experiences and an authored stance can each shape the relationship.</p>
   </details>`;
 }
+
+/* Inspection is read-only. Only an eligible, revision-checked review can write. */
+function boundaryReviewHtml(report){
+  const config=report.configuration||{},derived=report.derived||{},restriction=report.restriction||{};
+  const value=x=>x===true?'On':x===false?'Off':x==null?'Not available':String(x);
+  const status=x=>({active:'Active source',corrected:'Corrected',disputed:'Disputed',missing:'Source missing',invalid:'Invalid source record'})[x]||x||'Status unavailable';
+  const evidence=rows=>rows.map(row=>`<div class="us-boundary-evidence"><p>${esc(row.text||'')}</p>${row.evidence?`<blockquote>${esc(row.evidence)}</blockquote>`:'<p class="dim small">No supporting quotation is recorded.</p>'}<p class="dim small">${esc(row.at||'Date not recorded')}${row.id?` · ${esc(row.id)}`:''}</p></div>`).join('');
+  const incidents=rows=>rows.length?`<ol class="us-boundary-incidents">${rows.map(row=>`<li><div class="us-boundary-incident-head"><strong>${esc(status(row.status))}</strong><span class="dim small">${esc(row.topic||'Boundary incident')}</span></div>
+    ${evidence([row])}
+    ${(row.corrections||[]).length?`<details open><summary>Corrections (${row.corrections.length})</summary>${evidence(row.corrections)}</details>`:''}
+    ${(row.repairs||[]).length?`<details><summary>Repair records (${row.repairs.length})</summary>${evidence(row.repairs)}</details>`:''}</li>`).join('')}</ol>`:'<p class="dim small">No source incidents are listed.</p>';
+  const source=restriction.incidents||[],sourceIds=new Set(source.map(x=>x.id));
+  const other=(report.incidents||[]).filter(x=>!sourceIds.has(x.id));
+  const facts=[['Relationship setting',config.boundary],['Romantic progression',config.romantic_progression],['Adult themes',config.explicit],['Adult images',config.adult_images],['Prior settings restriction',config.nsfw_revoked]];
+  return `<p class="dim">This report shows configured and recorded restrictions. It does not assess the companion’s present wishes. Opening it leaves the records as they are.</p>
+    <section class="us-boundary-section"><h3>Configured boundaries</h3><dl class="fact-list">${facts.map(([label,entry])=>`<div><dt>${esc(label)}</dt><dd>${esc(value(entry))}</dd></div>`).join('')}</dl></section>
+    <section class="us-boundary-section"><h3>What is affecting the relationship now</h3>
+      ${(derived.blockers||[]).length?`<ul>${derived.blockers.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:'<p class="dim">No automatic blockers are listed in this report.</p>'}
+      <p class="dim small">${esc(derived.stage_name||'Stage unavailable')} · ${Number.isInteger(derived.active_violation_count)?derived.active_violation_count:'Unknown'} active boundary incidents</p></section>
+    <section class="us-boundary-section"><h3>Recorded friendship restriction</h3>
+      <p><strong>${esc(({absent:'No saved restriction',active:'Restriction is active',retired:'Past restriction reviewed',inspection_required:'Source inspection needed'})[restriction.status]||restriction.status||'Status unavailable')}</strong></p>
+      <p>${esc(restriction.reason||'')}</p><p class="dim small">Source information: ${esc(restriction.provenance||'unavailable')}.</p>
+      ${restriction.present&&restriction.provenance!=='identified'?'<p class="us-boundary-warning">The source information is incomplete. The report cannot infer which events supported this restriction.</p>':''}
+      <details ${(source.length||restriction.present)?'open':''}><summary>Supporting incidents and their history</summary>${incidents(source)}</details>
+      ${other.length?`<details><summary>Other boundary incidents (${other.length})</summary>${incidents(other)}</details>`:''}</section>
+    <section class="us-boundary-section"><h3>Authored identity and stance</h3><p>${esc(report.stance?.note||'Authored identity, standing instructions, memories and model rules may separately shape boundaries. This report does not assess or rewrite the companion’s stance.')}</p><button type="button" class="quiet" data-boundary-identity>Open Identity to review authored boundaries</button></section>
+    ${(report.warnings||[]).length?`<ul class="us-boundary-warning">${report.warnings.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}
+    ${restriction.eligible===true&&typeof report.revision==='string'&&report.revision?`<form id="feelings-controls" class="us-boundary-review-form"><h3>Review this corrected restriction</h3>
+      <p>The report found that this saved restriction is eligible for review. The original incidents and their corrections stay in history.</p>
+      <label>Reason for this review<textarea name="reason" required maxlength="1000" placeholder="Explain why the corrected source records warrant this review"></textarea></label>
+      <button type="submit" class="act">Review corrected restriction</button><p data-boundary-error role="status"></p></form>`:''}
+    ${(report.reviews||[]).length?`<details class="us-boundary-section"><summary>Previous reviews (${report.reviews.length})</summary>${report.reviews.map(row=>`<div class="us-boundary-evidence"><p>${esc(row.reason||'Reason not recorded')}</p><p class="dim small">${esc(row.at||row.recorded_at||'Date not recorded')}${row.id?` · ${esc(row.id)}`:''}</p></div>`).join('')}</details>`:''}
+    <div class="actions"><button type="button" class="quiet" data-boundary-refresh>Refresh report</button><button type="button" class="quiet" data-boundary-history>View emotional history</button></div><p data-boundary-status role="status"></p>`;
+}
+
+async function openBoundaryReview(){
+  if(!await confirmEditorLeave('dialog'))return;
+  const scope=INSTALLATION+'\0'+PROFILE;
+  dialog('Why these boundaries?','<div id="us-boundary-review"><p class="dim">Loading the current records…</p></div>');
+  const host=$('us-boundary-review');
+  try{await mountBoundaryReview(host);}catch(error){if(host.isConnected&&scope===INSTALLATION+'\0'+PROFILE)host.innerHTML=`<p class="bad">${esc(error.message)}</p>`;}
+}
+
+async function mountBoundaryReview(host){
+  const scope=INSTALLATION+'\0'+PROFILE;
+  const present=()=>host.isConnected&&scope===INSTALLATION+'\0'+PROFILE;
+  let state=await api('/relationship/review'),busy=false;
+  if(!present())return;
+  const paint=()=>{
+    host.innerHTML=boundaryReviewHtml(state);
+    const form=host.querySelector('form');
+    if(form)form.onsubmit=async event=>{
+      event.preventDefault();
+      if(busy||!present()||!form.reportValidity())return;
+      busy=true;const revision=state.revision,reason=form.elements.reason.value;
+      const button=form.querySelector('[type=submit]');button.disabled=true;
+      try{
+        const saved=await api('/relationship/review',{method:'POST',body:JSON.stringify({revision,reason})});
+        if(!present()||!form.isConnected)return;
+        state=saved.report;clearEditorDirty('dialog');paint();
+        host.querySelector('[data-boundary-status]').textContent='Review recorded. The original history is preserved; the updated recorded state is shown above.';
+        if(current==='relationship'){
+          const relationship=await api('/relationship').catch(()=>null);
+          const hero=present()&&current==='relationship'&&$('relationship')?.querySelector('.us-hero');
+          if(relationship&&hero)hero.outerHTML=relationshipHero(relationship,relationship.bars?.feelings||null,chatName()||'Your companion');
+        }
+      }catch(error){
+        if(present()&&form.isConnected){
+          form.querySelector('[data-boundary-error]').textContent=error.message+(error.status===409?' The records changed. Keep your reason, then refresh the report before reviewing again.':'');
+          if(error.status===409)button.dataset.stale='true';
+        }
+      }finally{busy=false;if(form.isConnected)button.disabled=button.dataset.stale==='true';}
+    };
+    host.querySelector('[data-boundary-refresh]').onclick=async()=>{
+      if(busy||!present())return;
+      const reason=host.querySelector('textarea[name=reason]')?.value||'';
+      busy=true;
+      try{
+        const fresh=await api('/relationship/review');
+        if(!present())return;
+        state=fresh;paint();
+        const input=host.querySelector('textarea[name=reason]');
+        if(input&&reason){input.value=reason;input.dispatchEvent(new Event('input',{bubbles:true}));}
+        else if(reason)host.querySelector('[data-boundary-status]').textContent='This report no longer offers a review. Your unsent reason: '+reason;
+      }catch(error){if(present())host.querySelector('[data-boundary-status]').textContent=error.message;}
+      finally{busy=false;}
+    };
+    host.querySelector('[data-boundary-history]').onclick=async()=>{if(await confirmEditorLeave('dialog')&&present())openEmotionalHistory();};
+    host.querySelector('[data-boundary-identity]').onclick=async()=>{
+      if(await confirmEditorLeave('dialog')&&present()){$('product-dialog').close();await showTab('identity');}
+    };
+  };
+  paint();
+}
+
 function openEmotionalHistory(){
   dialog('Emotional history','<div id="us-history"><p class="dim">Loading…</p></div>');
   return mountFeelingHistory($('us-history')).catch(error=>{if($('us-history'))$('us-history').innerHTML=`<p class="bad">${esc(error.message)}</p>`;});
@@ -501,6 +607,8 @@ function openSharedMoments(relationship){
 /* ------------------------------------------------------------------ the page */
 let usGeneration=0;
 workspaceHandlers.relationship=async()=>{
+  const generation=++usGeneration;
+  const scope=`${INSTALLATION}\0${PROFILE||'default'}`;
   // Carried threads come from /overview, which is by far the slowest of these
   // (it assembles all of Home). The page draws without it and fills them in.
   const overviewLoad=api('/overview').catch(()=>({loops:[]}));
@@ -511,8 +619,7 @@ workspaceHandlers.relationship=async()=>{
     api('/facts/held').then(r=>({held:r.held||[],error:false}),()=>({held:[],error:true}))
   ]);
   const review=heldLoad;
-  if(current!=='relationship')return;
-  const generation=++usGeneration;
+  if(current!=='relationship'||generation!==usGeneration||scope!==`${INSTALLATION}\0${PROFILE||'default'}`)return;
   const companionName=chatName()||'Your companion';
   const feelings=relationship.bars?.feelings||null;
   let facts=(ledgers.facts||[]).slice();
@@ -538,7 +645,8 @@ workspaceHandlers.relationship=async()=>{
     ${section('us-recent','Recently','',renderUsStory(story,storyShown))}
     ${section('us-keepsakes','Things that became ours','',usKeepsakesHTML(keep,relationship.moments))}
     ${section('us-memories','Remembered about you','',usMemoryPreviewHTML(facts,review))}
-    ${section('us-discoveries',`Things ${esc(companionName)} has discovered`,'Preferences and little opinions that have emerged along the way.',usDiscoveriesHTML(prefs,US_LIMITS.discoveries,companionName,relationship.pronoun_set))}
+    ${section('us-discoveries',`Things ${esc(companionName)} has discovered`,'Current perspectives, with earlier revisions kept as history.',usDiscoveriesHTML(prefs,US_LIMITS.discoveries,companionName,relationship.pronoun_set,ledgers.perspectives?.history||{}))}
+    ${section('us-growth','Independent curiosity and projects','Questions and work can continue without becoming a request or a message.',usIndependentGrowthHTML(ledgers.investigations,ledgers.projects))}
     ${section('us-threads','Still between you','Questions, promises, and loose threads that have carried into another conversation.',usOpenThreadsHTML(threads))}
     ${section('us-absences','Expected time apart','Dated plans you have explained, so time away stays understood.',expectedAbsencesSummary(feelings?.expected_absences||[]))}
     <div class="us-section us-advanced" id="us-advanced">${relationshipDetails(relationship,feelings,ledgers.standing||[],companionName)}</div>
@@ -575,15 +683,16 @@ workspaceHandlers.relationship=async()=>{
       if(group&&box)box.innerHTML=usSimilarRowsHTML(group,Number(b.dataset.shown||0)+US_LIMITS.similar);
     }
     else if(act==='forget'){b.disabled=true;await forget(b.dataset.fact);}
-    else if(act==='discoveries-all')$('us-discoveries').innerHTML=usDiscoveriesHTML(prefs,Infinity,companionName,relationship.pronoun_set);
+    else if(act==='discoveries-all')$('us-discoveries').innerHTML=usDiscoveriesHTML(prefs,Infinity,companionName,relationship.pronoun_set,ledgers.perspectives?.history||{});
     else if(act==='threads-all')$('us-threads').innerHTML=usOpenThreadsHTML(threads,Infinity);
     else if(act==='talk')await openChatWithDraft(b.dataset.draft);
     else if(act==='history')openEmotionalHistory();
+    else if(act==='boundary-review')openBoundaryReview();
     else if(act==='absences')openExpectedAbsences();
     else if(act==='standing'){const list=$('us-standing-list'),open=list.hidden;list.hidden=!open;b.setAttribute('aria-expanded',String(open));}
   };
   const overview=await overviewLoad;
-  if(current!=='relationship'||generation!==usGeneration||!$('us-threads'))return;
+  if(current!=='relationship'||generation!==usGeneration||scope!==`${INSTALLATION}\0${PROFILE||'default'}`||!$('us-threads'))return;
   threads=usOpenThreads(ledgers.questions,overview.loops);
   $('us-threads').innerHTML=usOpenThreadsHTML(threads);
 };

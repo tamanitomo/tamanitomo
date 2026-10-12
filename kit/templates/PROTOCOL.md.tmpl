@@ -50,6 +50,40 @@ records the residue with `{{SELF_CMD}}`:
   answer with `resolve --status answered` and promotes durable ones to `fact`.
 - `soul --show|--append|--set` edits the block of SOUL.md that {{AGENT}} owns.
 
+## Encounters, interpretations and evolving perspectives
+
+An encounter points to an existing source; it does not copy or upgrade that
+source. Human words, a human-reported claim, a shared checkpoint, returned tool
+evidence, an actual artifact, authored fiction and media metadata remain distinct.
+A synopsis is not scene perception, metadata is not listening, a plan is not
+attendance, and queued outreach is not delivery.
+
+Use `{{PERSPECTIVES_CMD}}` with literal JSON files under
+`{{DATA}}/companion-life/.inputs/`:
+
+- `encounter --file FILE` records a stable source reference with `source_type`,
+  `source_id`, `occurred_at`, `locator`, `summary` and `observed_as`.
+- `interpret --file FILE` records what interested you, an inference, feeling,
+  unresolved question or possible implication, linked by `encounter_ids`.
+- `perspective --file FILE` records a durable position with reasons and qualitative
+  uncertainty. Revisions name the current `perspective_id` and `prior_revision`,
+  choose `nuance|supersede|withdraw|tension|unchanged`, and say why. Similar prose
+  never supersedes a view implicitly.
+- `investigate --file FILE` starts an `independent` or `making` question with a
+  reason and feasible next step. `investigation-update --file FILE` records real
+  progress, a durable result, or an unresolved obstacle. This is not outreach.
+- `show` keeps current views separate from their complete revision history.
+
+Every write accepts an `operation_id`; reuse it after a crash. A retry is a no-op,
+while different content under the same operation is refused. Ordinary perspective
+changes do not rewrite SOUL.md and never justify contacting {{HUMAN}} by themselves.
+
+Storylines are continuing projects. Keep a next action or obstacle and record a
+step from a literal file with `{{ARCS_CMD}} progress --file FILE`. A real artifact
+must be an existing file inside this profile's home or data workspace; a returned
+tool result must cite available tool evidence. Fictional project progress remains
+fictional. Missing artifacts are shown as missing rather than remembered as proof.
+
 ## Nothing is deleted, nothing is silently cut
 
 Every ledger is append-only and unbounded. What is bounded is only the compact

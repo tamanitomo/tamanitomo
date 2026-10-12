@@ -1,3 +1,45 @@
+## Unreleased — Self-authored development and relationship reviews
+
+- Encounters now retain stable, profile-local source references and evidential
+  boundaries. Authored interpretations remain separate from human words, reports,
+  shared checkpoints, tool results, artifacts, fiction and catalog metadata;
+  repeated summaries retain one underlying origin.
+- Current perspectives are explicit append-only revision chains with authored
+  reasons, qualitative uncertainty and source/interpretation links. Nuance,
+  supersession, withdrawal, unresolved tension and an unchanged view all require
+  an explicit current target and reason. Old preference rows remain readable as
+  legacy authored views with unknown source links.
+- One bounded relevance selector now supplies current perspectives to live chat,
+  structured reflection, scheduled planning and Us. Superseded revisions stay in
+  history instead of returning as a second current personality after clipping or
+  conversation compression.
+- Curiosity can be a question for the human, an independent investigation, or an
+  exploration through making. Investigations retain a reason, related views,
+  next step, obstacles and durable results without becoming outreach.
+- Storylines now retain next actions, obstacles, related perspectives, dated
+  results and verified profile-local artifacts. Tool outages cannot be recorded
+  as successful evidence; missing artifacts remain visibly missing.
+- Structured reflection contract 5 can author the complete encounter →
+  interpretation → perspective/investigation chain and safely resume partial
+  application. Saved plans from contracts 1–4 retain their original replay rules.
+- Us separates current perspectives from revision history and shows open
+  investigations and ongoing project progress. Stored prose remains escaped and
+  the surface is read-only.
+
+- Us → Why these boundaries? explains configured permissions, calculated readiness,
+  persisted relationship restrictions and their source records. Authored identity,
+  historical conversation and provider rules are identified as separate influences;
+  an open application gate does not establish the companion's wishes.
+- A persisted restriction with identifiable, explicitly corrected source incidents
+  can receive a reasoned review. Review preserves the original restriction and all
+  experiences, checks for changed evidence, and records its decision separately.
+  Missing or malformed provenance requires inspection. Adult-theme settings and
+  the companion's authored stance are not changed by this action.
+- A saved restriction alone no longer produces claims of coercion or broken trust
+  in model context. Current, uncorrected incident records determine the risk flag.
+- Human suggestions remain invitations until accepted. Accepted plans and promises
+  retain priority without silently converting a proposal into an agreement.
+
 ## 3.10.1 — Album picks only with Music on (2026-10-11)
 
 - Album picks belong to the Music sensor. With Music switched off under Settings →

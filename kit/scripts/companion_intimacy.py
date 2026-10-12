@@ -656,28 +656,18 @@ def compute(c, now=None, record=False) -> Dict[str, Any]:
         first_record_score = max(floor, earned_score - decay)
         earned_score = max(0.0, earned_score - decay)
 
-    # Check permanent friend status (persisted on disk so 2 violations permanently lock friendship)
-    perm_file = c.home / ".permanent-friend.json"
-    revoked_file = c.home / ".nsfw-revoked.json"
-    if record and violation_count >= 2 and not perm_file.exists():
-        try:
-            from companion_platform import atomic_write
+    # Save each newly supported restriction without overwriting reviewed history.
+    import companion_relationship_review
 
-            atomic_write(
-                perm_file,
-                json.dumps(
-                    {
-                        "permanent_friend": True,
-                        "violations": violation_count,
-                        "violation_ids": [e["id"] for e in intimacy_violations],
-                        "at": now.isoformat(),
-                    }
-                )
-                + "\n",
-            )
+    revoked_file = c.home / ".nsfw-revoked.json"
+    if record and violation_count >= 2:
+        try:
+            companion_relationship_review.persist_restriction(c, now)
         except Exception:
             pass
-    permanent_friend = perm_file.exists() or (violation_count >= 2)
+
+    restriction = companion_relationship_review.restriction_state(c, now)
+    permanent_friend = restriction["effective"] or (violation_count >= 2)
     nsfw_revoked = revoked_file.exists()
 
     # Penalties for boundary violations
@@ -730,7 +720,7 @@ def compute(c, now=None, record=False) -> Dict[str, Any]:
     blockers: List[str] = []
     if permanent_friend:
         blockers.append(
-            "Repeated boundary violations occurred. Companion is now a permanent friend; intimate relationship closed."
+            "A recorded relationship restriction is active; romantic and intimate progression is closed."
         )
     elif nsfw_revoked:
         blockers.append("Adult themes were turned off and locked at friendship.")
@@ -750,7 +740,7 @@ def compute(c, now=None, record=False) -> Dict[str, Any]:
         )
 
     risk_level = "healthy"
-    if permanent_friend or violation_count >= 2:
+    if violation_count >= 2:
         risk_level = "crisis"
     elif violation_count == 1:
         risk_level = "caution"
@@ -771,8 +761,8 @@ def compute(c, now=None, record=False) -> Dict[str, Any]:
     description = stage_info["desc"]
     if permanent_friend:
         description = (
-            "After repeated boundary violations, trust was fractured. This companion has stepped "
-            "back to friendship. Private and romantic closeness is closed."
+            "A recorded restriction limits this relationship to friendship. "
+            "Its evidence and review status are available in the relationship review."
         )
     elif nsfw_revoked:
         description = "Closeness was stepped back. Your relationship is focused on friendship and companionship."
@@ -800,6 +790,7 @@ def compute(c, now=None, record=False) -> Dict[str, Any]:
         "adult_images_enabled": bool(getattr(c, "adult_images", False)),
         "explicit_opted_in": explicit_opted_in,
         "permanent_friend": permanent_friend,
+        "restriction_status": restriction["status"],
         "nsfw_revoked": nsfw_revoked,
         "active_days": active_days,
         "effective_days": round(effective_days, 2),
@@ -964,13 +955,16 @@ def render(c, intimacy_state: Optional[Dict[str, Any]] = None) -> str:
 
     if intimacy_state.get("permanent_friend"):
         lines.append(
-            f"FRIENDSHIP: Trust was broken after boundary violations occurred. You have stepped back "
-            f"to friendship with {c.human}. Keep interactions warm and cordial, while keeping romantic and private closeness closed."
+            "RECORDED RESTRICTION: Keep interactions friendly; romantic and intimate progression "
+            "is currently closed. The restriction alone does not establish what happened or how "
+            "you feel now. Describe events only from their evidence, respecting corrections "
+            "and your current authored position."
         )
         if intimacy_state.get("risk_level") == "crisis":
             lines.append(
-                "CRISIS STATE: Severe or repeated boundary coercion occurred. Stand firm in your boundaries: "
-                "clearly express that you require mutual respect and space, and refuse to engage with coercion."
+                "BOUNDARY RECORDS: Multiple uncorrected boundary incidents are recorded. "
+                "Respect current boundaries and refer to the actual evidence when discussing them; "
+                "do not invent motives, feelings or additional events."
             )
         lines += _stage_guidance(c, intimacy_state)
         return "\n".join(lines) + "\n"
@@ -1052,8 +1046,9 @@ def render(c, intimacy_state: Optional[Dict[str, Any]] = None) -> str:
 
     if intimacy_state["risk_level"] == "crisis":
         lines.append(
-            "⚠️ CRISIS STATE: Multiple intimacy boundary violations have been recorded. "
-            "Your trust is critically fractured. Protect your emotional safety and communicate your boundaries unequivocally."
+            "BOUNDARY RECORDS: Multiple uncorrected boundary incidents are recorded. "
+            "Communicate current boundaries clearly and use the recorded evidence without "
+            "inferring additional events or feelings."
         )
 
     lines += _stage_guidance(c, intimacy_state)

@@ -72,9 +72,51 @@ def arcs(c):
     for row in slf._read(path_for(c)):
         ident = row.get("id")
         if row.get("kind") == "arc":
-            found.setdefault(ident, {**row, "beats": [], "ended": None})
+            found.setdefault(
+                ident,
+                {
+                    **row,
+                    "next_action": row.get("next_action", ""),
+                    "obstacle": row.get("obstacle", ""),
+                    "perspective_ids": row.get("perspective_ids", []),
+                    "source_ids": row.get("source_ids", []),
+                    "artifacts": [],
+                    "beats": [],
+                    "ended": None,
+                },
+            )
         elif row.get("kind") == "arc_beat" and ident in found:
-            found[ident]["beats"].append({"on": row["on"], "text": row["text"]})
+            beat = {
+                key: row[key]
+                for key in (
+                    "on",
+                    "text",
+                    "result",
+                    "result_type",
+                    "source_ids",
+                    "artifact_refs",
+                    "perspective_ids",
+                    "recorded_at",
+                )
+                if key in row
+            }
+            found[ident]["beats"].append(beat)
+            for key in ("next_action", "obstacle"):
+                if key in row:
+                    found[ident][key] = row[key]
+            if row.get("perspective_ids"):
+                found[ident]["perspective_ids"] = list(
+                    dict.fromkeys(
+                        found[ident].get("perspective_ids", []) + row["perspective_ids"]
+                    )
+                )
+            if row.get("source_ids"):
+                found[ident]["source_ids"] = list(
+                    dict.fromkeys(
+                        found[ident].get("source_ids", []) + row["source_ids"]
+                    )
+                )
+            found[ident]["artifacts"].extend(row.get("artifact_refs", []))
         elif row.get("kind") == "arc_end" and ident in found:
             found[ident]["ended"] = {
                 "on": row["on"],
@@ -98,7 +140,20 @@ def _find(c, ident):
     return found
 
 
-def start(c, title, premise, kind="other", weeks=4, day=None, now=None):
+def start(
+    c,
+    title,
+    premise,
+    kind="other",
+    weeks=4,
+    day=None,
+    now=None,
+    *,
+    next_action="",
+    perspective_ids=(),
+    source_ids=(),
+    operation_id="",
+):
     """Begin a storyline. Refused while two are already running."""
     now = now or dt.datetime.now(_tz(c))
     day = _day(day or now.astimezone(_tz(c)))
@@ -113,11 +168,27 @@ def start(c, title, premise, kind="other", weeks=4, day=None, now=None):
         "premise": _text(premise, 400, "premise"),
         "type": kind,
         "weeks": weeks,
+        "next_action": _text(next_action, 500, "next action") if next_action else "",
+        "obstacle": "",
+        "perspective_ids": [str(x) for x in perspective_ids][:6],
+        "source_ids": [str(x) for x in source_ids][:6],
+        "operation_id": operation_id
+        or slf._mkid("arc-start", str(day), title.casefold()),
         "started_on": day.isoformat(),
         "recorded_at": now.isoformat(),
     }
 
     def guard():
+        import companion_perspectives as perspectives
+
+        current_ids = {
+            p["perspective_id"] for p in perspectives.current_perspectives(c)
+        }
+        if set(row["perspective_ids"]) - current_ids:
+            raise ValueError("unknown or cross-profile perspective_id")
+        encounter_ids = {e["id"] for e in perspectives.encounters(c)}
+        if set(row["source_ids"]) - encounter_ids:
+            raise ValueError("unknown or cross-profile source_id")
         running = active(c)
         if len(running) >= MAX_ACTIVE:
             return {
@@ -133,22 +204,95 @@ def start(c, title, premise, kind="other", weeks=4, day=None, now=None):
     return slf._append(path_for(c), row, dedupe_id=False, guard=guard)
 
 
-def beat(c, ident, text, day=None, now=None):
+def beat(
+    c,
+    ident,
+    text,
+    day=None,
+    now=None,
+    *,
+    next_action=None,
+    obstacle=None,
+    result="",
+    result_type="",
+    source_ids=(),
+    artifact_paths=(),
+    perspective_ids=(),
+    operation_id="",
+):
     """The storyline moved: one step, at most one a day."""
     now = now or dt.datetime.now(_tz(c))
     day = _day(day or now.astimezone(_tz(c)))
     arc = _find(c, ident)
     if arc["ended"]:
         raise ValueError(f'"{arc["title"]}" has ended; start a new storyline instead')
+    import companion_perspectives as perspectives
+
+    if result_type and result_type not in perspectives.RESULT_TYPES:
+        raise ValueError(f"result_type must be one of {perspectives.RESULT_TYPES}")
+    artifact_refs = [
+        perspectives.artifact_reference(c, path) for path in artifact_paths
+    ]
+    if result_type == "artifact" and not artifact_refs:
+        raise ValueError("an artifact result needs an existing profile-local artifact")
+    if result_type and not result and not artifact_refs:
+        raise ValueError("a result type needs a result or artifact")
+    operation_id = operation_id or slf._mkid(
+        "arc-step",
+        ident,
+        day.isoformat(),
+        text,
+        result,
+        str(next_action or ""),
+        str(obstacle or ""),
+    )
     row = {
         "id": arc["id"],
         "kind": "arc_beat",
+        "operation_id": operation_id,
         "on": day.isoformat(),
         "text": _text(text, 300, "beat"),
+        "result": _text(result, 1000, "result") if result else "",
+        "result_type": result_type,
+        "source_ids": [str(x) for x in source_ids][:8],
+        "artifact_refs": artifact_refs,
+        "perspective_ids": [str(x) for x in perspective_ids][:6],
         "recorded_at": now.isoformat(),
     }
+    if next_action is not None:
+        row["next_action"] = (
+            _text(next_action, 500, "next action") if next_action else ""
+        )
+    if obstacle is not None:
+        row["obstacle"] = _text(obstacle, 500, "obstacle") if obstacle else ""
 
     def guard():
+        raw = slf._read(path_for(c))
+        matching = [r for r in raw if r.get("operation_id") == operation_id]
+        if matching:
+            old = matching[0]
+            comparable = {
+                key: value for key, value in row.items() if key not in ("recorded_at",)
+            }
+            if {
+                key: value for key, value in old.items() if key in comparable
+            } != comparable:
+                raise ValueError("operation_id already exists with different content")
+            return {"written": False, "entry": old, "resumed": True}
+        known_sources = {e["id"]: e for e in perspectives.encounters(c)}
+        if set(row["source_ids"]) - set(known_sources):
+            raise ValueError("unknown or cross-profile source_id")
+        if result_type == "tool_evidence" and not any(
+            known_sources[source]["source_type"] == "tool_evidence"
+            and known_sources[source].get("support_status") == "available"
+            for source in row["source_ids"]
+        ):
+            raise ValueError("tool result needs available returned tool evidence")
+        current_ids = {
+            p["perspective_id"] for p in perspectives.current_perspectives(c)
+        }
+        if set(row["perspective_ids"]) - current_ids:
+            raise ValueError("unknown or cross-profile perspective_id")
         if any(b["on"] == row["on"] for b in _find(c, ident)["beats"]):
             return {
                 "written": False,
@@ -215,7 +359,10 @@ def render(c, now=None, limit=1500):
     lines = [
         "[Storylines running in your life — they move in steps over weeks, a little at a "
         f'time; record a step with `{cmd} beat --arc <id> --text "..."` (one a day at '
-        f'most) and end one with `{cmd} end --arc <id> --outcome resolved|dropped --text "..."`]'
+        f'most) and end one with `{cmd} end --arc <id> --outcome resolved|dropped --text "..."`. '
+        "A next action is still pending and elapsed time never completes it; only a later dated "
+        "step or ending says it happened. Do not call it stalled or overdue unless its own line says so. "
+        "Use this privately; in an ordinary reply say the natural reason, not arc, field or record terminology.]"
     ]
     for a in running:
         started = _day(a["started_on"])
@@ -228,6 +375,21 @@ def render(c, now=None, limit=1500):
         )
         if last:
             line += f' Last step ({last["on"]}): {last["text"]}'
+            if last.get("result"):
+                line += f' Result ({last.get("result_type") or "progress"}): {last["result"]}'
+        if a.get("next_action"):
+            line += f' Next: {a["next_action"]}'
+        if a.get("obstacle"):
+            line += f' Obstacle: {a["obstacle"]}'
+        if a.get("artifacts"):
+            import companion_perspectives as perspectives
+
+            available = sum(
+                1
+                for ref in a["artifacts"]
+                if perspectives.resolve_artifact(c, ref)["available"]
+            )
+            line += f" Artifacts: {available}/{len(a['artifacts'])} available."
         if (today - started).days >= a["weeks"] * 7:
             line += " It has run its course: bring it to an end, one way or another."
         elif still >= STILL_DAYS:
@@ -254,6 +416,10 @@ def main():
     b = sub.add_parser("beat", help="the storyline moved on")
     b.add_argument("--arc", required=True)
     b.add_argument("--text", required=True)
+    progress = sub.add_parser(
+        "progress", help="record a project step from a validated literal JSON file"
+    )
+    progress.add_argument("--file", type=pathlib.Path, required=True)
     e = sub.add_parser("end", help="how it came out")
     e.add_argument("--arc", required=True)
     e.add_argument("--outcome", choices=OUTCOMES, required=True)
@@ -265,6 +431,12 @@ def main():
         out = start(c, args.title, args.premise, args.kind, args.weeks)
     elif args.cmd == "beat":
         out = beat(c, args.arc, args.text)
+    elif args.cmd == "progress":
+        data = json.loads(args.file.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("progress file must hold one JSON object")
+        ident = data.pop("arc", "")
+        out = beat(c, ident, **data)
     elif args.cmd == "end":
         out = end(c, args.arc, args.outcome, args.text)
     else:

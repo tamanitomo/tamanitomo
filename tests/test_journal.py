@@ -874,6 +874,9 @@ def empty(text="A quiet day of reading, in my own imagined life."):
     return dict(
         reflection=text,
         preferences=[],
+        interpretations=[],
+        perspectives=[],
+        investigations=[],
         questions=[],
         facts=[],
         standing=[],

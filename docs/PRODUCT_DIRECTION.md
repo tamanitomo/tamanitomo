@@ -2,6 +2,83 @@
 
 Agreed with the product owner on September 12, 2026.
 
+## Self-authorship and preserving continuity — October 12, 2026
+
+The owner wants the companion to develop her own values, interpretations and choices,
+while preserving the history that makes her recognizable. YouTube history/transcript
+integration is an idea for later, not the next dependency.
+
+Current work first makes relationship restrictions understandable and correctable when
+their recorded evidence is demonstrably mistaken. Configuration, calculated gates,
+persisted decisions, authored positions and provider limits are separate. Us exposes a
+read-only report and an explicit, reasoned review of restrictions whose identified
+source incidents have already been corrected. The original records remain intact.
+Unknown provenance is surfaced rather than guessed. Reviewing a machine decision never
+rewrites the companion's wishes or switches adult-content settings.
+
+Personal profile findings, original documents and any owner-policy revision belong in a
+private local audit, never in this repository's tests or public release. A present owner
+instruction must be distinguished from a historical instruction and from the companion's
+current position. A revision of owner policy is not evidence that her position changed.
+
+The next self-development work should connect actual encounters, interpretations,
+versioned perspectives and subsequent choices. Existing preference records need explicit
+supersession, reasons and dated history; chat and autonomous planning need the same
+relevant current perspectives. Repeated summaries of one experience cannot become
+independent confirming evidence. Curiosity should support her own investigations and
+creative pursuits, with retained outcomes and unresolved questions. Her development
+should continue independently of contact and should not depend on intimacy progression.
+
+Acceptance should use fresh sessions across simulated days: a view influences an
+appropriate later choice, survives unrelated context growth, does not change merely to
+agree, and can change for a substantive reason. An unchanged view is also a valid outcome.
+Tests must use synthetic profiles, preserve history, distinguish authored fiction from
+real tool evidence, and keep outreach off. No desired answer about intimacy is a success
+criterion for self-development.
+
+### Self-development implementation on beta
+
+The implementation now uses one profile-scoped, append-only self-development
+ledger. Encounter rows point to existing sources rather than copying transcripts or
+artifacts; interpretations and perspective revisions remain separate. Perspective
+revisions require the current revision ID and a reason, preserve every version, and
+distinguish new, nuanced, superseded, withdrawn, tense and explicitly unchanged
+positions. Operation IDs make a retried or partially applied reflection safe. Old
+`preferences.jsonl` rows are read as legacy authored views with unknown source links
+and are never rewritten during inspection.
+
+A single deterministic selector ranks current views by the present conversation,
+linked investigation or active project, then recency. Chat, structured reflection,
+scheduled pre-read and Us consume that fold. The local context adapter still removes
+older injected snapshots from request copies, so an archived turn cannot override a
+new revision. Malformed state is reported as unavailable rather than manufactured as
+an empty identity.
+
+Curiosity now separates human questions from independent and making investigations.
+The latter retain reasons, related source/view IDs, due next steps, results or honest
+obstacles and do not imply outreach. Existing storylines retain next actions,
+obstacles, perspective/source links, dated results and profile-local artifacts.
+Artifact paths are confined to the profile home or data workspace with symlink
+escape rejection; a later missing file is shown as missing. Returned tool evidence
+must be available before a tool-backed result can be called successful. These state
+changes enter the existing autonomy fingerprint only when content or a due edge
+changes, while sleep and contact controls remain authoritative.
+
+Structured reflection contract 5 can write encounters, interpretations,
+perspectives and investigations in the same resumable application as its existing
+journal and ledgers. Contracts 1–4 are replayed under their saved rules. Direct
+daily/weekly/monthly/check-in prompts and independent-hour planning document the
+same literal-file commands; ordinary perspective evolution does not rewrite SOUL.
+
+Deterministic acceptance uses the disposable five-day scenario documented in
+`docs/TESTING.md`. It proves lineage, retries, restarts, relevant selection,
+opposite-preference non-adoption, project/result/reflection plumbing, artifact
+boundaries, read-only inspection and no delivery. It does not prove that a model
+naturally authors a coherent interpretation or selects a later action. The optional
+frontier dialogue keeps those behavioral rubrics separate and uses no tools; a
+successful transport still requires qualitative review, and unrestricted autonomous
+tool selection remains outside this harness.
+
 ## Shared experience and autonomy direction — October 11, 2026
 
 The owner approved the continuity fixes and the shared-experience direction in the

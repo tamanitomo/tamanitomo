@@ -1406,7 +1406,7 @@ def write_facts_index(c):
     return {"path": str(path), "facts": len(facts(c.human_dir))}
 
 
-def summary(c, budgets=None):
+def summary(c, budgets=None, query=""):
     b = budgets or c.budgets()
     rows = ordered_facts(facts(c.human_dir))
     # Everything, with its evidence, when the budget allows. When it does not, the bare
@@ -1430,12 +1430,17 @@ def summary(c, budgets=None):
         "facts",
         "companion_self.py profile | facts-index",
     )
-    prefs = _read(c.life / "preferences.jsonl", kind="companion_preference")
-    pref = _budget(
-        [f"{p['valence']}: {p['subject']} — {p['text']}" for p in reversed(prefs)],
-        b["preferences"],
-        "recorded feelings",
-        "companion_self.py pref-history",
+    # One authoritative current-state fold now combines explicit perspective
+    # revisions with old preference rows (labelled legacy, never rewritten).
+    # The selector is shared with reflection and scheduled planning; this call
+    # remains model-free and deterministic.
+    import companion_perspectives as perspectives
+
+    selected = perspectives.snapshot(c, query=query, budget=b["preferences"], limit=8)
+    pref = (
+        perspectives.render_current(c, query=query, budget=b["preferences"], limit=8)
+        if b["preferences"] and selected["current"]
+        else ""
     )
     openq = [q["text"] for q in questions(c.life, "open")]
     qs = _budget(
@@ -1450,7 +1455,7 @@ def summary(c, budgets=None):
         "open_questions": qs,
         "counts": {
             "facts": len(rows),
-            "preferences": len(prefs),
+            "preferences": selected.get("total", 0),
             "open_questions": len(openq),
         },
     }

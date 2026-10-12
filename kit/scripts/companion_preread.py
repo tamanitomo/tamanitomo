@@ -438,6 +438,25 @@ def fingerprint(c, now=None):
     # Ambient senses are deliberately not digested: the senses job rewrites them every 15
     # minutes and weather moves on almost every read. The bucket line guarantees a periodic run.
     import companion_viewing
+    import companion_perspectives
+    import companion_arcs
+
+    project_marks = [
+        (
+            arc["id"],
+            arc.get("next_action", ""),
+            arc.get("obstacle", ""),
+            tuple(
+                (
+                    beat.get("on", ""),
+                    beat.get("result_type", ""),
+                    beat.get("result", ""),
+                )
+                for beat in arc.get("beats", [])[-2:]
+            ),
+        )
+        for arc in companion_arcs.active(c)
+    ]
 
     rows = [
         f"bucket {bucket}",
@@ -450,6 +469,8 @@ def fingerprint(c, now=None):
         # rewording an activity or mood does not create a new event.
         f"scene {_digest(state.get('started_at') or 'static',state.get('confirmed',True))}",
         f"loops {len(open_loops)} {_digest(*loop_marks)}",
+        f"self-development {companion_perspectives.fingerprint(c, now)}",
+        f"projects {len(project_marks)} {_digest(*project_marks)}",
         f"queued {queued}",
     ]
     return "\n".join(rows) + "\n"
