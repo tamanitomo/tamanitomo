@@ -1,4 +1,6 @@
-Tamanitomo 3.12.2: her life, her answer.
+Tamanitomo 3.12.3: her life, her answer.
+
+3.12.3: a wrong outfit id now says which one she meant.
 
 3.12.2: she knows what a photo of her right now would show, and how to get to one she would
 send; she takes it before replying; and a routine woken for a long moment records what she does next.
