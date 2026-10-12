@@ -1,3 +1,9 @@
+## 3.13.1 — 3.13.0, packaged (2026-10-12)
+
+- 3.13.0's release build stopped because the new `companion_cron_bridge.py` was
+  missing from the list of files a release ships. 3.13.1 is the same changes,
+  with it included.
+
 ## 3.13.0 — Routine jobs get only the tools they need (2026-10-12)
 
 - Each kit job now runs with only the toolsets its work needs: the day pulse,

@@ -16,7 +16,8 @@ from kit.cli.common import load_manifest
 
 
 @pytest.fixture
-def companion(tmp_path):
+def companion(tmp_path, monkeypatch):
+    monkeypatch.delenv("COMPANION_NO_HERMES_CRON", raising=False)
     c = cc.Companion(agent="Nova", human="Alex", hermes_root=tmp_path / "home", vault=tmp_path / "vault")
     (c.home / "cron").mkdir(parents=True)
     return c

@@ -314,5 +314,6 @@
   "tools/preview_fixture.py",
   "uninstall-termux.sh",
   "update.sh",
-  "update_release.py"
+  "update_release.py",
+  "kit/scripts/companion_cron_bridge.py"
 ]
