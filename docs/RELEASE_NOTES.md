@@ -1,26 +1,12 @@
-Tamanitomo 3.11.0: her own perspectives, reviewable restrictions, and photos that arrive.
+Tamanitomo 3.11.1: photos arrive without stray text.
 
-- **Photos again.** The image timeline had stopped taking photos after 3.7.2; it takes them
-  again. Asked for a photo in chat, she now always has the one command that takes it and the
-  exact line that sends it, and she says so when a photo fails instead of claiming one was sent.
-- **Views of her own that can change.** What she takes from something she read, watched or
-  talked about can become a perspective with her reasons and how sure she is. She can keep a
-  view, add nuance, change her mind for a stated reason, or stay unsure; every earlier version
-  is kept. Saying the opposite does not make her agree, and repeating one source does not make
-  her more certain. The same current views reach chat, her independent hours and reflections.
-- **Curiosity she follows herself.** Besides questions for you, she can pursue a question on her
-  own or explore it by making something, with a next step and an honest result or obstacle.
-  Her storylines keep a next action and real results. None of this messages you by itself.
-- **Us shows it.** Current perspectives are kept apart from their history, with open
-  investigations and projects in progress.
-- **Why these boundaries?** Us explains which settings, calculated readiness and recorded
-  restrictions shape the relationship, and where each restriction came from. A restriction
-  whose source incidents were explicitly corrected can be reviewed with a reason; nothing is
-  erased, and adult settings and her own stance are not changed.
+- **Just the photo.** When she sent a photo she sometimes wrapped it as an image link, and
+  text like `![morning stretch]()` appeared in the chat next to the picture. That is now
+  cleaned up before it reaches you, even in a reply that was already showing, and she is
+  told to send the photo line as plain text.
 
-After updating, run Repair for each companion (or `companion repair --prompts auto`): it brings
-her scheduled routines the new perspective and project commands. Repair does not overwrite an
-existing image skill, because she may have added to it; the photo command reaches her in every
-chat turn regardless.
+After updating, run Repair for each companion (or `companion repair --prompts auto`) and restart
+the gateway, so the updated chat plugin is loaded.
 
-Coming from 3.10? 3.10.1 tied album picks to the Music switch. See CHANGELOG.md.
+Coming from 3.10? 3.11.0 brought her own evolving perspectives, curiosity she follows herself,
+reviewable relationship restrictions, and working photos again. See CHANGELOG.md.

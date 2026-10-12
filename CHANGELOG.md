@@ -1,3 +1,14 @@
+## 3.11.1 — Photos without stray text (2026-10-12)
+
+- A photo she sends arrives as just the photo. Writing its line as a Markdown
+  image, `![a stretch](MEDIA:/path)`, left `![a stretch]()` in the chat beside
+  the picture. The context plugin now unwraps it before delivery, correcting a
+  reply that was already streamed, and her instructions say to write the line
+  as plain text.
+- The 3.11.0 notes said Repair refreshes the image skill. It installs the skill
+  only when missing, because companions add what they learn to it; the photo
+  command reaches chat through the context either way.
+
 ## 3.11.0 — Her own perspectives, reviewable restrictions, photos that arrive (2026-10-12)
 
 - The image timeline takes photos again. Since 3.7.2 its pre-run gate printed
