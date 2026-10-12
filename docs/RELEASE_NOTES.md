@@ -1,4 +1,4 @@
-Tamanitomo 3.13.0: routine jobs get only the tools they need.
+Tamanitomo 3.13.1: routine jobs get only the tools they need.
 
 - **Only the tools each job needs.** Her day pulse, morning, wind-down and check-in now run with
   files and the terminal only; autonomy and reflections add conversation search, the research window
