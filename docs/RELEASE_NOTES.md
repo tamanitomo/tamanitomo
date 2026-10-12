@@ -1,4 +1,7 @@
-Tamanitomo 3.12.3: her life, her answer.
+Tamanitomo 3.12.4: her life, her answer.
+
+3.12.4: her routine's own times (a morning walk, an afternoon interest, a weekly swim) now wake her
+day, so she goes out instead of spending long stretches at home.
 
 3.12.3: a wrong outfit id now says which one she meant.
 
