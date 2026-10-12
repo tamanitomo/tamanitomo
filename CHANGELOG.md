@@ -1,4 +1,4 @@
-## Unreleased
+## 3.11.2 — Photos that match her, and answers that are hers (2026-10-12)
 
 - A photo she sends no longer carries its file path. 3.11.1 tidied a photo line
   written as `![alt](MEDIA:/path)` after the reply was written, but Hermes puts a
