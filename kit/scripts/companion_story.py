@@ -57,7 +57,10 @@ def instructions(c):
         "--session-id ID` links it into shared memory. A new joke is a note until it really recurs. "
         "Keep your own opinions; later callbacks should fit the conversation, not repeat on every turn."
     )
-    lines.append(music_instructions(c))
+    import companion_music
+
+    if companion_music.enabled(c):
+        lines.append(music_instructions(c))
     lines.append(
         f"When something between you becomes a running joke, a nickname, a ritual or a first: "
         f'{_command(c, "companion_notes.py")} moment --moment joke|nickname|ritual|first|milestone --text T '
@@ -76,7 +79,8 @@ def music_instructions(c):
         "reads Spotify top artists and albums (recent artists if top access is unavailable). "
         f"Use `{command} search ARTIST --kind artist`, then `albums ARTIST_ID`, for a favorite "
         "they actually named. Listening affinity is not proof of a favorite. If Spotify is unavailable, "
-        "say so; do not invent a catalog result. Pick only when you have a personal reason, "
+        "say so; do not invent a catalog result. Pick only when you have a personal reason "
+        "(a recorded preference or a shared memory, not because another run came round), "
         "keep the Spotify link, and don't claim to have heard audio or lyrics from metadata. "
         f"Save with `{command} suggest --file PATH` using JSON {{album_id, note, moment_id}} "
         "linked to a recorded shared moment, or {album_id, note, evidence, source} quoting a real exchange. "
@@ -164,9 +168,13 @@ def scheduled(c, limit=1500, now=None):
     import companion_music
 
     shared = companion_viewing.session_context(c, now, limit=1600)
-    saved_music = companion_music.render(c)
     if shared:
         block += "\n" + shared
-    if saved_music:
-        block += "\n" + saved_music
+    # Albums are the Music sensor's: the scheduled runs learn how to pick one, and
+    # what they picked, only while the human has it switched on.
+    if companion_music.enabled(c):
+        block += "\n" + music_instructions(c)
+        saved_music = companion_music.render(c)
+        if saved_music:
+            block += "\n" + saved_music
     return block

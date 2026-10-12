@@ -36,6 +36,7 @@ def companion(tmp_path):
         hermes_root=tmp_path / "home",
         vault=tmp_path / "vault",
         timezone="UTC",
+        sensors=["music"],
     )
     c.life.mkdir(parents=True)
     return c
@@ -346,3 +347,53 @@ def test_catalog_identifier_cannot_change_endpoint(companion, connected, ident):
     with pytest.raises(ValueError, match="Spotify"):
         music.albums(companion, ident)
     connected.assert_not_called()
+
+
+def test_switched_off_never_opens_the_authorization_or_reads_spotify(
+    companion, connected
+):
+    keep = notes.add_moment(
+        companion,
+        {"moment": "joke", "text": "The toaster did it", "evidence": "session:test"},
+        NOW,
+    )["entry"]
+    saved = suggestion(companion, connected, moment_id=keep["id"])
+    assert saved["ok"]
+    connected.reset_mock()
+    companion.sensors = []
+    with patch.object(music.sensors, "_spotify_state") as state:
+        results = [
+            music.top(companion, now=NOW),
+            music.recent(companion, now=NOW),
+            music.search(companion, "Example", now=NOW),
+            music.albums(companion, ARTIST_ID, now=NOW),
+            music.discover(companion, now=NOW),
+            music.suggest(
+                companion,
+                {"album_id": ALBUM_ID, "note": "Again", "moment_id": keep["id"]},
+                NOW,
+            ),
+            music.share(companion, saved["entry"]["id"], NOW),
+            music.Spotify(companion, NOW).get("/me/top/artists"),
+        ]
+    assert {r["status"] for r in results} == {"switched_off"}
+    assert all(not r["ok"] and "Settings" in r["message"] for r in results)
+    state.assert_not_called()
+    connected.assert_not_called()
+    assert outbox.fold(companion) == []
+    # Her context no longer carries the picks either; the record itself is kept.
+    assert music.render(companion) == ""
+    assert len(music.history(companion)) == 1
+
+
+def test_album_instructions_follow_the_switch(companion):
+    import companion_story as story
+
+    companion.soul_dir.mkdir(parents=True, exist_ok=True)
+    assert "companion_music.py" in story.instructions(companion)
+    assert "companion_music.py" in story.scheduled(companion)
+    companion.sensors = []
+    assert "companion_music.py" not in story.instructions(companion)
+    assert "companion_music.py" not in story.scheduled(companion)
+    # Watching together needs no sensor, so it stays offered.
+    assert "companion_viewing.py" in story.instructions(companion)

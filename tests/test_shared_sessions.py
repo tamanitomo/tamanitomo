@@ -52,7 +52,8 @@ class SharedSessionsApi(WorkspaceFixture):
                 self.get("/api/viewing/sessions", profile="rowan").json()["moments"], []
             )
             self.assertEqual(
-                self.get("/api/music/suggestions").json(), {"suggestions": []}
+                self.get("/api/music/suggestions").json(),
+                {"suggestions": [], "enabled": "music" in (self.c.sensors or [])},
             )
 
     def test_invalid_or_other_profile_session_cannot_be_changed(self):
@@ -91,4 +92,8 @@ html=musicSuggestionsHtml([{note:'<script>x</script>',album:{name:'Album',url:'j
 assert.ok(!html.includes('javascript:'));assert.ok(!html.includes('<script>'));
 html=musicSuggestionsHtml([{note:'Our evening',album:{name:'Album',url:'https://open.spotify.com/album/1234567890123456789012',artists:[{name:'Artist'}]}}]);
 assert.ok(html.includes('noopener noreferrer'));assert.ok(html.includes('Our evening'));
+html=musicSuggestionsHtml([],false);
+assert.ok(html.includes('Music is switched off'));assert.ok(!html.includes('Albums chosen for you'));
+html=musicSuggestionsHtml([{note:'Kept',album:{name:'Album',artists:[]}}],false);
+assert.ok(html.includes('Music is switched off'));assert.ok(html.includes('Kept'));
 """)

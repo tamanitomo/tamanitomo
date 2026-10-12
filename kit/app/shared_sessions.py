@@ -56,4 +56,5 @@ def register(app, load):
 
     @app.get("/api/music/suggestions")
     def suggestions():
-        return {"suggestions": music.history(load())}
+        c = load()
+        return {"suggestions": music.history(c), "enabled": music.enabled(c)}

@@ -5,6 +5,10 @@ Catalog calls are read-only. Listening affinity is evidence of listening, never
 proof of a favorite, a mood, or a shared experience. Suggestions retain their
 source and a human-supported reason; sharing only queues through the outbox.
 No playback, library or playlist mutations, model calls, or automatic messages.
+
+All of it is the Music sensor. Unless the human has ticked Music under Settings ->
+Sensors, nothing here reads Spotify, saves or shares a pick, or puts one in her
+context: a connected account is not consent to have her look through it.
 """
 
 from __future__ import annotations
@@ -34,6 +38,21 @@ RULE = (
     "a favorite or a feeling. Do not claim to have heard the audio, know its lyrics, "
     "or have listened together from these records. Keep Spotify links when sharing."
 )
+
+
+OFF = (
+    "Music is switched off in Settings → Sensors, so Spotify is not read. "
+    "Only the human can turn it on."
+)
+
+
+def enabled(c):
+    """Whether the human has switched on the Music sensor for this companion."""
+    return "music" in (getattr(c, "sensors", None) or [])
+
+
+def _off():
+    return _error("switched_off", OFF)
 
 
 def _now(now=None):
@@ -70,7 +89,9 @@ class Spotify:
 
     def __init__(self, c, now=None):
         self.at = _now(now).isoformat()
-        self.state = sensors._spotify_state(c)
+        self.enabled = enabled(c)
+        # Switched off, the stored authorization is not even opened.
+        self.state = sensors._spotify_state(c) if self.enabled else None
         try:
             self.token = (
                 sensors._spotify_token(c, self.state)
@@ -88,6 +109,8 @@ class Spotify:
         }
         if params:
             provenance["parameters"] = params
+        if not self.enabled:
+            return _off()
         if not self.token:
             return _error(
                 "not_connected",
@@ -201,6 +224,8 @@ def _page(result, kind, key=None):
 
 
 def top(c, limit=5, time_range="medium_term", now=None, client=None):
+    if not enabled(c):
+        return _off()
     if time_range not in RANGES:
         raise ValueError("Choose short_term, medium_term or long_term")
     _limit(limit)
@@ -218,6 +243,8 @@ def top(c, limit=5, time_range="medium_term", now=None, client=None):
 
 
 def recent(c, limit=10, now=None, client=None):
+    if not enabled(c):
+        return _off()
     _limit(limit)
     api = client or Spotify(c, now)
     result = api.get(
@@ -253,6 +280,8 @@ def recent(c, limit=10, now=None, client=None):
 
 
 def search(c, query, kind="artist", limit=5, now=None):
+    if not enabled(c):
+        return _off()
     if kind not in ("artist", "album"):
         raise ValueError("Search artist or album")
     query = _text(query, "query", 200)
@@ -267,6 +296,8 @@ def search(c, query, kind="artist", limit=5, now=None):
 
 
 def albums(c, artist_id, limit=10, now=None, client=None):
+    if not enabled(c):
+        return _off()
     artist_id = _id(artist_id)
     _limit(limit, 10)
     api = client or Spotify(c, now)
@@ -281,6 +312,8 @@ def albums(c, artist_id, limit=10, now=None, client=None):
 
 def discover(c, limit=3, now=None):
     """A small selection, not a claim of exhaustive catalog coverage or novelty."""
+    if not enabled(c):
+        return _off()
     _limit(limit, 3)
     api = Spotify(c, now)
     selected = top(c, limit, now=now, client=api)
@@ -347,7 +380,12 @@ def history(c, limit=20):
 
 
 def render(c, limit=3, budget=1500):
-    """Local saved suggestions for continuity; no Spotify lookup on chat turns."""
+    """Local saved suggestions for continuity; no Spotify lookup on chat turns.
+
+    Nothing while Music is switched off: turning it off takes albums out of her
+    context too, not only the Spotify reads."""
+    if not enabled(c):
+        return ""
     rows = history(c, limit)
     if not rows or budget <= 0:
         return ""
@@ -370,6 +408,8 @@ def render(c, limit=3, budget=1500):
 
 def suggest(c, entry, now=None):
     """Save a verified album and separately attributed personal interpretation."""
+    if not enabled(c):
+        return _off()
     now = _now(now)
     if not isinstance(entry, dict):
         raise ValueError("A suggestion must be an object")
@@ -437,6 +477,8 @@ def share(c, ident, now=None):
     """Queue once, including across delivery failures; nothing sends from here."""
     import companion_outbox as outbox
 
+    if not enabled(c):
+        return _off()
     now = _now(now)
     row = next(
         (r for r in slf._read(path_for(c), "music_suggestion") if r["id"] == ident),

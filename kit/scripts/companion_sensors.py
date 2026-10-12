@@ -652,7 +652,8 @@ REGISTRY = {
     "music": {
         "fn": "music",
         "needs": "Spotify auth",
-        "blurb": "What the human is playing on Spotify. Silent when Spotify is not connected.",
+        "blurb": "What the human is playing on Spotify, and their artists and albums when she "
+        "picks one for them. Off, Spotify is never read. Silent when Spotify is not connected.",
     },
     "viewing": {
         "fn": "viewing",

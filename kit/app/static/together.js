@@ -27,9 +27,10 @@ function sharedTimeHtml(data){
     <p class="small dim" id="shared-status" role="status"></p>`;
 }
 
-function musicSuggestionsHtml(rows){
-  if(!rows.length)return '<p class="dim">Albums chosen for you will appear here, with the reason they brought you to mind. Ask in chat for an album from an artist you love; a Spotify connection lets your companion look through your listening and the catalog.</p>';
-  return rows.slice(0,6).map(row=>{
+function musicSuggestionsHtml(rows,enabled=true){
+  const off=enabled?'':'<p class="dim">Music is switched off, so your companion does not read Spotify or pick albums. Turn on Music under Settings → Sensors to allow it.</p>';
+  if(!rows.length)return off||'<p class="dim">Albums chosen for you will appear here, with the reason they brought you to mind. Ask in chat for an album from an artist you love; a Spotify connection lets your companion look through your listening and the catalog.</p>';
+  return off+rows.slice(0,6).map(row=>{
     const album=row.album||{},safe=/^https:\/\/open\.spotify\.com\/album\/[A-Za-z0-9]{22}$/.test(album.url||'');
     const title=esc(album.name||'Album');
     return `<article class="shared-album"><strong>${safe?`<a href="${esc(album.url)}" target="_blank" rel="noopener noreferrer">${title} ↗</a>`:title}</strong><p class="dim small">${esc((album.artists||[]).map(a=>a.name).join(', '))}</p><p>${esc(row.note||'')}</p></article>`;
@@ -81,7 +82,7 @@ async function mountSharedTime(host,musicHost){
         else{revision=next;host.innerHTML=sharedTimeHtml(results[0].value);}
       }
     }else if(!revision)host.innerHTML='<p class="dim">Shared time could not be loaded. Reopen this page to try again.</p>';
-    if(musicHost?.isConnected)musicHost.innerHTML=results[1].status==='fulfilled'?musicSuggestionsHtml(results[1].value.suggestions||[]):'<p class="dim">Saved albums could not be loaded.</p>';
+    if(musicHost?.isConnected)musicHost.innerHTML=results[1].status==='fulfilled'?musicSuggestionsHtml(results[1].value.suggestions||[],results[1].value.enabled!==false):'<p class="dim">Saved albums could not be loaded.</p>';
   };
   await refresh();
   const onFocus=()=>{if(current())refresh();};

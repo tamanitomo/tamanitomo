@@ -1,3 +1,11 @@
+## Unreleased
+
+- Album picks belong to the Music sensor. With Music switched off under Settings →
+  Sensors she does not read Spotify at all (not even its stored authorization), cannot
+  save or share a pick, and neither the album instructions nor her saved picks reach
+  her chat or scheduled runs. A connected Spotify account alone is not consent. Saved
+  picks stay on record and show on Us → Albums for you with a note that Music is off.
+
 ## 3.10.0 — Shared time that leaves a memory (2026-10-11)
 
 - An established relationship (one that reached Friends) can cool to **Distant**
