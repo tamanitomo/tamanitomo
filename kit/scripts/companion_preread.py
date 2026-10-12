@@ -301,11 +301,6 @@ def day_ideas(c, now):
 
 STUCK_SLEEP_HOURS = 10
 DAYTIME_SLEEP_HOURS = 3
-# How long a moment runs before a run gets to ask whether she is still in it, when
-# the record gives no estimate of its own: a bath, a shower or a towel is brief;
-# anything else is given an afternoon's length.
-BRIEF_MINUTES = 45
-ORDINARY_HOURS = 3
 
 
 def overdue(c, state, now):
@@ -322,26 +317,14 @@ def overdue(c, state, now):
         return ""
     if began.tzinfo is None:
         began = began.replace(tzinfo=_tz(c))
-    minutes = state.get("duration_minutes")
-    if isinstance(minutes, (int, float)) and minutes > 0:
-        limit = dt.timedelta(minutes=minutes)
-    else:
-        import companion_presence
+    import companion_day
+    import companion_presence
 
-        try:
-            closet = companion_presence.wardrobe(c)["items"]
-        except (OSError, ValueError):
-            closet = ()
-        brief = companion_presence.undress(state, closet)[0] in (
-            "bathing",
-            "towel",
-            "undressed",
-        )
-        limit = (
-            dt.timedelta(minutes=BRIEF_MINUTES)
-            if brief
-            else dt.timedelta(hours=ORDINARY_HOURS)
-        )
+    try:
+        closet = companion_presence.wardrobe(c)["items"]
+    except (OSError, ValueError):
+        closet = ()
+    limit = dt.timedelta(minutes=companion_day.expected_minutes(state, closet))
     over = now - began - limit
     if over < dt.timedelta(0):
         return ""

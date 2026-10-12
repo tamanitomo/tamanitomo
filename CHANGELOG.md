@@ -1,3 +1,12 @@
+## 3.12.1 — A long moment says so (2026-10-12)
+
+- The pulse that wakes because a moment has run long is now told so. With no
+  estimate written, her day said only "estimated total duration unknown", and a
+  run woken to look at a shower begun hours earlier saw no reason to move. Her
+  day now says the moment is running long and asks her to move on or give a
+  concrete reason, using the same lengths that wake the pulse (45 minutes for a
+  bath, shower or towel, three hours for anything else).
+
 ## 3.12.0 — Her life, her answer (2026-10-12)
 
 - A photo is of her as she is right now: where she is, what she has on, what she

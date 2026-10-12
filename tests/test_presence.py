@@ -1728,3 +1728,21 @@ class OverdueFingerprintTests(AwakeFingerprintProseTests):
             preread.fingerprint(self.c, started + dt.timedelta(minutes=20)),
             preread.fingerprint(self.c, started + dt.timedelta(minutes=35)),
         )
+
+    def test_the_run_it_wakes_is_told_the_moment_has_run_long(self):
+        import companion_day
+
+        presence.transition_scene(
+            self.c,
+            "taking a shower",
+            "Finished lunch, went to wash.",
+            "Hot water.",
+            location="bathroom",
+            outfit=["bathing"],
+            setting="private",
+            now=self.now + dt.timedelta(minutes=15),
+        )
+        state = presence.current(self.c)["state"]
+        started = self.now + dt.timedelta(minutes=15)
+        self.assertNotIn("RUNNING LONG", companion_day.render(state, started + dt.timedelta(minutes=30)))
+        self.assertIn("RUNNING LONG: 50 minutes in", companion_day.render(state, started + dt.timedelta(minutes=50)))

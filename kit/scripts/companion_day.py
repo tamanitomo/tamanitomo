@@ -38,6 +38,23 @@ own life and need no tools or travel evidence; real-world actions (bookings, pur
 anyone else) are never taken to make them happen.
 Previously and started_at are supplied by code."""
 
+# How long a moment runs before it is looked at again, when the record gives no
+# estimate of its own: a bath, a shower or a towel is brief; anything else is given
+# an afternoon's length.
+BRIEF_MINUTES = 45
+ORDINARY_MINUTES = 180
+
+
+def expected_minutes(state, closet=()):
+    """The current moment's length: its own estimate, else a brief or an ordinary one."""
+    minutes = state.get("duration_minutes")
+    if isinstance(minutes, (int, float)) and minutes > 0:
+        return minutes
+    from companion_presence import undress
+
+    brief = undress(state, closet)[0] in ("bathing", "towel", "undressed")
+    return BRIEF_MINUTES if brief else ORDINARY_MINUTES
+
 
 def schema_fields():
     def string(n):
@@ -355,6 +372,12 @@ def render(state, now):
         if state.get("duration_minutes") and elapsed >= state["duration_minutes"]:
             lines.append(
                 f"ACTIVITY DUE FOR RECONSIDERATION: {elapsed:g} minutes elapsed. Choose the next activity or explain a concrete delay; do not restart this timer by paraphrasing."
+            )
+        elif elapsed >= expected_minutes(state):
+            # With no estimate written, nothing said a shower begun mid-morning had
+            # run long, and a run woken to look at it saw no reason to move.
+            lines.append(
+                f"RUNNING LONG: {elapsed:.0f} minutes in, longer than a moment like this usually lasts. Decide what you are doing now: move on, or give a concrete reason you are still at it."
             )
     intent = state.get("next")
     lines.append(
