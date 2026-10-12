@@ -533,6 +533,8 @@ workspaceHandlers.relationship=async()=>{
       <p class="intro">The things that have become part of you two — what happened, what stayed, and what still matters.</p>
     </div>
     ${relationshipHero(relationship,feelings,companionName)}
+    ${section('us-shared-time','Time together','', '<p class="dim">Loading shared time…</p>')}
+    ${section('us-music','Albums for you','', '<p class="dim">Loading saved albums…</p>')}
     ${section('us-recent','Recently','',renderUsStory(story,storyShown))}
     ${section('us-keepsakes','Things that became ours','',usKeepsakesHTML(keep,relationship.moments))}
     ${section('us-memories','Remembered about you','',usMemoryPreviewHTML(facts,review))}
@@ -541,6 +543,8 @@ workspaceHandlers.relationship=async()=>{
     ${section('us-absences','Expected time apart','Dated plans you have explained, so time away stays understood.',expectedAbsencesSummary(feelings?.expected_absences||[]))}
     <div class="us-section us-advanced" id="us-advanced">${relationshipDetails(relationship,feelings,ledgers.standing||[],companionName)}</div>
   </div>`;
+
+  mountSharedTime($('us-shared-time'),$('us-music')).catch(error=>notice(error.message,true));
 
   const forget=async id=>{
     await api('/facts/'+encodeURIComponent(id)+'/forget',{method:'POST'});

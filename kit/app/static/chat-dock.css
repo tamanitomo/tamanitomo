@@ -105,6 +105,11 @@
 .chat-dock-status { flex: none; min-height: 28px; margin: 0; padding: 8px 14px 12px; color: var(--dim); font-size: 11px; line-height: 1.5; }
 .chat-dock-status.is-error { color: var(--bad); }
 .chat-dock .voice-chat-panel #voice-status { max-width: 100%; }
+.chat-dock .message-speech { display: block; margin: 8px 0 0; padding: 4px 9px; border: 1px solid var(--edge); border-radius: 999px; background: transparent; color: var(--dim); font-size: 11px; cursor: pointer; }
+.chat-dock .message-speech:hover, .chat-dock .message-speech:focus-visible { color: var(--ink); border-color: var(--accent); }
+.chat-dock .message-speech[aria-pressed="true"] { color: var(--accent); }
+.chat-dock-composer { flex-wrap: wrap; }
+.chat-dock .voice-chat-panel #voice-reply:not([hidden]) { display: block; flex: 0 0 100%; order: 3; width: 100%; max-width: 100%; height: 34px; margin-top: 4px; }
 .chat-dock button:focus-visible, .chat-dock textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (max-width: 900px) {
   .chat-dock { bottom: calc(var(--bar) + env(safe-area-inset-bottom) + 16px); right: 16px; }

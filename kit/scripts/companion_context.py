@@ -709,7 +709,9 @@ def build(c, payload=None, now=None, maintenance_notice=""):
                     )
                 )
         if b.get("relationship"):
-            shared = companion_notes.render_relationship(c, b["relationship"])
+            shared = companion_notes.render_relationship(
+                c, b["relationship"], query=msg, now=now
+            )
             if shared:
                 parts.append(
                     (
@@ -785,6 +787,20 @@ def build(c, payload=None, now=None, maintenance_notice=""):
                     )
                 )
 
+    # Manual shared time is meaningful even with every ambient sensor switched off.
+    try:
+        import companion_viewing
+        import companion_music
+
+        shared_session = companion_viewing.session_context(c, now, limit=1600)
+        if shared_session:
+            parts.append((6, "[Time together]\n" + shared_session))
+        music_history = companion_music.render(c)
+        if music_history:
+            parts.append((5, music_history))
+    except (OSError, ValueError, ImportError):
+        pass
+
     watching_together = False
     if "viewing" in (c.sensors or []):
         # While the two of them are watching something together, what is on moves by
@@ -793,7 +809,10 @@ def build(c, payload=None, now=None, maintenance_notice=""):
         try:
             import companion_viewing
 
-            watching_together = bool(companion_viewing.active(c))
+            watching_together = any(
+                session["mode"] == "server" and session["state"] == "active"
+                for session in companion_viewing.active(c, now)
+            )
             stamp = c.home / "state" / "viewing-refreshed"
             fresh = stamp.exists() and time.time() - stamp.stat().st_mtime < 60
             if watching_together and not fresh:
@@ -809,7 +828,22 @@ def build(c, payload=None, now=None, maintenance_notice=""):
             pass
         # Its own short slot rather than a share of the ambient budget, which is a few
         # hundred characters: while they watch something together, this is the turn.
-        watching = read(c.soul_dir / "ambient/viewing.md", 800).strip()
+        cache = c.soul_dir / "ambient/viewing.md"
+        watching = read(cache, 800).strip()
+        if watching:
+            try:
+                # Expiry does not write a lifecycle event. A cached shared watch
+                # from before it ended cannot describe the present participation.
+                cached_at = dt.datetime.fromtimestamp(
+                    cache.stat().st_mtime, dt.timezone.utc
+                )
+                if any(
+                    cached_at <= session["until"] <= now
+                    for session in companion_viewing.agreements(c, now)
+                ):
+                    watching = ""
+            except (OSError, ValueError):
+                watching = ""
         if watching and (b["ambient"] or watching_together):
             parts.append((4, f"[What {c.human} is watching]\n" + watching))
     if b["ambient"]:

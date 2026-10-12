@@ -2,6 +2,95 @@
 
 Agreed with the product owner on September 12, 2026.
 
+## Shared experience and autonomy direction — October 11, 2026
+
+The owner approved the continuity fixes and the shared-experience direction in the
+companion review. Emotional impact should come from particular things the two did,
+remembered, made and followed through on. Independent life should leave consequences
+and continued interests. Preserve the existing distinction between authored fictional
+life and actual research, observations or tool-created artifacts.
+
+Cooling may take an established relationship below Friends to **Distant**. Familiarity
+and shared history remain; "Just Met" is reserved for a new relationship. Distant does
+not preserve romance, intimacy permissions or a requirement to be friends. Explained
+or routine absences remain explained; distance is never a debt or a demand for replies.
+
+### First implementation on beta
+
+- Preserve commitments across nightly planning, wake autonomy for due or meaningfully
+  changed caring follow-ups, and remove the instruction to automatically abandon her
+  plans for the human. Relevant recent memories and nickname/ritual anchors survive
+  growth of the history. Corrected experiences stop contributing false violations.
+- Complete the local watch-session lifecycle: manual or media-server participation,
+  start/pause/resume/end, quiet or occasional commentary, human-reported checkpoints,
+  linked personal moments, optional aftermath and later callbacks. The Us page exposes
+  these controls. Server metadata and a synopsis do not establish scene perception;
+  ending a session does not establish completion or enjoyment.
+- Add Spotify top/recent artists, artist/album search and album listings; save a verified
+  album and a personal note linked to a relationship moment or quoted exchange. Reuse
+  the existing Spotify connection, expose missing scopes clearly, and share through the
+  existing outbox. Listening affinity is not a stated favorite. Saved album suggestions
+  appear in Us and the companion's local context without network calls on every turn.
+- Add Play to completed assistant messages, using the selected Hermes local/cloud voice,
+  reading successive chunks instead of truncating a long reply. Stop cancels playback
+  and further synthesis. Native controls provide pause/seek within the current chunk.
+
+### Approved follow-on backlog, in order
+
+1. **Richer watching together.** Add permissioned, time-aligned subtitles or deliberately
+   shared screenshots up to the current playhead. Keep future scenes out of context;
+   use a measured, sparse reaction cadence with silence as a valid choice. Test pauses,
+   seeks, episode changes, outages, spoilers and recovery before live commentary.
+2. **Personal callbacks and keepsakes.** Link existing keepsakes to their originating
+   shared moments and artifacts. Add recently-mentioned callback cooldowns based on
+   actual delivered conversation, with relevance, timing and correction handling. A
+   follow-up should remember the answer and change subsequent behavior. Do not make
+   every session produce a gift, question or emotional milestone.
+3. **Projects with accumulating results.** Extend existing storylines and interests with
+   stable next actions, obstacles, artifacts and outcomes: a poem revised over days, a
+   growing sketchbook, a researched collection. Let setbacks, changes of taste and
+   abandoned projects persist. Practical fictional consequences can require a recorded
+   resolution rather than merely expiring by a fixed timer.
+4. **Other shared activities.** Reuse sessions for listening to an album, reading,
+   cooking and quiet work. Preserve distinct evidence per activity and allow quiet
+   company. Build rituals from actual repetition, with her own tastes and availability.
+5. **Reciprocal repair.** Extend existing rupture/repair records so her own mistake can
+   lead to a specific apology, a corrective action and a durable behavior change. A
+   repair should neither erase the past nor require the human to manage her feelings.
+6. **Richer voice, a major product priority.** Live, streaming, interruptible conversation
+   through local and cloud backends; stream short speech segments while appropriate,
+   support barge-in, cancel outstanding generation, and prevent stale audio across
+   profile changes. Retain push-to-talk and per-message playback. Add voice-specific
+   phrasing and thoughtful voice notes. Acceptance must include real devices, Bluetooth,
+   echo cancellation, interruptions, provider outages, latency and accessible controls.
+
+The first pass's chunked message playback is not a live streaming conversation engine.
+Provider speech quality, natural spontaneous behavior and subtitle-based perception
+require separate acceptance; passing storage and browser tests cannot establish them.
+
+Implementation verification: 961 automated tests and 50 subtests passed, with one skip.
+Black, Ruff, installer shell syntax, the source package's 307 file hashes and isolated
+Hermes routing compatibility passed. A disposable browser profile exercised a manual
+watch, quiet company, checkpoints, pause/resume/end and a shared memory that survived
+reload. Message Play controls and recovery from unavailable voice were checked; actual
+provider audio quality, microphone conversation and real Spotify delivery were not.
+Three isolated, tool-free frontier replies also passed their boundary checks: remember
+history while Distant, respect a paused manual watch, and distinguish catalog evidence
+and a queued album suggestion from actual listening or delivery. The album response
+was accurate but technical; natural phrasing still needs broader dialogue acceptance.
+These turns used 12,177 input and 150 output tokens, with no fallback or outreach. The
+validation harness now correctly recognizes temporary-file descriptors while still
+rejecting modifications to external files and symlink/hardlink aliases.
+
+### Acceptance expectations
+
+Use disposable profiles and frontier dialogue for the companion behavior. Check several
+simulated days: a shared watch becomes a supported memory, an invitation survives
+replanning/restart, a callback becomes due without unrelated activity, a long absence
+preserves familiarity, and a Spotify note stays tied to real catalog and conversation
+evidence. No test should touch a real companion's memories or send outreach. Keep input
+and output usage unknown when no authoritative accounting is available.
+
 ## The everyday experience
 
 Companionship and continuity lead. A user should be able to chat casually every day, then ask the same companion to investigate a practical problem, such as a Plex server failure, using Hermes's tools and configured access. A companion hosted in the cloud must clearly distinguish its host from the user's home systems.

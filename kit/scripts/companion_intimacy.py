@@ -387,8 +387,19 @@ def compute(c, now=None, record=False) -> Dict[str, Any]:
     irritation = meters.get("irritation", 0.0)
     temperament = feelings_state.get("personality", "steady")
 
-    # Count positive connections vs boundary violations
-    all_experiences = feelings.experiences(c)
+    # Use the same corrected history as feelings. A mistaken rupture must not
+    # count toward a permanent boundary decision after it has been corrected.
+    history = [
+        e
+        for e in feelings.experiences(c)
+        if feelings._stamp(e["at"]) <= now.astimezone(dt.timezone.utc)
+    ]
+    corrected = {e["related"] for e in history if e.get("kind") == "correction"}
+    all_experiences = [
+        e
+        for e in history
+        if e.get("kind") != "correction" and e.get("id") not in corrected
+    ]
     connections = [e for e in all_experiences if e.get("kind") == "connection"]
     intimacy_violations = [
         e
@@ -630,6 +641,14 @@ def compute(c, now=None, record=False) -> Dict[str, Any]:
     # old one -- never below Friends once reached -- survives only as the starting
     # point on the day the daily record begins, so the upgrade drops nobody at
     # once; from then on a relationship falls at most a day's cap at a time.
+    # Familiarity is history, not today's warmth. Keep the same closeness decay
+    # and permissions, but never tell old friends that they have just met again.
+    established = (
+        effective_days >= 4
+        or earned_score >= 25
+        or companion_meters.highest_closeness(c) >= 25
+        or (_read_levels(c) or {}).get("highest", 0) in (1, 2, 3, 4)
+    )
     first_record_score = earned_score
     if decay:
         floor = 25.0 if (earned_score >= 25.0 or effective_days >= 4.0) else 0.0
@@ -639,18 +658,21 @@ def compute(c, now=None, record=False) -> Dict[str, Any]:
     # Check permanent friend status (persisted on disk so 2 violations permanently lock friendship)
     perm_file = c.home / ".permanent-friend.json"
     revoked_file = c.home / ".nsfw-revoked.json"
-    if violation_count >= 2 and not perm_file.exists():
+    if record and violation_count >= 2 and not perm_file.exists():
         try:
-            perm_file.write_text(
+            from companion_platform import atomic_write
+
+            atomic_write(
+                perm_file,
                 json.dumps(
                     {
                         "permanent_friend": True,
                         "violations": violation_count,
+                        "violation_ids": [e["id"] for e in intimacy_violations],
                         "at": now.isoformat(),
                     }
                 )
                 + "\n",
-                encoding="utf-8",
             )
         except Exception:
             pass
@@ -691,6 +713,17 @@ def compute(c, now=None, record=False) -> Dict[str, Any]:
         if step["min_score"] <= score <= step["max_score"]:
             stage_info = step
             break
+
+    if stage_info["stage"] == 0 and established:
+        stage_info = {
+            **stage_info,
+            "name": "Distant",
+            "badge": "Distant",
+            "desc": (
+                "You have a shared history, but feel distant now. Familiarity remains; "
+                "present closeness and trust can take time to rebuild."
+            ),
+        }
 
     # Blockers for intimacy / NSFW readiness
     blockers: List[str] = []
@@ -757,6 +790,7 @@ def compute(c, now=None, record=False) -> Dict[str, Any]:
         "stage": stage_info["stage"],
         "stage_name": stage_info["name"],
         "stage_badge": stage_info["badge"],
+        "established": established,
         "description": description,
         "can_flirt": stage_info["can_flirt"] and not permanent_friend,
         "can_tease": stage_info["can_tease"] and not permanent_friend,
@@ -825,6 +859,26 @@ def _write_levels(c, data):
     atomic_write(path, json.dumps(data, indent=2) + "\n")
 
 
+def _historical_stage(c, state, known):
+    """The seen UI baseline may be new even when the relationship is old."""
+    import companion_meters
+
+    old_high = (known or {}).get("highest", (known or {}).get("seen", 0))
+    if type(old_high) is not int or not 0 <= old_high <= 4:
+        old_high = 0
+    # A newly crossed stage is not a regain just because today's meter tick
+    # already recorded it. Recover pre-existing history only for a new baseline
+    # or an old relationship that has cooled all the way down.
+    if known is not None and int(state.get("stage", 0)) > 0:
+        return old_high
+    peak = companion_meters.highest_closeness(c)
+    recorded = max(
+        (step["stage"] for step in stages_for(c) if peak >= step["min_score"]),
+        default=0,
+    )
+    return max(recorded, old_high, 1 if state.get("established") else 0)
+
+
 def level_event(c, state=None):
     """The change of level the human has not been told about yet, or None.
 
@@ -837,17 +891,20 @@ def level_event(c, state=None):
         return None
     stage = int(state.get("stage", 0))
     known = _read_levels(c)
+    historical = _historical_stage(c, state, known)
     if known is None:
         _write_levels(
             c,
             {
                 "seen": stage,
-                "highest": stage,
+                "highest": max(stage, historical),
                 "at": dt.datetime.now(dt.timezone.utc).isoformat(),
             },
         )
         return None
-    seen, highest = known["seen"], int(known.get("highest", known["seen"]))
+    seen, highest = known["seen"], historical
+    if highest != known.get("highest"):
+        _write_levels(c, {**known, "highest": highest})
     if stage == seen:
         return None
     kind = "new_high" if stage > highest else "regained" if stage > seen else "drop"
@@ -861,7 +918,7 @@ def level_event(c, state=None):
         "badge": state.get("stage_badge"),
         "description": state.get("description"),
         "from_stage": seen,
-        "from_name": before["name"],
+        "from_name": "Distant" if seen == 0 and highest >= 1 else before["name"],
         "romantic": state.get("romantic_progression", False),
     }
 
@@ -918,7 +975,14 @@ def render(c, intimacy_state: Optional[Dict[str, Any]] = None) -> str:
         return "\n".join(lines) + "\n"
 
     romantic = intimacy_state.get("romantic_progression", True)
-    if not romantic:
+    if intimacy_state["stage"] == 0 and intimacy_state.get("established"):
+        lines.append(
+            "DISTANT: You know each other and your shared history remains yours. "
+            "Do not introduce yourself again or pretend you never had those experiences. "
+            "Be cordial and honest about present distance; let comfort return through "
+            "what happens now. Time away is not a debt, and a reply is never owed."
+        )
+    elif not romantic:
         # This relationship is not a romance and never was, so the guidance says nothing
         # about chemistry or flirting. Closeness here deepens into candour and loyalty.
         if intimacy_state["stage"] >= 4:
@@ -999,5 +1063,9 @@ def _stage_guidance(c, intimacy_state):
     """What this stage holds and what is not yet (companion_gates)."""
     import companion_gates
 
-    text = companion_gates.guidance(c, int(intimacy_state.get("stage") or 0))
+    text = companion_gates.guidance(
+        c,
+        int(intimacy_state.get("stage") or 0),
+        established=bool(intimacy_state.get("established")),
+    )
     return [text] if text else []

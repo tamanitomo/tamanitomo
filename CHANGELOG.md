@@ -1,3 +1,28 @@
+## Unreleased — Shared time that leaves a memory
+
+- An established relationship can cool to **Distant** below friendship while keeping
+  its history; it never becomes Just Met again. Corrected relationship experiences
+  no longer count as boundary violations, and reading feelings no longer writes a lock.
+- Nightly planning preserves commitments. Changing one needs a reason; a conflicting
+  replacement does not overwrite the saved plan. Due follow-ups now wake autonomy
+  once when due, and meaningful edits are noticed without waking it every minute.
+- Shared memory favors relevant and recent moments while keeping nickname and ritual
+  anchors in view, instead of letting early milestones crowd everything else out.
+- Us → Time together supports manual or media-server watch sessions, quiet company
+  or occasional comments, pause/resume/end, progress checkpoints and personal memories.
+  Those memories enter shared history and later conversation. Ended sessions do not
+  imply a completed film; summaries are explicitly not scene perception.
+- Spotify discovery can read top or recent artists, search artists/albums, and choose
+  a verified album with a personal note tied to a shared memory or real exchange.
+  Suggestions appear under Us → Albums for you and can be queued through the usual
+  contact controls. Spotify must already be connected; top artists need `user-top-read`.
+- Completed companion messages have a Play button. The selected local or cloud Hermes
+  voice reads long replies in successive chunks, with Stop and native pause/seek
+  controls. Playback does not request the microphone or submit another chat turn.
+- The approved follow-on work, especially streaming interruptible voice, is recorded
+  in `docs/PRODUCT_DIRECTION.md`. Live conversation audio and scene-aware viewing remain
+  future work; this pass provides message playback and shared-session continuity.
+
 ## 3.9.1 — What you watch, and watching together (2026-10-11)
 
 - What you watch: a new sense reads your own Plex or Jellyfin server. She knows what

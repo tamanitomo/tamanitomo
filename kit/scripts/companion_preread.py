@@ -54,7 +54,7 @@ def preread(c, now=None):
     out.append("")
     import companion_story
 
-    places_block = companion_story.scheduled(c)
+    places_block = companion_story.scheduled(c, now=now)
     if places_block:
         out.append(places_block)
         out.append("")
@@ -365,6 +365,37 @@ def fingerprint(c, now=None):
                 mark += f"#overslept-{int(slept.total_seconds() // 3600)}"
         return f"sleep {night.get('source')} until={night.get('until')} scene={_digest(mark)}\n"
     open_loops = companion_loops.loops(c)
+    loop_marks = []
+    for loop in sorted(open_loops, key=lambda item: item["id"]):
+        due = False
+        if loop.get("follow_up_at"):
+            try:
+                when = dt.datetime.fromisoformat(loop["follow_up_at"])
+                if when.tzinfo is None:
+                    when = when.replace(tzinfo=_tz(c))
+                due = when <= now
+            except (TypeError, ValueError):
+                pass
+        # A callback becoming due or being meaningfully edited deserves a look.
+        # The clock and update timestamp alone do not: each due edge wakes once,
+        # and rewriting identical content must not keep the background loop busy.
+        loop_marks.append(
+            (
+                *(
+                    loop.get(key, "")
+                    for key in (
+                        "id",
+                        "title",
+                        "detail",
+                        "gentle_use",
+                        "category",
+                        "follow_up_at",
+                        "note",
+                    )
+                ),
+                due,
+            )
+        )
     # What is waiting NOW, from the fold. Counting raw rows counted every message ever
     # queued -- decisions are separate rows -- so the number only ever grew, and a
     # message that was sent or held back never changed the fingerprint.
@@ -406,8 +437,11 @@ def fingerprint(c, now=None):
     ]
     # Ambient senses are deliberately not digested: the senses job rewrites them every 15
     # minutes and weather moves on almost every read. The bucket line guarantees a periodic run.
+    import companion_viewing
+
     rows = [
         f"bucket {bucket}",
+        f"shared {companion_viewing.fingerprint(c, now)}",
         # Code-owned commitment fields only. `next` and each commitment's title/reason are prose
         # the pulse rewrites every tick, so hashing them opened the gate on nearly every run.
         f"day {_digest(commitment_marks,deadlines)}",
@@ -415,7 +449,7 @@ def fingerprint(c, now=None):
         # Only a real transition or confirmation change opens the awake gate;
         # rewording an activity or mood does not create a new event.
         f"scene {_digest(state.get('started_at') or 'static',state.get('confirmed',True))}",
-        f'loops {len(open_loops)} {_digest(*[l["id"] for l in open_loops])}',
+        f"loops {len(open_loops)} {_digest(*loop_marks)}",
         f"queued {queued}",
     ]
     return "\n".join(rows) + "\n"

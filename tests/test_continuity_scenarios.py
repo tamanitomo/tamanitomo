@@ -1,6 +1,7 @@
 """Combined continuity acceptance with synthetic evidence and no live provider."""
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -272,3 +273,46 @@ def test_guard_blocks_installed_bootstrap_side_effects_before_import(
     assert launcher.read_text() == "original installed launcher"
     assert candidate.read_text() == "replacement"
     assert "private sentinel" not in json.dumps(result)
+
+
+@pytest.mark.skipif(not hasattr(os, "fchmod"), reason="fchmod is Unix-only")
+@pytest.mark.parametrize("target", ["scratch", "external", "symlink", "hardlink"])
+def test_guard_checks_actual_file_behind_mutating_descriptor(tmp_path, target):
+    home = tmp_path / "isolated"
+    home.mkdir()
+    external = tmp_path / "external"
+    external.write_text("external sentinel")
+    external.chmod(0o600)
+    local = home / "temporary-auth"
+    if target == "symlink":
+        local.symlink_to(external)
+    elif target == "hardlink":
+        os.link(external, local)
+    else:
+        local.write_text("synthetic scratch auth")
+        local.chmod(0o600)
+    selected = external if target == "external" else local
+    # Open before the guard so the external test reaches the fd-specific check.
+    script = (
+        f"import os\nfd=os.open({str(selected)!r},os.O_RDONLY)\n"
+        + continuity.FRONTIER_GUARD
+        + "\ntry:\n    os.fchmod(fd,0o640)\n    print('allowed')\n"
+        "except PermissionError:\n    print('blocked')\n"
+        "finally:\n    os.close(fd)\n"
+    )
+    env = continuity.isolated_env(home)
+    env["PYTHONPATH"] = str(tmp_path / "runtime")
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        env=env,
+        cwd=home,
+        text=True,
+        capture_output=True,
+        check=True,
+        timeout=10,
+    )
+    assert result.stdout.strip() == ("allowed" if target == "scratch" else "blocked")
+    assert external.stat().st_mode & 0o777 == 0o600
+    assert external.read_text() == "external sentinel"
+    if target == "scratch":
+        assert local.stat().st_mode & 0o777 == 0o640

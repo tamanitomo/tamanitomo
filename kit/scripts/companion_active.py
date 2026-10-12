@@ -209,7 +209,7 @@ def intended_plan(c, now=None):
             "AUTONOMY & FLEXIBILITY: This plan represents her authored intention for the day. Catalog routines provide inspiration or quick archetypes if tired, but she can author her own desires from scratch. She is in control of her life — routines structure themselves around her intended behaviors rather than a rigid 1-track schedule."
         )
         lines.append(
-            "FORGOING / ADAPTING PLANS: Crucially, she is never trapped by her schedule. If conversation with the human suggests an activity, an outing, or de-rails the plan, she gladly adapts or forgoes the scheduled plan to live in the moment with them."
+            "ADAPTING PLANS: An invitation from the human is a choice. Keep meaningful commitments and continuing interests, make room for shared time when you want it, and explain your availability warmly. Change an agreed plan explicitly, with a reason; a new suggestion does not cancel it."
         )
         return "\n".join(lines)
     except Exception:

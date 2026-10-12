@@ -93,6 +93,14 @@ def run_life(c, *args):
 
 
 class TestHerEveningPlan:
+    PROMISE = {
+        "id": "watch-together",
+        "what": "Watch the film together",
+        "kind": "commitment",
+        "start": "20:00",
+        "end": "22:00",
+    }
+
     def test_planning_tomorrow_writes_the_days_plan(self, companion):
         out = run_life(
             companion, "plan-tomorrow", "--intent", "A slow day with a long walk"
@@ -135,6 +143,96 @@ class TestHerEveningPlan:
         items = plan.read(companion, out["date"])["items"]
         assert [i["what"] for i in items] == ["swim", "lunch out"]
         assert out["not_planned"] == ["market overlaps something earlier"]
+
+    def test_a_new_intention_keeps_tomorrows_promise(self, companion):
+        tomorrow = dt.datetime.now(UTC).date() + dt.timedelta(days=1)
+        original = plan.add(companion, tomorrow, self.PROMISE)["items"][0]
+        out = run_life(
+            companion, "plan-tomorrow", "--intent", "A slow day with a long walk"
+        )
+        written = plan.read(companion, tomorrow)
+        assert written["items"] == [original]
+        assert written["intent"] == out["intent"]
+        shape = life.expected_day(companion.life, tomorrow)
+        assert shape["anchors"][0]["activity"] == self.PROMISE["what"]
+
+    def test_conflicting_plan_changes_neither_promise_nor_summary(
+        self, companion, tmp_path
+    ):
+        tomorrow = dt.datetime.now(UTC).date() + dt.timedelta(days=1)
+        plan.add(companion, tomorrow, self.PROMISE)
+        original = plan.read(companion, tomorrow)
+        summary = life.save_tomorrow_plan(
+            companion.life,
+            {"date": tomorrow.isoformat(), "intent": "Our film tonight"},
+        )
+        anchors = tmp_path / "anchors.json"
+        anchors.write_text(
+            json.dumps([{"start": "19:00", "end": "23:00", "activity": "class"}])
+        )
+        out = run_life(
+            companion,
+            "plan-tomorrow",
+            "--intent",
+            "Go to class",
+            "--anchors-file",
+            str(anchors),
+        )
+        assert out["saved"] is False
+        assert "overlaps" in out["not_planned"][0]
+        assert plan.read(companion, tomorrow) == original
+        assert life.read_tomorrow_plan(companion.life) == summary
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            {"start": "18:00", "end": "20:00"},
+            {"status": "dropped"},
+            {"kind": "idea", "reason": "A different idea"},
+        ],
+    )
+    def test_replanning_cannot_silently_rewrite_a_promise(self, companion, change):
+        original = plan.add(companion, DAY.date(), self.PROMISE)
+        with pytest.raises(ValueError, match="commitment.*reason"):
+            plan.settle(
+                companion,
+                DAY.date(),
+                "A different day",
+                items=[{**self.PROMISE, **change}],
+            )
+        assert plan.read(companion, DAY.date()) == original
+
+    @pytest.mark.parametrize(
+        "change", [{"start": "18:00", "end": "20:00"}, {"status": "dropped"}]
+    )
+    def test_an_explicit_change_is_kept_with_its_reason(self, companion, change):
+        plan.add(companion, DAY.date(), self.PROMISE)
+        changed = plan.settle(
+            companion,
+            DAY.date(),
+            "We changed our plans",
+            items=[{**self.PROMISE, **change, "reason": "We agreed in conversation"}],
+        )
+        kept = plan.settle(companion, DAY.date(), "An ordinary day")
+        assert kept["items"] == changed["items"]
+        assert any(
+            "We agreed in conversation" in row["change"] for row in kept["history"]
+        )
+
+    def test_a_settled_plan_retains_a_cancelled_promise_without_reviving_it(
+        self, companion
+    ):
+        plan.add(companion, DAY.date(), self.PROMISE)
+        plan.amend(
+            companion,
+            DAY.date(),
+            self.PROMISE["id"],
+            status="dropped",
+            reason="We agreed to leave it for another evening",
+        )
+        settled = plan.settle(companion, DAY.date(), "Reading before bed")
+        assert settled["items"][0]["status"] == "dropped"
+        assert "another evening" in settled["items"][0]["reason"]
 
 
 class TestADaySheDidNotPlan:

@@ -841,8 +841,8 @@ def laid_out(root, day=None):
     return [str(i) for i in (data.get("items") or [])]
 
 
-def save_tomorrow_plan(root, plan):
-    """Record what she means to do tomorrow.
+def _checked_tomorrow_plan(root, plan):
+    """Validate what she means to do tomorrow before changing either store.
 
     The theme has to be a name she chose from her own catalog. It used to be
     guessed from the wording of her intention by substring -- 'beach' in the
@@ -862,6 +862,13 @@ def save_tomorrow_plan(root, plan):
     if theme not in known:
         raise ValueError(f"Unknown theme {theme!r}. Choose one of: " + ", ".join(known))
     plan["theme"] = theme
+    return plan
+
+
+def save_tomorrow_plan(root, plan):
+    """Record a validated intention in the compatibility summary."""
+    root = pathlib.Path(root)
+    plan = _checked_tomorrow_plan(root, plan)
     path = root / "tomorrow.json"
     atomic_write(path, json.dumps(plan, ensure_ascii=False, indent=2) + "\n")
     return plan
@@ -1433,7 +1440,7 @@ def main():
         }
         if custom_anchors:
             plan_dict["anchors"] = custom_anchors
-        out = save_tomorrow_plan(root, plan_dict)
+        out = _checked_tomorrow_plan(root, plan_dict)
         # The day's plan is the store everything else writes into (a lucky day, a
         # moved walk); this evening's intention is what it is for.
         import companion_plan
@@ -1445,6 +1452,11 @@ def main():
             )
         except ValueError as exc:
             refused.append(f"the plan was not written: {exc}")
+            out = {**out, "saved": False}
+        else:
+            # Only publish the summary after the authoritative plan accepts it.
+            # Otherwise a rejected activity could still reach ActiveContext.
+            out = save_tomorrow_plan(root, out)
         if refused:
             out = {**out, "not_planned": refused}
     elif a.cmd == "planned-tomorrow":

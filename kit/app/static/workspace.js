@@ -276,6 +276,7 @@ function chatMessagesHtml(messages){
       ${face}
       <div class="message-body">${richText(text)}</div>
       ${attachments.map(inlineMedia).join('')}
+      ${m.role==='assistant'&&!m.pending&&String(m.content||'').trim()?`<button type="button" class="message-speech" data-speech-index="${i}" aria-label="Play this message aloud" aria-pressed="false">Play</button>`:''}
       ${meta}
     </div>`;}).join('');
 }
@@ -472,4 +473,3 @@ async function openConsole(which){
 }
 const imageTimeline=renderTimeline;
 workspaceHandlers.timeline=async()=>{await imageTimeline();const d=await api('/life');$('timeline').insertAdjacentHTML('afterbegin',heading('A continuing life','Their recorded days, alongside the images you choose to keep.')+`<div class="card"><h2>Recent lived state</h2>${d.events.map(e=>`<div style="padding:12px 0;border-bottom:1px solid var(--edge)"><span class="dim small">${esc(new Date(e.recorded_at).toLocaleString())}</span> <span class="pill">${e.state.confirmed===false?'Carried forward · unconfirmed':'Recorded by companion'}</span><p>${esc(e.state.activity)} · ${esc(e.state.location)}</p><span class="dim">${esc(e.state.mood)}</span></div>`).join('')||'<p class="dim">No lived state yet. After setup, the background routine starts recording their day.</p>'}</div>`);};
-

@@ -3123,6 +3123,15 @@ section[data-creating] > *:not(#onboarding):not(#environment-onboarding){display
 .subview-navigation .link-button { min-height: 40px; }
 .subview-navigation .icon { width: 18px; height: 18px; }
 #manage-companions { margin-top: 18px; }
+.shared-session,.shared-album { padding: 18px 0; border-bottom: 1px solid var(--line); }
+.shared-session-title { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
+.shared-start { display: grid; gap: 14px; padding-top: 14px; }
+.shared-checkpoint { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.shared-checkpoint label { flex: 1 1 220px; min-width: 0; }
+.shared-checkpoint input,.shared-start input,.shared-start select { width: 100%; }
+.shared-checkpoint button,.shared-start button { min-height: 44px; }
+.shared-recent { margin-top: 20px; }
+.shared-moments { font-style: italic; padding-top: 10px; }
 @media (max-width: 600px) {
   .workspace-shortcuts { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin: 18px 0; }
   .workspace-shortcuts .quiet { padding: 10px 12px; font-size: 13px; min-height: 50px; }

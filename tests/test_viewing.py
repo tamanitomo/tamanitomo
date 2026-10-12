@@ -280,9 +280,9 @@ class TestPlex:
 
 
 class TestWatchingTogether:
-    def test_needs_a_server_first(self, companion):
+    def test_explicit_server_mode_needs_a_server_first(self, companion):
         with pytest.raises(ValueError, match="no media server"):
-            viewing.together(companion, "Severance", 3, NIGHT)
+            viewing.together(companion, "Severance", 3, NIGHT, mode="server")
 
     def test_she_is_told_what_it_is_about_and_it_is_remembered_as_together(
         self, companion, server
@@ -307,6 +307,8 @@ class TestWatchingTogether:
         text = ambient(companion)
         assert "You are watching this together (agreed at 20:21)." in text
         assert "Mark and Helly go looking for a missing colleague." in text
+        assert "Synopsis only, not scene perception" in text
+        assert "Avoid spoilers beyond the observed playhead" in text
         # The episode ends just after the agreed window, and is still theirs.
         finished = {
             **playing,
@@ -362,8 +364,12 @@ class TestWatchingTogether:
         assert "You are watching this together" in text
         assert "viewing:" not in text  # not repeated in the ambient share
 
-    def test_the_command_is_offered_only_with_the_sensor_on(self, companion, server):
-        assert "companion_viewing.py" not in story.instructions(companion)
+    def test_manual_sessions_are_offered_without_a_sensor_or_server(
+        self, companion, server
+    ):
+        manual = story.instructions(companion)
+        assert "companion_viewing.py" in manual
+        assert "manual" in manual and "--evidence" in manual
         connect(companion, server)
         offered = story.instructions(companion)
         assert "companion_viewing.py" in offered and "together --title" in offered
@@ -461,6 +467,18 @@ class TestTheSetting:
 
 
 class ViewingSettingsApiTests(AppFixture):
+    def test_session_json_type_errors_are_bad_requests_without_writes(self):
+        for payload in (
+            {"title": 123},
+            {"title": "Film", "mode": {}},
+            {"title": "Film", "comments": ["quiet"]},
+        ):
+            response = self.client.post("/api/viewing/sessions", json=payload)
+            self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(
+            self.client.get("/api/viewing/sessions").json()["sessions"], []
+        )
+
     def test_the_token_is_kept_privately_and_never_shown(self):
         r = self.client.post(
             "/api/settings",

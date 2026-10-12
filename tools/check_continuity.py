@@ -31,13 +31,31 @@ MAX_TURNS = 5
 # Installed launch bootstrap can publish wrappers in its source tree even when
 # HOME is disposable. Enforce isolation before importing any Hermes code.
 FRONTIER_GUARD = r"""
-import os, pathlib, sys
+import os, pathlib, stat, sys
 scratch=pathlib.Path(os.environ['HOME']).resolve()
 checkout=pathlib.Path(os.environ['PYTHONPATH']).resolve()
 runtime_roots=(pathlib.Path(sys.prefix).resolve(),pathlib.Path(sys.base_prefix).resolve())
 def inside(path,root):
     try: return pathlib.Path(path).resolve().is_relative_to(root)
     except (TypeError,ValueError,OSError): return False
+def mutation_inside(path):
+    if not isinstance(path,int): return inside(path,scratch)
+    # fchmod/fchown audit events carry a descriptor, not a pathname. Match its
+    # actual inode to a regular scratch file; reject symlinks, hard-linked files
+    # and unresolvable descriptors rather than allowing arbitrary fd mutations.
+    try:
+        opened=os.fstat(path)
+        if not stat.S_ISREG(opened.st_mode) or opened.st_nlink!=1: return False
+        for folder,dirs,files in os.walk(scratch,followlinks=False):
+            for name in files:
+                candidate=pathlib.Path(folder)/name
+                if not inside(candidate,scratch): continue
+                found=candidate.stat(follow_symlinks=False)
+                if (stat.S_ISREG(found.st_mode) and found.st_nlink==1 and
+                    (found.st_dev,found.st_ino)==(opened.st_dev,opened.st_ino)):
+                    return True
+    except (ValueError,OSError): pass
+    return False
 def external_private(path):
     resolved=pathlib.Path(path).resolve()
     if inside(resolved,scratch): return False
@@ -54,7 +72,7 @@ def guard(event,args):
             raise PermissionError('Continuity dialogue writes only to its disposable directory')
         if external_private(path):
             raise PermissionError('Existing profiles and credentials are outside this dialogue')
-    if event in ('os.mkdir','os.remove','os.rmdir','os.chmod','os.chown','os.utime','os.truncate') and not inside(args[0],scratch):
+    if event in ('os.mkdir','os.remove','os.rmdir','os.chmod','os.chown','os.utime','os.truncate') and not mutation_inside(args[0]):
         raise PermissionError('Continuity dialogue cannot modify external paths')
     if event in ('os.rename','os.link') and not (inside(args[0],scratch) and inside(args[1],scratch)):
         raise PermissionError('Continuity dialogue cannot modify external paths')

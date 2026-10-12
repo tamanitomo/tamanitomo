@@ -112,6 +112,22 @@ def _save(c, data, damaged):
         pass
 
 
+def highest_closeness(c):
+    """Recorded familiarity survives a quiet period, even after chats are pruned."""
+    data, _ = _load(c)
+    return max(
+        (
+            row["closeness"]
+            for row in data["days"].values()
+            if isinstance(row, dict)
+            and isinstance(row.get("closeness"), (int, float))
+            and not isinstance(row["closeness"], bool)
+            and math.isfinite(row["closeness"])
+        ),
+        default=0,
+    )
+
+
 @contextlib.contextmanager
 def _locked(c, write):
     """Hold the record's lock for a write, or carry on read-only: reading takes no

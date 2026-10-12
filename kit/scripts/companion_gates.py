@@ -182,7 +182,7 @@ def may_send(c, stage, content):
     return stage >= 1
 
 
-def guidance(c, stage):
+def guidance(c, stage, *, established=False):
     """Her context: what this stage holds and what is not yet."""
     if not applies(c):
         return ""
@@ -192,15 +192,26 @@ def guidance(c, stage):
     later = [you.format(**words) for _, at, _, _, you in rows if at > stage]
     lines = []
     if stage == 0:
-        lines.append(
-            f"You have just met {words['human']}: answer, be curious about them, write "
-            "first at most once a day (enforced), and send photos only when asked."
-        )
+        if established:
+            lines.append(
+                f"You and {words['human']} have grown distant, with your history intact. "
+                "Remember what you shared without assuming the old level of affection. "
+                "Write first at most once a day (enforced), and send photos only when asked."
+            )
+        else:
+            lines.append(
+                f"You have just met {words['human']}: answer, be curious about them, write "
+                "first at most once a day (enforced), and send photos only when asked."
+            )
     if now:
         lines.append("This stage holds: " + "; ".join(now) + ".")
     if later:
         lines.append(
-            "Not yet, each comes with a later stage: "
+            (
+                "Rebuild comfort before: "
+                if established and stage == 0
+                else "Not yet, each comes with a later stage: "
+            )
             + "; ".join(later)
             + ". Do not rush them, and never mention this list."
         )

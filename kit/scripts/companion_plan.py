@@ -205,21 +205,56 @@ def _write(c, day, plan, note=None, now=None):
 
 
 def settle(c, day, intent, theme="custom", items=(), author="companion", now=None):
-    """Write the day's plan. Replaces whatever was there, keeping its history."""
+    """Replace the day's ideas, preserving promises and their history.
+
+    Omission is not cancellation. To change a commitment here, supply its stable
+    id and a reason; otherwise it keeps its hours and status in the new plan.
+    """
     now = now or dt.datetime.now(dt.timezone.utc)
-    previous = read(c, day)
-    plan = empty(day, author)
-    if previous:
-        plan["history"] = previous.get("history", [])
-    plan.update(
-        intent=str(intent or "").strip()[:300],
-        theme=str(theme or "custom"),
-        items=list(items),
-        settled_at=now.isoformat(),
-    )
-    if not plan["intent"]:
+    intent = str(intent or "").strip()[:300]
+    if not intent:
         raise ValueError("A day needs an intent written as a sentence")
+    incoming = [clean_item(item) for item in items]
+    if len({item["id"] for item in incoming}) != len(incoming):
+        raise ValueError("A day's plan must not repeat an item id")
     with file_lock(folder(c) / ".lock"):
+        previous = read(c, day)
+        plan = empty(day, author)
+        if previous:
+            plan["history"] = list(previous.get("history", []))
+        commitments = {
+            item["id"]: item
+            for item in (previous or {}).get("items", [])
+            if item["kind"] == "commitment"
+        }
+        for item in incoming:
+            old = commitments.get(item["id"])
+            if old and item != old:
+                if item["kind"] != "commitment" or not item["reason"].strip():
+                    raise ValueError(
+                        f"Keep {old['what']!r} as a commitment and explain any "
+                        "change to its hours or status with a reason"
+                    )
+                plan["history"].append(
+                    {
+                        "at": now.isoformat(),
+                        "change": (
+                            f"commitment {old['what']}: {old['start']}–{old['end']} "
+                            f"{old['status']} -> {item['start']}–{item['end']} "
+                            f"{item['status']}; {item['reason']}"
+                        )[:300],
+                    }
+                )
+        incoming_ids = {item["id"] for item in incoming}
+        plan.update(
+            intent=intent,
+            theme=str(theme or "custom"),
+            items=incoming
+            + [
+                item for ident, item in commitments.items() if ident not in incoming_ids
+            ],
+            settled_at=now.isoformat(),
+        )
         return _write(c, day, plan, f'settled: {plan["intent"][:120]}', now)
 
 

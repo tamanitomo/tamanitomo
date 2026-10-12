@@ -24,6 +24,7 @@ import datetime as dt
 import hashlib
 import json
 import pathlib
+import re
 import sys
 from zoneinfo import ZoneInfo
 
@@ -225,36 +226,66 @@ def render_standing(c, limit=2000):
     )
 
 
-def render_relationship(c, limit=2000):
+def render_relationship(c, limit=2000, *, query="", now=None):
+    """Relevant memories first, then recent memories across the different kinds.
+
+    Preserve complete records and avoid letting years of milestones push every
+    joke or ritual out of view. Selecting context never modifies the ledger.
+    """
     rows = moments(c)
-    if not rows:
+    if not rows or limit <= 0:
         return ""
-    grouped = {}
-    for row in rows:
-        grouped.setdefault(row["moment"], []).append(row)
-    out = []
-    for kind in MOMENT_KINDS:
-        if kind not in grouped:
-            continue
-        out.append(LABELS[kind] + ":")
-        for row in grouped[kind]:
-            out.append(
-                "- "
-                + row["text"]
-                + (f" ({row['happened_on']})" if row.get("happened_on") else "")
-                + (
-                    f" ({row['recurs']}, since {row['first_on']})"
-                    if row.get("recurs")
-                    else ""
-                )
+    from companion_recall import BASE_STOP, CALLBACK_STOP
+
+    words = set(re.findall(r"[^\W_]+", query.casefold())) - BASE_STOP - CALLBACK_STOP
+    words = {word for word in words if len(word) > 2}
+    relevant = sorted(
+        (
+            (
+                len(words.intersection(re.findall(r"[^\W_]+", row["text"].casefold()))),
+                row,
             )
-    text = "\n".join(out)
-    return (
-        text
-        if len(text) <= limit
-        else text[:limit].rsplit("\n", 1)[0]
-        + f"\n[+more — companion_notes.py relationship]"
+            for row in rows
+        ),
+        key=lambda pair: (pair[0], pair[1]["recorded_at"]),
+        reverse=True,
     )
+    recent = sorted(rows, key=lambda row: row["recorded_at"], reverse=True)
+    champions = {}
+    for _, row in relevant:
+        champions.setdefault(row["moment"], row)
+    # A flood of matching milestones must not displace the name they use or
+    # their current tradition. Prefer a matching anchor, otherwise the newest.
+    anchors = [champions[kind] for kind in ("nickname", "ritual") if kind in champions]
+    candidates = (
+        anchors
+        + [row for score, row in relevant if score]
+        + list(champions.values())
+        + recent
+    )
+    lines, seen = [], set()
+    for row in candidates:
+        if row["id"] in seen:
+            continue
+        seen.add(row["id"])
+        line = f"- {LABELS[row['moment']]}: {row['text']}"
+        if row.get("happened_on"):
+            line += f" ({row['happened_on']})"
+        if row.get("recurs"):
+            line += f" ({row['recurs']}, since {row['first_on']})"
+        lines.append(line)
+    complete = "\n".join(lines)
+    if len(complete) <= limit:
+        return complete
+    notice = "[+more — companion_notes.py relationship]"
+    if len(notice) > limit:
+        return ""
+    selected, length = [], len(notice)
+    for line in lines:
+        if length + len(line) + 1 <= limit:
+            selected.append(line)
+            length += len(line) + 1
+    return "\n".join([*selected, notice])
 
 
 def batch(c, path, now):

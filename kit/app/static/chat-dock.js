@@ -94,6 +94,13 @@
     root.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') { event.preventDefault(); collapse(false); }
     });
+    root.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-speech-index]');
+      if (!button || !root.contains(button)) return;
+      const message = speechRow(button);
+      if (message?.role !== 'assistant' || message.pending || typeof playBrowserMessage !== 'function') return;
+      playBrowserMessage(message.content, button).catch(error => notice(error.message, true));
+    });
     if (typeof mountBrowserVoice === 'function') mountBrowserVoice();
   }
 
@@ -107,6 +114,7 @@
     const available = Boolean(PROFILE && roster.find((profile) => profile.id === PROFILE)?.installed);
     root.hidden = !available;
     if (!available) {
+      if (typeof stopBrowserVoice === 'function') stopBrowserVoice();
       scope = '';
       scopeVersion++;
       readEpoch++;
@@ -115,6 +123,7 @@
     }
     const nextScope = INSTALLATION + ':' + PROFILE;
     if (scope !== nextScope) {
+      if (typeof stopBrowserVoice === 'function') stopBrowserVoice();
       scope = nextScope;
       scopeVersion++;
       readEpoch++;
@@ -188,6 +197,20 @@
   function renderRows() {
     chatLastDay = '';
     log.innerHTML = rows.length ? chatMessagesHtml(rows) : '<p class="chat-dock-empty">A little space to talk, wherever you are.</p>';
+    syncSpeechButtons();
+  }
+
+  function speechRow(button) {
+    const index = Number(button.dataset.speechIndex);
+    if (!Number.isInteger(index) || index < 0) return null;
+    return (button.closest('.chat-search-context') ? searchContextRows : rows)[index];
+  }
+
+  function syncSpeechButtons() {
+    if (!root || typeof syncBrowserMessageButton !== 'function') return;
+    for (const button of root.querySelectorAll('[data-speech-index]')) {
+      syncBrowserMessageButton(button, speechRow(button)?.content || '');
+    }
   }
 
   function clearUnread() {
@@ -353,6 +376,7 @@
       searchContextRows = page.messages || [];
       chatLastDay = '';
       $('chat-search-results').innerHTML = '<button type="button" class="chat-dock-history" id="chat-search-return">← Search results</button><div class="chat-log chat-search-context">' + chatMessagesHtml(page.messages) + '</div>';
+      syncSpeechButtons();
       $('chat-search-return').onclick = () => { searchEpoch++; renderSearchResults(); $('chat-search-status').textContent = `${searchMatches.length} results`; };
       for (const bubble of $('chat-search-results').querySelectorAll('[data-source-message]')) {
         if (bubble.dataset.sourceMessage === page.selected) bubble.classList.add('is-search-match');
@@ -484,7 +508,7 @@
     grow();
     historyButton.disabled = true;
     const user = {role: 'user', content: message, timestamp: Date.now() / 1000, source: 'desktop'};
-    const reply = {role: 'assistant', content: '', timestamp: Date.now() / 1000, source: 'desktop'};
+    const reply = {role: 'assistant', content: '', timestamp: Date.now() / 1000, source: 'desktop', pending: true};
     if (!restored) rows.push(user);
     rows.push(reply);
     renderRows();
@@ -538,6 +562,7 @@
       const recorded = (final.messages || []).filter((row) => row.role === 'assistant').at(-1);
       reply.content = cleanReply(recorded?.content || final.response || reply.content);
       reply.attachments = recorded?.attachments || [];
+      reply.pending = false;
       const follow = nearBottom();
       renderRows();
       if (follow) scrollBottom();
@@ -580,6 +605,7 @@
   const navigate = window.productNavigate;
   window.productNavigate = (name) => { navigate?.(name); sync(); };
   window.addEventListener('appearance-change', sync);
+  window.addEventListener('message-voice-change', syncSpeechButtons);
   window.addEventListener('online', () => { refreshHistory(); scheduleRefresh(); });
   window.addEventListener('focus', () => refreshHistory());
   if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => {

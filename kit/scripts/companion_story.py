@@ -46,14 +46,18 @@ def instructions(c):
             f'{_command(c, "companion_places.py")} set-home --description D --room "Kitchen=what it is like" '
             "--room ... Until you do, do not describe the inside of your home in detail."
         )
-    if "viewing" in (c.sensors or []) and c.media_server:
-        lines.append(
-            f"When you and {c.human} agree to watch something together, record it: "
-            f'{_command(c, "companion_viewing.py")} together --title "the series or film" '
-            "(--hours N for a long evening). While it holds you are told what is on and what "
-            "the episode is about, so you can watch along without inventing scenes; it ends by "
-            "itself, or with `stop`."
-        )
+    viewing = _command(c, "companion_viewing.py")
+    lines.append(
+        f"When you both agree to watch together, record `{viewing} together --title TITLE "
+        "--comments quiet|occasional --evidence QUOTE` (manual progress without a media server). "
+        f"Use `{viewing} pause|resume|stop --session-id ID` when participation changes. "
+        f"Keep an actual human checkpoint with `{viewing} report --text TEXT --evidence QUOTE`; "
+        "never infer progress from elapsed time. A synopsis is not scene perception and may spoil later events. "
+        f"When something personal actually happened, `{viewing} moment --text TEXT --evidence QUOTE "
+        "--session-id ID` links it into shared memory. A new joke is a note until it really recurs. "
+        "Keep your own opinions; later callbacks should fit the conversation, not repeat on every turn."
+    )
+    lines.append(music_instructions(c))
     lines.append(
         f"When something between you becomes a running joke, a nickname, a ritual or a first: "
         f'{_command(c, "companion_notes.py")} moment --moment joke|nickname|ritual|first|milestone --text T '
@@ -63,6 +67,22 @@ def instructions(c):
         "Do not claim anything was recorded until the command succeeds."
     )
     return "\n".join(lines)
+
+
+def music_instructions(c):
+    command = _command(c, "companion_music.py")
+    return (
+        f"For an album that brings {c.human} or your relationship to mind, `{command} discover` "
+        "reads Spotify top artists and albums (recent artists if top access is unavailable). "
+        f"Use `{command} search ARTIST --kind artist`, then `albums ARTIST_ID`, for a favorite "
+        "they actually named. Listening affinity is not proof of a favorite. If Spotify is unavailable, "
+        "say so; do not invent a catalog result. Pick only when you have a personal reason, "
+        "keep the Spotify link, and don't claim to have heard audio or lyrics from metadata. "
+        f"Save with `{command} suggest --file PATH` using JSON {{album_id, note, moment_id}} "
+        "linked to a recorded shared moment, or {album_id, note, evidence, source} quoting a real exchange. "
+        f"`{command} share ID` queues the saved note and album link through the usual outreach controls. "
+        "Queued is not delivered. Read `history` before suggesting the same album again."
+    )
 
 
 def chat_parts(c, relationship_budget, compact=False):
@@ -116,7 +136,7 @@ HOME_MISSING = (
 )
 
 
-def scheduled(c, limit=1500):
+def scheduled(c, limit=1500, now=None):
     """Places only, for the scheduled runs that choose where she is and what she does."""
     if not c.has_inner_life:
         return ""
@@ -140,4 +160,13 @@ def scheduled(c, limit=1500):
         running = ""
     if running:
         block = (block + "\n" if block else "") + running
+    import companion_viewing
+    import companion_music
+
+    shared = companion_viewing.session_context(c, now, limit=1600)
+    saved_music = companion_music.render(c)
+    if shared:
+        block += "\n" + shared
+    if saved_music:
+        block += "\n" + saved_music
     return block

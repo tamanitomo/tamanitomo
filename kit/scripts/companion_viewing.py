@@ -13,8 +13,12 @@ else:
 - `together` records an agreement to watch something together. While it holds, what the
   human plays of that title is kept as watched together, and she is told what the
   episode is about, so she can watch along without inventing scenes.
+- Manual sessions need no server: their progress comes only from explicit human
+  reports. Pause/resume/end track participation, not remote playback. Personal
+  moments keep conversation evidence and link to the relationship memory.
 
-No model is called and only the server is contacted. Its address, kind and the human's
+No model is called; manual sessions make no network requests. Only an explicitly
+configured media server is contacted by the sensor. Its address, kind and the human's
 account are in companion.json; the token is read from media_token_file, so no secret sits
 there. The titles reach her model provider like everything else in her context, which
 the setting says.
@@ -32,6 +36,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+import unicodedata
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -66,6 +71,17 @@ def _tz(c):
 
 def path_for(c):
     return c.life / "viewing.jsonl"
+
+
+def _invalidate_context(c, result):
+    """A participation change makes the last sensor picture stale immediately."""
+    if result.get("written"):
+        for path in (
+            c.soul_dir / "ambient/viewing.md",
+            c.home / "state/viewing-refreshed",
+        ):
+            path.unlink(missing_ok=True)
+    return result
 
 
 def token_path(c):
@@ -406,7 +422,8 @@ def label(item):
 
 
 def _norm(text):
-    return " ".join(re.findall(r"[a-z0-9]+", (text or "").casefold()))
+    text = unicodedata.normalize("NFKC", str(text or "")).casefold()
+    return " ".join(re.findall(r"[^\W_]+", text, re.UNICODE))
 
 
 def matches(title, item):
@@ -414,10 +431,10 @@ def matches(title, item):
     want, have = _norm(title), _norm(item.get("show") or item.get("title"))
     if not want or not have:
         return False
-    return (
-        have == want
-        or have.startswith(want + " ")
-        or (len(have) >= 4 and want.startswith(have + " "))
+    # Prefixes confuse sequels and remakes. A year may disambiguate a film, but
+    # an otherwise different title needs a separate agreement.
+    return have == want or bool(
+        item.get("year") and want == _norm(f"{item.get('title')} {item['year']}")
     )
 
 
@@ -427,33 +444,68 @@ def seen(c):
     return sorted(rows, key=lambda r: _time(r["at"]))
 
 
-def agreements(c):
-    """Every agreement to watch together, with its end brought forward when it was stopped."""
+def agreements(c, at=None):
+    """Fold the append-only session log, including agreements from older releases."""
     found = {}
     for row in slf._read(path_for(c)):
         if row.get("kind") == "together":
+            begun = _time(row["from"])
+            if at and begun > at:
+                continue
             found[row["id"]] = {
                 **row,
-                "from": _time(row["from"]),
+                "from": begun,
                 "until": _time(row["until"]),
+                "state": "active",
+                "mode": row.get("mode", "server"),
+                "comments": row.get("comments", "occasional"),
+                "intervals": [[begun, None]],
+                "report": None,
             }
-        elif row.get("kind") == "together_end" and row.get("id") in found:
-            ended = _time(row["at"])
-            if ended and ended < found[row["id"]]["until"]:
-                found[row["id"]]["until"] = ended
+            continue
+        session = found.get(row.get("session_id") or row.get("id"))
+        when = _time(row.get("at"))
+        if not session or not when or (at and when > at):
+            continue
+        kind = row.get("kind")
+        if kind in ("together_pause", "together_end"):
+            if session["intervals"][-1][1] is None:
+                session["intervals"][-1][1] = when
+            session["state"] = "paused" if kind == "together_pause" else "ended"
+            if kind == "together_end":
+                session["ended_at"] = when
+                session["until"] = min(session["until"], when)
+        elif kind == "together_resume" and session["state"] == "paused":
+            session["state"] = "active"
+            session["intervals"].append([when, None])
+        elif kind == "together_report":
+            session["report"] = row
     return sorted(found.values(), key=lambda a: a["from"])
 
 
 def active(c, now=None):
+    """Live sessions, including paused sessions that can still be resumed."""
     now = now or dt.datetime.now(_tz(c))
-    return [a for a in agreements(c) if a["from"] <= now <= a["until"]]
+    return [
+        a
+        for a in agreements(c, now)
+        if a["from"] <= now < a["until"] and a["state"] != "ended"
+    ]
 
 
 def _covered(item, at, agreed):
-    return any(
-        a["from"] <= at <= a["until"] + TOGETHER_GRACE and matches(a["title"], item)
-        for a in agreed
-    )
+    for agreement in agreed:
+        if agreement.get("mode") == "manual" or not matches(agreement["title"], item):
+            continue
+        for begun, ended in agreement.get("intervals", [[agreement["from"], None]]):
+            # Only natural expiry has a grace period. Explicit pauses/ends are
+            # boundaries, even when the media server reports a finish later.
+            end = min(ended, agreement["until"]) if ended else agreement["until"]
+            if ended is None and not agreement.get("ended_at"):
+                end += TOGETHER_GRACE
+            if begun <= at < end:
+                return True
+    return False
 
 
 def sync(c, now=None):
@@ -506,18 +558,32 @@ def sync(c, now=None):
     return added
 
 
-def together(c, title, hours=3, now=None):
-    """Record that the two of you are watching something together, from now for `hours`."""
-    now = now or dt.datetime.now(_tz(c))
-    if not configured(c):
-        raise ValueError(
-            "no media server is set up, so there is nothing to watch along with"
-        )
-    title = slf._text(title, 120, "title")
-    if (
-        not isinstance(hours, int)
-        or not TOGETHER_HOURS[0] <= hours <= TOGETHER_HOURS[1]
+def together(
+    c, title, hours=3, now=None, *, mode="auto", comments="occasional", evidence=""
+):
+    """Start an agreed session; manual sessions need no media server or model call."""
+    now = slf._now(_tz(c), now)
+    for name, value in (
+        ("title", title),
+        ("mode", mode),
+        ("comments", comments),
+        ("evidence", evidence),
     ):
+        if not isinstance(value, str):
+            raise ValueError(f"{name} must be text")
+    title = slf._text(title, 120, "title")
+    if not _norm(title):
+        raise ValueError("title must contain letters or numbers")
+    if mode not in ("auto", "manual", "server"):
+        raise ValueError("mode must be auto, manual or server")
+    if comments not in ("quiet", "occasional"):
+        raise ValueError("comments must be quiet or occasional")
+    if mode == "auto":
+        mode = "server" if configured(c) else "manual"
+    if mode == "server" and not configured(c):
+        raise ValueError("no media server is set up; use a manual session")
+    evidence = slf._text(evidence, 600, "evidence") if evidence else ""
+    if type(hours) is not int or not TOGETHER_HOURS[0] <= hours <= TOGETHER_HOURS[1]:
         raise ValueError(
             f"hours must be a whole number from {TOGETHER_HOURS[0]} to {TOGETHER_HOURS[1]}"
         )
@@ -525,36 +591,287 @@ def together(c, title, hours=3, now=None):
         "id": slf._mkid("together", title.casefold(), now.isoformat()),
         "kind": "together",
         "title": title,
+        "mode": mode,
+        "comments": comments,
+        "evidence": evidence,
         "from": now.isoformat(),
         "until": (now + dt.timedelta(hours=hours)).isoformat(),
         "recorded_at": now.isoformat(),
     }
 
     def guard():
-        for agreement in active(c, now):
-            if _norm(agreement["title"]) == _norm(title):
-                return {
-                    "written": False,
-                    "reason": f"already watching {agreement['title']} together until "
-                    f"{agreement['until'].astimezone(_tz(c)):%H:%M}",
-                }
+        live = active(c, now)
+        if live:
+            agreement = live[-1]
+            return {
+                "written": False,
+                "session_id": agreement["id"],
+                "reason": f"already watching {agreement['title']} together until "
+                f"{agreement['until'].astimezone(_tz(c)):%H:%M}; end that session first",
+            }
         return None
 
-    return slf._append(path_for(c), row, dedupe_id=False, guard=guard)
+    return _invalidate_context(
+        c,
+        {
+            "session_id": row["id"],
+            **slf._append(path_for(c), row, dedupe_id=False, guard=guard),
+        },
+    )
 
 
-def stop(c, now=None):
+def _session(c, session_id, now, live=True):
+    rows = active(c, now) if live else agreements(c, now)
+    rows = [s for s in rows if not session_id or s["id"] == session_id]
+    if not rows:
+        raise ValueError(
+            "no live shared session" if live else "shared session not found"
+        )
+    if len(rows) > 1 and not session_id:
+        raise ValueError("choose a session_id")
+    return rows[-1]
+
+
+def _transition(c, action, now=None, session_id=None):
+    now = slf._now(_tz(c), now)
+    session = _session(c, session_id, now)
+    target = "paused" if action == "pause" else "active"
+
+    def guard():
+        current = _session(c, session["id"], now)
+        if current["state"] == target:
+            return {"written": False, "session_id": session["id"], "state": target}
+        return None
+
+    row = {
+        "id": slf._mkid("viewing-" + action, session["id"], now.isoformat()),
+        "session_id": session["id"],
+        "kind": "together_" + action,
+        "at": now.isoformat(),
+    }
+    return _invalidate_context(
+        c,
+        {
+            "session_id": session["id"],
+            "state": target,
+            **slf._append(path_for(c), row, guard=guard),
+        },
+    )
+
+
+def pause(c, now=None, session_id=None):
+    """Pause shared participation, not playback on the human's device."""
+    return _transition(c, "pause", now, session_id)
+
+
+def resume(c, now=None, session_id=None):
+    """Resume participation inside the original expiry window."""
+    return _transition(c, "resume", now, session_id)
+
+
+def stop(c, now=None, session_id=None):
     """End every agreement that is still running."""
-    now = now or dt.datetime.now(_tz(c))
+    now = slf._now(_tz(c), now)
     ended = []
     for agreement in active(c, now):
-        slf._append(
+        if session_id and agreement["id"] != session_id:
+            continue
+        result = slf._append(
             path_for(c),
-            {"id": agreement["id"], "kind": "together_end", "at": now.isoformat()},
+            {
+                "id": slf._mkid("viewing-end", agreement["id"]),
+                "session_id": agreement["id"],
+                "kind": "together_end",
+                "at": now.isoformat(),
+            },
             dedupe_id=False,
+            guard=lambda: (
+                None
+                if any(s["id"] == agreement["id"] for s in active(c, now))
+                else {"written": False}
+            ),
         )
+        _invalidate_context(c, result)
         ended.append(agreement["title"])
     return {"stopped": ended}
+
+
+def report(c, text, evidence, now=None, session_id=None, position_min=None):
+    """Keep a human-reported checkpoint without turning it into media-server evidence."""
+    now = slf._now(_tz(c), now)
+    session = _session(c, session_id, now)
+    text = slf._text(text, 400, "text")
+    evidence = slf._text(evidence, 600, "evidence")
+    if position_min is not None and (
+        type(position_min) is not int or not 0 <= position_min <= 1440
+    ):
+        raise ValueError("position_min must be a whole number from 0 to 1440")
+    row = {
+        "id": slf._mkid(
+            "viewing-report", session["id"], text, evidence, now.isoformat()
+        ),
+        "session_id": session["id"],
+        "kind": "together_report",
+        "at": now.isoformat(),
+        "text": text,
+        "evidence": evidence,
+        "position_min": position_min,
+        "source": "user_report",
+    }
+
+    def guard():
+        _session(c, session["id"], now)
+
+    return _invalidate_context(c, slf._append(path_for(c), row, guard=guard))
+
+
+def moments(c, session_id=None):
+    """Personal moments with their conversation evidence and session identity."""
+    return [
+        row
+        for row in slf._read(path_for(c))
+        if row.get("kind") == "together_moment"
+        and (not session_id or row.get("session_id") == session_id)
+    ]
+
+
+def moment(c, text, evidence, now=None, session_id=None, kind="note"):
+    """Record a particular shared memory in both the session and relationship ledgers.
+
+    Evidence is supplied from the conversation, never inferred from a synopsis.
+    Stable IDs let a retry repair either ledger without creating another memory.
+    """
+    import companion_notes as notes
+
+    now = slf._now(_tz(c), now)
+    session = _session(c, session_id, now, live=not bool(session_id))
+    if kind not in notes.MOMENT_KINDS:
+        raise ValueError(f"kind must be one of {notes.MOMENT_KINDS}")
+    text = slf._text(text, 350, "text")
+    evidence = slf._text(evidence, 600, "evidence")
+    ident = slf._mkid("viewing-moment", session["id"], kind, text, evidence)
+    row = {
+        "id": ident,
+        "kind": "together_moment",
+        "session_id": session["id"],
+        "title": session["title"],
+        "moment": kind,
+        "text": text,
+        "evidence": evidence,
+        "source": "conversation",
+        "happened_on": session["from"].astimezone(_tz(c)).date().isoformat(),
+        "recorded_at": now.isoformat(),
+        "relationship_id": ident,
+    }
+    result = slf._append(path_for(c), row)
+    kept = result["entry"]
+    memory = notes.add_moment(
+        c,
+        {
+            "id": ident,
+            "moment": kind,
+            "text": f"Watching {session['title']}: {text}",
+            "evidence": f"Shared session {session['id']}: {evidence}"[:300],
+            "happened_on": kept["happened_on"],
+        },
+        _time(kept["recorded_at"]),
+    )
+    return {**result, "relationship": memory}
+
+
+def _json_session(session, now):
+    return {
+        key: value.isoformat() if isinstance(value, dt.datetime) else value
+        for key, value in {
+            **{k: v for k, v in session.items() if k != "intervals"},
+            "state": (
+                "expired"
+                if session["until"] <= now and session["state"] != "ended"
+                else session["state"]
+            ),
+        }.items()
+    }
+
+
+def snapshot(c, now=None):
+    """JSON-safe local session state; this function never contacts a media server."""
+    now = now or dt.datetime.now(_tz(c))
+    return {
+        "sessions": [_json_session(s, now) for s in active(c, now)],
+        "recent_sessions": [_json_session(s, now) for s in agreements(c, now)[-10:]],
+        "moments": moments(c)[-10:],
+    }
+
+
+def fingerprint(c, now=None):
+    """Wake on session changes or expiry, never on the passage of each minute."""
+    return slf._mkid(
+        "viewing", json.dumps(snapshot(c, now), sort_keys=True, ensure_ascii=False)
+    )
+
+
+def session_context(c, now=None, limit=1000):
+    """Local shared-session context, also usable when viewing sensing is disabled."""
+    now = now or dt.datetime.now(_tz(c))
+    running = active(c, now)
+    session = running[-1] if running else None
+    if not session:
+        recent = [
+            s
+            for s in agreements(c, now)
+            if dt.timedelta(0) <= now - s["until"] <= dt.timedelta(hours=24)
+        ]
+        if not recent:
+            return ""
+        session = dict(max(recent, key=lambda s: s["until"]))
+        if session["state"] != "ended":
+            session["state"] = "expired"
+    lines = [
+        f"Shared session: {session['title']} ({session['state']}; {session['mode']}; id {session['id']}).",
+        "Evidence boundary: no live audio/video or scene perception. Do not invent reactions or reveal events beyond what the human reported or the observed playhead.",
+        (
+            "Quiet company: no unsolicited commentary; reply when addressed."
+            if session["comments"] == "quiet"
+            else "Occasional comments are welcome when relevant; silence is fine. This preference does not authorize delivery or bypass outreach/quiet hours."
+        ),
+    ]
+    if not running:
+        lines.append(
+            f"Session {session['state']} at {session['until'].isoformat()}; this does not mean the film finished. "
+            "A natural follow-up about the shared experience may fit; it is optional, never a required message."
+        )
+    if session["state"] == "paused":
+        lines.append(
+            "Shared participation is paused; do not narrate continuing to watch."
+        )
+    if session["mode"] == "manual":
+        lines.append(
+            "Manual agreement, not observed playback. Only the human can report progress; do not advance the playhead by elapsed time."
+        )
+    if report := session.get("report"):
+        position = (
+            f" ({report['position_min']} minutes)"
+            if report.get("position_min") is not None
+            else ""
+        )
+        lines.append(
+            f"Last human-reported checkpoint at {report['at']}{position} (not live observation): {report['text']}"
+        )
+        lines.append(f"Conversation evidence: {report['evidence']}")
+    import companion_notes as notes
+
+    retired = {row["id"] for row in notes.moments(c, "retired")}
+    kept_moments = [
+        row
+        for row in moments(c, session["id"])
+        if row["relationship_id"] not in retired
+    ]
+    for row in kept_moments[-2:]:
+        lines.append(
+            f"Remembered from this session: {row['text']} (evidence: {row['evidence']})"
+        )
+    text = "\n".join(lines)
+    return text if len(text) <= limit else text[:limit].rsplit("\n", 1)[0]
 
 
 def _when(at, now):
@@ -619,20 +936,45 @@ def render(c, now, playing=(), limit=800):
             f"- At {now:%H:%M} {c.human} was watching {label(item)} on {source_name(c)}, "
             f"{item.get('position_min', 0)}{length} minutes in{paused}."
         )
-        shared = next((a for a in running if matches(a["title"], item)), None)
+        shared = next(
+            (a for a in running if a["mode"] == "server" and matches(a["title"], item)),
+            None,
+        )
         if shared:
+            if shared["state"] == "paused":
+                lines.append(
+                    "- Shared participation is paused; playback is not evidence that you resumed together."
+                )
+                continue
             about = _summary(c, item)
             lines.append(
                 f"- You are watching this together (agreed at "
                 f"{shared['from'].astimezone(now.tzinfo):%H:%M})."
-                + (f" What this one is about: {about}" if about else "")
             )
+            lines.append(
+                "Synopsis only, not scene perception. Avoid spoilers beyond the observed playhead or human reports; never invent scene-specific reactions."
+            )
+            if shared["comments"] == "quiet":
+                lines.append(
+                    "Quiet company: no unsolicited commentary; reply when addressed."
+                )
+            if about:
+                lines.append(
+                    f"Whole-episode synopsis (may include later events): {about}"
+                )
     if running and not shared:
         agreement = running[-1]
-        lines.append(
-            f"- You agreed at {agreement['from'].astimezone(now.tzinfo):%H:%M} to watch "
-            f"{agreement['title']} together; it is not on yet."
-        )
+        if agreement["mode"] == "manual":
+            lines.append(
+                f"- Manual shared session: {agreement['title']}; playback and progress depend on human reports."
+            )
+        elif agreement["state"] == "paused":
+            lines.append(f"- Your shared session of {agreement['title']} is paused.")
+        else:
+            lines.append(
+                f"- You agreed at {agreement['from'].astimezone(now.tzinfo):%H:%M} to watch "
+                f"{agreement['title']} together; it is not on yet."
+            )
     phrases = lately(c, now)
     if phrases:
         lines.append("- Lately: " + "; ".join(phrases) + ".")
@@ -648,6 +990,14 @@ def render(c, now, playing=(), limit=800):
 def sense(c, now=None):
     """(text, facts) for the viewing sensor, or (None, why) when there is nothing true to say."""
     now = now or dt.datetime.now(_tz(c))
+    running = active(c, now)
+    if running and all(s["mode"] == "manual" for s in running):
+        return session_context(c, now), {
+            "source": "manual",
+            "playing": [],
+            "together": [s["title"] for s in running],
+            "lately": 0,
+        }
     if not c.media_server:
         return None, "no media server is set"
     if not _token(c):
@@ -701,30 +1051,72 @@ def main():
     p.add_argument("--home", type=pathlib.Path)
     sub = p.add_subparsers(dest="cmd", required=True)
     t = sub.add_parser(
-        "together", help="the two of you are watching something together"
+        "together",
+        aliases=["start"],
+        help="start an agreed shared session (manual without a server)",
     )
     t.add_argument("--title", required=True, help="the series or film")
     t.add_argument("--hours", type=int, default=3)
-    sub.add_parser("stop", help="you have stopped watching together")
+    t.add_argument("--mode", choices=("auto", "manual", "server"), default="auto")
+    t.add_argument("--comments", choices=("quiet", "occasional"), default="occasional")
+    t.add_argument("--evidence", default="", help="the words agreeing to the session")
+    for command in ("pause", "resume", "stop"):
+        parser = sub.add_parser(command, aliases=["end"] if command == "stop" else [])
+        parser.add_argument("--session-id")
+    r = sub.add_parser("report", help="keep a human-reported progress checkpoint")
+    r.add_argument("--session-id")
+    r.add_argument("--text", required=True)
+    r.add_argument("--evidence", required=True)
+    r.add_argument("--position-min", type=int)
+    m = sub.add_parser(
+        "moment", help="remember a particular shared moment with conversation evidence"
+    )
+    m.add_argument("--session-id")
+    m.add_argument("--text", required=True)
+    m.add_argument("--evidence", required=True)
+    m.add_argument(
+        "--kind",
+        choices=("note", "joke", "nickname", "ritual", "first", "milestone"),
+        default="note",
+    )
     sub.add_parser(
         "show", help="what is on, what was finished lately, what you watch together"
     )
     sub.add_parser("check", help="whether the server answers")
     args = p.parse_args()
     c = cc.load(args.home)
-    if args.cmd == "together":
-        out = together(c, args.title, args.hours)
-    elif args.cmd == "stop":
-        out = stop(c)
+    if args.cmd in ("together", "start"):
+        out = together(
+            c,
+            args.title,
+            args.hours,
+            mode=args.mode,
+            comments=args.comments,
+            evidence=args.evidence,
+        )
+    elif args.cmd in ("stop", "end", "pause", "resume"):
+        action = {"stop": stop, "end": stop, "pause": pause, "resume": resume}[args.cmd]
+        out = action(c, session_id=args.session_id)
+    elif args.cmd == "report":
+        out = report(
+            c,
+            args.text,
+            args.evidence,
+            session_id=args.session_id,
+            position_min=args.position_min,
+        )
+    elif args.cmd == "moment":
+        out = moment(
+            c, args.text, args.evidence, session_id=args.session_id, kind=args.kind
+        )
     elif args.cmd == "check":
         out = check(c)
     else:
         now = dt.datetime.now(_tz(c))
+        state = snapshot(c, now)
         out = {
-            "together": [
-                {**a, "from": a["from"].isoformat(), "until": a["until"].isoformat()}
-                for a in active(c, now)
-            ],
+            **state,
+            "together": state["sessions"],
             "lately": lately(c, now),
             "kept": len(seen(c)),
         }
