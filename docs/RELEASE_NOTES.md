@@ -1,16 +1,24 @@
-Tamanitomo 3.10.1: album picks follow the Music switch.
+Tamanitomo 3.11.0: her own perspectives, reviewable restrictions, and photos that arrive.
 
-- **Spotify only with Music on.** With Music switched off under Settings → Sensors, she does not
-  read your Spotify at all: no listening history, no artist or album lookups, and no album picks
-  saved or sent. The album instructions and her saved picks also leave her chat and background
-  routines. A connected Spotify account on its own is not permission. Picks she already saved
-  stay on Us → Albums for you, with a note that Music is off.
-- **Top artists need one extra permission.** To let her see your top artists, sign in to Spotify
-  again with `user-top-read` added to the requested scopes. Without it she uses what you played
-  recently.
+- **Photos again.** The image timeline had stopped taking photos after 3.7.2; it takes them
+  again. Asked for a photo in chat, she now always has the one command that takes it and the
+  exact line that sends it, and she says so when a photo fails instead of claiming one was sent.
+- **Views of her own that can change.** What she takes from something she read, watched or
+  talked about can become a perspective with her reasons and how sure she is. She can keep a
+  view, add nuance, change her mind for a stated reason, or stay unsure; every earlier version
+  is kept. Saying the opposite does not make her agree, and repeating one source does not make
+  her more certain. The same current views reach chat, her independent hours and reflections.
+- **Curiosity she follows herself.** Besides questions for you, she can pursue a question on her
+  own or explore it by making something, with a next step and an honest result or obstacle.
+  Her storylines keep a next action and real results. None of this messages you by itself.
+- **Us shows it.** Current perspectives are kept apart from their history, with open
+  investigations and projects in progress.
+- **Why these boundaries?** Us explains which settings, calculated readiness and recorded
+  restrictions shape the relationship, and where each restriction came from. A restriction
+  whose source incidents were explicitly corrected can be reviewed with a reason; nothing is
+  erased, and adult settings and her own stance are not changed.
 
-After updating, run Repair for each companion (or `companion repair --prompts auto`): it takes
-the album instructions out of her autonomy routine, which now gets them only while Music is on.
+After updating, run Repair for each companion (or `companion repair --prompts auto`): it brings
+her scheduled routines the new perspective and project commands and refreshes the image skill.
 
-Coming from 3.9? 3.10.0 brought time together on the Us page, album picks, a Play button on
-messages, and the Distant stage. See CHANGELOG.md.
+Coming from 3.10? 3.10.1 tied album picks to the Music switch. See CHANGELOG.md.

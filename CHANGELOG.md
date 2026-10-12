@@ -1,4 +1,18 @@
-## Unreleased — Self-authored development and relationship reviews
+## 3.11.0 — Her own perspectives, reviewable restrictions, photos that arrive (2026-10-12)
+
+- The image timeline takes photos again. Since 3.7.2 its pre-run gate printed
+  nothing when a photo should go ahead, and Hermes skips a job whose pre-run
+  script has nothing to report, so no timeline photo was taken. The gate now
+  says `{"wakeAgent": true}` out loud.
+- Asked for a photo in chat, she always has the command. How to take one now
+  sits in the part of her context that is never dropped for space; it used to
+  ride in the Image Studio section, the first to go on a long day, and she
+  guessed at a command instead. `companion_portrait.py generate` returns the
+  exact `send` line that delivers the picture, and she is told to say so when a
+  photo fails rather than writing a path to a file that does not exist. The
+  image skill now says it is the way to take and send a photo.
+- The internal image bridge, run by hand, names the real command instead of
+  failing with a bare JSON error.
 
 - Encounters now retain stable, profile-local source references and evidential
   boundaries. Authored interpretations remain separate from human words, reports,
