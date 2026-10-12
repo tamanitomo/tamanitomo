@@ -294,7 +294,7 @@
    "toolsets": [
     "file",
     "terminal",
-    "web_search"
+    "web"
    ],
    "tier": "reflection",
    "preread": true,

@@ -266,6 +266,24 @@ def classify(target, returncode=None, stdout="", stderr="", error=None):
             "not_dispatched": True,
             "detail": f"delivery failed before any platform call ({str(error_text)[:200]})",
         }
+    # A photo upload that timed out on this side, with nothing else to send: Telegram
+    # had usually taken it anyway. Read as "failed", the companion re-sent it twice.
+    warnings = (
+        payload.get("warnings") if isinstance(payload.get("warnings"), list) else []
+    )
+    if (
+        error_text
+        and "No deliverable" in str(error_text)
+        and warnings
+        and all("timed out" in str(w).lower() for w in warnings)
+    ):
+        return {
+            "outcome": "unknown",
+            "error_code": "upload_timeout",
+            "delivery": record,
+            "detail": "the upload timed out on this side, which usually still delivers; "
+            "count it as sent and do not send it again",
+        }
     # Keep Hermes's own reason: "failed or unconfirmed" alone sent the last
     # investigation into the logs to find a target Hermes had named plainly.
     why = error_text or (stderr or "").strip()[-200:] or f"exit {returncode}"
@@ -273,7 +291,8 @@ def classify(target, returncode=None, stdout="", stderr="", error=None):
         "outcome": "unknown",
         "error_code": "hermes_error" if error_text else "unconfirmed",
         "delivery": record,
-        "detail": f"delivery failed or unconfirmed ({str(why)[:200]}); the slot is kept and it is not retried",
+        "detail": f"delivery not confirmed ({str(why)[:200]}); it may well have arrived, so it is not "
+        "sent again: do not queue it again, and ask if it matters",
     }
 
 

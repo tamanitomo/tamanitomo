@@ -528,13 +528,101 @@ def _install_jobs_locked(c, m, report):
     elif staging.exists():
         staging.unlink()
     report.append(f"  cron jobs: {made} added via `hermes cron create`")
-    if without_toolsets:
+    if not apply_job_toolsets(c, m, report) and without_toolsets:
         report.append(
             f"  ! this Hermes exposes no supported per-job toolset flag; {len(without_toolsets)} job(s) "
             f"were created with whatever toolsets it defaults to. Check that they can "
             f"reach file and terminal, or set them in Hermes."
         )
     return made
+
+
+def apply_job_toolsets(c, m, report):
+    """Give each kit job only the tools its work needs, on new and existing jobs alike.
+
+    The manifest has always named them, but Hermes's cron command line has no flag
+    to pass them, so every job ran with every tool the platform allows -- and a
+    model inclined to explore spent a day pulse searching files, loading skills and
+    inspecting images, at several million tokens a run. Hermes keeps the list on
+    the job record; companion_cron_bridge sets it there. True when nothing is left
+    to apply.
+    """
+    if os.environ.get("COMPANION_NO_HERMES_CRON", "").lower() in ("1", "true", "yes"):
+        return False
+    jobs = {
+        j.get("name"): j for j in _read_jobs(c.home / "cron/jobs.json").get("jobs", [])
+    }
+    changes = []
+    for spec in load_manifest(c)["jobs"]:
+        wanted = [str(t) for t in (spec.get("toolsets") or [])]
+        job = jobs.get(cr.render(spec["name"], m))
+        if spec.get("no_agent") or not wanted or not job:
+            continue
+        if sorted(job.get("enabled_toolsets") or []) != sorted(wanted):
+            changes.append({"id": job["id"], "name": job["name"], "toolsets": wanted})
+    if not changes:
+        return True
+    try:
+        results = {r["id"]: r for r in _cron_bridge(c, changes)}
+    except ValueError as exc:
+        report.append(f"  ! job toolsets not applied: {exc}")
+        return False
+    done = True
+    for change in changes:
+        result = results.get(change["id"]) or {"ok": False, "error": "no result"}
+        if not result.get("ok"):
+            done = False
+            report.append(
+                f"  ! could not set the tools for {change['name']}: {result.get('error')}"
+            )
+            continue
+        report.append(
+            f"  {change['name']}: tools limited to {', '.join(result['toolsets'])}"
+            + (
+                f" (this Hermes has no {', '.join(result['unknown'])})"
+                if result.get("unknown")
+                else ""
+            )
+        )
+    return done
+
+
+def _cron_bridge(c, changes):
+    """Run companion_cron_bridge under Hermes's own Python. Tests replace this."""
+    from companion_gateway import _env_values
+
+    checkout = c.hermes_root / "hermes-agent"
+    python = cp.venv_executable(checkout)
+    if not python.is_file():
+        raise ValueError("Hermes Python is unavailable")
+    env = dict(os.environ, **_env_values(c.home))
+    env.update(HERMES_HOME=str(c.home), PYTHONPATH=str(checkout))
+    env.pop("HERMES_PROFILE", None)
+    run = subprocess.run(
+        [
+            str(python),
+            str(pathlib.Path(cr.__file__).with_name("companion_cron_bridge.py")),
+        ],
+        input=json.dumps({"jobs": changes}),
+        env=env,
+        cwd=checkout,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    try:
+        return json.loads(
+            next(
+                line.split("=", 1)[1]
+                for line in run.stdout.splitlines()
+                if line.startswith("COMPANION_CRON=")
+            )
+        )
+    except (StopIteration, ValueError):
+        raise ValueError(
+            "Hermes could not be asked"
+            + (f" ({run.stderr.strip()[-200:]})" if run.stderr.strip() else "")
+        )
 
 
 # ---------------------------------------------------------------- prompt fingerprints

@@ -408,6 +408,11 @@ def render(c, now=None):
     )
 
 
+UNCONFIRMED = (
+    " (sent; delivery not confirmed, it most likely arrived: do not send it again)"
+)
+
+
 def sent_recently(c, now=None, hours=24, limit=6):
     """What she actually sent in the last day, oldest first, as (sent_at, entry).
 
@@ -418,7 +423,10 @@ def sent_recently(c, now=None, hours=24, limit=6):
     now = now or dt.datetime.now(tz)
     rows = []
     for entry in fold(c):
-        if entry.get("status") != "sent":
+        # An unconfirmed send went out as far as anyone can tell. Left off this list,
+        # a photo whose upload timed out -- and that arrived anyway -- read to her as
+        # never sent, so she waited for it in a towel and queued it twice more.
+        if entry.get("status") not in ("sent", "unknown"):
             continue
         try:
             at = dt.datetime.fromisoformat(entry.get("decided_at") or "")
@@ -438,6 +446,7 @@ def render_sent(c, now=None):
     recent = sent_recently(c, now)
     lines = [
         f"- {at.astimezone(tz):%a %H:%M} {e['content']}: {e['body'][:120]}"
+        + (UNCONFIRMED if e.get("status") == "unknown" else "")
         for at, e in recent
     ]
     shown = {e.get("id") for _, e in recent}

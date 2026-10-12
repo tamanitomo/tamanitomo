@@ -1,3 +1,25 @@
+## 3.13.0 — Routine jobs get only the tools they need (2026-10-12)
+
+- Each kit job now runs with only the toolsets its work needs: the day pulse,
+  morning, wind-down, check-in and hygiene get files and the terminal; autonomy
+  and the reflections add conversation search; the research window adds the web;
+  the image timeline adds image generation. The manifest always named these, but
+  Hermes's cron command line has no flag to pass them, so every job ran with every
+  tool the platform allows, and a model inclined to explore spent a pulse
+  searching files, loading skills and inspecting images. Repair now sets them on
+  the job itself through Hermes (`companion_cron_bridge.py`), on new and existing
+  jobs alike. The research window's list named a tool (`web_search`) instead of
+  its toolset (`web`).
+- The health watch flags a routine job whose latest run read several times what
+  that job usually does (and over 1.5 million tokens), naming the model, so a
+  model that explores instead of doing the job is noticed the same day rather
+  than when the allowance runs out.
+- A photo whose upload timed out on this side, which usually still arrives, is
+  recorded as "count it as sent and do not send it again" rather than "failed or
+  unconfirmed". Unconfirmed sends now appear in her list of what she sent, marked
+  as most likely arrived. Read as failures, a companion waited in a towel for a
+  photo that had arrived and queued it twice more.
+
 ## 3.12.4 — Her routine's times wake her day (2026-10-12)
 
 - A routine anchor starting or ending now wakes the pulse and autonomy runs.

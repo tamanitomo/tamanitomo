@@ -102,6 +102,65 @@ def check_jobs(c, found):
     return out
 
 
+# A routine run far past its own usual size. A model that explores instead of doing
+# the job read about 2.9 million tokens a pulse where others read 0.3 million, and
+# nothing said so until the allowance was the thing that noticed.
+SPEND_LOOKBACK_HOURS = 2
+SPEND_HISTORY_DAYS = 14
+SPEND_MIN_HISTORY = 5
+SPEND_FLOOR = 1_500_000
+SPEND_FACTOR = 4
+
+
+def check_spend(c, now, found=None):
+    """Kit jobs whose latest runs used several times their usual tokens."""
+    import sqlite3
+    import statistics
+
+    found = _jobs(c) if found is None else found
+    path = c.home / "state.db"
+    if not path.is_file():
+        return []
+    ids = {
+        job["id"]: name
+        for name, scripted in expected_jobs(c).items()
+        if not scripted and (job := found.get(name)) and job.get("id")
+    }
+    if not ids:
+        return []
+    since = (now - dt.timedelta(days=SPEND_HISTORY_DAYS)).timestamp()
+    recent = (now - dt.timedelta(hours=SPEND_LOOKBACK_HOURS)).timestamp()
+    runs = {}
+    with sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5) as db:
+        for sid, started, model, used_in, cached, used_out in db.execute(
+            "select id, started_at, model, input_tokens, cache_read_tokens, output_tokens "
+            "from sessions where id like 'cron_%' and started_at >= ? and started_at <= ?",
+            (since, now.timestamp()),
+        ):
+            job_id = sid.split("_")[1] if sid.count("_") >= 2 else ""
+            if job_id not in ids or used_in is None:
+                continue
+            total = (used_in or 0) + (cached or 0) + (used_out or 0)
+            runs.setdefault(job_id, []).append((started, total, model or ""))
+    out = []
+    for job_id, rows in runs.items():
+        before = [t for s, t, _ in rows if s < recent]
+        latest = [(t, m) for s, t, m in rows if s >= recent]
+        if not latest:
+            continue
+        used, model = max(latest)
+        usual = statistics.median(before) if len(before) >= SPEND_MIN_HISTORY else 0
+        if used < SPEND_FLOOR or (usual and used < SPEND_FACTOR * usual):
+            continue
+        # Worded without the counts: the alert is repeated only when its text changes.
+        out.append(
+            f'"{ids[job_id]}" is using far more than usual on {model or "its model"}: '
+            "one run reads several times what this job normally does. The model may be "
+            "exploring instead of doing the job; compare models on the Models page"
+        )
+    return out
+
+
 def check_state(c, now, found=None):
     # Nothing is expected to run while the schedule is paused by choice, so
     # saying the present is stale would be reporting the user's own decision
@@ -253,6 +312,7 @@ def problems(c, now=None):
     for check in (
         lambda: check_jobs(c, found),
         lambda: check_state(c, now, found),
+        lambda: check_spend(c, now, found),
         lambda: check_files(c),
         lambda: check_hook(c),
         lambda: check_memory(c),

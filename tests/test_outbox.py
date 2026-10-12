@@ -777,3 +777,40 @@ class SayingItAgainTests(unittest.TestCase):
             self.queue(
                 "I followed a small curiosity about clocks this morning, it was fun."
             )
+
+
+class UnconfirmedPhotoTests(unittest.TestCase):
+    """A photo whose upload timed out usually arrived; she must not read it as unsent."""
+
+    def test_an_upload_timeout_is_counted_as_sent_and_not_resent(self):
+        payload = {
+            "error": "No deliverable text or media remained after processing MEDIA tags",
+            "warnings": ["Failed to send media /vault/a.png: Timed out"],
+        }
+        out = dispatch.classify("telegram", 1, json.dumps(payload), "")
+        self.assertEqual(out["outcome"], "unknown")
+        self.assertEqual(out["error_code"], "upload_timeout")
+        self.assertIn("count it as sent and do not send it again", out["detail"])
+
+    def test_any_other_unconfirmed_send_says_not_to_queue_it_again(self):
+        out = dispatch.classify("telegram", 1, json.dumps({"error": "Bad Gateway"}), "")
+        self.assertEqual(out["outcome"], "unknown")
+        self.assertIn("do not queue it again", out["detail"])
+        self.assertNotIn("failed", out["detail"])
+
+    def test_she_sees_it_among_what_she_sent(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        c = cc.Companion(agent="Nova", human="Alex", hermes_root=Path(tmp.name) / "home", vault=Path(tmp.name) / "vault", timezone="UTC")
+        now = dt.datetime(2026, 10, 12, 15, 0, tzinfo=dt.timezone.utc)
+        outbox.path_for(c).parent.mkdir(parents=True, exist_ok=True)
+        rows = [
+            {"kind": "outbox", "id": "m1", "content": "image", "body": "Here it is.", "status": "queued",
+             "priority": "normal", "queued_at": (now - dt.timedelta(minutes=20)).isoformat()},
+            {"kind": "outbox_update", "id": "m1", "status": "unknown", "at": (now - dt.timedelta(minutes=15)).isoformat()},
+        ]
+        outbox.path_for(c).write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+        self.assertEqual(
+            outbox.render_sent(c, now),
+            "- Mon 14:45 image: Here it is." + outbox.UNCONFIRMED,
+        )
