@@ -1746,3 +1746,15 @@ class OverdueFingerprintTests(AwakeFingerprintProseTests):
         started = self.now + dt.timedelta(minutes=15)
         self.assertNotIn("RUNNING LONG", companion_day.render(state, started + dt.timedelta(minutes=30)))
         self.assertIn("RUNNING LONG: 50 minutes in", companion_day.render(state, started + dt.timedelta(minutes=50)))
+
+
+class OutfitIdErrorTests(AwakeFingerprintProseTests):
+    """A wrong outfit id is answered with the id she meant and the ones she has."""
+
+    def test_a_described_towel_points_at_the_towel_id(self):
+        with self.assertRaisesRegex(ValueError, r"'soft white towel' is not a wardrobe id\. Did you mean towel\?.*tee"):
+            presence.transition_scene(
+                self.c, "wrapped in a towel", "Grabbed one.", "Warm.",
+                outfit=["soft white towel"], setting="private",
+                now=self.now + dt.timedelta(minutes=5),
+            )

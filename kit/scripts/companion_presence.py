@@ -536,7 +536,23 @@ def update(c, data, now=None, dry_run=False):
             raise ValueError("Duplicate outfit item")
         for item in outfit:
             if item not in closet and item not in VIRTUAL_TOKENS:
-                raise ValueError("Add new items to the wardrobe before wearing them")
+                # "Add new items to the wardrobe" was all it said, and asked to put a
+                # towel on she wrote "soft white towel", guessed at wardrobe commands
+                # that do not exist, and told him she had it on anyway.
+                words = set(str(item).lower().replace("-", " ").split())
+                guess = [t for t in VIRTUAL_TOKENS if t in words] or [
+                    i
+                    for i in closet
+                    if words & set(i.lower().replace("-", " ").split())
+                ]
+                raise ValueError(
+                    f"{item!r} is not a wardrobe id. "
+                    + (f"Did you mean {', '.join(guess[:3])}? " if guess else "")
+                    + "Wear ids you have ("
+                    + ", ".join([*VIRTUAL_TOKENS, *list(closet)[:12]])
+                    + (", ..." if len(closet) > 12 else "")
+                    + "), or add a new piece first with `wardrobe --file`."
+                )
         loc = text(data.get("location"), "location", 240)
         act = text(data.get("activity"), "activity", 120)
         # "Taking a hot morning shower" recorded while still wearing pyjamas is not a

@@ -1,3 +1,12 @@
+## 3.12.3 — A wrong outfit id says which one she meant (2026-10-12)
+
+- Recording an outfit by its description instead of its id ("soft white towel")
+  used to fail with "Add new items to the wardrobe before wearing them", and
+  nothing else. Asked to put a towel on, a companion then guessed at wardrobe
+  commands that do not exist and said she had it on anyway. The error now names
+  the id she most likely meant ("Did you mean towel?") and lists the ids she can
+  wear.
+
 ## 3.12.2 — She knows what a photo would show, and does it before she replies (2026-10-12)
 
 - Her photo line now says what a photo of her right now would show. When it is not
