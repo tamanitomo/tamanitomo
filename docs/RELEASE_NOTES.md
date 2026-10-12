@@ -1,4 +1,7 @@
-Tamanitomo 3.12.0: her life, her answer.
+Tamanitomo 3.12.1: her life, her answer.
+
+3.12.1: a moment that has run long (a shower begun hours ago) now says so in her day, so the
+routine that wakes for it moves her on.
 
 - **Photos of her as she is.** A photo shows where she is, what she has on and what she is doing.
   To be in something else for one she changes first, which takes the time it takes and only works
