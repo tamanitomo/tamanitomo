@@ -19,6 +19,8 @@ Tamanitomo 3.11.0: her own perspectives, reviewable restrictions, and photos tha
   erased, and adult settings and her own stance are not changed.
 
 After updating, run Repair for each companion (or `companion repair --prompts auto`): it brings
-her scheduled routines the new perspective and project commands and refreshes the image skill.
+her scheduled routines the new perspective and project commands. Repair does not overwrite an
+existing image skill, because she may have added to it; the photo command reaches her in every
+chat turn regardless.
 
 Coming from 3.10? 3.10.1 tied album picks to the Music switch. See CHANGELOG.md.
