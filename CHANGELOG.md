@@ -1,3 +1,17 @@
+## 3.14.0 — A week you can measure, and plans that follow the weather (2026-10-12)
+
+- `companion_weekcard.py` reads her last seven days from her own records: things
+  done a day, hours out versus at home, places other than home, people seen, days
+  she planned for herself the night before. Her weekly reflection reads it as her
+  own week, not a quota, and is told that a life with no one in it, or nowhere she
+  has to be, is hers to change by letting someone in or choosing a standing
+  commitment (a job, a class, a shift). Nothing is assigned to her.
+- The weather sense carries tomorrow's forecast (range, midday, chance of rain),
+  and the wind-down plan is told to let it shape where she swims, walks or sketches,
+  and to get out of the house on some days and name the place.
+- The pulse prompt asks her to name the place every time she leaves home, so the
+  same pool or cafe is the same next time.
+
 ## 3.13.1 — 3.13.0, packaged (2026-10-12)
 
 - 3.13.0's release build stopped because the new `companion_cron_bridge.py` was

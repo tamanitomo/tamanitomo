@@ -71,6 +71,22 @@ def weather(c, now):
             f"Today {today['mintempC']}–{today['maxtempC']}°C. "
             f"Sunrise {today['astronomy'][0]['sunrise']}, sunset {today['astronomy'][0]['sunset']}."
         )
+        # Tomorrow, for the plan she makes at wind-down: a rainy Tuesday is an indoor
+        # swim, not the park. Absent when the service does not send a second day.
+        try:
+            nxt = data["weather"][1]
+            hours = nxt.get("hourly") or []
+            rain = max((int(h.get("chanceofrain", 0)) for h in hours), default=0)
+            midday = (
+                hours[4]["weatherDesc"][0]["value"].lower() if len(hours) > 4 else ""
+            )
+            text += (
+                f"\nTomorrow {nxt['mintempC']}–{nxt['maxtempC']}°C"
+                + (f", {midday}" if midday else "")
+                + f", chance of rain up to {rain}%."
+            )
+        except (KeyError, IndexError, TypeError, ValueError):
+            pass
         try:
             latitude = float(data["nearest_area"][0]["latitude"])
         except (KeyError, IndexError, TypeError, ValueError):
