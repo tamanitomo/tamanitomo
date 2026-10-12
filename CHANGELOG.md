@@ -1,4 +1,4 @@
-## Unreleased
+## 3.10.1 — Album picks only with Music on (2026-10-11)
 
 - Album picks belong to the Music sensor. With Music switched off under Settings →
   Sensors she does not read Spotify at all (not even its stored authorization), cannot

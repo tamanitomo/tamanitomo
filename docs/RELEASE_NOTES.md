@@ -1,23 +1,16 @@
-Tamanitomo 3.10.0: time together that she remembers, albums she picks for you, and messages you can listen to.
+Tamanitomo 3.10.1: album picks follow the Music switch.
 
-- **Time together.** Us → Time together starts a watch with her, with or without a media
-  server: pause, resume and finish it, tell her where you are up to, and keep a moment from
-  it. Those moments join your shared memories and come back later in conversation. Choose
-  quiet company or occasional comments. She never claims to see the screen or spoils what
-  comes next.
-- **Albums for you.** With Spotify connected, she can look through the artists you listen to
-  and their albums, pick one with a reason that is about the two of you, and send it through
-  the usual contact settings. Picks appear under Us → Albums for you. Your top artists need
-  the `user-top-read` permission; without it she uses what you played recently.
-- **Listen to a message.** Every finished reply in the chat has a Play button that reads it
-  in her voice, long replies included.
-- **Distance is not a reset.** A relationship that cools after reaching Friends becomes
-  Distant, not Just Met: she remembers what you shared and is honest about the distance.
-- **Promises keep.** A plan she made with you survives her evening replanning, and a
-  follow-up she meant to make wakes her when it comes due.
+- **Spotify only with Music on.** With Music switched off under Settings → Sensors, she does not
+  read your Spotify at all: no listening history, no artist or album lookups, and no album picks
+  saved or sent. The album instructions and her saved picks also leave her chat and background
+  routines. A connected Spotify account on its own is not permission. Picks she already saved
+  stay on Us → Albums for you, with a note that Music is off.
+- **Top artists need one extra permission.** To let her see your top artists, sign in to Spotify
+  again with `user-top-read` added to the requested scopes. Without it she uses what you played
+  recently.
 
-After updating, run Repair for each companion (or `companion repair --prompts auto`): it
-teaches her autonomy about albums and time together.
+After updating, run Repair for each companion (or `companion repair --prompts auto`): it takes
+the album instructions out of her autonomy routine, which now gets them only while Music is on.
 
-Coming from 3.8? 3.9 gave her own life places, people, storylines and lasting luck, and a
-sense of what you watch on Plex or Jellyfin. See CHANGELOG.md.
+Coming from 3.9? 3.10.0 brought time together on the Us page, album picks, a Play button on
+messages, and the Distant stage. See CHANGELOG.md.
