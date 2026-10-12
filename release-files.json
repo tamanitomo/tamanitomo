@@ -213,6 +213,7 @@
   "kit/scripts/companion_tts_inherit.py",
   "kit/scripts/companion_vault.py",
   "kit/scripts/companion_vault_index.py",
+  "kit/scripts/companion_viewing.py",
   "kit/scripts/companion_vision.py",
   "kit/scripts/companion_voice.py",
   "kit/scripts/companion_voice_chat.py",
