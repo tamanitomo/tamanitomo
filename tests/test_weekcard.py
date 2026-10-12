@@ -37,10 +37,10 @@ def test_a_week_at_home_says_so(companion):
 def test_outings_places_and_people_are_counted(companion):
     day(companion, "2026-10-11",
         {"started_at": "2026-10-11T08:00:00+00:00", "location": "home, kitchen", "place": "home"},
-        {"started_at": "2026-10-11T10:00:00+00:00", "location": "the pool", "place": "ymca", "with": ["priya"]},
+        {"started_at": "2026-10-11T10:00:00+00:00", "location": "the pool", "place": "pool", "with": ["friend-1"]},
         {"started_at": "2026-10-11T13:00:00+00:00", "location": "home", "place": "home"})
     d = weekcard.card(companion, NOW)
-    assert d["places_visited"] == ["ymca"] and d["people_seen"] == ["priya"]
+    assert d["places_visited"] == ["pool"] and d["people_seen"] == ["friend-1"]
     assert d["hours_out"] == 3.0
 
 
