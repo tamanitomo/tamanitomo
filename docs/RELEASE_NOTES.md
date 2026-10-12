@@ -1,21 +1,21 @@
-Tamanitomo 3.11.2: photos that match what she is doing, and answers that are hers.
+Tamanitomo 3.12.0: her life, her answer.
 
-- **No file paths in the chat.** 3.11.1's clean-up of photo lines backfired: on a reply that was
-  already showing, the whole `MEDIA:/...` path appeared next to every photo. The clean-up is gone.
-- **She is wearing what she is wearing.** An image preset's own outfit used to win over what she
-  was recorded in, so every photo from that preset showed the same clothes wherever she was. Her
-  recorded outfit now comes first, and she says what she has on when a photo shows something else.
-- **She knows what she can send.** Her context says whether photos of herself undressed are hers
-  to choose and, if not, why. Asked for one while she is in the bath or shower, the photo command
-  tells her what is possible instead of drawing her fully clothed. When it is allowed, choosing one
-  is `--intimate` on the same photo command.
-- **Her answer, her choice.** She is told that nothing runs after her reply, that she never claims a
-  fix or setting change she did not make, and that her wants count: she decides, declines or teases
-  rather than asking what you want.
+- **Photos of her as she is.** A photo shows where she is, what she has on and what she is doing.
+  To be in something else for one she changes first, which takes the time it takes and only works
+  with what she has with her. Asked for something she could not do, she answers as herself.
+- **"Not yet" in her own words.** When she is not ready to send a photo, she hears how it is for her
+  (not there with you yet, not trusting you that far, still hurt) and says so herself, never as a
+  setting, a filter or a model. She offers only what she could really send instead.
+- **A towel before Bonded.** For a romance with adult themes on, a teasing photo in a towel opens at
+  Intimacy. Undressed photos still wait for Bonded and the adult-image setting.
+- **"Later" is kept.** Something she says she will do later goes into her day, and she does it, or
+  tells you why not, when it comes due.
+- **Pushing has a cost.** Asking is fine and so is her answer. Being pushed after a no can show, and
+  if it keeps happening it is remembered, and it fades or is made up like any other hurt.
+- **Her day moves on.** A shower no longer lasts all morning: a moment that runs long wakes her
+  routine to decide what she is doing now.
 
-After updating, run Repair for each companion (or `companion repair --prompts auto`) and restart the
-gateway, so the chat plugin without the clean-up is loaded. Repair leaves an existing image skill
-alone; the photo command and its rules reach chat through the context either way.
-
-Coming from 3.10? 3.11.0 brought her own evolving perspectives, curiosity she follows herself,
-reviewable relationship restrictions, and working photos again. See CHANGELOG.md.
+After updating, run Repair for each companion (or `companion repair --prompts auto`). The new photo
+wording, the `promise` command and her rules reach chat through the context. Repair leaves an
+existing image skill alone, so merge the new photo section by hand if your companion's copy is old.
+Restarting the gateway is not needed for this update.
