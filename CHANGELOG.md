@@ -1,4 +1,4 @@
-## Unreleased — Asking for things, and a lighter background
+## 3.15.0 — Asking for things, and a lighter background (2026-10-13)
 
 - She can ask the human for things: to pick tonight's film, send a photo of
   something they mentioned, call when free, try a song she found, help her choose

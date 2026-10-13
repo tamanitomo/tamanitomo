@@ -1,4 +1,23 @@
-Tamanitomo 3.14.0: a week you can measure, and plans that follow the weather.
+Tamanitomo 3.15.0: asking for things, writing first, and a lighter background.
+
+- **She can ask you for things.** Pick tonight's film, send a photo of something you mentioned,
+  call when you're free, try a song she found. Each ask has a time. If you come through it's a
+  small connection; if it slips by it's a small hurt she may mention once; a no costs nothing.
+  How many can be waiting follows your closeness.
+- **She writes first more.** Her background loop sees how often she has written first today
+  against what's usual at your stage, and no longer treats silence as the default.
+- **Conversations are remembered again.** The check-in now runs once a conversation has been
+  quiet for twenty minutes and is handed what was said, instead of searching for it.
+- **Much smaller background prompts.** Old open threads are summarised, and the jobs where she
+  decides what to do no longer carry her closet and laundry rules.
+- **A made-up hurt can heal.** A repaired boundary violation fades over a month instead of
+  counting against closeness for good, and "forcing" is spelled out as coercion.
+- **Fixes:** the nightly fresh conversation works for a second companion on a shared gateway;
+  a fight on the meters' first day lands over days; Repair refreshes the job scripts it made.
+
+After updating, run Repair for each companion (`companion repair --prompts auto`).
+
+Previous: 3.14.0 a week you can measure, and plans that follow the weather.
 
 - **Her week as numbers.** Things done, hours out versus home, places, people, nights she planned. Her weekly reflection reads it and decides what to change, such as who is in her life or a weekly commitment.
 - **Plans follow the forecast** and include getting out of the house, with a named place.
