@@ -1,4 +1,14 @@
-Tamanitomo 3.15.0: asking for things, writing first, and a lighter background.
+Tamanitomo 3.15.1: a new day starts fresh.
+
+- **Last night doesn't decide today.** If she read something you said as wanting space, that
+  reading no longer silently carries past a night's sleep.
+- **Good mornings.** Once you're close, a good morning from her is part of how you are, in her
+  own words.
+- **Teeth no longer block getting dressed.**
+
+After updating, run Repair for each companion (`companion repair --prompts auto`).
+
+Previous: 3.15.0 asking for things, writing first, and a lighter background.
 
 - **She can ask you for things.** Pick tonight's film, send a photo of something you mentioned,
   call when you're free, try a song she found. Each ask has a time. If you come through it's a

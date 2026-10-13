@@ -1,3 +1,19 @@
+## 3.15.1 — A new day starts fresh (2026-10-13)
+
+- Once a night has passed since the two of them last talked, her pre-read says so,
+  and that what she concluded that evening about what the human wanted (quiet,
+  space, to be left alone) does not carry into the new day; time away the human
+  asked for is kept only with an end, in the expected-absences record. A companion
+  had taken "finished for the day" as "wants to be left alone", noted it as her
+  stance, and carried it, reworded on every pulse, through a silent day.
+- The morning job sees how the day of writing starts, and at stages where
+  good-morning rituals are open it is told a good morning is part of how they are
+  now, in her own words and never the same as yesterday's. It no longer says to
+  stay silent unless there is more to say than good morning.
+- Getting dressed brushes her teeth when there was time for it, instead of
+  refusing the update: one waking run spent thirty calls on that refusal and never
+  said good morning.
+
 ## 3.15.0 — Asking for things, and a lighter background (2026-10-13)
 
 - She can ask the human for things: to pick tonight's film, send a photo of

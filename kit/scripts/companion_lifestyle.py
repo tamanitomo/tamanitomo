@@ -354,7 +354,15 @@ def evolve(c, data, outfit, previous, closet, now):
             or day.timestamp(teeth).astimezone(ZoneInfo(c.timezone)).date()
             != now.astimezone(ZoneInfo(c.timezone)).date()
         ):
-            raise ValueError("CARE: brush teeth today before putting on fresh clothes")
+            # Brushing her teeth while she gets dressed is not a decision, and it
+            # was the commonest refusal of a morning: one waking run spent thirty
+            # calls on it and never got as far as saying good morning. It is done
+            # for her when there was time for it, and only refused when there was not.
+            if elapsed < 2 + required:
+                raise ValueError(
+                    "CARE: brush teeth today before putting on fresh clothes"
+                )
+            result["teeth_at"] = now.isoformat()
         if any(known.get(i, {}).get("category") == "sleep" for i in entering):
             shower = result["shower_at"]
             if not shower or not dt.timedelta(0) <= now - day.timestamp(

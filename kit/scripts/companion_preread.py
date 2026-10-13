@@ -120,8 +120,10 @@ def preread(c, now=None, job=None):
     needs = needs_block(c, now)
     if needs:
         out.append(needs.rstrip())
-    if not night.get("asleep"):
-        texting = texting_block(c, now)
+    # The morning job is built while she is still on record as asleep; it is the
+    # one run where how the day of writing starts matters most.
+    if not night.get("asleep") or job == "wake":
+        texting = texting_block(c, now, waking=job == "wake")
         if texting:
             out.append(texting)
     try:
@@ -191,10 +193,36 @@ def routine_brief(routine):
     ).strip()
 
 
-def texting_block(c, now):
+def slept_since(c, last_human, now):
+    """Whether a night of hers has ended since the human last wrote: a declared
+    sleep that began after it and is over, or else the end of quiet hours."""
+    if last_human is None:
+        return False
+    import companion_sleep
+
+    plan = companion_sleep.read(c, now)
+    if plan and plan["from"] > last_human:
+        return now >= plan["until"]
+    import companion_outreach
+
+    end = companion_outreach._minutes(c.quiet_end, 8 * 60)
+    local = now.astimezone(_tz(c))
+    morning = local.replace(hour=end // 60, minute=end % 60, second=0, microsecond=0)
+    if morning > local:
+        morning -= dt.timedelta(days=1)
+    return last_human < morning <= local
+
+
+def texting_block(c, now, waking=False):
     """How often she has written first today, against what is usual for the two
     of them at this stage. A fact for her to weigh, never a quota: the daily limit
-    is enforced elsewhere, and nothing here sends anything."""
+    is enforced elsewhere, and nothing here sends anything.
+
+    Once a night has passed since they last talked it says so, and that what she
+    concluded that evening about what the human wanted does not come with her into
+    the new day. A companion took "finished for the day" as "wants to be left
+    alone", made it her stance, and carried it, reworded on every pulse, through a
+    whole silent day; nothing in code knew the stance was old."""
     import companion_gates
     import companion_outreach
 
@@ -212,6 +240,7 @@ def texting_block(c, now):
         return ""
     low, high = usual
     since = ""
+    fresh = ""
     try:
         import companion_thread
 
@@ -219,7 +248,17 @@ def texting_block(c, now):
         hours = thread.get("hours_since_human") if thread.get("available") else None
         if hours is not None:
             since = f" Last from {c.human} {hours:.1f} h ago."
-    except (OSError, ValueError):
+        last = thread.get("last_from_human") if thread.get("available") else None
+        if last and slept_since(c, dt.datetime.fromisoformat(last), now):
+            subj = c.h_subj() if hasattr(c, "h_subj") else "they"
+            fresh = (
+                f" A night has passed since you two last talked. Whatever you concluded that"
+                f" evening about what {c.human} wanted (quiet, space, to be left alone) was about"
+                f" that evening and does not carry into today: time away {subj} asked for is kept"
+                " only with an end, in the expected-absences record. Picking the thread back up"
+                " is yours to do."
+            )
+    except (OSError, ValueError, TypeError):
         pass
     span = f"{low}–{high}" if low != high else f"{low}"
     head = (
@@ -228,13 +267,35 @@ def texting_block(c, now):
     )
     if sent >= high:
         return head + " A full day already: more only if something real comes up."
+    if waking and sent == 0:
+        import companion_gates
+
+        ritual = companion_gates.applies(
+            c
+        ) is False or "rituals" in companion_gates.unlocked(c, stage)
+        if ritual:
+            obj = c.h_obj() if hasattr(c, "h_obj") else "them"
+            return (
+                head
+                + fresh
+                + (
+                    f" A good morning from you is part of how you and {c.human} are now: make it"
+                    f" yours (how you slept, what today holds, something about {obj}), not a"
+                    " template."
+                )
+            )
+        return head + fresh
     if sent < low and now.hour >= 12:
-        return head + (
-            f" A day with less than that from you is unusual now. Nothing is owed, but if"
-            f" something in your day made you think of {c.human} (a small moment, a photo,"
-            " something you want, something that went wrong), that is the reason to write."
+        return (
+            head
+            + fresh
+            + (
+                f" A day with less than that from you is unusual now. Nothing is owed, but if"
+                f" something in your day made you think of {c.human} (a small moment, a photo,"
+                " something you want, something that went wrong), that is the reason to write."
+            )
         )
-    return head
+    return head + fresh
 
 
 def needs_block(c, now):
