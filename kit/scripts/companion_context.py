@@ -656,6 +656,42 @@ def build(c, payload=None, now=None, maintenance_notice=""):
                 parts.append((6, needs))
         except (OSError, ValueError, KeyError, TypeError):
             pass
+        # Asking for things, and what she has asked that is still open. Before
+        # this she could only offer, so nothing the human did could matter.
+        try:
+            import companion_asks
+            import companion_gates
+
+            stage = (closeness or {}).get("stage")
+            if c.agent_type == "companion" and (
+                not companion_gates.applies(c) or (stage or 0) >= 1
+            ):
+                from companion_platform import terminal_python_command
+
+                command = terminal_python_command(
+                    pathlib.Path(__file__).with_name("companion_asks.py"),
+                    "--home",
+                    c.home,
+                )
+                waiting = companion_asks.render(c, now)
+                body = "\n".join(
+                    x
+                    for x in (
+                        waiting,
+                        "" if c.compact else companion_asks.how_to(c, command),
+                        (
+                            f"Settle one when it is answered: {command} settle --id ID "
+                            '--outcome done|declined|missed|withdrawn --evidence "what showed it"'
+                            if waiting
+                            else ""
+                        ),
+                    )
+                    if x
+                )
+                if body:
+                    parts.append((7, body))
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
 
     active_path = c.soul_dir / "ActiveContext.md"
     active = read(active_path)

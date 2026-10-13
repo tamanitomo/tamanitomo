@@ -232,6 +232,7 @@ def mapping_for(
             "music",
             "perspectives",
             "weekcard",
+            "asks",
         )
     }
     commands["DOCTOR_CMD"] = terminal_python_command(

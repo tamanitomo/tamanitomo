@@ -87,7 +87,8 @@ def clear(c, now=None):
     It clears the sessions the job was started for -- the count its monitor tick
     saw -- not whatever is pending by the time it finishes. Zeroing the counter
     erased a conversation that ended while the reflection was running, and nothing
-    would ever look at it.
+    would ever look at it. What it covered is kept, so the next pre-read starts
+    where this one ended.
     """
     now = now or dt.datetime.now(_tz(c))
     with file_lock(path_for(c).with_suffix(".json.lock")):
@@ -96,26 +97,141 @@ def clear(c, now=None):
         claimed = state.pop("claimed", None)
         state["pending"] = 0 if claimed is None else max(0, pending - int(claimed))
         state["last_reflected"] = now.isoformat()
+        if state.get("through"):
+            state["covered"] = state["through"]
         atomic_write(path_for(c), json.dumps(state, ensure_ascii=False, indent=2))
     return state
 
 
-def fingerprint(c):
+# A conversation is over when it has been quiet this long. Hermes ends a session
+# after every reply on a chat platform, so the flag went up after each message and
+# the reflection ran in the middle of the conversation -- thirty-one times in one
+# day for one companion, each a full model run, mostly finding nothing new.
+SETTLE_MINUTES = 20
+
+
+def _stamp(c, value):
+    try:
+        when = dt.datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    return when if when.tzinfo else when.replace(tzinfo=_tz(c))
+
+
+def fingerprint(c, now=None):
     """Stable bytes for --monitor-script. Changes only when there is something to do.
 
-    No clock in here at all: this is the one gate that should stay silent
-    indefinitely when nobody is talking. It notes how many sessions it has seen,
-    so the run it triggers clears exactly those.
+    It names the end of the last conversation that has settled, and nothing
+    else: so it moves once a conversation has been quiet for SETTLE_MINUTES, and
+    not again when the reflection clears the flag. (Hermes wakes the job on any
+    change of these bytes, so a fingerprint that went back to "nothing pending"
+    after each clear paid for a second run with nothing to do.) It notes how many
+    sessions it has seen, so the run it triggers clears exactly those.
     """
+    now = now or dt.datetime.now(_tz(c))
     with file_lock(path_for(c).with_suffix(".json.lock")):
         state = read(c)
         pending = int(state.get("pending", 0) or 0)
-        if pending and state.get("claimed") != pending:
+        ended = state.get("last_end") or ""
+        when = _stamp(c, ended)
+        settled = when is None or now - when >= dt.timedelta(minutes=SETTLE_MINUTES)
+        if pending and settled and state.get("through") != (ended or f"#{pending}"):
+            state["through"] = ended or f"#{pending}"
             state["claimed"] = pending
             atomic_write(path_for(c), json.dumps(state, ensure_ascii=False, indent=2))
-    return (
-        f"pending {pending}\nlast_end {state.get('last_end','') if pending else ''}\n"
+    return f"through {state.get('through', '')}\n"
+
+
+# The conversation is handed to the run whole, newest kept when it is long.
+TRANSCRIPT_CHARS = 16000
+MESSAGE_CHARS = 1500
+
+
+def preread(c, now=None):
+    """What the check-in needs and nothing else: the conversation since the last
+    check-in, and the threads already open so it updates one rather than adding
+    a twin. Without this the run was handed the companion's whole day -- closet,
+    laundry rules and every open loop, 80,000 characters -- and still had to go
+    looking for the conversation, through files, the database and the kit's own
+    source, before giving up."""
+    import companion_loops
+    import companion_thread
+
+    now = now or dt.datetime.now(_tz(c))
+    state = read(c)
+    start = (
+        _stamp(c, state.get("covered"))
+        or _stamp(c, state.get("last_reflected"))
+        or now - dt.timedelta(hours=24)
     )
+    start = max(start, now - dt.timedelta(days=3))
+    out = [
+        "[Check-in pre-read: the conversation since your last check-in, already read from",
+        " the conversation store. Do not search files or the database for it, and do not read",
+        " Tamanitomo's source to work out the rules: run the commands below as written.]",
+        "",
+    ]
+    rows = companion_thread.since(c, start, now)
+    if rows is None:
+        out.append(
+            "[The conversation store could not be read this run. Do not guess at what was said:"
+            " leave the check-in pending (do not clear) so the next run tries again.]"
+        )
+    elif not any(r["who"] == "them" for r in rows):
+        out.append(
+            f"[{c.human} has said nothing since {start.strftime('%a %H:%M')}. There is nothing to"
+            " record: run the clear command and stop.]"
+        )
+    else:
+        lines = []
+        for r in rows:
+            who = c.human if r["who"] == "them" else c.agent
+            text = " ".join(r["text"].split())
+            if len(text) > MESSAGE_CHARS:
+                text = text[: MESSAGE_CHARS - 1] + "…"
+            lines.append(f"**{who}** ({r['at'].strftime('%a %H:%M')}): {text}")
+        kept, size = [], 0
+        for line in reversed(lines):
+            if size + len(line) > TRANSCRIPT_CHARS and kept:
+                break
+            kept.append(line)
+            size += len(line) + 1
+        kept.reverse()
+        omitted = len(lines) - len(kept)
+        heard = sum(1 for r in rows if r["who"] == "them")
+        out.append(
+            f"[Conversation since {start.strftime('%a %H:%M')}: {len(rows)} messages,"
+            f" {heard} from {c.human}"
+            + (f"; the {omitted} earliest are left out for length" if omitted else "")
+            + ". Only what "
+            + c.human
+            + " wrote is evidence about "
+            + c.human
+            + ".]"
+        )
+        out.extend(kept)
+    try:
+        import companion_asks
+
+        asked = companion_asks.render(c, now)
+        if asked:
+            out.append("")
+            out.append(asked)
+    except (OSError, ValueError):
+        pass
+    open_loops = companion_loops.loops(c, "open")
+    if open_loops:
+        out.append("")
+        out.append(
+            "[Threads already open between you -- update or close one of these (kind update,"
+            " with its id) instead of adding a second copy:]"
+        )
+        for loop in open_loops[-25:]:
+            out.append(f"- {loop['id']}: {loop['title'][:100]}")
+        if len(open_loops) > 25:
+            out.append(f"- …and {len(open_loops) - 25} older ones (`list` shows them).")
+    out.append(f"[Local time: {now.isoformat(timespec='minutes')} ({c.timezone})]")
+    return "\n".join(out) + "\n"
 
 
 def main():
@@ -126,7 +242,7 @@ def main():
     p.add_argument("--platform", default="")
     p.add_argument(
         "mode",
-        choices=["flag", "fingerprint", "clear", "status"],
+        choices=["flag", "fingerprint", "preread", "clear", "status"],
         nargs="?",
         default="fingerprint",
     )
@@ -134,6 +250,8 @@ def main():
     c = cc.load(a.home)
     if a.mode == "fingerprint":
         sys.stdout.write(fingerprint(c))
+    elif a.mode == "preread":
+        sys.stdout.write(preread(c))
     elif a.mode == "flag":
         # Called from a Hermes hook: say nothing, ever. A hook that prints is a
         # hook that ends up in somebody's chat.

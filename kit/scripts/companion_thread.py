@@ -228,6 +228,50 @@ def activity(c, now=None, days=60, limit=40000):
     return list(_cached(key, _store_version(resolved), make))
 
 
+def since(c, after, now=None, limit=200):
+    """The conversation after `after` (an aware datetime), oldest first, as
+    [{"who": "them"|"you", "at": aware datetime, "text": str}]. Never another
+    agent's, never a scheduled run's. None when the history is unknowable, so a
+    caller can tell "nothing was said" from "could not look"."""
+    now = now or dt.datetime.now(_tz(c))
+    found, _why = _store_scope(c)
+    if found is None:
+        return None
+    resolved, scope, params = found
+    con = None
+    try:
+        con = _connect(resolved)
+        query = _message_query(con, scope)
+        rows = list(
+            con.execute(
+                query
+                + " AND m.timestamp>? AND m.timestamp<=? ORDER BY m.timestamp DESC LIMIT ?",
+                (*params, after.timestamp(), now.timestamp(), limit),
+            )
+        )
+    except (sqlite3.Error, OSError):
+        return None
+    finally:
+        if con:
+            con.close()
+    out = []
+    for role, text, value in reversed(rows):
+        try:
+            stamp = dt.datetime.fromtimestamp(float(value), dt.timezone.utc).astimezone(
+                _tz(c)
+            )
+        except (TypeError, ValueError, OverflowError):
+            continue
+        out.append(
+            {
+                "who": "them" if role == "user" else "you",
+                "at": stamp,
+                "text": text or "",
+            }
+        )
+    return out
+
+
 def human_times(c, now=None, days=28):
     """When the human wrote over the last `days`, as aware datetimes. [] if unknowable."""
     now = now or dt.datetime.now(_tz(c))

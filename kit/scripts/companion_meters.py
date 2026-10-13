@@ -160,6 +160,12 @@ def settle(c, now, raw, seed=None, pace=1.0, write=False):
     with _locked(c, write) as locked:
         data, damaged = _load(c)
         earlier = sorted((d for d in data["days"] if d < key), reverse=True)
+        # The record's first day has no yesterday to be held to, so it measures
+        # from its own first reading instead. Without that the first day took
+        # whatever the latest tick said, uncapped: a fight that evening landed in
+        # one step, the whole of it, which is what the caps are there to prevent.
+        opened = data.get("opened") if isinstance(data.get("opened"), dict) else {}
+        opened = opened if opened.get("day") == key and not earlier else {}
         for name, target in raw.items():
             low, high = RANGE.get(name, (0.0, 1.0))
             target = min(max(float(target), low), high)
@@ -170,6 +176,13 @@ def settle(c, now, raw, seed=None, pace=1.0, write=False):
                     start = (dt.date.fromisoformat(day), float(value))
                     break
             digits = PRECISION.get(name, 3)
+            first = opened.get(name)
+            if (
+                start is None
+                and isinstance(first, (int, float))
+                and not isinstance(first, bool)
+            ):
+                start = (today - dt.timedelta(days=1), float(first))
             if start is None:
                 value = min(max(float(seed.get(name, target)), low), high)
                 out[name] = {
@@ -195,6 +208,17 @@ def settle(c, now, raw, seed=None, pace=1.0, write=False):
         if locked and key >= latest and now <= dt.datetime.now(dt.timezone.utc) + AHEAD:
             row = data["days"].setdefault(key, {})
             changed = damaged
+            if not earlier:
+                kept = (
+                    data.get("opened") if isinstance(data.get("opened"), dict) else {}
+                )
+                if kept.get("day") != key:
+                    kept = {"day": key}
+                for name, info in out.items():
+                    if name not in kept:
+                        kept[name] = info["value"]
+                        changed = True
+                data["opened"] = kept
             for name, info in out.items():
                 if row.get(name) != info["value"]:
                     row[name] = info["value"]

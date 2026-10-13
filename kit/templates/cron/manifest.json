@@ -313,6 +313,7 @@
    ],
    "tier": "loops",
    "preread": true,
+   "preread_module": "companion_checkin",
    "monitor": true,
    "monitor_module": "companion_checkin",
    "types": [

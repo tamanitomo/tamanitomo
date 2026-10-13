@@ -102,3 +102,32 @@ def test_a_due_callback_preserves_sleep_gating(companion):
     assert before.startswith("sleep ")
     assert preread.fingerprint(companion, at(2, 12)) == before
     assert not preread.fingerprint(companion, at(8)).startswith("sleep ")
+
+
+def test_a_long_ledger_renders_recent_threads_and_names_the_rest(companion):
+    # Forty threads, one a month-old callback: the run sees this week's, not all.
+    for i in range(40):
+        loops.add(
+            companion,
+            {
+                "id": f"thread-{i:02d}",
+                "title": f"Thread {i:02d}",
+                "detail": "x" * 590,
+                "gentle_use": "only if it comes up",
+                **(
+                    {"follow_up_at": "2026-09-15T09:00:00+00:00"}
+                    if i == 0
+                    else {}
+                ),
+            },
+            DAY - dt.timedelta(days=40 - i),
+        )
+    shown = loops.render(companion, now=at(12))
+    assert "Ask how the interview went" in shown  # due today
+    assert "**Thread 00**" not in shown  # a September callback is not "ready" now
+    assert "### Thread 39" in shown and "### Thread 20" not in shown
+    assert "x" * 300 not in shown
+    assert "older open thread(s) not shown" in shown and "and 20 more" in shown
+    assert len(shown) < 6000
+    everything = loops.render(companion, limit=None, now=at(12))
+    assert "**Thread 00**" in everything and "x" * 590 in everything

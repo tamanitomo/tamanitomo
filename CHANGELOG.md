@@ -1,3 +1,34 @@
+## Unreleased — Asking for things, and a lighter background
+
+- She can ask the human for things: to pick tonight's film, send a photo of
+  something they mentioned, call when free, try a song she found, help her choose
+  (`companion_asks.py ask|settle|list`). How many may be waiting follows the
+  closeness ladder (none at Just Met, one at Friends, up to three later; two new a
+  day). She settles each as done, declined, missed or withdrawn: a kept ask is a
+  small connection, a missed one a small hurt she may mention once and that fades
+  like any other, and a no costs nothing. Open asks are in her chat context, her
+  pre-read and the check-in, and one coming due wakes the background loop.
+- The pre-read says how often she has written first today against what is usual at
+  her stage (a guide, never a quota; the daily limit is still the person's), and
+  the autonomy prompt no longer teaches that most runs should be silent: small,
+  specific messages, a bad moment and something she wants are reasons to write.
+- The check-in runs once a conversation has been quiet for twenty minutes, not
+  after every reply, and clearing it no longer wakes it a second time. It is handed
+  the conversation since the last check-in instead of her whole day (a pre-read of
+  about 3,000 characters instead of 80,000), so it stops searching files and the
+  kit's source for what was said.
+- Open loops in the pre-read: callbacks that came due in the last three days and
+  the eight threads touched most recently, details clipped; the rest are named and
+  counted. Forty open threads had been 42% of a companion's pre-read on every run.
+- The nightly fresh conversation finds a profile's chat when one gateway serves
+  every profile. It read only the profile's own copy of the routes, which stopped
+  moving when the gateway took over, so it reported "already fresh" every night
+  while one conversation ran on for a week.
+- The meters' first recorded day is held to its own first reading, so a fight on
+  that evening lands over days like any other instead of all at once.
+- Repair rewrites the pre-read, gate and fingerprint shims the kit generated for
+  existing jobs, so a job whose pre-read moved to another helper gets it.
+
 ## 3.14.0 — A week you can measure, and plans that follow the weather (2026-10-12)
 
 - `companion_weekcard.py` reads her last seven days from her own records: things

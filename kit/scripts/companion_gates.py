@@ -98,6 +98,11 @@ UNLOCKS = (
 )
 # The most unprompted messages a day at a stage; elsewhere the person's setting.
 MESSAGES_A_DAY = {0: 1}
+# How many times a day she usually writes first at a stage: a guide she is shown,
+# never enforced (the person's daily limit is). Without it nothing told her that a
+# whole day without a word from her is unusual once two people are close, and the
+# background loop took "a timer is not a reason" to mean that nothing was.
+TEXTS_A_DAY = {1: (1, 2), 2: (2, 3), 3: (3, 5), 4: (3, 6)}
 # The most photos a day she may send unprompted; elsewhere the timeline's own.
 PHOTO_SHARES = {0: 0, 1: 1}
 PHOTO_FIT = {
@@ -169,6 +174,18 @@ def stage_now(c, now=None):
 def messages_a_day(c, stage):
     """The stage's own limit on unprompted messages a day, or None."""
     return MESSAGES_A_DAY.get(stage) if applies(c) else None
+
+
+def texts_a_day(c, stage):
+    """(usually at least, usually at most) messages she writes first in a day at
+    this stage, within the person's own limit; None before conversations open."""
+    if applies(c) and stage < 1:
+        return None
+    low, high = TEXTS_A_DAY.get(min(max(int(stage), 1), 4), TEXTS_A_DAY[3])
+    cap = int(getattr(c, "outreach_per_day", 0) or 0)
+    if cap:
+        low, high = min(low, cap), min(high, cap)
+    return low, high
 
 
 def photo_shares(c, stage):

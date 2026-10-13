@@ -60,22 +60,86 @@ def _tz(c):
         return dt.timezone.utc
 
 
-def routes(c):
-    """The gateway's chat routes for this profile: {session_key: session_id}."""
+def _namespace(c):
+    """The gateway's session-key prefix for this companion's chats: Hermes keys
+    the default profile `agent:main:` and a named one `agent:<name>:`."""
+    profile = getattr(c, "profile", "") or ""
+    if not profile or profile == "default":
+        return "agent:main:"
+    return "agent:main~:" if profile == "main" else f"agent:{profile}:"
+
+
+def _route_entries(home):
+    """Every route one gateway home records, newest first per key: its routing
+    table in state.db (the primary copy) and the legacy sessions.json mirror."""
+    found = {}
+
+    def keep(key, entry):
+        if not isinstance(entry, dict) or not entry.get("session_id"):
+            return
+        old = found.get(key)
+        if old is None or str(entry.get("updated_at") or "") > str(
+            old.get("updated_at") or ""
+        ):
+            found[key] = entry
+
     try:
-        data = json.loads(
-            (c.home / "sessions/sessions.json").read_text(encoding="utf-8")
-        )
-    except (OSError, ValueError):
-        return {}
-    entries = data.get("entries", data) if isinstance(data, dict) else {}
+        data = json.loads((home / "sessions/sessions.json").read_text(encoding="utf-8"))
+        entries = data.get("entries", data) if isinstance(data, dict) else {}
+        for key, entry in entries.items():
+            keep(key, entry)
+    except (OSError, ValueError, AttributeError):
+        pass
+    db = home / "state.db"
+    if db.exists():
+        con = None
+        try:
+            con = sqlite3.connect(
+                db.resolve().as_uri() + "?mode=ro", uri=True, timeout=2
+            )
+            for key, raw in con.execute(
+                "select session_key, entry_json from gateway_routing"
+            ):
+                try:
+                    keep(key, json.loads(raw))
+                except (TypeError, ValueError):
+                    pass
+        except sqlite3.Error:
+            pass
+        finally:
+            if con:
+                con.close()
+    return found
+
+
+def routes(c):
+    """The gateway's chat routes for this profile: {session_key: session_id}.
+
+    One gateway can serve every profile, and then a named profile's routes live
+    in the gateway's own home (the Hermes root), not the profile's, whose copy
+    is left behind at whatever it last held. Reading only the profile's copy
+    ended a session that was already over and reported "already fresh" every
+    night, while the real conversation ran on for a week. So both homes are
+    read, and only this companion's own keys are kept."""
+    namespace = _namespace(c)
+    homes = [c.home]
+    root = getattr(c, "hermes_root", None)
+    if root and pathlib.Path(root) != pathlib.Path(c.home):
+        homes.append(pathlib.Path(root))
+    found = {}
+    for home in homes:
+        for key, entry in _route_entries(home).items():
+            old = found.get(key)
+            if old is None or str(entry.get("updated_at") or "") > str(
+                old.get("updated_at") or ""
+            ):
+                found[key] = entry
     # Direct messages with the human only. A group channel or thread is somebody
     # else's conversation too, and is never reset from here.
     return {
         k: v["session_id"]
-        for k, v in entries.items()
-        if isinstance(v, dict)
-        and v.get("session_id")
+        for k, v in found.items()
+        if k.startswith(namespace)
         and ":dm:" in k
         and str(v.get("platform", "")).lower() in CHAT_PLATFORMS
     }

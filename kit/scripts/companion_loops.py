@@ -192,42 +192,77 @@ def batch(c, path, now):
     return {"applied": len(results), "failed_at": None, "results": results}
 
 
-def render(c, limit=None, now=None):
-    """The markdown the ActiveContext assembler and the app both show."""
+# What every scheduled run is handed. All of it, every run, was 34,000 characters
+# for a companion with forty threads open -- 42% of her whole pre-read, re-sent on
+# every model call -- and a callback that came due in September stayed "ready to
+# raise" for ever, beside this week's. A person keeps the last few things in mind
+# and remembers the rest when something brings them up.
+DUE_WITHIN_HOURS = 72
+DUE_SHOWN = 5
+SHOWN = 8
+DETAIL_CHARS = 280
+
+
+def _due_at(c, loop):
+    fu = loop.get("follow_up_at")
+    if not fu:
+        return None
+    try:
+        when = dt.datetime.fromisoformat(fu)
+    except ValueError:
+        return None
+    return when if when.tzinfo else when.replace(tzinfo=_tz(c))
+
+
+def _clip(text, limit=DETAIL_CHARS):
+    text = " ".join(str(text or "").split())
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def render(c, limit=SHOWN, now=None):
+    """The markdown the ActiveContext assembler shows: callbacks that came due in
+    the last few days, then the threads touched most recently. Older ones are
+    counted and named, never dropped -- `list` reads every one. `limit=None`
+    renders everything."""
     now = now or dt.datetime.now(_tz(c))
     rows = loops(c, "open")
-    if limit:
-        rows = rows[-limit:]
     if not rows:
         return "Nothing is hanging between you right now.\n"
-    due = []
+    due, stale = [], []
     for l in rows:
-        fu = l.get("follow_up_at")
-        if fu:
-            try:
-                when = dt.datetime.fromisoformat(fu)
-                if when.tzinfo is None:
-                    when = when.replace(tzinfo=_tz(c))
-                if when <= now:
-                    due.append(l)
-            except ValueError:
-                pass
+        when = _due_at(c, l)
+        if when is None or when > now:
+            continue
+        if limit is None or now - when <= dt.timedelta(hours=DUE_WITHIN_HOURS):
+            due.append((when, l))
+        else:
+            stale.append(l)
+    due.sort(key=lambda pair: pair[0], reverse=True)
+    if limit is not None:
+        stale += [l for _, l in due[DUE_SHOWN:]]
+        due = due[:DUE_SHOWN]
+    raised = {l["id"] for _, l in due}
+    rest = [l for l in rows if l["id"] not in raised]
+    shown = rest if limit is None else rest[-limit:]
+    hidden = [l for l in rest if l not in shown]
     out = []
     if due:
         out.append("## [CARING CALLBACKS READY TO RAISE]")
         out.append(
             "The following open thread(s) have reached their follow-up horizon. Check in warmly and gently:\n"
         )
-        for loop in due:
+        for _, loop in due:
             out.append(f"**{loop['title']}** (follow up: {loop['follow_up_at'][:16]})")
             if loop.get("detail"):
-                out.append(f"- Detail: {loop['detail']}")
+                out.append(
+                    f"- Detail: {loop['detail'] if limit is None else _clip(loop['detail'])}"
+                )
             out.append(f"- How to raise gently: {loop['gentle_use']}")
             out.append("")
-    for loop in rows:
+    for loop in shown:
         out.append(f"### {loop['title']}")
         if loop.get("detail"):
-            out.append(loop["detail"])
+            out.append(loop["detail"] if limit is None else _clip(loop["detail"]))
         out.append(
             f"- status: open since {loop['recorded_at'][:10]}"
             + (
@@ -242,6 +277,15 @@ def render(c, limit=None, now=None):
         if loop.get("note"):
             out.append(f"- note: {loop['note']}")
         out.append("")
+    if hidden:
+        names = "; ".join(_clip(l["title"], 60) for l in reversed(hidden[-12:]))
+        more = len(hidden) - min(len(hidden), 12)
+        out.append(
+            f"[{len(hidden)} older open thread(s) not shown, nothing lost: {names}"
+            + (f"; and {more} more" if more else "")
+            + ". Read one in full with `list` when it comes up; close any that are"
+            " already finished.]"
+        )
     return "\n".join(out)
 
 

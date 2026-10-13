@@ -294,6 +294,17 @@ class TestDailyCaps:
             values.append(out["closeness"]["value"])
         assert values == [25, 19, 13, 7, 4, 4]
 
+    def test_the_first_day_is_held_to_its_own_first_reading(self, companion):
+        # A rupture on the record's very first evening lands over days too.
+        meters.settle(companion, on(0), {"closeness": 46}, write=True)
+        later = meters.settle(
+            companion, on(0) + dt.timedelta(hours=9), {"closeness": 6}, write=True
+        )
+        assert later["closeness"]["value"] == 40
+        assert later["closeness"]["held"]
+        nxt = meters.settle(companion, on(1), {"closeness": 6}, write=True)
+        assert nxt["closeness"]["value"] == 34
+
     def test_reading_never_writes(self, companion):
         meters.settle(companion, on(0), START)
         meters.kept_credits(companion, {on(0).date(): 0.8})

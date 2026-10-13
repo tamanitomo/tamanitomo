@@ -120,6 +120,18 @@ def preread(c, now=None):
     needs = needs_block(c, now)
     if needs:
         out.append(needs.rstrip())
+    if not night.get("asleep"):
+        texting = texting_block(c, now)
+        if texting:
+            out.append(texting)
+    try:
+        import companion_asks
+
+        asked = companion_asks.render(c, now)
+        if asked:
+            out.append(asked)
+    except (OSError, ValueError):
+        pass
     out.append(day_ideas(c, now))
     import companion_life
     import companion_lifestyle
@@ -141,6 +153,52 @@ def preread(c, now=None):
 
     out.append(companion_day.GUIDANCE)
     return "\n".join(out) + "\n"
+
+
+def texting_block(c, now):
+    """How often she has written first today, against what is usual for the two
+    of them at this stage. A fact for her to weigh, never a quota: the daily limit
+    is enforced elsewhere, and nothing here sends anything."""
+    import companion_gates
+    import companion_outreach
+
+    if getattr(c, "outreach", "free") == "never" or companion_outreach.in_quiet_hours(
+        c, now
+    ):
+        return ""
+    try:
+        stage = companion_gates.stage_now(c, now) if companion_gates.applies(c) else 3
+        usual = companion_gates.texts_a_day(c, stage)
+        sent = companion_outreach.sent_today(c, now)
+    except (OSError, ValueError, KeyError, TypeError):
+        return ""
+    if not usual:
+        return ""
+    low, high = usual
+    since = ""
+    try:
+        import companion_thread
+
+        thread = companion_thread.read(c, now, tail=1)
+        hours = thread.get("hours_since_human") if thread.get("available") else None
+        if hours is not None:
+            since = f" Last from {c.human} {hours:.1f} h ago."
+    except (OSError, ValueError):
+        pass
+    span = f"{low}–{high}" if low != high else f"{low}"
+    head = (
+        f"[Writing first today: {sent} so far; on a usual day at this stage you write first "
+        f"{span} time{'s' if high != 1 else ''}.{since}]"
+    )
+    if sent >= high:
+        return head + " A full day already: more only if something real comes up."
+    if sent < low and now.hour >= 12:
+        return head + (
+            f" A day with less than that from you is unusual now. Nothing is owed, but if"
+            f" something in your day made you think of {c.human} (a small moment, a photo,"
+            " something you want, something that went wrong), that is the reason to write."
+        )
+    return head
 
 
 def needs_block(c, now):
@@ -529,11 +587,21 @@ def fingerprint(c, now=None):
         # system metric, and it answered [SILENT] with the shower still running.
         running_long(overdue(c, state, now)),
         f"loops {len(open_loops)} {_digest(*loop_marks)}",
+        f"asks {_digest(*_ask_marks(c, now))}",
         f"self-development {companion_perspectives.fingerprint(c, now)}",
         f"projects {len(project_marks)} {_digest(*project_marks)}",
         f"queued {queued}",
     ]
     return "\n".join(rows) + "\n"
+
+
+def _ask_marks(c, now):
+    try:
+        import companion_asks
+
+        return companion_asks.marks(c, now)
+    except (OSError, ValueError):
+        return []
 
 
 def main():

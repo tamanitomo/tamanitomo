@@ -265,7 +265,7 @@ def write_preread_script(c, spec, mode):
     module = (
         spec.get("monitor_module", "companion_preread")
         if mode in ("fingerprint", "gate")
-        else "companion_preread"
+        else spec.get("preread_module", "companion_preread")
     )
     path = c.home / "scripts" / f"companion-{spec['key'].replace('_','-')}-{mode}.py"
     argv = [module + ".py", "--home", str(c.home), mode]
@@ -278,6 +278,27 @@ def write_preread_script(c, spec, mode):
         f'runpy.run_module({module!r},run_name="__main__")\n',
     )
     return path
+
+
+def refresh_shims(c, spec, job):
+    """Rewrite the shims the kit generated for an existing job, in place, so a job
+    whose pre-read or gate moved to another helper gets it on Repair. Before this
+    a shim was written once, when the job was created, and kept whatever it first
+    said. Only a file under the kit's own name is touched: a script someone chose
+    has another name and is left alone. Returns the names rewritten."""
+    stem = f"companion-{spec['key'].replace('_', '-')}"
+    done = []
+    for field, mode in (
+        ("script", "preread" if spec.get("preread") else "gate"),
+        ("monitor_script", "fingerprint"),
+    ):
+        if mode == "gate" and not spec.get("gate"):
+            continue
+        if mode == "fingerprint" and not spec.get("monitor"):
+            continue
+        if str(job.get(field) or "") == f"{stem}-{mode}.py":
+            done.append(write_preread_script(c, spec, mode).name)
+    return done
 
 
 def write_job_script(c, spec):
@@ -333,6 +354,7 @@ def _install_jobs_locked(c, m, report):
             job = existing[name]
             additions = []
             template = (T / "cron" / spec["file"]).read_text(encoding="utf-8")
+            refresh_shims(c, spec, job)
             # Early structured workers were installed as --no-agent scripts
             # whose argv contained a provider URL/model/API-key name. Editing
             # the cron model pin could never affect them. Migrate only that

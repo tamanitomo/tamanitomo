@@ -303,3 +303,27 @@ def test_the_context_engine_sends_only_the_newest_snapshot(monkeypatch):
     request = [{'role': 'user', 'content': row['api_content']} for row in stored]
     sent = engine.select_context(request, conversation_messages=stored)
     assert [m['content'] for m in sent] == ['hi 0', 'hi 1', request[2]['content']]
+
+
+def test_rollover_finds_a_profile_chat_routed_by_the_root_gateway(tmp_path):
+    import companion_rollover as rollover
+    c = cc.Companion(hermes_root=tmp_path, profile='nova', vault=tmp_path/'vault')
+    (c.home/'sessions').mkdir(parents=True)
+    (tmp_path/'sessions').mkdir(parents=True)
+    dm = {'platform': 'telegram', 'chat_type': 'dm'}
+    # The profile's own copy was left behind when one gateway began serving both.
+    (c.home/'sessions/sessions.json').write_text(json.dumps({
+        'agent:main:telegram:dm:1': {**dm, 'session_id': 'stale', 'updated_at': '2026-09-29T07:43'}}))
+    (tmp_path/'sessions/sessions.json').write_text(json.dumps({
+        'agent:main:telegram:dm:1': {**dm, 'session_id': 'root-chat', 'updated_at': '2026-10-12T16:05'},
+        'agent:nova:telegram:dm:1': {**dm, 'session_id': 'nova-mirror', 'updated_at': '2026-10-12T11:00'},
+        'agent:nova:discord:group:9': {'platform': 'discord', 'session_id': 'group', 'updated_at': '2026-10-12T11:00'}}))
+    con = sqlite3.connect(tmp_path/'state.db')
+    con.execute('CREATE TABLE gateway_routing(scope TEXT, session_key TEXT, entry_json TEXT, updated_at REAL)')
+    con.execute('INSERT INTO gateway_routing VALUES(?,?,?,?)', (
+        str(tmp_path/'sessions'), 'agent:nova:telegram:dm:1',
+        json.dumps({**dm, 'session_id': 'nova-chat', 'updated_at': '2026-10-12T11:45'}), 1.0))
+    con.commit(); con.close()
+    assert rollover.routes(c) == {'agent:nova:telegram:dm:1': 'nova-chat'}
+    root = cc.Companion(hermes_root=tmp_path, profile='', vault=tmp_path/'vault')
+    assert rollover.routes(root) == {'agent:main:telegram:dm:1': 'root-chat'}
