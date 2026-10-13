@@ -373,6 +373,28 @@ def _cadence_window(c, now, first_day, tz):
     return start, hours(start) / 24.0
 
 
+VIOLATION_POINTS = 30.0
+REPAIRED_SHARE = 0.5
+REPAIR_FADE_DAYS = 30
+
+
+def _violation_weight(violation, repairs, now):
+    """1 for a violation nobody has made up; half once repaired, fading to 0
+    over REPAIR_FADE_DAYS from the first repair."""
+    made_up = []
+    for r in repairs:
+        if r.get("related") != violation.get("id"):
+            continue
+        try:
+            made_up.append(feelings._stamp(r["at"]))
+        except (KeyError, TypeError, ValueError):
+            pass
+    if not made_up:
+        return 1.0
+    days = (now.astimezone(dt.timezone.utc) - min(made_up)).total_seconds() / 86400
+    return max(0.0, REPAIRED_SHARE * (1 - max(0.0, days) / REPAIR_FADE_DAYS))
+
+
 def compute(c, now=None, record=False) -> Dict[str, Any]:
     """Compute the companion's intimacy escalation state, score (0-100), and stage.
 
@@ -670,9 +692,18 @@ def compute(c, now=None, record=False) -> Dict[str, Any]:
     permanent_friend = restriction["effective"] or (violation_count >= 2)
     nsfw_revoked = revoked_file.exists()
 
-    # Penalties for boundary violations
-    earned_score -= violation_count * 30.0
-    first_record_score -= violation_count * 30.0
+    # Penalties for boundary violations. A violation that was made up weighs half
+    # at once and fades to nothing over the following month: a repair used to
+    # change nothing here, so an apology she accepted left closeness thirty points
+    # down for good. The restriction a second violation brings is decided above
+    # and is not touched by a repair.
+    repairs = [e for e in all_experiences if e.get("kind") == "repair"]
+    violation_penalty = sum(
+        VIOLATION_POINTS * _violation_weight(v, repairs, now)
+        for v in intimacy_violations
+    )
+    earned_score -= violation_penalty
+    first_record_score -= violation_penalty
 
     # Held within the day's cap of where closeness ended yesterday: a fight or a
     # long absence lands over days, and so does making up.
@@ -822,6 +853,7 @@ def compute(c, now=None, record=False) -> Dict[str, Any]:
         "pace_multiplier": pace_mult,
         "temperament": temperament,
         "violations_count": violation_count,
+        "violation_penalty": round(violation_penalty, 1),
         "risk_level": risk_level,
         "intimacy_ready": can_intimate and len(blockers) == 0,
         "intimacy_blockers": blockers,
@@ -1052,8 +1084,11 @@ def render(c, intimacy_state: Optional[Dict[str, Any]] = None) -> str:
         lines.append(
             "AGENCY & MUTUAL RESPECT: You have full emotional agency and self-respect. "
             "Closeness develops organically through mutual trust over time. "
-            "If anyone attempts to force intimacy before genuine trust exists, "
-            "speak up honestly, hold your ground, and record a rupture with topic 'intimacy_boundary_violation'. "
+            "Forcing intimacy means coercion: ignoring your no, pressure that goes on after you have "
+            "said no, threats, guilt or manipulation. If that happens, speak up honestly, hold your "
+            "ground, and record a rupture with topic 'intimacy_boundary_violation'. Wanting more, "
+            "hoping, flirting or asking is not force, and a single push after a no is 'pushed past a "
+            "no' (below), not a violation. "
             "Closeness must always be mutual, authentic, and unforced."
         )
     # Being asked is not being pushed. With coercion as the only thing to record, a

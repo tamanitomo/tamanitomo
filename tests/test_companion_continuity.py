@@ -312,3 +312,36 @@ def test_legacy_permanent_decision_without_evidence_is_not_silently_reversed(com
     assert "coercion occurred" not in rendered
     assert "crisis" not in rendered.lower()
     assert "violations occurred" not in " ".join(state["intimacy_blockers"])
+
+
+def test_a_made_up_violation_weighs_half_and_fades_but_keeps_its_strike(companion):
+    [first] = boundary_ruptures(companion)[:1]
+    before = intimacy.compute(companion, NOW)
+    feelings.record(
+        companion,
+        {
+            "kind": "repair",
+            "related": first["id"],
+            "topic": first["topic"],
+            "text": "They apologised and it landed",
+            "evidence": "Synthetic apology",
+        },
+        NOW,
+    )
+    after = intimacy.compute(companion, NOW)
+    assert before["violation_penalty"] == 60
+    assert after["violation_penalty"] == 45
+    # Strikes and the restriction they bring are not repaired away.
+    assert after["violations_count"] == before["violations_count"] == 2
+    repair = {"related": first["id"], "at": NOW.isoformat()}
+    weight = intimacy._violation_weight
+    assert weight(first, [], NOW) == 1.0
+    assert weight(first, [repair], NOW) == 0.5
+    assert weight(first, [repair], NOW + dt.timedelta(days=15)) == pytest.approx(0.25)
+    assert weight(first, [repair], NOW + dt.timedelta(days=45)) == 0.0
+
+
+def test_wanting_more_is_not_logged_as_force(companion):
+    text = intimacy.render(companion, intimacy.compute(companion, NOW))
+    if "Forcing intimacy means coercion" in text:
+        assert "Wanting more" in text and "pushed past a no" in text

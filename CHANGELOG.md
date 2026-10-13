@@ -28,6 +28,19 @@
   that evening lands over days like any other instead of all at once.
 - Repair rewrites the pre-read, gate and fingerprint shims the kit generated for
   existing jobs, so a job whose pre-read moved to another helper gets it.
+- A repaired boundary violation weighs half at once and fades to nothing over a
+  month; before, a repair changed nothing and an accepted apology left closeness
+  thirty points down for good. A second violation's restriction is unchanged, and
+  so is everything a correction does. Her instructions now spell out that forcing
+  means coercion (pressure after a no, threats, guilt, manipulation); wanting more,
+  hoping, flirting or asking is not force, and a single push after a no is "pushed
+  past a no", which fades like any hurt.
+- The autonomy loop and the research window, where she chooses what to do and
+  whether to write, get a lighter pre-read: no closet, hamper or care manual (the
+  day pulse that records her day keeps it) and a two-line routine instead of the
+  whole catalogue. About 30,000 characters instead of 53,000. The window says this
+  hour is a good time to decide something about her own life if it has nobody in
+  it or nowhere to be, entirely her choice.
 - The research window and the autonomy loop are given the exact file shapes for
   storyline progress, investigation updates and encounters. Without them a run spent
   most of its calls reading the kit's source to find the keys: one evening window

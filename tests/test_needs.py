@@ -316,6 +316,20 @@ class TestHerScheduledRuns:
         assert "Your needs" not in text and "Today's luck" not in text
 
 
+    def test_the_jobs_that_choose_are_not_handed_the_closet(self, companion):
+        import companion_preread
+
+        night(companion, at(23, day=-1), at(7))
+        with patch.object(needs, "luck", return_value=self.UNLUCKY):
+            pulse = companion_preread.preread(companion, at(9), job="pulse")
+            free = companion_preread.preread(companion, at(9), job="autonomy")
+        assert "Today's luck: a rough night" in free
+        assert "kept by your day pulse" in free and "kept by your day pulse" not in pulse
+        assert "[Routine anchors and interests" in pulse
+        assert "[Routine anchors and interests" not in free
+        assert len(free) < len(pulse)
+
+
 class TestFeedsInPresence:
     def setup(self, companion):
         presence.update_wardrobe(

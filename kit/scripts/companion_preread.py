@@ -40,7 +40,7 @@ def _tz(c):
         return ZoneInfo("UTC")
 
 
-def preread(c, now=None):
+def preread(c, now=None, job=None):
     import companion_active
     import companion_presence
 
@@ -136,16 +136,28 @@ def preread(c, now=None):
     import companion_life
     import companion_lifestyle
 
-    out.append(
-        "[Routine anchors and interests — choose and record what happens; no automatic attendance]\n"
-        + json.dumps(
-            companion_life.routine(c.life, now.astimezone(_tz(c)), c.agent),
-            ensure_ascii=False,
+    routine = companion_life.routine(c.life, now.astimezone(_tz(c)), c.agent)
+    if job in LIGHT_JOBS:
+        out.append(routine_brief(routine))
+    else:
+        out.append(
+            "[Routine anchors and interests — choose and record what happens; no automatic attendance]\n"
+            + json.dumps(routine, ensure_ascii=False)
         )
-    )
     expected = commitments_block(c, now)
     if expected:
         out.append(expected)
+    if job in LIGHT_JOBS:
+        # Her clothes, care and laundry are the pulse's to keep. The jobs where she
+        # decides what she wants to do, or whether to write, were handed the whole
+        # manual too, every run: twelve to fourteen thousand characters of closet
+        # and hamper, which is most of why her days read as chores.
+        out.append(
+            "[Clothes, care and laundry are kept by your day pulse. If you change what you are"
+            " doing here, record it with `transition` (it fills in the rest, and if something"
+            " is missing its message says what).]"
+        )
+        return "\n".join(out) + "\n"
     lifestyle = companion_lifestyle.render(c, now, scene)
     if lifestyle:
         out.append(lifestyle)
@@ -153,6 +165,30 @@ def preread(c, now=None):
 
     out.append(companion_day.GUIDANCE)
     return "\n".join(out) + "\n"
+
+
+# Jobs that choose rather than record: what she wants to do, whether to write.
+LIGHT_JOBS = frozenset({"autonomy", "window"})
+
+
+def routine_brief(routine):
+    """Where her routine stands, in a line or two instead of the whole catalogue."""
+
+    def name(row):
+        when = "–".join(x for x in (row.get("start"), row.get("end")) if x)
+        return f"{row.get('activity', '')} ({when}, id {row.get('id', '')})"
+
+    now = [name(r) for r in routine.get("active_suggestions") or []]
+    later = [name(r) for r in (routine.get("later_today") or [])[:2]]
+    return (
+        "[Your routine — invitations, not attendance] "
+        + (
+            "Now: " + "; ".join(now) + ". "
+            if now
+            else "Nothing in your routine is on now. "
+        )
+        + ("Later: " + "; ".join(later) + "." if later else "")
+    ).strip()
 
 
 def texting_block(c, now):
@@ -610,9 +646,12 @@ def main():
     p.add_argument(
         "mode", choices=["preread", "fingerprint"], nargs="?", default="preread"
     )
+    p.add_argument("--job", default="", help="the job it is for (lighter for some)")
     a = p.parse_args()
     c = cc.load(a.home)
-    sys.stdout.write(preread(c) if a.mode == "preread" else fingerprint(c))
+    sys.stdout.write(
+        preread(c, job=a.job or None) if a.mode == "preread" else fingerprint(c)
+    )
 
 
 if __name__ == "__main__":
