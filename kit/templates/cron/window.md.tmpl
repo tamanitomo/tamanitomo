@@ -21,6 +21,11 @@ existing file inside this profile workspace. Authored fictional progress stays
 `fictional`. Rest, no progress, changing direction and leaving the question open
 are valid outcomes.
 
+FILE SHAPES (exactly these keys; do not read Tamanitomo's source to find them, and if a command refuses, its message names what to change):
+- `{{ARCS_CMD}} progress --file F`: `{"arc":"<storyline id>","text":"what happened, one step","next_action":"...","obstacle":"","result":"","result_type":"thought|artifact|fictional","artifact_paths":["<absolute path of a file you made>"]}`. One step a day per storyline.
+- `{{PERSPECTIVES_CMD}} investigation-update --file F`: `{"investigation_id":"<id from the pre-read>","status":"open|paused|blocked|resolved|dropped","next_step":"...","obstacle":"needed when blocked","result":"needed when resolved","result_type":"thought|artifact|fictional|tool_evidence","artifact_paths":[]}`.
+- `tool_evidence` needs the source recorded first: `{{PERSPECTIVES_CMD}} encounter --file F` with `{"source_type":"tool_evidence","source_id":"<the URL>","occurred_at":"<ISO time now>","locator":"<URL or page>","summary":"what it actually said","observed_as":"returned_tool_result"}`, then pass the `id` it returns in `"source_ids"`. Without a returned source, say `thought`.
+
 {{VOICE_RULE}}
 
 RECORDING: Use Hermes's `write_file` tool to create a NEW UTF-8 JSON input file under

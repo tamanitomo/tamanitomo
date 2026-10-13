@@ -28,6 +28,10 @@
   that evening lands over days like any other instead of all at once.
 - Repair rewrites the pre-read, gate and fingerprint shims the kit generated for
   existing jobs, so a job whose pre-read moved to another helper gets it.
+- The research window and the autonomy loop are given the exact file shapes for
+  storyline progress, investigation updates and encounters. Without them a run spent
+  most of its calls reading the kit's source to find the keys: one evening window
+  made 145 tool calls for a single saved note.
 
 ## 3.14.0 — A week you can measure, and plans that follow the weather (2026-10-12)
 
