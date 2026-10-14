@@ -32,6 +32,9 @@ def collect(c, now=None):
     tz = _tz(c)
     now = now or dt.datetime.now(tz)
     scene = presence.current(c)
+    if scene:
+        shown, _gone = presence.held(c, scene, now)
+        scene = {**scene, "state": shown}
     anchor = presence.last_confirmed(c)
     jobs = [
         j

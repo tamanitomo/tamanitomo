@@ -55,14 +55,14 @@ def right_now(c, now):
     evening, read on Thursday morning, is how a companion ends up wrong about
     the world with no way to notice.
     """
-    from companion_presence import current
+    from companion_presence import current, held
 
     scene = current(c)
     if not scene:
         return (
             "No state recorded yet. Establish one before describing a current scene.\n"
         )
-    state = scene["state"]
+    state, gone = held(c, scene, now)
     when = dt.datetime.fromisoformat(scene["recorded_at"])
     outfit = ", ".join(item["description"] for item in state.get("outfit", []))
     lines = [
@@ -76,6 +76,14 @@ def right_now(c, now):
         lines += ["", "Wants right now: " + "; ".join(state["wants"]) + "."]
     if state.get("private_stance"):
         lines += ["", f"Where {c.subj()} actually stands: {state['private_stance']}"]
+    elif gone["private_stance"]:
+        # Said without the old words: shown them, a model writes them straight back.
+        lines += [
+            "",
+            f"{c.poss().capitalize()} last private stance was written before {c.subj()} and"
+            f" {c.human} last talked, or before a night passed, so it has lapsed. Anything"
+            f" still held now is {c.pronouns[3]} to put in a fresh stance, in new words.",
+        ]
     if state.get("care"):
         lines += ["", "Recent care: " + "; ".join(state["care"]) + "."]
     import companion_day

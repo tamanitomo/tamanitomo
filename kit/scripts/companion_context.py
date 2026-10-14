@@ -522,11 +522,11 @@ def build(c, payload=None, now=None, maintenance_notice=""):
                 parts.append((6, handed))
 
     try:
-        from companion_presence import current, last_confirmed
+        from companion_presence import current, held, last_confirmed
 
         scene = current(c)
         if scene:
-            state = scene["state"]
+            state, _gone = held(c, scene, now)
             outfit = ", ".join(item["description"] for item in state["outfit"])
             label = "[Current lived state — " + age_phrase(
                 dt.datetime.fromisoformat(scene["recorded_at"]), now

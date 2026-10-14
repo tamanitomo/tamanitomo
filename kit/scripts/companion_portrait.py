@@ -289,7 +289,7 @@ def recorded_parts(c, record=None):
     again beside it, so the same clothes were described twice and the framing three
     times -- once as its own box, once inside the scene, and once in the tag list.
     """
-    from companion_presence import current, visible_outfit, wardrobe
+    from companion_presence import current, held, visible_outfit, wardrobe
 
     scene = record if record is not None else current(c)
     state = (scene or {}).get("state", {}) if scene else {}
@@ -312,7 +312,9 @@ def recorded_parts(c, record=None):
         "identity": identity_block(c),
         "scene": ", ".join(p for p in action if p),
         "wardrobe": outfit,
-        "feeling": feeling_text(state),
+        # A want that has lapsed is not part of this picture: a morning chore was
+        # still going into the prompt in the evening.
+        "feeling": feeling_text(held(c, scene)[0] if record is None else state),
         "lighting": visual.get("lighting") or lighting_guess(c, location),
         "camera": visual.get("framing") or "",
     }

@@ -768,7 +768,11 @@ def compute(c, now=None, record=False):
         "personality": config["personality"],
         "mood": scene["state"].get("mood") if scene else None,
         "mood_at": scene.get("recorded_at") if scene else None,
-        "private_stance": scene["state"].get("private_stance") if scene else None,
+        "private_stance": (
+            companion_presence.held(c, scene, now)[0].get("private_stance") or None
+            if scene
+            else None
+        ),
         "meters": {
             **{name: settled[name]["value"] for name in targets},
             "longing": None if longing is None else clamp(longing),

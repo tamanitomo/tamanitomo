@@ -1,3 +1,17 @@
+## 3.15.2 — Stances and wants lapse (2026-10-13)
+
+- Her private stance carries across a gap into the next conversation, then lapses
+  once the two of them have talked since she first wrote it and the talk has gone
+  quiet for twenty minutes, or once a night has passed. Code no longer copies it
+  into every later record, a model rewording it does not restart its clock, and a
+  lapsed one copied back word for word is dropped. Her job summary says it lapsed
+  without repeating it; anything she still holds is hers to write fresh. A stance
+  had been carried, by code and by rewording, for three days.
+- Wants lapse one by one after six hours unchanged or a night, and leave her
+  photo prompt with them: a morning chore was still being drawn in the evening.
+- Chat, her Emotive page, the job summary, `companion_presence.py show`, status,
+  the app and the feelings bars all show stance and wants as they stand now.
+
 ## 3.15.1 — A new day starts fresh (2026-10-13)
 
 - Once a night has passed since the two of them last talked, her pre-read says so,

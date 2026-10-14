@@ -336,12 +336,15 @@ def build(home=None, token="", state_dir=None):
             stage = max(stage, 4)
         display_scene = scene
         if scene and isinstance(scene.get("state"), dict):
+            # A lapsed stance or want is not shown as how she feels now.
+            shown, _gone = presence.held(c, scene)
+            display_scene = {**scene, "state": shown}
             raw_outfit = scene["state"].get("outfit", [])
             if isinstance(raw_outfit, list):
                 filtered_outfit = filter_wardrobe_items(raw_outfit, stage)
                 display_scene = {
-                    **scene,
-                    "state": {**scene["state"], "outfit": filtered_outfit},
+                    **display_scene,
+                    "state": {**display_scene["state"], "outfit": filtered_outfit},
                 }
         setup_pending = []
         if not getattr(c, "location", "") and not getattr(c, "sensors", []):

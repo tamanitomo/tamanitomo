@@ -320,5 +320,6 @@
   "kit/scripts/companion_asks.py",
   "tests/test_asks.py",
   "tests/test_checkin_gate.py",
-  "tests/test_fresh_day.py"
+  "tests/test_fresh_day.py",
+  "tests/test_stance_lapse.py"
 ]

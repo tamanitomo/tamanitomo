@@ -297,6 +297,144 @@ def current(c):
     return next(events(c), None)
 
 
+# ---- how long an intention lasts -------------------------------------------
+# A stance is about a moment between the two of them, and wants are what she is
+# after right now. Both used to be copied into every later record by code, so a
+# conclusion drawn one evening ("he wants to be left alone") was still steering
+# every pulse the next afternoon, after they had talked twice. Each now carries
+# when it was first written, and lapses once it has outlived its moment.
+WANTS_HOURS = 6
+# How long the human has to be quiet before a conversation counts as over.
+QUIET_MINUTES = 20
+
+
+def _first_seen(c, scene, holds, days=3):
+    """When the run of records ending at `scene` started to satisfy `holds`.
+
+    Only records written before the since fields existed need this walk; it stops
+    at the first record that disagrees or already knows the answer, and after
+    `days` (anything older has lapsed by a night anyway)."""
+    oldest = dt.datetime.fromisoformat(scene["recorded_at"])
+    floor = oldest - dt.timedelta(days=days)
+    started = False
+    for row in events(c):
+        if not started:
+            started = row["id"] == scene["id"]
+            if not started:
+                continue
+        elif not holds(row["state"]):
+            break
+        if dt.datetime.fromisoformat(row["recorded_at"]) < floor:
+            break
+        known = holds(row["state"])
+        if isinstance(known, str):
+            return dt.datetime.fromisoformat(known)
+        oldest = dt.datetime.fromisoformat(row["recorded_at"])
+    return oldest
+
+
+def _stance_since(c, scene):
+    st = scene["state"]
+    if st.get("stance_since"):
+        return dt.datetime.fromisoformat(st["stance_since"])
+
+    # Any wording: a model rewords the stance it was shown on every pulse.
+    def holds(s):
+        if not s.get("private_stance"):
+            return False
+        return s.get("stance_since") or True
+
+    return _first_seen(c, scene, holds)
+
+
+def _wants_since(c, scene):
+    st = scene["state"]
+    stored = st.get("wants_since") if isinstance(st.get("wants_since"), dict) else {}
+    out = {}
+    for want in st.get("wants") or []:
+        if stored.get(want):
+            out[want] = dt.datetime.fromisoformat(stored[want])
+            continue
+
+        def holds(s, want=want):
+            if want not in (s.get("wants") or []):
+                return False
+            known = s.get("wants_since")
+            return (known.get(want) if isinstance(known, dict) else None) or True
+
+        out[want] = _first_seen(c, scene, holds)
+    return out
+
+
+def _night_since(c, since, now):
+    import companion_preread
+
+    try:
+        return companion_preread.slept_since(c, since, now)
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def _talked_since(c, since, now):
+    """They have written to each other since `since`, and it has gone quiet."""
+    import companion_thread
+
+    try:
+        thread = companion_thread.read(c, now, tail=1)
+        last = thread.get("last_from_human") if thread.get("available") else None
+    except (OSError, ValueError, TypeError):
+        return False
+    if not last:
+        return False
+    last = dt.datetime.fromisoformat(last)
+    return last > since and now - last >= dt.timedelta(minutes=QUIET_MINUTES)
+
+
+def lapsed(c, scene, now=None):
+    """What of her carried intentions has outlived its moment.
+
+    The stance lapses once the two of them have talked since she first wrote it
+    (rewordings since included) and the talk has gone quiet, or a night has passed:
+    it carries across a gap into the next conversation, and is hers to rewrite
+    after it. A want lapses after a night
+    or after WANTS_HOURS unchanged. Returns {"private_stance": bool, "wants": [...]}.
+    """
+    now = now or dt.datetime.now(ZoneInfo(c.timezone))
+    out = {"private_stance": False, "wants": []}
+    if not scene:
+        return out
+    st = scene["state"]
+    if st.get("private_stance"):
+        since = _stance_since(c, scene)
+        out["private_stance"] = _talked_since(c, since, now) or _night_since(
+            c, since, now
+        )
+    if st.get("wants"):
+        for want, since in _wants_since(c, scene).items():
+            if now - since >= dt.timedelta(hours=WANTS_HOURS) or _night_since(
+                c, since, now
+            ):
+                out["wants"].append(want)
+    return out
+
+
+def held(c, scene, now=None):
+    """The scene's state as it stands now: lapsed stance and wants left out.
+
+    Every reader that shows her stance or wants goes through this, so an old
+    conclusion stops being presented as how she feels the moment it lapses, not
+    at the next record."""
+    if not scene:
+        return {}, {"private_stance": False, "wants": []}
+    gone = lapsed(c, scene, now)
+    state = dict(scene["state"])
+    if gone["private_stance"]:
+        state["private_stance"] = ""
+    if gone["wants"]:
+        state["wants"] = [w for w in state.get("wants") or [] if w not in gone["wants"]]
+    return state, gone
+
+
 def wardrobe(c):
     path = c.life / "wardrobe.json"
     if not path.exists():
@@ -372,7 +510,8 @@ def update_wardrobe(c, items):
     return data
 
 
-def show(c):
+def show(c, now=None):
+    now = now or dt.datetime.now(ZoneInfo(c.timezone))
     closet = wardrobe(c)
     needed = {item["id"] for item in closet["items"]}
     last = {}
@@ -385,8 +524,13 @@ def show(c):
             break
     import companion_lifestyle
 
+    cur = current(c)
+    if cur:
+        # Shown as it stands now, so a lapsed stance is not there to be copied back.
+        shown, _gone = held(c, cur, now)
+        cur = {**cur, "state": shown}
     result = {
-        "current": current(c),
+        "current": cur,
         "wardrobe": {
             **closet,
             "items": [
@@ -395,9 +539,7 @@ def show(c):
         },
     }
     if companion_lifestyle.enabled(c):
-        result["everyday_life"] = companion_lifestyle.render(
-            c, dt.datetime.now(ZoneInfo(c.timezone))
-        )
+        result["everyday_life"] = companion_lifestyle.render(c, now)
     return result
 
 
@@ -685,6 +827,35 @@ def update(c, data, now=None, dry_run=False):
             parent = next(
                 (row for row in events(c) if row["id"] == data["previous_id"]), None
             )
+        # A lapsed stance or want copied back word for word is the copy talking, not
+        # her: it is dropped. Said again in new words, it is hers and starts fresh.
+        # What is still current keeps the time it was first written.
+        at = (
+            dt.datetime.fromisoformat(previous["recorded_at"])
+            if previous and previous["id"] == ident
+            else now
+        )
+        before = parent["state"] if parent else {}
+        gone = lapsed(c, parent, at)
+        if gone["private_stance"] and state["private_stance"] == before.get(
+            "private_stance"
+        ):
+            state["private_stance"] = ""
+        state["wants"] = [w for w in state["wants"] if w not in gone["wants"]]
+        if state["private_stance"]:
+            # Reworded or not, a stance written while the last one still held is that
+            # stance going on, and keeps its clock: a model rewording what it was shown
+            # kept one evening's conclusion "new" for a whole day. Only a stance written
+            # after the last one lapsed starts a clock of its own.
+            going_on = before.get("private_stance") and not gone["private_stance"]
+            state["stance_since"] = (
+                _stance_since(c, parent) if going_on else at
+            ).isoformat()
+        if state["wants"]:
+            kept = _wants_since(c, parent) if parent else {}
+            state["wants_since"] = {
+                w: (kept[w] if w in kept else at).isoformat() for w in state["wants"]
+            }
         # Which place she is in: hers to say, carried while she stays put (see
         # companion_places.resolve). Writes wait for the record itself.
         import companion_places
@@ -871,17 +1042,18 @@ def _note_missed_commitment(c, state, parent, now):
 _VISUAL_KEYS = ("pose", "hands", "gaze", "framing", "props", "expression", "lighting")
 
 
-def _carried_record(c):
+def _carried_record(c, now=None):
     """The scene as it stands, as an `update` record: everything a model has to get right
     and keeps getting wrong (the previous id, every outfit id, the wants list, the day
     plan). A continuation or a transition changes a few fields of this; the rest is code.
+    A stance or want that has lapsed is not carried (see `lapsed`).
     """
     cur = current(c)
     if not cur:
         raise ValueError(
             "there is no recorded scene yet; write the first one with `update --file`"
         )
-    st = cur["state"]
+    st, _gone = held(c, cur, now)
     rec = {
         "previous_id": cur["id"],
         "outfit": [item["id"] for item in st.get("outfit", [])],
@@ -984,7 +1156,7 @@ def continue_scene(
     model out of the short form and into hand-writing the whole record.
     """
     now = now or dt.datetime.now(ZoneInfo(c.timezone))
-    rec = _carried_record(c)
+    rec = _carried_record(c, now)
     if mood:
         rec["mood"] = mood
     if asleep is not None:
@@ -1021,7 +1193,7 @@ def promise(
     """
     now = now or dt.datetime.now(ZoneInfo(c.timezone))
     cur = current(c)
-    rec = _carried_record(c)
+    rec = _carried_record(c, now)
     settle = done or drop
     if settle:
         held = {item["id"]: item for item in cur["state"].get("commitments", [])}
@@ -1095,7 +1267,7 @@ def transition_scene(
 ):
     """A real change. Only what changed is named; `update` still applies every rule."""
     now = now or dt.datetime.now(ZoneInfo(c.timezone))
-    rec = _carried_record(c)
+    rec = _carried_record(c, now)
     rec.update(
         {
             "activity": activity,
@@ -1262,7 +1434,7 @@ def render_emotive(c, now=None):
             "",
         ]
         return "\n".join(lines)
-    state = row["state"]
+    state, _gone = held(c, row, now)
     when = dt.datetime.fromisoformat(row["recorded_at"]).astimezone(
         ZoneInfo(c.timezone)
     )

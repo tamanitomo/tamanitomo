@@ -1,4 +1,14 @@
-Tamanitomo 3.15.1: a new day starts fresh.
+Tamanitomo 3.15.2: old feelings don't stick.
+
+- **Her stance moves on.** How she privately stands with you carries into your next
+  conversation, then lapses once you've talked and it goes quiet, or overnight. It is no
+  longer copied forward for days.
+- **Wants expire.** What she wants right now lapses after six hours or a night, so old chores
+  stop showing up in her photos.
+
+After updating, run Repair for each companion (`companion repair --prompts auto`).
+
+Previous: 3.15.1 a new day starts fresh.
 
 - **Last night doesn't decide today.** If she read something you said as wanting space, that
   reading no longer silently carries past a night's sleep.
