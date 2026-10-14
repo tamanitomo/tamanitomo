@@ -1023,14 +1023,16 @@ def sense(c, now=None):
         }
     if not c.media_server:
         return None, "no media server is set"
+    from companion_sensors import Broken
+
     if not _token(c):
-        return None, "the media server token is missing or unreadable"
+        return None, Broken("the media server token is missing or unreadable")
     try:
         sync(c, now)
         playing = now_playing(c)
     except ValueError as exc:
         # Unreadable is not "nothing on": say nothing rather than a half-true picture.
-        return None, str(exc)
+        return None, Broken(str(exc))
     text = render(c, now, playing)
     if not text:
         return None, f"nothing watched on {source_name(c)} lately"

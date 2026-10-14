@@ -38,6 +38,18 @@ TIMEOUT = 8
 USER_AGENT = "tamanitomo"
 
 
+class Broken(str):
+    """A reason for silence that is a failure, not an empty moment.
+
+    Every sense says nothing when it has nothing true to say, and that silence
+    is right. But "Spotify signed out" and "nothing played lately" looked the
+    same from outside, so a sense could be broken for days with nobody told. A
+    sense returns its reason as Broken when the thing it reads has stopped
+    working; `run_one` keeps the time it started, and the health watch reports
+    one that stays broken (companion_watch.check_senses).
+    """
+
+
 def _tz(c):
     try:
         return ZoneInfo(c.timezone)
@@ -60,7 +72,7 @@ def weather(c, now):
     try:
         data = json.loads(_get(url))
     except (urllib.error.URLError, OSError, ValueError, TimeoutError) as exc:
-        return None, f"weather service unreachable: {exc}"
+        return None, Broken(f"the weather service is unreachable: {exc}")
     try:
         current = data["current_condition"][0]
         today = data["weather"][0]
@@ -100,7 +112,9 @@ def weather(c, now):
         }
         return text, extra
     except (KeyError, IndexError, TypeError) as exc:
-        return None, f"weather service returned a shape we do not understand: {exc}"
+        return None, Broken(
+            f"the weather service returned a shape we do not understand: {exc}"
+        )
 
 
 # ---- daylight, season, moon ---------------------------------------------
@@ -340,7 +354,8 @@ def thread(c, now):
 
     data = companion_thread.read(c, now)
     if not data.get("available"):
-        return None, data.get("reason", "no conversation history yet")
+        reason = data.get("reason", "no conversation history yet")
+        return None, (Broken(reason) if "unreadable" in reason else reason)
     return companion_thread.render(c, data), data
 
 
@@ -479,6 +494,12 @@ def music(c, now):
     st = _spotify_state(c)
     if st:
         token = _spotify_token(c, st)
+        if not token:
+            # Connected, but the sign-in no longer works: not the same as quiet.
+            (c.soul_dir / "context-music.md").unlink(missing_ok=True)
+            return None, Broken(
+                "Spotify is connected but its sign-in has stopped working; sign in again"
+            )
         if token:
             api = st.get("api_base_url", "https://api.spotify.com/v1").rstrip("/")
             try:
@@ -693,7 +714,10 @@ def run_one(c, name, now):
     try:
         text, extra = globals()[spec["fn"]](c, now)
     except Exception as exc:
-        text, extra = None, f"sensor failed: {exc}"
+        text, extra = None, Broken(f"it crashed: {exc}")
+    _note_health(
+        c, name, extra if isinstance(extra, Broken) and not text else None, now
+    )
     if not text:
         # Absent means silent. Removing the stale file is the point: yesterday's
         # weather presented as today's is worse than no weather at all.
@@ -717,6 +741,42 @@ def run_one(c, name, now):
             ),
         )
     return {"sensor": name, "wrote": True, "chars": len(text)}
+
+
+def health_path(c):
+    return c.home / "state" / "sensor-health.json"
+
+
+def _note_health(c, name, broken, now):
+    """Keep when each sense started failing; a sense that works again is forgotten."""
+    path = health_path(c)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    if broken is None:
+        if name not in data:
+            return
+        data.pop(name)
+    else:
+        since = (data.get(name) or {}).get("since") or now.isoformat()
+        data[name] = {"since": since, "at": now.isoformat(), "reason": str(broken)}
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2))
+    except OSError:
+        pass
+
+
+def broken_senses(c):
+    """{name: {"since", "at", "reason"}} for the senses failing right now."""
+    try:
+        data = json.loads(health_path(c).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def run(c, now=None, names=None):

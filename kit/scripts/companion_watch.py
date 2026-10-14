@@ -48,6 +48,17 @@ LOW_DISK_BYTES = 1_000_000_000
 # and each run spawns an interpreter. Failures are always re-run.
 HOOK_PASS_REUSE_SECONDS = 300
 _hook_passes = {}
+# The same for the image servers: a working one is not asked again for ten
+# minutes; one that failed is asked again after a minute.
+PROBE_PASS_REUSE_SECONDS = 600
+PROBE_FAIL_REUSE_SECONDS = 60
+PROBE_TIMEOUT = 5
+_probes = {}
+# A sense that fails for a moment (a flaky weather service) is not news; one
+# broken this long is.
+SENSE_BROKEN_HOURS = 3
+# Messages to the human that ended failed or unconfirmed, looked at this far back.
+DELIVERY_LOOKBACK_HOURS = 6
 
 
 def _tz(c):
@@ -305,6 +316,134 @@ def check_disk(c):
     return []
 
 
+def _probe(url):
+    """(ok, why) for one GET, reusing a recent answer (see PROBE_*_REUSE_SECONDS)."""
+    import time
+    import urllib.error
+    import urllib.request
+
+    cached = _probes.get(url)
+    if cached:
+        ok, why, at = cached
+        reuse = PROBE_PASS_REUSE_SECONDS if ok else PROBE_FAIL_REUSE_SECONDS
+        if time.monotonic() - at < reuse:
+            return ok, why
+    try:
+        with urllib.request.urlopen(url, timeout=PROBE_TIMEOUT) as response:
+            ok, why = 200 <= response.status < 300, f"HTTP {response.status}"
+    except urllib.error.HTTPError as exc:
+        ok, why = False, f"HTTP {exc.code}"
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        ok, why = False, str(getattr(exc, "reason", exc))
+    _probes[url] = (ok, why, time.monotonic())
+    return ok, why
+
+
+def check_photos(c):
+    """Whether the image servers her photos are routed to answer at all.
+
+    Her photo setting once pointed at a server that had stopped, and every
+    photo failed for a day: she said her camera was not answering, and nothing
+    else said anything. Only ComfyUI endpoints are asked; a hosted provider has
+    no cheap way to ask, and its failures show up as failing jobs."""
+    if c.image_mode == "none" and not c.image_timeline:
+        return []
+    try:
+        import companion_media
+
+        data = companion_media.effective(c)
+    except (OSError, ValueError, ImportError):
+        return []
+    used = {v for v in (data.get("routes") or {}).values() if v}
+    if data.get("default_preset"):
+        used.add(data["default_preset"])
+    servers = sorted(
+        {
+            str(p["endpoint"]).rstrip("/")
+            for p in data.get("presets") or []
+            if p.get("id") in used
+            and p.get("provider") == "comfyui"
+            and p.get("endpoint")
+        }
+    )
+    out = []
+    for server in servers:
+        ok, why = _probe(server + "/system_stats")
+        if not ok:
+            out.append(
+                f"photos: the image server at {server} is not answering ({why}); "
+                "every photo will fail until it is back"
+            )
+    return out
+
+
+def check_senses(c, now):
+    """Senses switched on whose source has stopped working for a while."""
+    try:
+        import companion_sensors
+
+        broken = companion_sensors.broken_senses(c)
+    except (OSError, ValueError, ImportError):
+        return []
+    out = []
+    for name in c.sensors or []:
+        row = broken.get(name)
+        if not isinstance(row, dict) or not row.get("since"):
+            continue
+        try:
+            since = dt.datetime.fromisoformat(row["since"]).astimezone(now.tzinfo)
+        except (TypeError, ValueError):
+            continue
+        if (now - since).total_seconds() >= SENSE_BROKEN_HOURS * 3600:
+            out.append(
+                f"the {name} sense has not worked since {since.strftime('%a %H:%M')}: "
+                f"{str(row.get('reason') or 'no detail')[:120]}"
+            )
+    return out
+
+
+def check_delivery(c, now):
+    """Messages to the human that failed lately, when none got through after them.
+
+    A send whose delivery was not confirmed most likely arrived (a slow photo
+    upload), so unconfirmed ones count only from the second in a row."""
+    try:
+        import companion_outbox
+
+        rows = companion_outbox.fold(c)
+    except (OSError, ValueError, ImportError):
+        return []
+    cutoff = now - dt.timedelta(hours=DELIVERY_LOOKBACK_HOURS)
+    recent = []
+    for row in rows:
+        try:
+            at = dt.datetime.fromisoformat(row.get("decided_at") or "")
+        except ValueError:
+            continue
+        if at.astimezone(now.tzinfo) >= cutoff and row.get("status") in (
+            "sent",
+            "failed",
+            "unknown",
+        ):
+            recent.append((at, row))
+    if not recent:
+        return []
+    recent.sort(key=lambda pair: pair[0])
+    last_sent = max((at for at, row in recent if row["status"] == "sent"), default=None)
+    failed = [
+        row
+        for at, row in recent
+        if row["status"] in ("failed", "unknown")
+        and (last_sent is None or at > last_sent)
+    ]
+    if not any(row["status"] == "failed" for row in failed) and len(failed) < 2:
+        return []
+    detail = str(failed[-1].get("detail") or failed[-1].get("status"))[:120]
+    return [
+        f"{len(failed)} message(s) to {c.human} did not get through lately: {detail}"
+    ]
+
+
 def problems(c, now=None):
     now = now or dt.datetime.now(_tz(c))
     found = _jobs(c)
@@ -317,6 +456,9 @@ def problems(c, now=None):
         lambda: check_hook(c),
         lambda: check_memory(c),
         lambda: check_disk(c),
+        lambda: check_photos(c),
+        lambda: check_senses(c, now),
+        lambda: check_delivery(c, now),
     ):
         try:
             out += check()

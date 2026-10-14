@@ -1,4 +1,14 @@
-Tamanitomo 3.15.2: old feelings don't stick.
+Tamanitomo 3.15.3: you hear about it when something breaks.
+
+- **Breakage alerts.** If her image server stops answering, a sense breaks (weather, Spotify,
+  Plex/Jellyfin) or your messages stop arriving, you get an alert, and she knows her camera
+  or senses are out.
+- **Her finds are worth sharing.** When she figures something out on her own, telling you is
+  now named as a good reason to text, and her log stops teaching the next run to stay quiet.
+
+After updating, run Repair for each companion (`companion repair --prompts auto`).
+
+Previous: 3.15.2 old feelings don't stick.
 
 - **Her stance moves on.** How she privately stands with you carries into your next
   conversation, then lapses once you've talked and it goes quiet, or overnight. It is no

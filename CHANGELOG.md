@@ -1,3 +1,24 @@
+## 3.15.3 — Telling you when something breaks (2026-10-13)
+
+- The health watch checks the features you switched on, not only the jobs. It
+  asks each image server her photo routes use whether it answers, reports a sense
+  that has been broken for three hours (weather unreachable, Spotify signed out,
+  the Plex or Jellyfin server or its token, an unreadable conversation store), and
+  reports messages to you that failed with nothing delivered since (one
+  unconfirmed photo upload is not enough; two are). Alerts go where the profile's
+  alerts go, a phone push included, and she is told her own camera or senses are
+  not working. Image servers are asked at most every ten minutes while they work.
+- Senses tell "broken" from "nothing to report": a sense whose source fails says
+  so, and when it started is kept in `state/sensor-health.json` until it works.
+- Her own log, read back on every run, no longer hands the next run the last one's
+  reason for staying quiet: the pre-read says a choice not to write was for its
+  moment, not a precedent, and the log is for what she did, not why she did not
+  write. A run that wrote "I let the quiet stay quiet" was read by the next one as
+  its reason too.
+- Investigations are hers to pursue rather than to hand to the human, and when
+  one gets somewhere, telling the human what she found is named as a message worth
+  sending. "Do not turn them into outreach" had kept a finished find to herself.
+
 ## 3.15.2 — Stances and wants lapse (2026-10-13)
 
 - Her private stance carries across a gap into the next conversation, then lapses

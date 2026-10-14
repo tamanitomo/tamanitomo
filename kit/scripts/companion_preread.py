@@ -62,9 +62,15 @@ def preread(c, now=None, job=None):
 
     recent = companion_journal.tail(c, "autonomy", 3000)
     if recent["text"]:
+        # Her own log, read back on every run: a run that wrote down why it stayed
+        # quiet became the next run's reason to, and a week of that was a silent day
+        # nobody chose. What earlier runs did carries on; why they did not write does not.
         out.append(
             "[Recent autonomy log tail, already read. Older entries remain in the file; "
-            f'{recent["omitted_chars"]} earlier characters omitted.]'
+            f'{recent["omitted_chars"]} earlier characters omitted. It says what earlier runs'
+            " did, to carry on from. Where one chose not to write to "
+            f"{c.human}, that was its call for its moment and is not a precedent for"
+            " this one: whether to write now is decided from now.]"
         )
         out.append(recent["text"])
     scene = companion_presence.current(c)
