@@ -1,4 +1,11 @@
-Tamanitomo 3.15.3: you hear about it when something breaks.
+Tamanitomo 3.15.4: the share hint follows your photo setting.
+
+- **No more undies hint with adult images off.** The nudge to share her latest photo only
+  mentions underwear when such a photo could actually be sent; otherwise it suggests an outfit.
+
+After updating, run Repair for each companion (`companion repair --prompts auto`).
+
+Previous: 3.15.3 you hear about it when something breaks.
 
 - **Breakage alerts.** If her image server stops answering, a sense breaks (weather, Spotify,
   Plex/Jellyfin) or your messages stop arriving, you get an alert, and she knows her camera

@@ -322,5 +322,6 @@
   "tests/test_checkin_gate.py",
   "tests/test_fresh_day.py",
   "tests/test_stance_lapse.py",
-  "tests/test_feature_health.py"
+  "tests/test_feature_health.py",
+  "tests/test_share_hint.py"
 ]

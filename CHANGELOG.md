@@ -1,3 +1,11 @@
+## 3.15.4 — The share hint follows the photo setting (2026-10-14)
+
+- The hint that offers her latest timeline photo for sharing named "teasing an
+  outfit/undies" as an example for every companion, including ones with adult
+  images switched off, where such a photo can never be sent. It now says that only
+  when an undressed photo could actually go out (the setting is on and closeness
+  allows it), and suggests an outfit she likes otherwise.
+
 ## 3.15.3 — Telling you when something breaks (2026-10-13)
 
 - The health watch checks the features you switched on, not only the jobs. It

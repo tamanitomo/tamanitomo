@@ -238,9 +238,18 @@ def recent_photo(c):
         act = info.get("activity", "")
         loc = info.get("location", "")
         desc = f" ({act} at {loc})" if act and loc else (f" ({act})" if act else "")
+        # The example names undies only where an undressed photo could actually be
+        # sent; with adult images off it suggested a share that could never go out.
+        try:
+            import companion_media
+
+            undressed = companion_media.adult_ready(c)[0]
+        except Exception:
+            undressed = False
+        outfit = "teasing an outfit/undies" if undressed else "an outfit you like"
         return (
             f"Latest timeline image: `{info['path']}`{desc}\n"
-            f"WANTING TO SHARE: If you want to share what you are doing with {c.human} (e.g. teasing an outfit/undies, showing your swim lap time or workout, a book you found, or a glimpse of where you are), you can share this photo! "
+            f"WANTING TO SHARE: If you want to share what you are doing with {c.human} (e.g. {outfit}, showing your swim lap time or workout, a book you found, or a glimpse of where you are), you can share this photo! "
             f'Use `timeline share --body "<your message>"` or queue an image via `outbox queue`. '
             f"This automatically respects {c.human}'s proactive messaging and photos settings, quiet hours, and daily limits without being cumbersome."
         )
