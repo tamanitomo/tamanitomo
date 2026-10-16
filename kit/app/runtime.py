@@ -348,13 +348,61 @@ class Runtime:
             )
         return result
 
+    def legacy_chat(self, args, home, report):
+        """Older/custom CLI wrappers lack the cooperative bridge protocol."""
+        proc = subprocess.Popen(
+            self.command() + list(args),
+            env=self.env(home),
+            cwd=str(KIT),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        deadline = time.monotonic() + 600
+        interrupted = False
+        try:
+            while True:
+                if getattr(report, "cancelled", lambda: False)():
+                    interrupted = True
+                    proc.terminate()
+                try:
+                    stdout, stderr = proc.communicate(
+                        timeout=0.2 if not interrupted else 3
+                    )
+                    break
+                except subprocess.TimeoutExpired:
+                    if interrupted:
+                        proc.kill()
+                        stdout, stderr = proc.communicate()
+                        break
+                    if time.monotonic() > deadline:
+                        raise ValueError(
+                            "Hermes chat timed out; inspect the session before retrying"
+                        )
+            if proc.returncode and not interrupted:
+                raise ValueError(
+                    redact(stderr or stdout or "Hermes chat failed")[-6000:]
+                )
+            result = subprocess.CompletedProcess(args, proc.returncode, stdout, stderr)
+            result.interrupted = interrupted
+            return result
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+            proc.wait()
+            proc.stdout.close()
+            proc.stderr.close()
+
     def chat(self, args, home, report):
         binary = Path(self.command()[0])
         python = binary.parent / ("python.exe" if os.name == "nt" else "python")
         if not python.is_file():
             python = binary.resolve().parent / "python"
         if len(self.command()) != 1 or not python.is_file():
-            return self.run(args, home=home, timeout=600)
+            return self.legacy_chat(args, home, report)
         import queue
 
         events = queue.Queue(maxsize=1024)
@@ -363,10 +411,20 @@ class Runtime:
         # or restarting a CLI turn that may already have performed tool actions.
         fallbacks = json.dumps(_chat_fallbacks(cc.load(home)))
         proc, errors = _warm_bridges.take(python, env)
+        cancel_directory = tempfile.TemporaryDirectory(prefix="tamanitomo-chat-")
+        cancel_file = Path(cancel_directory.name) / "cancel"
+        cancel_requested_at = None
         with errors:
             try:
                 proc.stdin.write(
-                    json.dumps({"args": args, "fallbacks": fallbacks}) + "\n"
+                    json.dumps(
+                        {
+                            "args": args,
+                            "fallbacks": fallbacks,
+                            "cancel_file": str(cancel_file),
+                        }
+                    )
+                    + "\n"
                 )
                 proc.stdin.close()
             except OSError:
@@ -385,6 +443,14 @@ class Runtime:
             session = None
             try:
                 while True:
+                    if getattr(report, "cancelled", lambda: False)():
+                        if cancel_requested_at is None:
+                            cancel_file.touch()
+                            cancel_requested_at = time.monotonic()
+                        elif time.monotonic() - cancel_requested_at > 10:
+                            # Older Hermes may not expose interrupt(). Bound cleanup,
+                            # preserving the existing session instead of resubmitting.
+                            proc.kill()
                     if time.monotonic() > deadline:
                         raise ValueError(
                             "Hermes chat timed out. Inspect the session before retrying."
@@ -410,16 +476,18 @@ class Runtime:
                 code = proc.wait(timeout=5)
                 errors.seek(0)
                 error = errors.read()[-6000:]
-                if code:
+                if code and cancel_requested_at is None:
                     raise ValueError(redact(error or final or "Hermes chat failed"))
                 result = subprocess.CompletedProcess(args, code, final, error)
                 result.session = session
+                result.interrupted = cancel_requested_at is not None
                 return result
             finally:
                 if proc.poll() is None:
                     proc.kill()
                     proc.wait()
                 proc.stdout.close()
+                cancel_directory.cleanup()
                 # Ready the next turn while the person reads this one.
                 _warm_bridges.prepare(python, env)
 
@@ -646,6 +714,7 @@ class Operations:
         self.lock = threading.Lock()
         self.rows = {}
         self.busy = set()
+        self.cancellations = {}
 
     def submit(
         self,
@@ -656,6 +725,7 @@ class Operations:
         profile="default",
         kind="runtime",
         before_start=None,
+        cancellable=False,
     ):
         with self.lock:
             if scope in self.busy:
@@ -675,6 +745,10 @@ class Operations:
                 "started_at": dt.datetime.now(dt.timezone.utc).isoformat(),
             }
             self.rows[ident] = row
+            cancelled = threading.Event()
+            if cancellable:
+                self.cancellations[ident] = cancelled
+                row["cancellable"] = True
             try:
                 self._save(row)
                 if before_start:
@@ -683,6 +757,7 @@ class Operations:
                 # Nothing has run yet. A journal must be durable before a
                 # setup subprocess can create files or contact a model.
                 self.busy.discard(scope)
+                self.cancellations.pop(ident, None)
                 row.update(
                     status="failed", error=redact(exc), progress="Needs attention"
                 )
@@ -718,6 +793,7 @@ class Operations:
                 row["percent"] = value
                 self._save(row)
 
+        report.cancelled = cancelled.is_set
         report.stream = stream
         report.percent = percent
 
@@ -725,20 +801,45 @@ class Operations:
             try:
                 result = action(report)
                 with self.lock:
-                    row.update(status="complete", result=result, progress="Complete")
+                    row.update(
+                        status="cancelled" if cancelled.is_set() else "complete",
+                        result=result,
+                        progress="Interrupted" if cancelled.is_set() else "Complete",
+                    )
             except Exception as exc:
                 with self.lock:
                     row.update(
-                        status="failed", error=redact(exc), progress="Needs attention"
+                        status="cancelled" if cancelled.is_set() else "failed",
+                        error=redact(exc),
+                        progress=(
+                            "Interrupted" if cancelled.is_set() else "Needs attention"
+                        ),
                     )
             finally:
                 with self.lock:
                     row["finished_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
                     self.busy.discard(scope)
+                    self.cancellations.pop(ident, None)
                     self._save(row)
 
         self.pool.submit(work)
         return dict(row)
+
+    def cancel(self, ident, scope, profile):
+        """Only explicit cancellation stops a chat; a lost connection never does."""
+        with self.lock:
+            row = self.rows.get(ident)
+            if not row or row["scope"] != scope or row["profile"] != profile:
+                raise ValueError("Unknown chat operation")
+            if not row.get("cancellable"):
+                raise ValueError("This operation cannot be interrupted")
+            if row["status"] == "running":
+                event = self.cancellations.get(ident)
+                if event is None:
+                    raise ValueError("This chat is no longer running")
+                event.set()
+                row["progress"] = "Interrupting reply"
+            return dict(row)
 
     def _save(self, row):
         self.directory.mkdir(parents=True, exist_ok=True)

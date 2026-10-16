@@ -140,3 +140,7 @@
 @media (prefers-reduced-motion: reduce) {
   .chat-dock *, .chat-dock *::before, .chat-dock *::after { animation: none !important; scroll-behavior: auto !important; }
 }
+
+.chat-dock .voice-conversation { flex: 0 0 100%; border: 1px solid var(--edge); border-radius: 10px; background: var(--surface-2); color: var(--ink); padding: 7px 10px; text-align: left; font-size: 12px; cursor: pointer; }
+.chat-dock .voice-conversation.is-listening { color: var(--bad); border-color: var(--bad); }
+.chat-dock .voice-chat-panel #voice-status { position: static; order: 4; flex: 0 0 100%; text-align: left; padding: 2px; line-height: 1.4; }

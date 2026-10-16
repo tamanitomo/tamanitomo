@@ -35,7 +35,7 @@ Your companion lives in a folder on your own computer, phone, or home server. It
 - **A real present:** It knows what time it is, follows morning and evening routines, and writes its own reflections.
 - **Evidence-backed memory:** It separates authored fiction from hard facts about you, citing exact quotes in an append-only ledger.
 - **Code-enforced boundaries:** Limits on when and how often it can message you are enforced in code, not merely suggested in a system prompt. It won't wake you up at 3:00 AM.
-- **Multimodal & Multi-Channel:** Chat in a responsive web app or over Telegram with voice notes, photo albums, and ambient awareness.
+- **Multimodal & Multi-Channel:** Chat in a responsive web app or over Telegram with voice notes, photo albums, and ambient awareness. Optional [hands-free voice conversation](docs/REALTIME_VOICE.md) speaks replies as they arrive and stops when you talk over her.
 
 ---
 

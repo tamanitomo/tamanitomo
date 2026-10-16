@@ -323,5 +323,10 @@
   "tests/test_fresh_day.py",
   "tests/test_stance_lapse.py",
   "tests/test_feature_health.py",
-  "tests/test_share_hint.py"
+  "tests/test_share_hint.py",
+  "docs/REALTIME_VOICE.md",
+  "kit/app/realtime_speech.py",
+  "kit/app/static/voice-capture-worklet.js",
+  "tests/test_realtime_speech.py",
+  "tests/test_realtime_voice_browser.py"
 ]

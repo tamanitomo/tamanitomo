@@ -76,10 +76,14 @@ class TestOneCast:
         life.add_person(companion.life, {"name": "Marguerite", "relation": "aunt"})
         assert seed["id"] in {p["id"] for p in life.cast(companion.life)}
 
-    def test_two_companions_are_not_offered_the_same_friends(self, tmp_path):
-        one = {p["id"] for p in life.cast(make(tmp_path, "nova").life)}
-        other = {p["id"] for p in life.cast(make(tmp_path, "kit").life)}
-        assert one != other
+    def test_companions_are_not_all_offered_the_same_friends(self, tmp_path):
+        # Two folders draw the same four of eight about once in 70 runs; five
+        # all drawing alike would mean the choice ignores the folder.
+        offered = {
+            frozenset(p["id"] for p in life.cast(make(tmp_path, name).life))
+            for name in ("nova", "kit", "rowan", "ivy", "juno")
+        }
+        assert len(offered) > 1
 
 
 class TestWhoSheIsWith:

@@ -157,6 +157,9 @@ def build(home=None, token="", state_dir=None):
     from .voice_chat import register as register_voice_chat
 
     register_voice_chat(app, select, load)
+    from .realtime_speech import register as register_realtime_speech
+
+    register_realtime_speech(app, select)
     from .shared_sessions import register as register_shared_sessions
 
     register_shared_sessions(app, load)
@@ -275,7 +278,11 @@ def build(home=None, token="", state_dir=None):
                 "GET",
                 "HEAD",
                 "OPTIONS",
-            ) and not request.url.path.startswith("/api/terminal/"):
+            ) and not (
+                request.url.path.startswith("/api/terminal/")
+                or request.url.path == "/api/voice-chat/stream"
+                or re.fullmatch(r"/api/chat/[a-f0-9]{32}/interrupt", request.url.path)
+            ):
                 installation, _ = selection.get()
                 if installation not in runtimes:
                     return JSONResponse(

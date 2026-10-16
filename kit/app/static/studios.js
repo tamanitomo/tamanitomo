@@ -836,6 +836,7 @@ async function renderVoiceStudio(host,compact=false){
   </form>
  </div>
 
+ <div class="card" id="realtime-voice-settings"></div>
  <div class="card" style="margin-top:20px">
   <h2>Try the saved voice</h2>
   <p class="dim small">Type a phrase to hear how ${esc(heroName)} sounds.</p>
@@ -914,6 +915,7 @@ async function renderVoiceStudio(host,compact=false){
    </div>`;
  });
  $('hero-quick-test').onclick=()=>$('studio-preview-voice').click();
+ if(typeof mountRealtimeVoiceSettings==='function')mountRealtimeVoiceSettings($('realtime-voice-settings'));
 };
 
 /* A model's own terms travel with the weights, not with this kit. Civitai

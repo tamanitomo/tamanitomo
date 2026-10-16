@@ -575,7 +575,7 @@ def register(app, select, load, operations):
         rt, profile = select()
         return rt, profile, rt.home(profile)
 
-    def op(label, action, *, before_start=None):
+    def op(label, action, *, before_start=None, cancellable=False):
         rt, profile, home = context()
         if any(
             c.scope[0] == str(rt.root) and not c.finished
@@ -590,6 +590,7 @@ def register(app, select, load, operations):
             lambda report: action(rt, profile, home, report),
             profile=profile,
             before_start=before_start,
+            cancellable=cancellable,
         )
 
     @app.post("/api/terminal")
@@ -674,6 +675,14 @@ def register(app, select, load, operations):
         if not visible_scope or row.get("profile") != (profile or "default"):
             raise HTTPException(404, "Unknown operation")
         return row
+
+    @app.post("/api/chat/{ident}/interrupt")
+    def interrupt_chat(ident: str):
+        rt, profile = select()
+        try:
+            return operations.cancel(ident, str(rt.root), profile or "default")
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from None
 
     @app.get("/api/profiles")
     def profiles():
@@ -3838,12 +3847,13 @@ def register(app, select, load, operations):
             hr.note_workspace_session(c, new)
             return {
                 "response": ANSI_TEXT(r.stdout),
+                "interrupted": bool(getattr(r, "interrupted", False)),
                 "session": new,
                 "messages": hr.messages(c, new) if new else [],
                 "note": "Hermes owns this conversation. All channels share this profile’s identity, memory, and lived state.",
             }
 
-        operation = op("Chat with " + c.agent, run)
+        operation = op("Chat with " + c.agent, run, cancellable=True)
         if "text/event-stream" not in request.headers.get("accept", ""):
             return operation
 
@@ -3865,8 +3875,10 @@ def register(app, select, load, operations):
                 if len(streamed) > offset:
                     yield event("delta", {"text": streamed[offset:]})
                     offset = len(streamed)
-                if row["status"] == "complete":
+                if row["status"] in ("complete", "cancelled"):
                     result = row.get("result", {})
+                    if row["status"] == "cancelled":
+                        result = {**result, "interrupted": True}
                     if result.get("session"):
                         yield event("session", {"id": result["session"]})
                     yield event("final", result)

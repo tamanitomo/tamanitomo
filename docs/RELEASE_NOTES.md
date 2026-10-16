@@ -1,4 +1,14 @@
-Tamanitomo 3.15.4: the share hint follows your photo setting.
+Tamanitomo 3.16.0: talk to her out loud.
+
+- **Voice conversation.** In web chat, press Voice conversation and just talk. She answers
+  out loud as her reply arrives, and stops when you start talking. Use headphones.
+- **Works without special hardware.** In Voice studio → Hands-free conversation, pick OpenAI
+  (paid, uses your OpenAI key) or Kokoro (free, runs on your own computer), enable it, and
+  save. Setup steps are in docs/REALTIME_VOICE.md.
+
+No Repair needed for this update.
+
+Previous: 3.15.4 the share hint follows your photo setting.
 
 - **No more undies hint with adult images off.** The nudge to share her latest photo only
   mentions underwear when such a photo could actually be sent; otherwise it suggests an outfit.

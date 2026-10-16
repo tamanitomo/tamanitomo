@@ -4,7 +4,7 @@
   'use strict';
 
   const state = {open: false, busy: false, loaded: false, loading: false, cursor: null, latest: null, unseen: false, recovering: false, refreshing: 0};
-  let root, log, box, send, status, historyButton;
+  let root, log, box, send, status, historyButton, activeTurn;
   let scope = '', scopeVersion = 0, readEpoch = 0, rows = [], refreshTimer;
   let searchEpoch = 0, searchCursor = null, searchMatches = [], searchContextRows = [], searchParams = null;
   const scopeKey = () => scope + ':' + scopeVersion;
@@ -16,7 +16,7 @@
   };
   const nearBottom = () => log.scrollHeight - log.scrollTop - log.clientHeight < 100;
   const scrollBottom = () => { log.scrollTop = log.scrollHeight; };
-  const cleanReply = (text) => String(text || '').replace(/<(think|reasoning)>[\s\S]*?(<\/\1>|$)/gi, '');
+  const cleanReply = (text) => String(text || '').replace(/<(think|thinking|reasoning)>[\s\S]*?(<\/\1>|$)/gi, '');
 
   function mount() {
     if (root) return;
@@ -471,7 +471,7 @@
         receive('progress', {text: next});
         seen = next;
       }
-      if (row.status === 'complete') { receive('final', row.result || {}); return; }
+      if (row.status === 'complete' || row.status === 'cancelled') { receive('final', {...(row.result || {}), interrupted: row.status === 'cancelled' || Boolean(row.result?.interrupted)}); return; }
       if (row.status === 'failed' || row.error) { receive('error', {error: row.error || 'The reply could not finish.'}); return; }
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
@@ -488,6 +488,35 @@
     }
   }
 
+  function requestTurnInterrupt(turn) {
+    if (!turn.operationId || turn.interruptRequest) return turn.interruptRequest;
+    const url = new URL(turn.interruptUrl, location.origin);
+    url.pathname += '/' + encodeURIComponent(turn.operationId) + '/interrupt';
+    turn.interruptRequest = fetch(url.pathname + url.search, {
+      method: 'POST', headers: {'content-type': 'application/json', ...turn.headers}, body: '{}'
+    }).then(async response => {
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw Error(body.detail || 'The previous reply could not be interrupted.');
+      }
+    }).catch(error => { turn.interruptError = error; });
+    return turn.interruptRequest;
+  }
+
+  async function interrupt() {
+    const turn = activeTurn;
+    if (!turn) return;
+    turn.interrupted = true;
+    if (typeof cancelBrowserRealtimeReply === 'function') cancelBrowserRealtimeReply();
+    if (scopeKey() === turn.scope) status.textContent = 'Stopping the previous reply…';
+    requestTurnInterrupt(turn);
+    // Keep reading the final server event. Disconnecting alone intentionally
+    // does not cancel a chat, and a new turn must wait for its tool cleanup.
+    await turn.finished;
+    await turn.interruptRequest;
+    if (turn.interruptError) throw turn.interruptError;
+  }
+
   async function submit(event, operationId = null) {
     event?.preventDefault();
     const restored = Boolean(operationId);
@@ -498,6 +527,10 @@
     const sessionKey = chatKey('session'), draftKey = chatKey('draft'), operationStorageKey = chatKey('operation');
     const saveTurn = (key, value) => { try { sessionStorage.setItem(key, value); } catch (_) {} };
     let terminal = false;
+    const turn = {scope: capturedScope, operationId, interrupted: false, interruptUrl: scoped('/api/chat'), headers: token ? {'x-tamanitomo-token':token,'x-companion-token':token} : {}};
+    turn.finished = new Promise(resolve => { turn.finish = resolve; });
+    activeTurn = turn;
+    const voiceTurn = !restored && typeof beginBrowserRealtimeReply === 'function' ? beginBrowserRealtimeReply() : null;
     readEpoch++;
     setSearch(false);
     state.busy = true;
@@ -527,6 +560,8 @@
       const receive = (name, data) => {
         if (name === 'operation' && data.id) {
           operationId = data.id;
+          turn.operationId = operationId;
+          if (turn.interrupted) requestTurnInterrupt(turn);
           saveTurn(operationStorageKey, operationId);
         }
         if (name === 'session' && data.id) saveTurn(sessionKey, data.id);
@@ -535,6 +570,7 @@
           const follow = nearBottom();
           reply.content = name === 'progress' ? String(data.text || '') : reply.content + String(data.text || '');
           replyNode.textContent = cleanReply(reply.content);
+          if (voiceTurn && !turn.interrupted) updateBrowserRealtimeReply(voiceTurn, reply.content);
           status.textContent = 'Replying…';
           if (follow) scrollBottom();
         } else if (name === 'session' && data.id) chatSession = data.id;
@@ -571,13 +607,16 @@
       if (scopeKey() !== capturedScope) return;
       state.unseen = !state.open;
       status.textContent = 'Enter to send · Shift+Enter for a new line';
-      if (typeof speakBrowserReply === 'function') {
+      if (voiceTurn && !turn.interrupted && !final.interrupted) updateBrowserRealtimeReply(voiceTurn, reply.content, true);
+      if (final.interrupted || turn.interrupted) status.textContent = 'Reply interrupted.';
+      if (!voiceTurn && !turn.interrupted && !final.interrupted && typeof speakBrowserReply === 'function') {
         speakBrowserReply(final).catch((error) => { if (scopeKey() === capturedScope) status.textContent = 'Reply received. Voice unavailable: ' + error.message; });
       }
     } catch (error) {
       if (scopeKey() !== capturedScope) return;
       if (error.status === 404) terminal = true;
       voiceReplyRequested = false;
+      if (voiceTurn && typeof cancelBrowserRealtimeReply === 'function') cancelBrowserRealtimeReply();
       box.value = stored('draft') || message;
       reply.content = cleanReply(reply.content);
       if (!reply.content) rows.pop();
@@ -585,6 +624,8 @@
       status.textContent = error.message + ' Your draft is saved. Review the conversation before retrying.';
       status.classList.add('is-error');
     } finally {
+      if (activeTurn === turn) activeTurn = null;
+      turn.finish();
       if (terminal) saveTurn(operationStorageKey, '');
       if (scopeKey() !== capturedScope) return;
       state.busy = false;
@@ -600,7 +641,7 @@
     }
   }
 
-  window.ChatDock = {open, minimise: () => collapse(false), sync, refresh: refreshHistory, readStream,
+  window.ChatDock = {open, minimise: () => collapse(false), sync, refresh: refreshHistory, readStream, interrupt,
     get isOpen() { return state.open; }, get busy() { return state.busy; }, get historyLoading() { return state.loading; }};
   const navigate = window.productNavigate;
   window.productNavigate = (name) => { navigate?.(name); sync(); };

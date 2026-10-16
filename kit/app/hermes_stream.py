@@ -87,6 +87,8 @@ def wait_for_turn():
     if not line.strip():
         raise SystemExit(0)
     turn = json.loads(line)
+    if turn.get("cancel_file"):
+        os.environ["TAMANITOMO_CHAT_CANCEL_FILE"] = turn["cancel_file"]
     if turn.get("fallbacks") is not None:
         os.environ["TAMANITOMO_CHAT_FALLBACKS"] = turn["fallbacks"]
     sys.argv = [sys.argv[0], *turn["args"]]
@@ -95,6 +97,23 @@ def wait_for_turn():
     os.dup2(devnull, 0)
     os.close(devnull)
     sys.stdin = open(os.devnull, encoding="utf-8")
+
+
+def watch_cancellation(agent):
+    """Use Hermes's own interruption seam, including provider/tool cleanup."""
+    path = os.environ.pop("TAMANITOMO_CHAT_CANCEL_FILE", "")
+    interrupt = getattr(agent, "interrupt", None)
+    if not path or not callable(interrupt):
+        return
+    import threading
+    from pathlib import Path
+
+    def watch():
+        while not Path(path).exists():
+            threading.Event().wait(0.05)
+        interrupt()
+
+    threading.Thread(target=watch, daemon=True, name="companion-cancel").start()
 
 
 def main():
@@ -124,6 +143,7 @@ def main():
             def configured(agent, *args, **kwargs):
                 configure(agent, *args, **kwargs)
                 configure_fallbacks(agent, emit)
+                watch_cancellation(agent)
                 agent.stream_delta_callback = lambda delta: (
                     emit("delta", text=delta) if isinstance(delta, str) else None
                 )
@@ -136,6 +156,9 @@ def main():
                 # Startup diagnostics are not part of the companion's reply.
                 output.seek(0)
                 output.truncate(0)
+                # Preserve ownership even if an older Hermes needs bounded
+                # process cleanup before its quiet runner can return.
+                emit("session", id=instance.session_id)
                 try:
                     return quiet(instance, query, *args, **kwargs)
                 finally:

@@ -1,3 +1,23 @@
+## 3.16.0 — Talk to her out loud (2026-10-16)
+
+- **Voice conversation** in web chat: press it once and the microphone stays
+  open. Pause after speaking and your words are transcribed and sent; her reply is
+  spoken sentence by sentence while it is still arriving. Start talking and she
+  stops: queued audio is dropped and the reply is interrupted through Hermes's own
+  interrupt, which keeps the session and never re-sends a turn that may have used a
+  tool. Ending it, leaving the page or switching companion turns the microphone
+  off. It is off until you enable it per companion in Voice studio.
+- Speech comes from a separate OpenAI-style speech service that returns raw 24 kHz
+  PCM. Voice studio's **Fill in for** sets up OpenAI (paid, uses the companion's
+  `OPENAI_API_KEY`), Kokoro-FastAPI (free, local, any computer) or Gufo Qwen3-TTS
+  (local, AMD Strix Halo). Separate English and Japanese voices are picked by the
+  reply's script. Only Qwen3-TTS servers are sent the extra language field; other
+  services get OpenAI's standard fields.
+- A speech key is named, not pasted: the setting holds a variable name from the
+  companion's `.env`, and the key never reaches the browser.
+- Listening uses the companion's Hermes transcription provider, the one voice
+  messages already use. See docs/REALTIME_VOICE.md.
+
 ## 3.15.4 — The share hint follows the photo setting (2026-10-14)
 
 - The hint that offers her latest timeline photo for sharing named "teasing an
