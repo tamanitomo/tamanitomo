@@ -1,3 +1,10 @@
+## 3.19.1 — Her archived note keeps a place (2026-11-26)
+
+- **A topic callback keeps a place for her archived note.** The facts and his own messages on a
+  topic often scored higher than her archived note about it and filled the two places, so the one
+  part she could not otherwise see was the part left out. When an archived note matches, it now
+  takes the last place.
+
 ## 3.19.0 — Short memory in view, the rest a look away (2026-11-26)
 
 - **The relationship stays in her always-loaded memory; working notes move first.** When a memory

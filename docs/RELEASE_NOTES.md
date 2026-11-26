@@ -1,4 +1,11 @@
-Tamanitomo 3.19.0: short memory in view, the rest a look away.
+Tamanitomo 3.19.1: her archived note keeps a place.
+
+- **What you mention, found.** When something you bring up is in her archive, that note now always
+  comes back with the rest, instead of being crowded out by your messages about it.
+
+No Repair needed for this update.
+
+Previous: 3.19.0 short memory in view, the rest a look away.
 
 - **She keeps the relationship in view.** When her memory fills, old working notes (servers,
   settings, file paths) go to the archive first; what matters about the two of you stays.

@@ -83,5 +83,26 @@ class MemoryTierTests(unittest.TestCase):
         self.assertFalse(any("turkey photo" in r.get("excerpt", "") for r in brush["results"]))
 
 
+    def test_her_archived_note_keeps_a_place_beside_stronger_matches(self):
+        import companion_self as slf
+        import datetime as dt
+
+        now = dt.datetime(2026, 10, 10, 12, tzinfo=dt.timezone.utc)
+        for i in range(3):
+            slf.record_fact(
+                self.c.human_dir, f"Alex built a keyboard voice note button {i}", "said so", now
+            )
+        self.write(
+            "MEMORY.md",
+            ["- The keyboard voice button was flashed with new firmware."]
+            + [f"- Filler {i}." for i in range(900)],
+        )
+        mem.archive(self.c, "MEMORY.md", apply=True)
+        hits = rec.search(self.c, "Did the keyboard voice button work?", limit=2, implicit=True)
+        kinds = [r.get("kind") for r in hits["results"]]
+        self.assertIn("memory_note_requires_provenance_check", kinds)
+        self.assertEqual(len(hits["results"]), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

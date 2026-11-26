@@ -335,9 +335,22 @@ def search(c, query, limit=6, seconds=1.0, *, implicit=False, now=None):
             out["warnings"].append(
                 "session lookup unavailable or over time budget; use session_search for a broader search"
             )
-    out["results"] = [
-        x[1] for x in sorted(candidates, key=lambda x: -x[0])[: min(max(limit, 1), 12)]
-    ]
+    ranked = sorted(candidates, key=lambda x: -x[0])
+    top = ranked[: min(max(limit, 1), 12)]
+    if implicit:
+        # His own words and the facts often outrank one of her archived notes on the same
+        # topic, and the note is the part she cannot see otherwise: keep a place for it.
+        note = next(
+            (
+                x
+                for x in ranked
+                if x[1].get("kind") == "memory_note_requires_provenance_check"
+            ),
+            None,
+        )
+        if note is not None and note not in top:
+            top = top[:-1] + [note]
+    out["results"] = [x[1] for x in top]
     out["status"] = (
         "candidates_found"
         if out["results"]
