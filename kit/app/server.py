@@ -872,6 +872,11 @@ def build(home=None, token="", state_dir=None):
         except (OSError, ValueError):
             return True
 
+    def _automatic_image_timeout(c):
+        import companion_media as media
+
+        return media.image_timeout(cc.dataclasses.replace(c, image_timeout_seconds=0))
+
     @app.get("/api/settings")
     def get_settings():
         c = load()
@@ -899,6 +904,9 @@ def build(home=None, token="", state_dir=None):
             "autonomy_windows": c.autonomy_windows,
             "share_people": c.share_people,
             "image_interval_minutes": c.image_interval_minutes,
+            "image_timeout_seconds": c.image_timeout_seconds,
+            # What "automatic" comes to for this companion's image endpoint.
+            "image_timeout_auto": _automatic_image_timeout(c),
             "schedule_offset_minutes": c.schedule_offset_minutes,
             "timeline_budget_gb": c.timeline_budget_gb,
             "image_timeline": c.image_timeline,
@@ -945,6 +953,7 @@ def build(home=None, token="", state_dir=None):
         "content_permissions",
         "image_timeline",
         "image_interval_minutes",
+        "image_timeout_seconds",
         "bars",
         "relationship_progression",
         "peer_interaction",

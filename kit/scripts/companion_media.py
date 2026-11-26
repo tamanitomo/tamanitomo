@@ -264,6 +264,82 @@ def load(c):
     }
 
 
+IMAGE_TIMEOUT_HOSTED = 600
+IMAGE_TIMEOUT_SELF_HOSTED = 1800
+IMAGE_TIMEOUT_RANGE = (60, 7200)
+
+
+def _self_hosted(url):
+    """True for an endpoint on this machine or the owner's own network."""
+    import ipaddress
+
+    try:
+        host = (urllib.parse.urlsplit(str(url)).hostname or "").lower()
+    except ValueError:
+        return False
+    if not host:
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        # A name: this machine, a single-label LAN name, or a home or tailnet domain.
+        return (
+            host == "localhost"
+            or "." not in host
+            or host.endswith((".local", ".lan", ".home", ".internal", ".ts.net"))
+        )
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip in ipaddress.ip_network("100.64.0.0/10")  # carrier-grade NAT, Tailscale
+    )
+
+
+def _image_endpoints(c):
+    """Every URL in Hermes's image settings, the provider sections included."""
+    try:
+        section = cc.hermes_config(c.home).get("image_gen")
+    except Exception:
+        return []
+    found = []
+
+    def walk(value, key=""):
+        if isinstance(value, dict):
+            for name, child in value.items():
+                walk(child, str(name).lower())
+        elif isinstance(value, str) and value.strip():
+            if key.endswith("url") or key in ("endpoint", "host"):
+                found.append(value.strip())
+
+    walk(section)
+    return found
+
+
+def image_timeout(c, comfyui=False):
+    """Seconds one photo may take.
+
+    COMPANION_IMAGE_TIMEOUT wins, then the companion's own setting. Otherwise it is
+    automatic. Through Hermes, an image endpoint on this machine or the owner's
+    network, a GPU that may have to wake before it renders, gets 30 minutes; a hosted
+    service gets 10 and answers well inside it, so the longer ceiling costs it
+    nothing. A ComfyUI preset keeps its 10 minutes unless a time is chosen.
+    """
+    low, high = IMAGE_TIMEOUT_RANGE
+    raw = os.environ.get("COMPANION_IMAGE_TIMEOUT", "").strip()
+    if raw:
+        try:
+            return max(low, min(int(float(raw)), high))
+        except ValueError:
+            pass
+    chosen = getattr(c, "image_timeout_seconds", 0) or 0
+    if chosen:
+        return max(low, min(int(chosen), high))
+    if not comfyui and any(_self_hosted(url) for url in _image_endpoints(c)):
+        return IMAGE_TIMEOUT_SELF_HOSTED
+    return IMAGE_TIMEOUT_HOSTED
+
+
 def hermes_bridge(c, command, payload=None):
     import subprocess
     from companion_gateway import _env_values
@@ -272,8 +348,14 @@ def hermes_bridge(c, command, payload=None):
     python = cp.venv_executable(checkout)
     if not python.is_file():
         raise ValueError("Hermes Python is unavailable")
+    timeout = 30 if command == "catalog" else image_timeout(c)
     env = dict(os.environ, **_env_values(c.home))
-    env.update(HERMES_HOME=str(c.home), PYTHONPATH=str(checkout))
+    # The provider reads the same ceiling, so its own HTTP client can wait as long.
+    env.update(
+        HERMES_HOME=str(c.home),
+        PYTHONPATH=str(checkout),
+        COMPANION_IMAGE_TIMEOUT=str(timeout),
+    )
     env.pop("HERMES_PROFILE", None)
     run = subprocess.run(
         [
@@ -286,7 +368,7 @@ def hermes_bridge(c, command, payload=None):
         cwd=checkout,
         capture_output=True,
         text=True,
-        timeout=30 if command == "catalog" else 600,
+        timeout=timeout,
     )
     try:
         reply = json.loads(
@@ -1217,7 +1299,7 @@ def _generate(
         if not ident:
             raise ValueError("ComfyUI did not return a prompt ID")
         _comfy_progress(base, client_id, str(ident), report)
-        deadline = time.monotonic() + 600
+        deadline = time.monotonic() + image_timeout(c, comfyui=True)
         history = {}
         waited = 0
         while time.monotonic() < deadline:

@@ -1,3 +1,18 @@
+## Unreleased
+
+- **Photos from slow image servers arrive** (#5). A photo made through Hermes's image
+  provider was cut off after a fixed 10 minutes, so a self-hosted GPU that had to wake
+  first lost the picture it had just finished. The wait is now automatic: 10 minutes for
+  a hosted service, 30 for an image server on this computer or your own network
+  (loopback, LAN and Tailscale addresses, single-word host names, `.local`, `.lan`,
+  `.home`, `.internal` and `.ts.net`). Settings → Photo sessions → Slow image servers
+  picks a fixed time instead, and `COMPANION_IMAGE_TIMEOUT` (seconds) overrides both for
+  containers. The provider is told the same value. ComfyUI presets keep their 10 minutes
+  unless a time is chosen. Hermes's own OpenAI image client still has a fixed 600-second
+  default until Hermes makes it configurable.
+- Fix a meters test that began failing on its own at the end of October: it compared a
+  fixed September date against today's clock with a 60-day window.
+
 ## 3.16.0 — Talk to her out loud (2026-10-16)
 
 - **Voice conversation** in web chat: press it once and the microphone stays

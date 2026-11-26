@@ -308,6 +308,10 @@ class Companion:
     vault_index_tokens: int = -1
     vault_index_exclude: list = dataclasses.field(default_factory=list)
     image_interval_minutes: int = 15
+    # Seconds one photo may take before the image bridge gives up. 0 is automatic
+    # (companion_media.image_timeout): 10 minutes for a hosted service, 30 for an
+    # endpoint on this machine or the owner's network, where a GPU may need waking.
+    image_timeout_seconds: int = 0
     schedule_offset_minutes: int = 0
     image_timeline: bool = False
     image_mode: str = "none"  # codex | local | none
@@ -518,6 +522,12 @@ class Companion:
         ):
             raise ValueError(
                 "Choose a supported image interval between 5 minutes and 24 hours"
+            )
+        if type(self.image_timeout_seconds) is not int or not (
+            self.image_timeout_seconds == 0 or 60 <= self.image_timeout_seconds <= 7200
+        ):
+            raise ValueError(
+                "Photo timeout must be automatic (0) or between 60 seconds and 2 hours"
             )
         if (
             type(self.schedule_offset_minutes) is not int

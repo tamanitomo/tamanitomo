@@ -315,7 +315,9 @@ class TestDailyCaps:
         meters.settle(companion, on(1), {"closeness": 1}, write=True)
         future = dt.datetime.now(dt.timezone.utc) + days(2)
         meters.settle(companion, future, {"closeness": 1}, write=True)
-        assert [row["day"] for row in meters.history(companion, future, 60)] == [
+        # Look back far enough to reach the fixed days above, however late the suite runs.
+        span = (future.date() - on(1).date()).days + 1
+        assert [row["day"] for row in meters.history(companion, future, span)] == [
             on(3).date().isoformat()
         ]
 

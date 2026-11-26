@@ -474,6 +474,18 @@ const settingsPanels=[
     </div>
   </div>
 
+  <details class="settings-advanced"><summary>Slow image servers</summary>
+  <div class="contact-settings" style="margin-top:12px">
+    <div class="contact-row">
+      <label class="contact-label" for="image-timeout">Wait for a photo</label>
+      <div class="contact-controls">
+        <select id="image-timeout">${options([[0,'Automatic ('+Math.round((s.image_timeout_auto||600)/60)+' minutes here)'],[300,'5 minutes'],[600,'10 minutes'],[1200,'20 minutes'],[1800,'30 minutes'],[3600,'1 hour'],[7200,'2 hours']].map(([v,t])=>[String(v),t]),String(s.image_timeout_seconds||0))}</select>
+      </div>
+    </div>
+    <p class="dim small" style="margin:6px 0 0">Automatic waits 10 minutes for a hosted image service, and 30 for an image server on this computer or your own network, where a GPU may have to wake up first. ComfyUI keeps 10 minutes unless you choose a time.</p>
+  </div>
+  </details>
+
   <details class="settings-advanced"><summary>Review &amp; blurring</summary>
   <div class="contact-settings" style="margin-top:12px">
     <div class="contact-row">
@@ -552,6 +564,7 @@ const settingsPanels=[
     const result=await saveSettings({
       image_timeline:host.querySelector('#tl').checked,
       image_interval_minutes:Number(host.querySelector('#image-interval').value),
+      image_timeout_seconds:Number(host.querySelector('#image-timeout').value),
       image_style:host.querySelector('#image-style').value,
       timeline_budget_gb:Number(host.querySelector('#gb').value)});
     const choice=host.querySelector('#media-review-mode').value;
