@@ -1,3 +1,12 @@
+## 3.17.2 — She knows which photos she sent (2026-11-26)
+
+- **Photos her routines send are in her conversations, not just their captions.** A photo sent
+  through the outbox (the photo timeline, outreach) reached the conversation as its caption
+  alone. Complimented on one, she asked whether a photo had arrived and said she would not take
+  credit for something she never sent. Her conversation context now lists the photos she sent
+  in the last day: when, the caption, and what each showed, from its capture record. Routines
+  already had their own "You already sent" list and are unchanged.
+
 ## 3.17.1 — A budget you fix stays fixed (2026-11-26)
 
 - **A context budget fixed by choice stays fixed.** Repair, which also runs after every

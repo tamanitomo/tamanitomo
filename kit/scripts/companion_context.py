@@ -415,6 +415,28 @@ def cross_channel_handoff(c, payload, now, cap):
     return "\n".join([head, *lines, *tail])
 
 
+def sent_photo_scene(c, entry):
+    """What a photo sent from her timeline showed, from its capture record, or ''."""
+    stem = pathlib.Path(str(entry.get("media_path") or "")).stem.split("_")[0]
+    if not re.fullmatch(r"[a-f0-9]{24}", stem):
+        return ""
+    try:
+        import companion_timeline
+
+        path = companion_timeline.root(c) / "captures" / f"{stem}.json"
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, ImportError):
+        return ""
+    scene = record.get("scene") if isinstance(record.get("scene"), dict) else {}
+    text = str(scene.get("text") or "")
+    if not text:
+        state = scene.get("state") if isinstance(scene.get("state"), dict) else {}
+        text = ", ".join(
+            str(state[k]) for k in ("activity", "location") if state.get(k)
+        )
+    return clip(text, 180)
+
+
 def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None):
     tz = ZoneInfo(c.timezone) if c.timezone else ZoneInfo("UTC")
     now = now or dt.datetime.now(tz)
@@ -1028,6 +1050,39 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
                         "[History retrieval unavailable. Acknowledge uncertainty rather than inventing.]",
                     )
                 )
+
+    # A photo sent through the outbox reaches the conversation as its caption alone; the copy
+    # carries no picture. Complimented on one, she doubted she had sent it at all ("did a photo
+    # reach you?"). The outbox ledger is the record of what went out (routines read it too).
+    if not scheduled:
+        try:
+            import companion_outbox
+
+            photos = [
+                (at, e)
+                for at, e in companion_outbox.sent_recently(c, now, hours=24, limit=12)
+                if e.get("content") == "image"
+            ][-4:]
+            if photos:
+                lines = [
+                    f"[Photos you sent {c.human} in the last day. In this conversation they show "
+                    "only as their captions, but the pictures went with them]"
+                ]
+                for at, e in photos:
+                    shown = sent_photo_scene(c, e)
+                    caption = clip(str(e.get("body") or ""), 140)
+                    lines.append(
+                        f'- {at.astimezone(tz):%a %H:%M}: "{caption}"'
+                        + (f" It showed: {shown}" if shown else "")
+                        + (
+                            " (sending was not confirmed)"
+                            if e.get("status") == "unknown"
+                            else ""
+                        )
+                    )
+                parts.append((6, "\n".join(lines)))
+        except (OSError, ValueError, KeyError, ImportError):
+            pass
 
     # Manual shared time is meaningful even with every ambient sensor switched off.
     try:

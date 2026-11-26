@@ -1,4 +1,12 @@
-Tamanitomo 3.17.1: a context budget you fix stays fixed.
+Tamanitomo 3.17.2: she knows which photos she sent.
+
+- **No more "did a photo reach you?"** A photo her routines sent showed up in her conversation as
+  its caption only, so she could doubt she had sent it. She now sees the photos she sent in the
+  last day, with what each one showed.
+
+No Repair needed for this update.
+
+Previous: 3.17.1 a context budget you fix stays fixed.
 
 - **Your budget, kept.** Repair (which runs after every settings save) used to reset a context
   budget you had set by hand to the model's full window. It now keeps it, and the doctor notes the
