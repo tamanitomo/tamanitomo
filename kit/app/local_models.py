@@ -16,27 +16,34 @@ import urllib.request
 import zipfile
 
 BASE = "http://127.0.0.1:11434"
+# Hermes refuses to run a model whose window is under 64,000 tokens, because tool use is not
+# reliable below that (agent_init._enforce_minimum_context). Every local server the kit starts
+# gives each conversation LOCAL_WINDOW, the starting point Hermes recommends.
+HERMES_FLOOR = 64_000
+LOCAL_WINDOW = 65_536
+
+
 MODELS = [
     {
         "id": "qwen3:4b-q4_K_M",
         "name": "Qwen3 4B · compact",
         "gb": 2.6,
         "memory": "8 GB RAM minimum; 12+ GB preferred for the full stack",
-        "context": 8192,
+        "context": LOCAL_WINDOW,
     },
     {
         "id": "qwen3:8b-q4_K_M",
         "name": "Qwen3 8B · balanced",
         "gb": 5.2,
         "memory": "16+ GB RAM; roughly 8 GB free GPU memory for acceleration",
-        "context": 8192,
+        "context": LOCAL_WINDOW,
     },
     {
         "id": "qwen3:14b-q4_K_M",
         "name": "Qwen3 14B · more capable",
         "gb": 9.3,
         "memory": "24–32+ GB RAM; roughly 12–16 GB free GPU memory for acceleration",
-        "context": 8192,
+        "context": LOCAL_WINDOW,
     },
 ]
 
@@ -46,28 +53,28 @@ MOBILE_MODELS = [
         "name": "SmolLM2 1.7B · ultra-compact mobile",
         "gb": 1.0,
         "memory": "4 GB RAM; fast & battery-efficient on mobile CPU",
-        "context": 4096,
+        "context": LOCAL_WINDOW,
     },
     {
         "id": "qwen2.5:1.5b-instruct-q4_K_M",
         "name": "Qwen 2.5 1.5B · lightweight mobile",
         "gb": 1.1,
         "memory": "4–6 GB RAM; excellent reasoning for mobile footprint",
-        "context": 4096,
+        "context": LOCAL_WINDOW,
     },
     {
         "id": "llama3.2:1b-instruct-q4_K_M",
         "name": "Llama 3.2 1B · compact mobile",
         "gb": 0.8,
         "memory": "4 GB RAM; minimal battery & memory overhead",
-        "context": 4096,
+        "context": LOCAL_WINDOW,
     },
     {
         "id": "llama3.2:3b-instruct-q4_K_M",
         "name": "Llama 3.2 3B · high-capability mobile",
         "gb": 2.0,
         "memory": "6–8 GB RAM; balance of capability and memory",
-        "context": 4096,
+        "context": LOCAL_WINDOW,
     },
 ]
 
@@ -199,6 +206,25 @@ def request(path, payload=None, timeout=5):
     if isinstance(value, dict) and value.get("error"):
         raise ValueError(str(value["error"]))
     return value
+
+
+def served_window():
+    """The window one request gets from the local server, when it says (llama.cpp /props)."""
+    try:
+        props = request("/props", timeout=2)
+        settings = props.get("default_generation_settings") or {}
+        return int(settings.get("n_ctx") or 0)
+    except Exception:
+        return 0
+
+
+def ollama_context():
+    """OLLAMA_CONTEXT_LENGTH for a server the kit starts: LOCAL_WINDOW, or more if set."""
+    try:
+        chosen = int(os.environ.get("OLLAMA_CONTEXT_LENGTH") or 0)
+    except ValueError:
+        chosen = 0
+    return str(max(chosen, LOCAL_WINDOW))
 
 
 def directory(rt):
@@ -612,7 +638,7 @@ def start(rt, report):
             raise ValueError("Install Ollama or download a .gguf model first.")
         m = disk_models[0]
         mem = get_host_memory()
-        ctx = 4096 if mem["is_mobile"] else 8192
+        ctx = LOCAL_WINDOW
         threads = min(os.cpu_count() or 4, 4) if mem["is_mobile"] else 8
         root = directory(rt)
         root.mkdir(parents=True, exist_ok=True)
@@ -628,6 +654,16 @@ def start(rt, report):
             "11434",
             "--ctx-size",
             str(ctx),
+            # One slot, so one conversation has the whole window, and the cache settings
+            # the managed service uses, so a window that size fits in memory.
+            "--parallel",
+            "1",
+            "--cache-type-k",
+            "q4_0",
+            "--cache-type-v",
+            "q4_0",
+            "--flash-attn",
+            "on",
             "-t",
             str(threads),
             "--no-warmup",
@@ -662,7 +698,7 @@ def start(rt, report):
         os.environ,
         OLLAMA_HOST="127.0.0.1:11434",
         OLLAMA_NO_CLOUD="1",
-        OLLAMA_CONTEXT_LENGTH="8192",
+        OLLAMA_CONTEXT_LENGTH=ollama_context(),
     )
     if Path(executable).is_relative_to(root):
         env["OLLAMA_MODELS"] = str(root / "models")
@@ -781,13 +817,18 @@ def switch_model(
     mmproj_arg = f" --mmproj {mmprojs[0]}" if mmprojs else ""
 
     # Hardware & platform safety scaling
+    # --ctx-size is shared by the server's slots, and each slot holds one conversation,
+    # which Hermes refuses below HERMES_FLOOR. So every slot gets at least LOCAL_WINDOW.
     if mem.get("is_mobile"):
-        ctx_size = min(ctx_size, 4096)
+        parallel = 1
+        ctx_size = LOCAL_WINDOW
         threads = min(os.cpu_count() or 4, 4)
         threads_batch = threads
         mem_high = "3500M"
         mem_max = "4500M"
     else:
+        parallel = 2
+        ctx_size = max(int(ctx_size), LOCAL_WINDOW * parallel)
         threads = 8
         threads_batch = 8
         mem_high = "22G"
@@ -805,7 +846,7 @@ def switch_model(
     )
     content = f"""[Service]
 ExecStart=
-ExecStart={llama_bin} --model {src} --alias {alias} --host 127.0.0.1 --port 11434 --ctx-size {ctx_size} --parallel 2 --n-gpu-layers 99 --threads {threads} --threads-batch {threads_batch} --batch-size 1024 --ubatch-size 256 --cache-ram 0 --ctx-checkpoints 1 --jinja --chat-template-kwargs '{{"enable_thinking":false}}' --reasoning off --cache-type-k q4_0 --cache-type-v q4_0 --flash-attn on --predict 4096 --no-warmup{mmproj_arg}
+ExecStart={llama_bin} --model {src} --alias {alias} --host 127.0.0.1 --port 11434 --ctx-size {ctx_size} --parallel {parallel} --n-gpu-layers 99 --threads {threads} --threads-batch {threads_batch} --batch-size 1024 --ubatch-size 256 --cache-ram 0 --ctx-checkpoints 1 --jinja --chat-template-kwargs '{{"enable_thinking":false}}' --reasoning off --cache-type-k q4_0 --cache-type-v q4_0 --flash-attn on --predict 4096 --no-warmup{mmproj_arg}
 Restart=no
 MemoryHigh={mem_high}
 MemoryMax={mem_max}
@@ -1027,7 +1068,8 @@ def assign(rt, home, ident):
                 "stream": False,
                 "think": False,
                 "keep_alive": 0,
-                "options": {"num_predict": 8, "num_ctx": 8192},
+                # At the window it will run with, so a model that cannot fit it fails here.
+                "options": {"num_predict": 8, "num_ctx": LOCAL_WINDOW},
             },
             timeout=180,
         )
@@ -1037,7 +1079,8 @@ def assign(rt, home, ident):
                 "default": ident,
                 "provider": "ollama",
                 "base_url": BASE + "/v1",
-                "context_length": 8192,
+                "context_length": LOCAL_WINDOW,
+                "ollama_num_ctx": LOCAL_WINDOW,
             }
             cfg["fallback_providers"] = []
 
@@ -1053,7 +1096,7 @@ def assign(rt, home, ident):
                 )
             save_config(home, mutate)
             if raw is not None:
-                raw.update(models={}, context_mode="fixed", context_tokens=8192)
+                raw.update(models={}, context_mode="fixed", context_tokens=LOCAL_WINDOW)
                 cp.atomic_write(
                     path, json.dumps(raw, indent=2, ensure_ascii=False) + "\n"
                 )

@@ -44,6 +44,13 @@
 - **Her internal name is locked in the companion editor**, now labelled "Internal name".
   Changing it made the next repair install a second full set of scheduled jobs beside the old
   ones. To rename her, change the display name.
+- **Local models get a window Hermes will run.** Hermes refuses any model with under 64K tokens
+  of context, and local setup wrote 8,192 (4,096 on a phone), so a local model set up in the app
+  stopped at the first message. Setup now gives each conversation 65,536 tokens, and Ollama is sent
+  the same as `num_ctx`. A server you run yourself is asked what it serves; under 64K, setup says
+  so instead of saving a profile that cannot start. The model switcher's window is shared by two
+  conversations, so it now offers only 128K (64K each) and 256K. A phone runs one conversation
+  at 64K.
 - Fix a meters test that began failing on its own at the end of October: it compared a
   fixed September date against today's clock with a 60-day window.
 

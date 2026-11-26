@@ -1486,8 +1486,18 @@ def register(app, select, load, operations):
                 except Exception:
                     pass
 
-            ctx_len = 4096 if mem["is_mobile"] else 8192
             provider_type = "ollama" if setup_type == "ollama" else "custom:local_llama"
+            # Hermes refuses a window under 64K. The kit's own servers give each
+            # conversation lm.LOCAL_WINDOW; a server run some other way says what it serves.
+            served = lm.served_window() if provider_type != "ollama" else 0
+            if 0 < served < lm.HERMES_FLOOR:
+                raise ValueError(
+                    f"The local server gives each conversation {served:,} tokens of "
+                    f"context, and Hermes needs at least {lm.HERMES_FLOOR:,}. Restart it "
+                    "with a larger --ctx-size (shared by its --parallel slots), then try "
+                    "again."
+                )
+            ctx_len = max(served, lm.LOCAL_WINDOW)
 
             for target_home in targets:
 
@@ -1499,6 +1509,11 @@ def register(app, select, load, operations):
                     cfg["model"]["provider"] = provider_type
                     cfg["model"]["base_url"] = "http://127.0.0.1:11434/v1"
                     cfg["model"]["context_length"] = ctx_len
+                    if provider_type == "ollama":
+                        # Ollama runs a model at the num_ctx it is sent; Hermes sends this.
+                        cfg["model"]["ollama_num_ctx"] = ctx_len
+                    else:
+                        cfg["model"].pop("ollama_num_ctx", None)
                     cfg["fallback_providers"] = []
 
                 save_config(target_home, mutate)

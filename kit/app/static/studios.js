@@ -2128,15 +2128,13 @@ workspaceHandlers['local-models']=async()=>{
     </div>`:'<p class="dim">No GGUF models discovered in storage. Place <code>.gguf</code> files into <code>/mnt/nvme2/models/</code> or <code>~/models/</code> and refresh.</p>'}
   </div>`;
 
+  /* The engine's window is shared by its conversations, and Hermes will not run one
+     with under 64K, so these are the only sizes that work (the server enforces it too). */
   const ctxOptions = d.is_mobile ? `
-    <option value="4096" selected>4,096 tokens (4k - Mobile Recommended)</option>
-    <option value="2048">2,048 tokens (2k - Low Memory)</option>
-    <option value="8192">8,192 tokens (8k - Extended Context)</option>
+    <option value="65536" selected>65,536 tokens: one conversation at 64k, the least Hermes accepts</option>
   ` : `
-    <option value="131072" selected>131,072 tokens (128k - Recommended)</option>
-    <option value="65536">65,536 tokens (64k)</option>
-    <option value="32768">32,768 tokens (32k)</option>
-    <option value="16384">16,384 tokens (16k)</option>
+    <option value="131072" selected>131,072 tokens: two conversations at 64k each (recommended)</option>
+    <option value="262144">262,144 tokens: two conversations at 128k each (needs more memory)</option>
   `;
 
   const advancedHTML=`<details class="card">

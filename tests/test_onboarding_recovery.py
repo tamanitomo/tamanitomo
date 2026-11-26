@@ -353,6 +353,48 @@ class SetupRecoveryTests(WorkspaceFixture):
         self.get("/api/onboarding/attempt/" + self.payload["request_id"])
         self.assertFalse(stage.exists())
 
+    def local_setup(self, served):
+        model_path = self.root.parent / "synthetic.gguf"
+        model_path.write_bytes(b"synthetic")
+        with (
+            patch(
+                "kit.app.local_models.get_host_memory",
+                return_value={"is_mobile": False},
+            ),
+            patch(
+                "kit.app.local_models.validate_model_safety", return_value=(True, "")
+            ),
+            patch("kit.app.local_models.status", return_value={"online": True}),
+            patch("kit.app.local_models.served_window", return_value=served),
+        ):
+            return self.wait(
+                self.post(
+                    "/api/onboarding/local-setup",
+                    {
+                        "request_id": self.payload["request_id"],
+                        "type": "disk",
+                        "path": str(model_path),
+                        "model_id": "synthetic",
+                    },
+                )
+            )
+
+    def test_local_setup_gives_the_model_a_window_hermes_will_run(self):
+        # Hermes refuses a window under 64K at agent start; this used to write 8,192.
+        self.assertEqual(self.local_setup(0)["status"], "complete")
+        with patch("kit.app.runtime.Runtime.run", side_effect=self.run_create):
+            self.wait(self.post("/api/profiles", self.payload))
+        import yaml
+
+        config = yaml.safe_load((self.root / "profiles/iris/config.yaml").read_text())
+        self.assertEqual(config["model"]["context_length"], 65536)
+        self.assertNotIn("ollama_num_ctx", config["model"])
+
+    def test_local_setup_refuses_a_server_whose_window_hermes_cannot_run(self):
+        result = self.local_setup(8192)
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("8,192 tokens", json.dumps(result))
+
     def test_local_model_selection_stages_profile_overrides(self):
         model_path = self.root.parent / "synthetic.gguf"
         model_path.write_bytes(b"synthetic")
