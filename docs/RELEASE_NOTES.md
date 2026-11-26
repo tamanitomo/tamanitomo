@@ -1,4 +1,11 @@
-Tamanitomo 3.18.0: lighter requests, sized for the model reading them.
+Tamanitomo 3.18.1: a repair she means to record is recorded.
+
+- **Making up counts.** When she tried to record that a let-down had been mended, the record was
+  refused over a field name and lost. It now accepts the names she uses and explains itself.
+
+No Repair needed for this update.
+
+Previous: 3.18.0 lighter requests, sized for the model reading them.
 
 - **No pile-up after a restart.** After the gateway restarted, every old context snapshot in a
   conversation was sent again with each message. Now only the newest one is, as intended.

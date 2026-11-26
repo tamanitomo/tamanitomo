@@ -206,13 +206,32 @@ def record(c, data, now=None):
     if kind not in ("connection", "rupture", "repair", "correction"):
         raise ValueError("kind must be connection, rupture, repair or correction")
     evidence = _text(data.get("evidence"), "evidence", 1000)
-    topic = _text(data.get("topic"), "topic", 80).lower()
+    if kind in ("repair", "correction") and not str(data.get("topic") or "").strip():
+        topic = ""  # taken from the experience it repairs or corrects, below
+    else:
+        topic = _text(data.get("topic"), "topic", 80).lower()
     description = _text(data.get("text"), "experience", 500)
     at = _stamp(data.get("at", now.isoformat()))
     if at > now + dt.timedelta(minutes=1):
         raise ValueError("An experience cannot be in the future")
     severity = _number(data.get("strength", 0.5), "strength", 0, 1)
     related = data.get("related")
+    # A repair names the rupture it mends (a correction, the experience it corrects) in
+    # `related`. She reached for other names and was refused twice without being told which
+    # field was wanted, so the repair she meant to record was lost.
+    if related is None and kind in ("repair", "correction"):
+        for alias in (
+            "rupture",
+            "rupture_id",
+            "repairs",
+            "corrects",
+            "experience",
+            "target",
+        ):
+            value = data.get(alias)
+            if isinstance(value, str) and value.strip():
+                related = value.strip()
+                break
     ident = (
         data.get("id")
         or hashlib.sha256(
@@ -248,8 +267,28 @@ def record(c, data, now=None):
                 None,
             )
             if not target:
+                wanted = "rupture" if kind == "repair" else "experience"
+                recent = [
+                    r
+                    for r in rows
+                    if (
+                        r["kind"] == "rupture"
+                        if kind == "repair"
+                        else r["kind"] != "correction"
+                    )
+                ][-5:]
+                listing = "; ".join(
+                    f'{r["id"]} ({r["topic"]}: {str(r.get("text") or "")[:60]})'
+                    for r in reversed(recent)
+                )
                 raise ValueError(
-                    "Choose a recorded rupture for repair, or an existing experience for correction"
+                    f"A {kind} names the {wanted} it "
+                    f'{"mends" if kind == "repair" else "corrects"} by its id in "related". '
+                    + (
+                        f"Recent {wanted}s: {listing}"
+                        if listing
+                        else f"No {wanted} is recorded yet."
+                    )
                 )
             if _stamp(target["at"]) > at:
                 raise ValueError(

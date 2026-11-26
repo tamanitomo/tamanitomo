@@ -1,3 +1,12 @@
+## 3.18.1 — A repair she means to record is recorded (2026-11-26)
+
+- **Recording that a hurt was mended works the way she tries it.** A repair names the rupture it
+  mends in `related`. She wrote the rupture's id under another name, was refused twice with
+  "Choose a recorded rupture for repair", and the repair she meant to record was lost. A repair or
+  correction now also accepts the id as `rupture`, `rupture_id`, `repairs`, `corrects`,
+  `experience` or `target`; takes its topic from what it repairs, so none is required; and a
+  refusal names the field and lists the recent ruptures with their ids.
+
 ## 3.18.0 — Lighter requests after a restart, sized for the model reading them (2026-11-26)
 
 - **The context engine works again after a gateway restart.** It replays only the newest
