@@ -10,12 +10,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 import sqlite3
 import sys
 import time
 
-LOCAL_SOURCES = ("cli", "desktop", "tui")
+LOCAL_SOURCES = ("cli", "desktop", "tui", "oneshot")
+# Hermes 0.3x files `hermes chat --oneshot` (the workspace's /api/chat and other local
+# clients) as source "oneshot", with chat_id set to the session's own id and user_id
+# "uid:<local uid>". Those are local conversations with the owner; scheduled runs stay
+# "cron" and are never accepted.
 # Every source session_kind can accept. Rows from anything else are always dropped,
 # so they are not read at all: scheduled runs are nineteen sessions in twenty, and
 # paging through them 200 rows at a time to find the conversation made the chat
@@ -97,7 +102,17 @@ def session_kind(row, binding, workspace):
                 if binding.workspace
                 else (None, "workspace_not_trusted")
             )
-        if chat_id:
+        if source == "oneshot":
+            # Its own session id as chat_id, and this machine's user: anything else
+            # did not come from a conversation on this host.
+            user = str(row.get("user_id") or "")
+            uid = getattr(os, "getuid", None)  # Windows has no uid to compare
+            local_user = not user or uid is None or user == f"uid:{uid()}"
+            if (
+                chat_id and chat_id != str(row.get("session_id") or "")
+            ) or not local_user:
+                return None, "oneshot_not_local"
+        elif chat_id:
             return None, "local_source_with_gateway_chat"
         return ("terminal", "") if binding.terminal else (None, "terminal_not_trusted")
     if source == "telegram":

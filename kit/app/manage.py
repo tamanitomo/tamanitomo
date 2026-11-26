@@ -3863,7 +3863,7 @@ def register(app, select, load, operations):
                     row["id"]
                     for row in after
                     if row["id"] not in before
-                    and row.get("source") in ("cli", "desktop", "tui")
+                    and row.get("source") in ("cli", "desktop", "tui", "oneshot")
                 ),
                 session,
             )
