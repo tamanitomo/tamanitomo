@@ -578,38 +578,11 @@ def fingerprint(c, now=None):
             if slept is not None and slept >= dt.timedelta(hours=limit):
                 mark += f"#overslept-{int(slept.total_seconds() // 3600)}"
         return f"sleep {night.get('source')} until={night.get('until')} scene={_digest(mark)}\n"
-    open_loops = companion_loops.loops(c)
-    loop_marks = []
-    for loop in sorted(open_loops, key=lambda item: item["id"]):
-        due = False
-        if loop.get("follow_up_at"):
-            try:
-                when = dt.datetime.fromisoformat(loop["follow_up_at"])
-                if when.tzinfo is None:
-                    when = when.replace(tzinfo=_tz(c))
-                due = when <= now
-            except (TypeError, ValueError):
-                pass
-        # A callback becoming due or being meaningfully edited deserves a look.
-        # The clock and update timestamp alone do not: each due edge wakes once,
-        # and rewriting identical content must not keep the background loop busy.
-        loop_marks.append(
-            (
-                *(
-                    loop.get(key, "")
-                    for key in (
-                        "id",
-                        "title",
-                        "detail",
-                        "gentle_use",
-                        "category",
-                        "follow_up_at",
-                        "note",
-                    )
-                ),
-                due,
-            )
-        )
+    # A callback becoming due, or a loop the conversation added, edited or closed,
+    # deserves a look. The clock and update timestamp alone do not, and neither does a
+    # loop her own routines just wrote (companion_loops.gate_view): each due edge wakes
+    # once, and a routine's own bookkeeping no longer wakes the next routine.
+    loop_view, due_today = companion_loops.gate_view(c, now)
     # What is waiting NOW, from the fold. Counting raw rows counted every message ever
     # queued -- decisions are separate rows -- so the number only ever grew, and a
     # message that was sent or held back never changed the fingerprint.
@@ -680,8 +653,12 @@ def fingerprint(c, now=None):
         f"day {_digest(commitment_marks,deadlines)}",
         f"missions {len(open_missions)} {_digest(*open_missions)}",
         # Only a real transition or confirmation change opens the awake gate;
-        # rewording an activity or mood does not create a new event.
-        f"scene {_digest(state.get('started_at') or 'static',state.get('confirmed',True))}",
+        # rewording an activity or mood does not create a new event. A transition her
+        # own routines made is not news to the next routine either: Hermes keeps the
+        # mark from BEFORE each run, so it read as a change on the next tick and pulse
+        # and autonomy kept waking each other (#4). `unscheduled_since` moves only when
+        # the conversation or code moves the scene (companion_day.evolve).
+        f"scene {_digest(state.get('unscheduled_since') or state.get('started_at') or 'static',state.get('confirmed',True))}",
         # Her routine's own times. Nothing else moves while she stays put, so the walk
         # her day holds at ten never got a run to take it; the next came at noon, and
         # the days settled into reading at home.
@@ -689,7 +666,7 @@ def fingerprint(c, now=None):
         # Shown to the woken run as the reason it woke. "overdue 0 -> 1" read to it as a
         # system metric, and it answered [SILENT] with the shower still running.
         running_long(overdue(c, state, now)),
-        f"loops {len(open_loops)} {_digest(*loop_marks)}",
+        f"loops {len(loop_view)} {_digest(loop_view, due_today)}",
         f"asks {_digest(*_ask_marks(c, now))}",
         f"self-development {companion_perspectives.fingerprint(c, now)}",
         f"projects {len(project_marks)} {_digest(*project_marks)}",

@@ -264,14 +264,30 @@ def evolve(data, state, previous, now, asleep=False):
         and state.get("location") == before.get("location")
     ):
         changed = False
-    result = {
-        "started_at": (
-            now.isoformat()
-            if changed
-            else before.get("started_at", previous["recorded_at"])
-        ),
-        "previous": before.get("previous"),
-    }
+    started = (
+        now.isoformat()
+        if changed
+        else before.get("started_at", previous["recorded_at"])
+    )
+    result = {"started_at": started, "previous": before.get("previous")}
+    # Who moved the scene. A move made inside one of her scheduled runs is her routine
+    # acting; the awake gate watches `unscheduled_since`, the last move made by anything
+    # else (the conversation, code), so a routine's own transition no longer wakes the
+    # next routine (companion_preread.fingerprint). A state from before this falls back
+    # to `started_at`, the mark the gate used until now, so upgrading wakes nothing.
+    import companion_platform as cp
+
+    if changed and cp.in_scheduled_run():
+        result["started_by"] = "routine"
+        result["unscheduled_since"] = before.get("unscheduled_since") or before.get(
+            "started_at", previous["recorded_at"] if previous else started
+        )
+    elif changed:
+        result["started_by"] = "other"
+        result["unscheduled_since"] = started
+    else:
+        result["started_by"] = before.get("started_by", "other")
+        result["unscheduled_since"] = before.get("unscheduled_since") or started
     if previous and changed:
         result["previous"] = {k: before.get(k) for k in ("activity", "location")}
         result["previous"].update(

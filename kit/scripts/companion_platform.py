@@ -24,6 +24,17 @@ WINDOWS_RESERVED = {
 }
 
 
+def in_scheduled_run():
+    """True inside one of the companion's scheduled jobs.
+
+    Hermes stamps HERMES_CRON_SESSION on every command a cron agent runs, so a write
+    made by one of her routines can be told apart from one made in conversation or
+    by code.
+    """
+    value = os.environ.get("HERMES_CRON_SESSION", "")
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
 def profile_name(value):
     name = value.lower()
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,47}", name) or name in WINDOWS_RESERVED:

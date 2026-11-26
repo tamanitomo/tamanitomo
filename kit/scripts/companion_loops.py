@@ -106,6 +106,7 @@ def add(c, entry, now):
         "status": "open",
         "recorded_at": now.isoformat(),
     }
+    _mark_routine(row)
     return slf._append(path_for(c), row)
 
 
@@ -130,7 +131,64 @@ def update(c, entry, now):
         "note": _text(entry.get("note"), 300, "note", required=False),
         "updated_at": now.isoformat(),
     }
+    _mark_routine(row)
     return slf._append(path_for(c), row, dedupe_id=False)
+
+
+def _mark_routine(row):
+    """Note a row written inside one of her scheduled runs (see gate_view)."""
+    from companion_platform import in_scheduled_run
+
+    if in_scheduled_run():
+        row["by"] = "routine"
+
+
+def gate_view(c, now):
+    """What the background gate watches: each open loop as its last change from outside
+    her own scheduled runs left it, and the callbacks that have come due today.
+
+    A routine adding, editing or closing a loop is her own work, and the next routine
+    need not wake for it; Hermes keeps the gate's mark from before each run, so it used
+    to (#4). A callback coming due is news whoever wrote it, and stays listed for the
+    rest of that day even once a routine closes it, so the closing wakes nothing.
+    Rows from before this have no author and count as outside, as they did.
+    """
+    state, seen, last_by = {}, {}, {}
+    for r in slf._read(path_for(c)):
+        ident = r.get("id")
+        if r.get("kind") == "loop":
+            if ident in state:
+                continue
+            state[ident] = dict(r)
+        elif r.get("kind") == "loop_update" and ident in state:
+            loop = state[ident]
+            loop["status"] = r.get("status", loop["status"])
+            for key in ("detail", "gentle_use", "category", "follow_up_at"):
+                if r.get(key):
+                    loop[key] = r[key]
+            if r.get("note"):
+                loop["note"] = r["note"]
+        else:
+            continue
+        routine = r.get("by") == "routine"
+        last_by[ident] = "routine" if routine else "outside"
+        if not routine:
+            seen[ident] = dict(state[ident])
+    fields = ("id", "title", "detail", "gentle_use", "category", "follow_up_at", "note")
+    marks = sorted(
+        tuple(loop.get(key, "") for key in fields)
+        for loop in seen.values()
+        if loop.get("status") == "open"
+    )
+    today = now.astimezone(_tz(c)).date()
+    due = []
+    for ident, loop in state.items():
+        when = _due_at(c, loop)
+        if when is None or when > now or when.astimezone(_tz(c)).date() != today:
+            continue
+        if loop.get("status") == "open" or last_by.get(ident) == "routine":
+            due.append(ident)
+    return marks, sorted(due)
 
 
 def loops(c, status="open"):

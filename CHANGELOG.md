@@ -10,6 +10,17 @@
   containers. The provider is told the same value. ComfyUI presets keep their 10 minutes
   unless a time is chosen. Hermes's own OpenAI image client still has a fixed 600-second
   default until Hermes makes it configurable.
+- **Her routines stop waking each other** (#4). Hermes keeps a monitored job's mark from
+  before each run, so a scene transition or loop edit that pulse or autonomy made read as a
+  change on the next tick, and the two kept waking each other. On one install, nearly every
+  transition in a week was written during these runs, and a scene change was part of 43% of
+  pulse wakes and 69% of autonomy wakes. A write made inside a scheduled run is now recorded
+  as such (Hermes stamps `HERMES_CRON_SESSION` on a cron run's commands), and the awake
+  fingerprint watches only what the conversation or code changed: `unscheduled_since` for the
+  scene; for loops, each loop as its last outside change left it, plus the callbacks due
+  today. Callbacks coming due, routine anchors, deadlines, queued messages and the six-hour
+  bucket still wake the jobs. A routine moving on from an activity that ran long still wakes
+  the next run once.
 - Fix a meters test that began failing on its own at the end of October: it compared a
   fixed September date against today's clock with a 60-day window.
 
