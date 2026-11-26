@@ -92,6 +92,28 @@ def _read_parsed(path: pathlib.Path, parse):
 
 # Hermes' own context-file rule, reproduced so we can stay under it deliberately.
 HERMES_CHARS_PER_TOKEN = 4
+# Characters per token by model family, to turn the token budgets below into characters for
+# the model that will read them. The budgets assume 4 (OpenAI's tokenizer on English prose).
+# Claude's current tokenizer spends a token per ~2.5 characters of this kit's injected text
+# (Anthropic's token counter, 2026-11-26: 2.4-2.8 on prose, ~2.0 on file paths), so a budget
+# meant as N tokens cost about 1.6 N on Claude.
+CHARS_PER_TOKEN = {"claude": 2.5}
+
+
+def chars_per_token(model) -> float:
+    """Characters per token for `model` (its family), HERMES_CHARS_PER_TOKEN when unknown."""
+    name = str(model or "").lower()
+    for family, ratio in CHARS_PER_TOKEN.items():
+        if family in name:
+            return ratio
+    return float(HERMES_CHARS_PER_TOKEN)
+
+
+def budget_scale(model) -> float:
+    """How much of each character budget fits the same tokens on `model` (1.0 when unknown)."""
+    return chars_per_token(model) / HERMES_CHARS_PER_TOKEN
+
+
 HERMES_CONTEXT_FILE_FRACTION = 0.06
 HERMES_CONTEXT_FILE_FLOOR = 20_000
 HERMES_CONTEXT_FILE_CEILING = 500_000
@@ -878,16 +900,20 @@ class Companion:
         """Small windows get a condensed rules block instead of losing sections."""
         return self.tier in ("tiny", "small")
 
-    def budgets(self) -> dict:
+    def budgets(self, scale: float = 1.0) -> dict:
         """Chars per injected section, scaled to the window. Rules and the lookup
         tail are reserved first and never sacrificed. On a small window whole
         sections are dropped (set to 0) in reverse priority order, because a
-        90-character fragment of open loops helps nobody."""
+        90-character fragment of open loops helps nobody.
+
+        `scale` fits the character budgets to the reading model's tokenizer
+        (budget_scale(model)): the same tokens hold fewer characters on Claude."""
         rules = 380 if self.compact else 1450
         tail = 260 if self.compact else 620
-        reserve = facts_reserve(self.context_tokens)
-        conversation = self.conversation_cap
-        free = max(0, self.injection_cap - reserve - conversation - rules - tail)
+        reserve = int(facts_reserve(self.context_tokens) * scale)
+        conversation = int(self.conversation_cap * scale)
+        total = int(self.injection_cap * scale)
+        free = max(0, total - reserve - conversation - rules - tail)
         keep = [
             k for i, k in enumerate(_PRIORITY) if (i + 1) * _MIN_USEFUL <= free
         ] or _PRIORITY[:1]
@@ -914,7 +940,7 @@ class Companion:
                 out[dropped] = 0
         out["facts"] += reserve
         out["conversation"] = conversation
-        out["rules"], out["tail"], out["total"] = rules, tail, self.injection_cap
+        out["rules"], out["tail"], out["total"] = rules, tail, total
         return out
 
     # ---- io --------------------------------------------------------------

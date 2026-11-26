@@ -1,4 +1,13 @@
-Tamanitomo 3.17.2: she knows which photos she sent.
+Tamanitomo 3.18.0: lighter requests, sized for the model reading them.
+
+- **No pile-up after a restart.** After the gateway restarted, every old context snapshot in a
+  conversation was sent again with each message. Now only the newest one is, as intended.
+- **Right-sized for Claude.** Context budgets now account for how many characters fit in a token
+  on the model that reads them, so on Claude each turn costs what it was designed to.
+
+No Repair needed for this update; restart the gateway once so Hermes loads the updated engine.
+
+Previous: 3.17.2 she knows which photos she sent.
 
 - **No more "did a photo reach you?"** A photo her routines sent showed up in her conversation as
   its caption only, so she could doubt she had sent it. She now sees the photos she sent in the

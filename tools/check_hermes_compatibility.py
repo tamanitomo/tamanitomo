@@ -216,6 +216,44 @@ def probe(scratch, checkout):
         "Companion context engine not registered",
     )
     checks = ["real_plugin_discovery", "context_engine_registration"]
+    # The engine as Hermes hands it to an agent, on a resumed history: after a gateway
+    # restart each message is the bytes that were sent (no api_content beside it), and only
+    # the newest plain snapshot may stay. This regressed unnoticed once; keep it checked.
+    import copy as _copy
+    from agent.context_engine import ContextEngine
+    from companion_local_context import BEGIN as _BEGIN, END as _END
+
+    engine = manager._context_engine
+    engine = (
+        engine.clone_for_agent()
+        if hasattr(engine, "clone_for_agent")
+        else _copy.deepcopy(engine)
+    )
+    require(
+        getattr(engine.select_context, "__func__", None)
+        is not ContextEngine.select_context,
+        "Companion context engine does not implement select_context",
+    )
+    resumed = [
+        {
+            "role": "user",
+            "content": f"hello {n}\n\n{_BEGIN}\n[{c.agent} — continuity]\nstate {n}\n{_END}",
+        }
+        for n in range(3)
+    ]
+    picked = engine.select_context(
+        [dict(m) for m in resumed],
+        conversation_messages=resumed,
+        incoming_message=None,
+        budget_tokens=0,
+    )
+    require(
+        isinstance(picked, list)
+        and [m["content"] for m in picked[:2]] == ["hello 0", "hello 1"]
+        and picked[2]["content"] == resumed[2]["content"],
+        "Context engine kept old snapshots in a resumed session",
+    )
+    checks.append("resumed_history_keeps_only_newest_snapshot")
     cfg = load_config()
     enrolled = cfg["tamanitomo_routing"]["jobs"]
     pinned = {

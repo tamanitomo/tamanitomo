@@ -49,7 +49,54 @@ def without_snapshot(sidecar, raw, agent):
     return prefix + extra[:index]
 
 
+def strip_text(text, agent):
+    """`text` without its plain-fenced Kit snapshot, or None when there is none to take.
+
+    Read from the message itself, not from its sidecar. A resumed session (any gateway
+    restart) replays the bytes that were sent as the message, with no sidecar left to
+    compare against, and the sidecar match then found nothing: every old snapshot rode
+    along, 278K tokens in one request on 2026-11-26. The base and update fences of a
+    conversation are a different marker and are never taken.
+    """
+    for b_marker, e_marker in ((BEGIN, END), (LEGACY_BEGIN, LEGACY_END)):
+        if text.count(b_marker) == 1 and text.count(e_marker) == 1:
+            head, rest = text.split(b_marker, 1)
+            body, tail = rest.split(e_marker, 1)
+            if f"[{agent} — continuity" not in body:
+                return None
+            result = head.rstrip()
+            if tail.strip():
+                result += "\n\n" + tail.lstrip()
+            # A message that was nothing but its snapshot stays whole: an empty user
+            # message is an error on most providers.
+            return result if result.strip() else None
+    return None
+
+
+def _strip_content(content, agent):
+    """Content without its snapshot (text, or the text parts of a multimodal message),
+    or None when nothing changed."""
+    if isinstance(content, str):
+        return strip_text(content, agent)
+    if not isinstance(content, list):
+        return None
+    changed, parts = False, []
+    for part in content:
+        if (
+            isinstance(part, dict)
+            and part.get("type") == "text"
+            and isinstance(part.get("text"), str)
+        ):
+            cleaned = strip_text(part["text"], agent)
+            if cleaned is not None:
+                part, changed = {**part, "text": cleaned}, True
+        parts.append(part)
+    return parts if changed else None
+
+
 def select_messages(request_messages, conversation_messages, agent):
+    # Earlier hooks wrote unfenced snapshots; those are only recognisable against the
+    # sidecar, so that match stays for histories old enough to have them.
     replacements = {}
     for row in conversation_messages or []:
         if row.get("role") != "user":
@@ -59,20 +106,21 @@ def select_messages(request_messages, conversation_messages, agent):
         cleaned = without_snapshot(sidecar, raw, agent)
         if cleaned is not None:
             replacements[sidecar] = cleaned
-    candidates = [
-        i
-        for i, row in enumerate(request_messages)
-        if row.get("role") == "user"
-        and isinstance(row.get("content"), str)
-        and row["content"] in replacements
-    ]
+    candidates = []
+    for index, row in enumerate(request_messages):
+        if row.get("role") != "user":
+            continue
+        content = row.get("content")
+        cleaned = replacements.get(content) if isinstance(content, str) else None
+        if cleaned is None:
+            cleaned = _strip_content(content, agent)
+        if cleaned is not None:
+            candidates.append((index, cleaned))
     if len(candidates) < 2:
         return None
-    keep = candidates[-1]
     out = list(request_messages)
-    for index in candidates[:-1]:
-        row = request_messages[index]
-        out[index] = {**row, "content": replacements[row["content"]]}
+    for index, cleaned in candidates[:-1]:
+        out[index] = {**request_messages[index], "content": cleaned}
     return out
 
 

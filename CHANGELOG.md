@@ -1,3 +1,21 @@
+## 3.18.0 — Lighter requests after a restart, sized for the model reading them (2026-11-26)
+
+- **The context engine works again after a gateway restart.** It replays only the newest
+  continuity snapshot, and it found the old ones by comparing each message with the copy Hermes
+  keeps beside it. After a restart Hermes replays the bytes that were sent as the message itself,
+  with no copy beside it, so nothing matched and every old snapshot rode along: one request on a
+  live install reached 278,000 tokens. The engine now takes the snapshot out of the message text
+  itself (and out of the text of a message that carries a photo). On that conversation the
+  request goes from 566,634 characters to 124,560. A conversation's first-turn snapshot and its
+  updates (3.17.0) are left in place as before.
+- **Budgets fit the model that reads them.** The kit turns its token budgets into characters at 4
+  characters a token; Claude's current tokenizer spends a token per about 2.5 characters of this
+  text, so every budget cost about 1.6 times what it was meant to. The per-turn budgets are now
+  sized for the model of that turn. Other models are unchanged.
+- The photos-you-sent list cuts a long caption plainly instead of adding a note meant for files.
+- The Hermes compatibility check now runs the engine as Hermes hands it to an agent, on a resumed
+  history, so this cannot regress unnoticed again. Verified against Hermes v0.23.4.
+
 ## 3.17.2 — She knows which photos she sent (2026-11-26)
 
 - **Photos her routines send are in her conversations, not just their captions.** A photo sent

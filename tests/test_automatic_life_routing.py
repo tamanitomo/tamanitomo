@@ -305,6 +305,48 @@ def test_the_context_engine_sends_only_the_newest_snapshot(monkeypatch):
     assert [m['content'] for m in sent] == ['hi 0', 'hi 1', request[2]['content']]
 
 
+
+def _snap(local, n):
+    return local.BEGIN + f'\n[Nova — continuity]\nstate {n}\n' + local.END
+
+
+def test_a_resumed_session_without_sidecars_still_sends_only_the_newest_snapshot():
+    # A gateway restart replays the bytes that were sent as the message itself, with no
+    # api_content beside it; matching sidecars found nothing and every snapshot rode along.
+    import companion_local_context as local
+
+    stored = [{'role': 'user', 'content': f'hi {i}\n\n' + _snap(local, i)} for i in range(3)]
+    request = [dict(row) for row in stored]
+    sent = local.select_messages(request, stored, 'Nova')
+    assert [m['content'] for m in sent] == ['hi 0', 'hi 1', request[2]['content']]
+
+
+def test_an_image_message_loses_its_snapshot_but_keeps_its_picture():
+    import companion_local_context as local
+
+    image = {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,AAAA'}}
+    request = [
+        {'role': 'user', 'content': [{'type': 'text', 'text': 'look\n\n' + _snap(local, 0)}, image]},
+        {'role': 'user', 'content': 'and now\n\n' + _snap(local, 1)},
+    ]
+    sent = local.select_messages(request, None, 'Nova')
+    assert sent[0]['content'] == [{'type': 'text', 'text': 'look'}, image]
+    assert sent[1] == request[1]
+
+
+def test_conversation_base_and_updates_and_bare_snapshots_are_left_alone():
+    import companion_local_context as local
+
+    base = '<!-- tamanitomo:continuity-base:begin abc -->\n[Nova — continuity]\n<!-- tamanitomo:continuity-base:end -->'
+    update = '<!-- tamanitomo:continuity-update:begin -->\n[Nova — continuity update]\n<!-- tamanitomo:continuity-update:end -->'
+    request = [
+        {'role': 'user', 'content': 'hi\n\n' + base},
+        {'role': 'user', 'content': _snap(local, 0)},  # nothing but a snapshot: an empty message is an error
+        {'role': 'user', 'content': 'again\n\n' + update},
+    ]
+    assert local.select_messages(request, None, 'Nova') is None
+
+
 def test_rollover_finds_a_profile_chat_routed_by_the_root_gateway(tmp_path):
     import companion_rollover as rollover
     c = cc.Companion(hermes_root=tmp_path, profile='nova', vault=tmp_path/'vault')

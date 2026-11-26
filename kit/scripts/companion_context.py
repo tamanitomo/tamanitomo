@@ -434,7 +434,8 @@ def sent_photo_scene(c, entry):
         text = ", ".join(
             str(state[k]) for k in ("activity", "location") if state.get(k)
         )
-    return clip(text, 180)
+    text = " ".join(text.split())
+    return text if len(text) <= 240 else text[:239].rstrip() + "…"
 
 
 def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None):
@@ -442,9 +443,10 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
     now = now or dt.datetime.now(tz)
     if now.tzinfo is None:
         now = now.replace(tzinfo=tz)
-    b = c.budgets()
     extra = (payload or {}).get("extra") if isinstance(payload, dict) else {}
     extra = extra if isinstance(extra, dict) else {}
+    # Sized for the model that will read it: the same tokens hold fewer characters on Claude.
+    b = c.budgets(scale=cc.budget_scale(extra.get("model")))
     msg = extra.get("user_message", "") if isinstance(extra, dict) else ""
     if not isinstance(msg, str):
         msg = ""
@@ -1070,7 +1072,9 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
                 ]
                 for at, e in photos:
                     shown = sent_photo_scene(c, e)
-                    caption = clip(str(e.get("body") or ""), 140)
+                    body = " ".join(str(e.get("body") or "").split())
+                    # A plain cut: clip()'s "read source" note means nothing inside a quote.
+                    caption = body if len(body) <= 220 else body[:219].rstrip() + "…"
                     lines.append(
                         f'- {at.astimezone(tz):%a %H:%M}: "{caption}"'
                         + (f" It showed: {shown}" if shown else "")
