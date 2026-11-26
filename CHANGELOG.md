@@ -1,3 +1,21 @@
+## 3.19.0 — Short memory in view, the rest a look away (2026-11-26)
+
+- **The relationship stays in her always-loaded memory; working notes move first.** When a memory
+  file nears its cap the archiver moved the oldest entries, whatever they were, so how someone
+  likes to be addressed or what a ring means to them could leave her view before a server's port
+  did. Now entries that are not working notes (two or more paths, hosts, ports, versions or
+  settings) are kept first, newest first, then working notes while there is room. Nothing is
+  deleted: archived entries stay in the vault's memory archive.
+- **What he raises, she looks for.** A topic callback, the automatic check of what a message
+  mentions, now also reads her archived memory, not only facts and recent messages. Two of the
+  message's words must meet on one line, and at most two such notes come back, so a passing word
+  does not pull in an unrelated one. Her continuity rules also say it plainly: the loaded memory
+  is the short version, and something mentioned that she does not see is to be looked up before
+  she answers.
+- **A curated tidy.** `companion_memory.py list` shows each entry with its number and whether it
+  counts as a working note; `archive --file NAME --move 3,7,12 --apply` archives exactly those,
+  through the same transaction (never the last entry of a file).
+
 ## 3.18.1 — A repair she means to record is recorded (2026-11-26)
 
 - **Recording that a hurt was mended works the way she tries it.** A repair names the rupture it

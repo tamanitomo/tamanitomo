@@ -221,7 +221,12 @@ def search(c, query, limit=6, seconds=1.0, *, implicit=False, now=None):
                     },
                 )
             )
-    for p in ([] if implicit else sources(c)):
+    # A topic callback also reads her archived memory: the always-loaded files are in front
+    # of her already, but what was archived to keep them short is only found by looking. Two
+    # of his words must meet on one line, and two such lines at most, so a passing word
+    # does not pull in an unrelated note.
+    archived = 0
+    for p in (sources(c)[2:] if implicit else sources(c)):
         if time.monotonic() > deadline:
             break
         try:
@@ -232,7 +237,10 @@ def search(c, query, limit=6, seconds=1.0, *, implicit=False, now=None):
                         break
                     score = _overlap(line, words)
                     stripped = line.strip()
+                    if implicit and (score < 2 or archived >= 2):
+                        continue
                     if score and stripped not in seen:
+                        archived += 1 if implicit else 0
                         seen.add(stripped)
                         candidates.append(
                             (

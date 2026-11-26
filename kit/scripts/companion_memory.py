@@ -169,24 +169,55 @@ def status(c):
     return out
 
 
-def plan(text, keep_chars):
+# A working note: the paths, hosts, ports, versions and settings of something she worked on.
+# Two or more such markers make one; anything else is about a person, the relationship or
+# her own life. Errors here keep a little more in view, never less of the relationship.
+WORKING_MARKS = re.compile(
+    r"(`[^`]+`|https?://|(?:^|\s)(?:/home|/mnt|/opt|/etc|/usr|~)/|"
+    r"\b\d{1,3}(?:\.\d{1,3}){3}\b|:\d{4,5}\b|"
+    r"\.(?:py|json|jsonl|md|ya?ml|toml|sh|png|jpg|gguf|safetensors|apk|zip)\b|"
+    r"\bv?\d+\.\d+\.\d+\b|SHA-256|\bAPI\b|\bconfig\w*|\bSSH\b|\bcron\b|\bDocker\b)",
+    re.I,
+)
+
+
+def working_note(entry):
+    return len(WORKING_MARKS.findall(entry)) >= 2
+
+
+def plan(text, keep_chars, move=None):
+    """Which entries stay in the always-loaded file and which go to the archive.
+
+    Kept first: everything that is not a working note, newest first; then working notes,
+    newest first, while there is room. Oldest-first alone moved the relationship out of
+    view (how he likes to be addressed, what a ring means to him) to keep a server's port.
+    `move` (entry indices) is an explicit choice instead, for a curated tidy.
+    """
+    _, items = entries(text)
+    if move is not None:
+        chosen = set(move)
+        if not chosen <= set(range(len(items))):
+            raise ValueError("move names an entry that is not in the file")
+        keep = [e for i, e in enumerate(items) if i not in chosen]
+        if not keep:
+            raise ValueError("keep at least one entry in view")
+        return "", keep, [e for i, e in enumerate(items) if i in chosen]
     if (
         isinstance(keep_chars, bool)
         or not isinstance(keep_chars, int)
         or keep_chars <= 0
     ):
         raise ValueError("keep_chars must be a positive integer")
-    _, items = entries(text)
-    keep = []
-    used = 0
-    for entry in reversed(items):
-        size = len(entry) + (len(ENTRY_DELIMITER) if keep else 0)
-        if used + size > keep_chars and keep:
-            break
-        keep.append(entry)
+    order = sorted(range(len(items)), key=lambda i: (working_note(items[i]), -i))
+    kept, used = set(), 0
+    for i in order:
+        size = len(items[i]) + (len(ENTRY_DELIMITER) if kept else 0)
+        if used + size > keep_chars and kept:
+            continue
+        kept.add(i)
         used += size
-    keep.reverse()
-    return "", keep, items[: len(items) - len(keep)]
+    keep = [e for i, e in enumerate(items) if i in kept]
+    return "", keep, [e for i, e in enumerate(items) if i not in kept]
 
 
 def _recover(p, dest, journal):
@@ -381,6 +412,7 @@ def archive(
     *,
     keep_chars=None,
     lock_timeout=30,
+    move=None,
 ):
     if name not in FILES:
         raise ValueError("Only USER.md and MEMORY.md may be archived")
@@ -408,7 +440,7 @@ def archive(
                     }
                 return _recover(p, dest, journal)
             text = _text(p)
-            _, keep, move = plan(text, target)
+            _, keep, move = plan(text, target, move)
             if not move:
                 return {
                     "file": name,
@@ -480,7 +512,8 @@ def maintain(c, lock_timeout=30):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument(
-        "action", choices=("status", "archive", "caps", "index", "backfill-index")
+        "action",
+        choices=("status", "list", "archive", "caps", "index", "backfill-index"),
     )
     p.add_argument("--home", type=pathlib.Path)
     p.add_argument("--file", choices=FILES)
@@ -491,9 +524,31 @@ def main():
         type=int,
         help="character target (--keep-bytes is a legacy alias)",
     )
+    p.add_argument(
+        "--move",
+        help="with --file: comma-separated entry numbers (from `list`) to archive, "
+        "instead of choosing by size",
+    )
     p.add_argument("--apply", action="store_true")
     a = p.parse_args()
     c = cc.load(a.home)
+    if a.action == "list":
+        for name in [a.file] if a.file else list(FILES):
+            p_ = memory_dir(c) / name
+            _, items = entries(_text(p_)) if p_.exists() else ("", [])
+            print(f"{name}: {len(items)} entries")
+            for i, e in enumerate(items):
+                flag = "work" if working_note(e) else "    "
+                print(f"  {i:3} {flag} {len(e):5}  {' '.join(e.split())[:90]}")
+        return 0
+    move = None
+    if a.move:
+        if not a.file:
+            p.error("--move needs --file")
+        try:
+            move = sorted({int(x) for x in a.move.split(",") if x.strip()})
+        except ValueError:
+            p.error("--move takes entry numbers, e.g. 3,7,12")
     if a.action == "backfill-index":
         print(
             json.dumps(backfill_index(c, apply=a.apply), ensure_ascii=False, indent=2)
@@ -537,7 +592,7 @@ def main():
         ]
     )
     for name in targets:
-        print(archive(c, name, keep_chars=a.keep_chars, apply=a.apply))
+        print(archive(c, name, keep_chars=a.keep_chars, apply=a.apply, move=move))
     if not targets:
         print("All memory files are below the warning threshold; nothing to archive.")
     if not a.apply:

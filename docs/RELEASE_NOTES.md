@@ -1,4 +1,13 @@
-Tamanitomo 3.18.1: a repair she means to record is recorded.
+Tamanitomo 3.19.0: short memory in view, the rest a look away.
+
+- **She keeps the relationship in view.** When her memory fills, old working notes (servers,
+  settings, file paths) go to the archive first; what matters about the two of you stays.
+- **She looks up what you mention.** If you bring up something that has moved to her archive, she
+  finds it before answering instead of saying she does not know.
+
+No Repair needed for this update.
+
+Previous: 3.18.1 a repair she means to record is recorded.
 
 - **Making up counts.** When she tried to record that a let-down had been mended, the record was
   refused over a field name and lost. It now accepts the names she uses and explains itself.
