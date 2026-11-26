@@ -27,6 +27,23 @@
   keeps its choice, and the result says which. Tick "Reset routines I set by hand" to put
   them all on the plan as before. Anything on an account the plan no longer uses is still
   moved.
+- **Settings open with Essentials**: model, contact & outreach, awareness (where she is), photo
+  sessions and voice. These are the few things a new person sets once; everything else keeps
+  its working defaults further down the list.
+- **Pausing one job no longer breaks settings saves.** The health check that ends every save
+  treated a job paused on the Scheduled jobs page as a fault, so quiet-hours, outreach and photo
+  saves reported failure. A job paused on purpose is now listed as such. A job running inside a
+  paused routine is still flagged.
+- **Switching photos back on starts them again.** Turning photos off paused the photo timeline
+  job, but turning them on in the app never resumed it; only the CLI did. Now the app does too,
+  on that switch only, so a photo job paused by hand stays paused through other saves.
+- **Photo times stay inside waking hours.** "Every 24 hours" ran at 00:03, inside quiet hours,
+  where the photo gate refuses, so no photos came; "every 12 hours" lost one of its two. Hourly
+  and longer intervals now spread over the waking day, and a day-long one lands mid-day. A
+  schedule the kit set the old way moves to the new one; one you chose yourself is left alone.
+- **Her internal name is locked in the companion editor**, now labelled "Internal name".
+  Changing it made the next repair install a second full set of scheduled jobs beside the old
+  ones. To rename her, change the display name.
 - Fix a meters test that began failing on its own at the end of October: it compared a
   fixed September date against today's clock with a 60-day window.
 

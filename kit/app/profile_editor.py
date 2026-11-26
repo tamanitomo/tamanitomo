@@ -12,6 +12,10 @@ import companion_config as cc
 import companion_platform as cp
 
 FIXED = {"profile", "hermes_root", "vault", "soul_in_vault"}
+# Her internal name files and scheduled jobs are kept under ("{{AGENT}} companion pulse").
+# Changing it here made the next repair install a second full set of jobs beside the old
+# ones, both running; what she is called in the app is the display name.
+LOCKED = {"agent"}
 
 
 def snapshot(c):
@@ -32,6 +36,7 @@ def snapshot(c):
         "revision": revision,
         "display_name": label or c.agent,
         "fixed": sorted(FIXED),
+        "locked": sorted(LOCKED),
     }
 
 
@@ -47,6 +52,12 @@ def save(c, payload):
     if any(values[k] != original["config"][k] for k in FIXED):
         raise ValueError(
             "Profile and storage paths are read-only; use migration tools to move them"
+        )
+    if any(values[k] != original["config"][k] for k in LOCKED):
+        raise ValueError(
+            "Her internal name cannot be changed here: her files and scheduled jobs are "
+            "kept under it, and renaming would leave a second set of jobs running. "
+            "Change the display name instead."
         )
     for key, old in original["config"].items():
         if isinstance(old, bool):

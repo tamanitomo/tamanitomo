@@ -58,6 +58,23 @@ def preserve_human_records(old, updated):
             raise
 
 
+def resume_timeline(c, runtime):
+    """Resume the companion's photo timeline job if it is paused; returns a report line."""
+    from kit.cli.common import _read_jobs
+
+    path = c.home / "cron/jobs.json"
+    jobs = _read_jobs(path).get("jobs", []) if path.exists() else []
+    job = next((j for j in jobs if j.get("name") == c.agent + " image timeline"), None)
+    if job is None:
+        return "  photos on; the timeline job will be added by repair"
+    if job.get("enabled"):
+        return "  photos on; the timeline job is already running"
+    result = runtime.run(["cron", "resume", job["id"]], home=c.home, check=False)
+    if result.returncode:
+        return "  ! photos on, but the timeline job could not be resumed; run repair"
+    return "  photos on; the timeline job is running again"
+
+
 def synchronize(app, runtime, old, updated):
     """Queue the same job update regardless of which editor saved the settings."""
     cadence = {
@@ -83,6 +100,12 @@ def synchronize(app, runtime, old, updated):
         report("Preferences saved; updating background jobs")
         sync_report = []
         refresh_schedules(old, updated, sync_report, run_cmd=runtime.run)
+        if updated.image_timeline and not old.image_timeline and updated.cron_active:
+            # Switching photos off pauses the timeline job (scaffold.install_jobs), so
+            # switching them back on has to resume it, as the CLI toggle always did.
+            # Only on this edge: a photo job someone paused by hand while photos were on
+            # stays paused through every other save.
+            sync_report.append(resume_timeline(updated, runtime))
         for line in sync_report:
             report(line.strip())
         result = runtime.run(

@@ -90,12 +90,46 @@ def load_manifest(c=None):
     if c is not None:
         for spec in jobs:
             if spec["key"] == "timeline":
-                n = c.image_interval_minutes
-                spec["expr"] = f"3-59/{n} * * * *" if n < 60 else f"3 */{n//60} * * *"
-                if n == 1440:
-                    spec["expr"] = "3 0 * * *"
+                spec["expr"] = timeline_expr(c, c.image_interval_minutes)
             spec["expr"] = stagger_schedule(spec["expr"], c.schedule_offset_minutes)
     return {"jobs": jobs}
+
+
+def waking_hours(c):
+    """Whole hours outside quiet hours, in day order from the end of the night."""
+    try:
+        start = int(str(c.quiet_start).split(":")[0])
+        end_hour, end_minute = (int(x) for x in str(c.quiet_end).split(":")[:2])
+    except (ValueError, AttributeError):
+        return list(range(24))
+    hour, hours = (end_hour + (1 if end_minute else 0)) % 24, []
+    while hour != start and len(hours) < 24:
+        hours.append(hour)
+        hour = (hour + 1) % 24
+    return hours or list(range(24))
+
+
+def timeline_expr(c, minutes):
+    """The photo timeline's schedule for an interval, kept inside waking hours.
+
+    The photo gate refuses a run in quiet hours, so "every 24 hours" at 00:03 made no
+    photos at all and "every 12 hours" lost one of its two. Hourly and longer intervals
+    are now spread over the waking day; a day-long interval lands mid-day.
+    """
+    if minutes < 60:
+        return f"3-59/{minutes} * * * *"
+    hours = waking_hours(c)
+    if minutes >= 1440:
+        return f"3 {hours[len(hours) // 2]} * * *"
+    picked = sorted(hours[:: minutes // 60])
+    return "3 " + ",".join(str(h) for h in picked) + " * * *"
+
+
+def legacy_timeline_exprs(minutes):
+    """How the timeline was scheduled before it kept to waking hours (for migration)."""
+    if minutes < 60:
+        return []
+    return ["3 0 * * *"] if minutes >= 1440 else [f"3 */{minutes // 60} * * *"]
 
 
 def stagger_schedule(expr, offset):

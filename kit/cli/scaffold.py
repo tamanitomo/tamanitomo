@@ -30,7 +30,18 @@ import shutil
 import subprocess
 import uuid
 import companion_wizard as wiz
-from .common import KIT, T, _read_jobs, edit_count, load_manifest, mapping, print, write
+from .common import (
+    KIT,
+    T,
+    _read_jobs,
+    edit_count,
+    legacy_timeline_exprs,
+    load_manifest,
+    mapping,
+    print,
+    stagger_schedule,
+    write,
+)
 from .questions import ask, confirm
 
 # Editor and sync droppings that should never be committed alongside a vault, and
@@ -466,6 +477,13 @@ def _install_jobs_locked(c, m, report):
                 and job.get("schedule", {}).get("expr") == "*/15 6-23 * * *"
             ):
                 updates += ["--schedule", spec["expr"]]
+            # The timeline as the kit scheduled it before it kept to waking hours: move
+            # it to the new form. A schedule someone chose is not one of these, so stays.
+            if spec["key"] == "timeline" and job.get("schedule", {}).get("expr") in {
+                stagger_schedule(expr, c.schedule_offset_minutes)
+                for expr in legacy_timeline_exprs(c.image_interval_minutes)
+            }:
+                updates += ["--schedule", spec["expr"]]
             # 3.0.12: the morning job moved from one fixed minute to a window gated by
             # a fingerprint. Move only the schedule the kit itself rendered before.
             if spec["key"] == "wake" and job.get("schedule", {}).get(
@@ -880,7 +898,15 @@ def refresh_schedules(old, new, report, run_cmd=None):
             was = cr.render(spec_old["expr"], m_old)
             now = cr.render(spec_new["expr"], m_new)
             current_expr = job.get("schedule", {}).get("expr")
-            if was != now and current_expr == was:
+            # What the kit itself rendered before. The timeline also has its old
+            # quiet-hours-blind form, so an install from before still follows settings.
+            rendered = {was}
+            if spec_old.get("key") == "timeline":
+                rendered.update(
+                    stagger_schedule(expr, old.schedule_offset_minutes)
+                    for expr in legacy_timeline_exprs(old.image_interval_minutes)
+                )
+            if current_expr in rendered and current_expr != now:
                 try:
                     if run_cmd is not None:
                         result = run_cmd(

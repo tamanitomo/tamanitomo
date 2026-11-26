@@ -1632,17 +1632,21 @@ function androidHostingTips(){
 
 /* Every section, in the order people look for them. A string is a section in
    settingsPanels; an object is a page elsewhere in the workspace that belongs
-   here too, so there is one list to scan instead of tiles plus groups. */
+   here too, so there is one list to scan instead of tiles plus groups.
+   Essentials come first: the few things a new person sets once (which model,
+   when she may write, where she is, photos, voice). Everything below them has
+   working defaults and is there for when someone wants it. */
 const SETTINGS_NAV=[
+  ['Essentials',['models','contact','awareness','photos','connect-voice']],
   ['Companion',[
     {route:'roster',title:'Companions',blurb:'Create, adopt, switch or archive a companion'},
     {route:'identity',title:'Identity',blurb:'Name, personality, appearance and story'},
-    'contact','rhythm','awareness','relationship']],
+    'rhythm','relationship']],
   ['AI models',[
-    'models','hermes-accounts','jobs',
+    'hermes-accounts','jobs',
     {route:'local-models',title:'Local models',blurb:'Run models on this machine with Ollama'}]],
   ['Images & voice',[
-    'connect-images','photos','connect-voice',
+    'connect-images',
     {route:'image-studio',title:'Image studio',blurb:'Workflows, presets and previews'},
     {route:'voice',title:'Voice studio',blurb:'Voices, cloning and previews'}]],
   ['App',['appearance','network','updates']],

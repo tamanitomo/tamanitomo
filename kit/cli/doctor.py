@@ -336,14 +336,16 @@ def cmd_doctor(args):
             except (ValueError, TypeError):
                 print("  ! invalid job timestamp")
                 ok = jobs_ok = False
-    if any(j.get("enabled") and not j.get("next_run_at") for j in jobs) or any(
-        bool(j.get("enabled")) != (True if j.get("name") in scripted else c.cron_active)
-        for j in jobs
+    if any(j.get("enabled") and not j.get("next_run_at") for j in jobs) or (
+        schedule_state_mismatches(c, jobs, scripted)
     ):
         print(
             "  ! schedule state differs from setup choice, or an active job lacks next_run_at"
         )
         ok = jobs_ok = False
+    paused = [j["name"] for j in jobs if c.cron_active and deliberately_paused(j)]
+    if paused:
+        print("  paused on purpose: " + ", ".join(paused))
     if (c.home / "companion-pending-jobs.json").exists():
         print("  ! scheduled jobs pending; run repair")
         ok = jobs_ok = False
@@ -418,6 +420,30 @@ def cmd_doctor(args):
     print("\nOK" if ok else "\nIncomplete — see the ! lines above.")
     # 1 = a job or schedule is wrong; 2 = only advisories elsewhere.
     return 0 if ok else (1 if not jobs_ok else 2)
+
+
+def deliberately_paused(job):
+    """A job paused on its own: Pause on the Scheduled jobs page, or photos switched off."""
+    return not job.get("enabled") and (
+        job.get("state") == "paused" or bool(job.get("paused_at"))
+    )
+
+
+def schedule_state_mismatches(c, jobs, scripted):
+    """Jobs whose on/off state contradicts the routine.
+
+    A job running while the routine is paused is wrong. One that is off while the
+    routine runs is wrong only when nobody paused it: a person pausing a single job is
+    a choice, and treating it as a fault failed every later settings save, because
+    each save ends with this check.
+    """
+    out = []
+    for job in jobs:
+        want = True if job.get("name") in scripted else c.cron_active
+        if bool(job.get("enabled")) == want or (want and deliberately_paused(job)):
+            continue
+        out.append(job)
+    return out
 
 
 def cmd_repair(args):
