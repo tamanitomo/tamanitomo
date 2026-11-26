@@ -1,4 +1,4 @@
-## Unreleased
+## 3.17.0 — Settings start with the essentials (2026-11-26)
 
 - **Photos from slow image servers arrive** (#5). A photo made through Hermes's image
   provider was cut off after a fixed 10 minutes, so a self-hosted GPU that had to wake
@@ -51,6 +51,11 @@
   so instead of saving a profile that cannot start. The model switcher's window is shared by two
   conversations, so it now offers only 128K (64K each) and 256K. A phone runs one conversation
   at 64K.
+- **Web chats reach her memory on Hermes 0.3x.** Hermes 0.3x files the workspace's own chat
+  (`hermes chat --oneshot`) under the source "oneshot", which the transcript reader and the
+  workspace's session list did not know, so those conversations were left out. They now count
+  as local conversations with you when they carry their own session id and this computer's
+  user; scheduled runs are never accepted.
 - Fix a meters test that began failing on its own at the end of October: it compared a
   fixed September date against today's clock with a 60-day window.
 

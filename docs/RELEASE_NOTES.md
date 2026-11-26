@@ -1,4 +1,24 @@
-Tamanitomo 3.16.0: talk to her out loud.
+Tamanitomo 3.17.0: settings start with the essentials, and her routines stop waking each other.
+
+- **Settings open with Essentials:** model, contact and outreach, where she is, photos and voice,
+  the few things to set once. Everything below keeps working defaults.
+- **Her routines stop waking each other** (#4). What one of her scheduled runs writes no longer
+  counts as news for the next, so pulse and autonomy run when something actually happened. Your
+  messages, callbacks coming due and deadlines still wake her.
+- **Photos from slow image servers arrive** (#5). She waits 10 minutes for a hosted service and 30
+  for one on your own computer or network; Settings → Photo sessions → Slow image servers sets
+  your own time.
+- **Photo times stay in waking hours.** "Every 24 hours" fell at 00:03, inside quiet hours, so no
+  photo came. Longer intervals now spread over the day.
+- **Fixes:** pausing one job no longer makes every settings save fail; switching photos back on
+  starts them again; Models → Apply keeps routines you set by hand; a local model set up in the app
+  gets the 64K window Hermes requires; web chats reach her memory on Hermes 0.3x; her internal
+  name, which duplicated every job when changed, is locked (rename her with the display name).
+
+After updating, run Repair for each companion (`companion repair --prompts auto`) so photo times
+the kit set the old way move into waking hours.
+
+Previous: 3.16.0 talk to her out loud.
 
 - **Voice conversation.** In web chat, press Voice conversation and just talk. She answers
   out loud as her reply arrives, and stops when you start talking. Use headphones.
