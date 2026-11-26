@@ -88,6 +88,19 @@ class RecallCallbacksTests(unittest.TestCase):
         output = self.build("Do you remember Paris?")
         self.assertIn("Paris owner direct message", output)
         self.assertNotIn("Paris forbidden", output)
+        # The results, not a copy of the question: a long message echoed as the query used
+        # to fill the block before any result fit.
+        self.assertNotIn('"query"', output)
+
+    def test_a_scheduled_run_never_searches_its_own_prompt(self):
+        self.say("Paris owner direct message", "tg")
+        prompt = "[Scheduled run] Remember what changed in Paris, if anything ever did."
+        output = context.build(
+            self.c, {"extra": {"user_message": prompt, "platform": "cron"}}, now=NOW
+        )
+        self.assertNotIn("retrieval", output)
+        self.assertNotIn("Paris owner direct message", output)
+        self.assertNotIn(prompt, output)
 
     def test_binding_switches_and_local_gateway_sessions_are_respected(self):
         self.say("Paris workspace", "web")

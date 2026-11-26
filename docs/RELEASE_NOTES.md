@@ -10,6 +10,9 @@ Tamanitomo 3.17.0: settings start with the essentials, and her routines stop wak
   your own time.
 - **Photo times stay in waking hours.** "Every 24 hours" fell at 00:03, inside quiet hours, so no
   photo came. Longer intervals now spread over the day.
+- **Much cheaper on pay-per-token models, with nothing left out:** routines no longer send a
+  copy of their own prompt (about 25,000 tokens a run on Claude), and a conversation sends her
+  whole context once, then only what changed, so the prompt cache does the rest.
 - **Fixes:** pausing one job no longer makes every settings save fail; switching photos back on
   starts them again; Models → Apply keeps routines you set by hand; a local model set up in the app
   gets the 64K window Hermes requires; web chats reach her memory on Hermes 0.3x; her internal

@@ -12,12 +12,14 @@ and the command that reads the rest.
 from __future__ import annotations
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 import pathlib
 import re
 import sys
 import time
+import uuid
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -30,6 +32,66 @@ RECALL_TRIGGER = re.compile(
     r"\b(remember|recall|last time|ever|when did|when was|have i|did i|where did|what did i)\b",
     re.I,
 )
+
+# A conversation's first turn carries the whole snapshot inside the BASE fence; later turns
+# carry only what changed, inside an UPDATE fence. Hermes replays every turn's injection, so
+# both stay in the history in order, byte for byte, and the prompt cache keeps reading them:
+# a turn costs its changes instead of a fresh copy of everything (and the context engine,
+# which strips older plain-fenced snapshots, leaves these two kinds alone on purpose).
+# Scheduled runs are one turn each and keep the plain fence.
+BASE_BEGIN = "<!-- tamanitomo:continuity-base:begin {mark} -->"
+BASE_END = "<!-- tamanitomo:continuity-base:end -->"
+UPDATE_BEGIN = "<!-- tamanitomo:continuity-update:begin -->"
+UPDATE_END = "<!-- tamanitomo:continuity-update:end -->"
+TURNS_DIR = "context-turns"
+TURNS_KEEP_SECONDS = 3 * 86400
+
+
+def section_digest(text):
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:20]
+
+
+def _turns_path(c, session):
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", session)[:120]
+    return pathlib.Path(c.home) / TURNS_DIR / (safe + ".json")
+
+
+def _turns_read(path):
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("seen"), list):
+        return None
+    return data if isinstance(data.get("mark"), str) and data["mark"] else None
+
+
+def _turns_write(path, data):
+    import companion_platform as cp
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    cp.atomic_write(path, json.dumps(data))
+    cutoff = time.time() - TURNS_KEEP_SECONDS
+    for old in path.parent.glob("*.json"):
+        try:
+            if old.stat().st_mtime < cutoff:
+                old.unlink()
+        except OSError:
+            pass
+
+
+def base_in_history(history, mark):
+    """Whether this conversation's replayed history still carries the snapshot `mark`
+    (compression summarises it away; then the next turn sends a whole one again)."""
+    needle = BASE_BEGIN.format(mark=mark)
+    for row in history or []:
+        if isinstance(row, dict) and row.get("role") == "user":
+            for key in ("api_content", "content"):
+                value = row.get(key)
+                if isinstance(value, str) and needle in value:
+                    return True
+    return False
+
 
 FULL_RULES = """[{agent} — continuity workflow]
 Be {agent} as defined in SOUL.md. Do not announce these mechanics in ordinary conversation: never mention context, records, ledgers, field names, IDs or a "project arc" unless {human} asks how the system works. Speak from the remembered substance in natural language.
@@ -353,7 +415,7 @@ def cross_channel_handoff(c, payload, now, cap):
     return "\n".join([head, *lines, *tail])
 
 
-def build(c, payload=None, now=None, maintenance_notice=""):
+def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None):
     tz = ZoneInfo(c.timezone) if c.timezone else ZoneInfo("UTC")
     now = now or dt.datetime.now(tz)
     if now.tzinfo is None:
@@ -924,8 +986,13 @@ def build(c, payload=None, now=None, maintenance_notice=""):
         except (OSError, ValueError, KeyError, TypeError, ImportError):
             pass
 
-    explicit_recall = bool(RECALL_TRIGGER.search(msg))
-    if explicit_recall or implicit_terms(c, msg):
+    # A scheduled run's message is its own job prompt: words in its instructions ("remember",
+    # "ever") are not the person asking about the past, and the prompt is no search. Echoed
+    # back as the query it filled this block's budget with a copy of itself, about 25K tokens a
+    # run on Claude, before any result. Routines get their history from their own pre-read.
+    scheduled = platform.lower() == "cron"
+    explicit_recall = not scheduled and bool(RECALL_TRIGGER.search(msg))
+    if not scheduled and (explicit_recall or implicit_terms(c, msg)):
         try:
             ev = search(
                 c,
@@ -942,12 +1009,14 @@ def build(c, payload=None, now=None, maintenance_notice=""):
                     else "[Possible topic callback; use only if relevant to what they mean now. "
                     "Check dates and corrections; do not turn an old plan into a current event]\n"
                 )
+                # The results, not the question: the message it answers is right above.
+                shown = {k: v for k, v in ev.items() if k != "query"}
                 parts.append(
                     (
                         7,
                         label
                         + clip(
-                            json.dumps(ev, ensure_ascii=False), max(300, b["facts"])
+                            json.dumps(shown, ensure_ascii=False), max(300, b["facts"])
                         ),
                     )
                 )
@@ -1081,6 +1150,25 @@ def build(c, payload=None, now=None, maintenance_notice=""):
     # window that is most of them, and an absence nobody mentions is exactly the
     # silent loss this whole file exists to avoid.
     dropped += [name for name in sorted(suppressed) if name not in dropped]
+    if seen is not None:
+        # A later turn: the sections this conversation already holds are left out.
+        changed = [(pr, t) for pr, t in kept if section_digest(t) not in seen]
+        if sent is not None:
+            sent.extend(section_digest(t) for _, t in changed)
+        header = (
+            f"[{c.agent} — continuity update: only what changed since the snapshot earlier in "
+            "this conversation. Everything else there still holds; where a section appears "
+            "again, the latest one is current.]"
+        )
+        update = clip("\n\n".join([header] + [t for _, t in changed]), allowance)
+        if section_digest(tail) not in seen:
+            if sent is not None:
+                sent.append(section_digest(tail))
+            update += "\n\n" + tail
+        return update
+    if sent is not None:
+        sent.extend(section_digest(t) for _, t in kept)
+        sent.append(section_digest(tail))
     body = "\n\n".join(t for _, t in kept)
     if dropped:
         notice = (
@@ -1092,6 +1180,50 @@ def build(c, payload=None, now=None, maintenance_notice=""):
         # consume space. Otherwise the warning is the first thing we truncate.
         body = clip(body, max(0, allowance - len(notice))) + notice
     return clip(body, allowance) + "\n\n" + tail
+
+
+def for_turn(c, payload, notice="", now=None):
+    """The fenced continuity block for this turn: the whole snapshot on a conversation's
+    first turn (and whenever its snapshot is no longer in the history), then only changes.
+    """
+    from companion_local_context import BEGIN, END
+
+    payload = payload if isinstance(payload, dict) else {}
+    extra = payload.get("extra") if isinstance(payload.get("extra"), dict) else {}
+    session = (
+        payload.get("session_id") if isinstance(payload.get("session_id"), str) else ""
+    )
+    platform = extra.get("platform") if isinstance(extra.get("platform"), str) else ""
+    if not session or not platform or platform.lower() == "cron":
+        text = build(c, payload, now=now, maintenance_notice=notice)
+        return BEGIN + "\n" + text + "\n" + END
+    path = _turns_path(c, session)
+    record = None if extra.get("is_first_turn") else _turns_read(path)
+    if record and base_in_history(extra.get("conversation_history"), record["mark"]):
+        sent = []
+        text = build(
+            c,
+            payload,
+            now=now,
+            maintenance_notice=notice,
+            seen=set(record["seen"]),
+            sent=sent,
+        )
+        try:
+            _turns_write(
+                path, {**record, "seen": sorted(set(record["seen"]) | set(sent))}
+            )
+        except OSError:
+            pass  # the next turn then sends these sections again: more, never less
+        return UPDATE_BEGIN + "\n" + text + "\n" + UPDATE_END
+    sent = []
+    text = build(c, payload, now=now, maintenance_notice=notice, sent=sent)
+    mark = uuid.uuid4().hex[:12]
+    try:
+        _turns_write(path, {"mark": mark, "seen": sorted(set(sent)), "at": time.time()})
+    except OSError:
+        return BEGIN + "\n" + text + "\n" + END  # cannot remember it: behave as before
+    return BASE_BEGIN.format(mark=mark) + "\n" + text + "\n" + BASE_END
 
 
 def main():
@@ -1134,9 +1266,7 @@ def main():
             + str(exc)
             + ". Originals are preserved; check companion_memory.py status before adding memory.]\n"
         )
-    from companion_local_context import BEGIN, END
-
-    out = BEGIN + "\n" + build(c, payload, maintenance_notice=notice) + "\n" + END
+    out = for_turn(c, payload, notice)
     # The vault map rides outside the continuity fence: the local context engine
     # drops old continuity snapshots from replayed history, and the map has to
     # stay there, sent once, for the rest of the session.

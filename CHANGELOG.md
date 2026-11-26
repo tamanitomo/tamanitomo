@@ -51,6 +51,19 @@
   so instead of saving a profile that cannot start. The model switcher's window is shared by two
   conversations, so it now offers only 128K (64K each) and 256K. A phone runs one conversation
   at 64K.
+- **Routines stop sending a copy of their own prompt.** A routine's instructions contain words
+  like "remember" and "ever", which started a personal-history search with the whole job prompt
+  as the query, and the result block repeated the query first, so the copy filled the block's
+  budget before any result fit. On Claude that was about 25,000 tokens on every routine call.
+  Scheduled runs no longer search their own prompt (their pre-read carries the history they
+  need), and no search result repeats the question.
+- **Conversations stop re-sending her whole context with every message.** Hermes replays each
+  turn's injected context with the history, so a full snapshot on every message re-sent and
+  re-cached the same sections all day. Now a conversation's first message carries the whole
+  snapshot and each later one only what changed since; both stay in the history unchanged, so
+  the prompt cache keeps reading them instead of writing them again. When compression
+  summarises the snapshot away, the next message sends it whole again. Scheduled runs, one turn
+  each, are unchanged.
 - **Web chats reach her memory on Hermes 0.3x.** Hermes 0.3x files the workspace's own chat
   (`hermes chat --oneshot`) under the source "oneshot", which the transcript reader and the
   workspace's session list did not know, so those conversations were left out. They now count
