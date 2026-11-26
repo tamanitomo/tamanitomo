@@ -1070,7 +1070,7 @@ function planStatusHTML(row){
       ${r.off.map(j=>`<li>${esc(j.name)}: ${esc(routeText(j)||'no model of its own')}, expected ${esc(routeText({provider:j.expected_provider,model:j.expected_model})||'the profile default')}</li>`).join('')}
       ${helpers.map(h=>`<li>Hermes ${esc(h.label)}: ${esc(h.base_url||accountName(h.provider))}${h.model?' · '+esc(h.model):''} — an account this plan does not use</li>`).join('')}
       ${own.map(j=>`<li>Your job “${esc(j.name)}”: ${esc(routeText(j))} — an account this plan does not use</li>`).join('')}
-    </ul><p class="dim small">Applying the plan moves all of these.</p></details>`:''}
+    </ul><p class="dim small">Applying keeps routines you set by hand (tick “Reset routines I set by hand” to move them too) and always moves anything on an account the plan does not use.</p></details>`:''}
   </li>`;
 }
 
@@ -1185,6 +1185,7 @@ async function renderModelPlan(host){
         </section>
         <div class="panel-footer plan-footer">
           ${companions.length>1?`<fieldset class="plan-who"><legend class="small">Apply to</legend>${companions.map(c=>`<label class="check"><input type="checkbox" data-plan-profile value="${esc(c.profile)}" ${chosen.has(c.profile)?'checked':''}> ${esc(c.name)}</label>`).join('')}</fieldset>`:''}
+          <label class="check small" title="Routines whose model you changed on the Scheduled jobs page keep it unless this is ticked"><input type="checkbox" data-plan-repin> Reset routines I set by hand</label>
           <button type="button" class="act" data-apply>Apply</button>
           <span class="dim small" data-plan-status role="status"></span>
         </div>
@@ -1231,7 +1232,8 @@ async function renderModelPlan(host){
         // The callback stops the workspace redrawing the whole page on completion,
         // which would throw away the result shown below.
         const done=await action('/models/plan',{chat:plan.chat,loops:plan.loops,reflection:plan.reflection,
-          fallbacks:plan.links.map(l=>l.bundle?{bundle:l.bundle}:{provider:l.provider,model:l.model,...(l.base_url?{base_url:l.base_url}:{})}),profiles},()=>{});
+          fallbacks:plan.links.map(l=>l.bundle?{bundle:l.bundle}:{provider:l.provider,model:l.model,...(l.base_url?{base_url:l.base_url}:{})}),profiles,
+          ...(host.querySelector('[data-plan-repin]')?.checked?{repin:'all'}:{})},()=>{});
         clearEditorDirty(editorScope(host));
         const r=done.result||{};
         await renderModelPlan(host);

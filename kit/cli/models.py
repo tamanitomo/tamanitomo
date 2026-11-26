@@ -248,8 +248,42 @@ def cmd_models(args):
     return screen(c)
 
 
-def apply_job_models(c, run=None):
-    """Re-pin existing kit jobs through Hermes without recreating their histories."""
+def previous_job_routes(c):
+    """The route the kit gives each routine under the companion's plan as it stands.
+
+    Taken before a plan changes, it says which routines still carry the kit's own pin:
+    those follow the new plan, and anything else is the person's own choice, which
+    apply_job_models keeps instead of overwriting.
+    """
+    from companion_routing import job_route
+
+    return {
+        spec["name"].replace("{{AGENT}}", c.agent): job_route(c, spec)
+        for spec in load_manifest(c)["jobs"]
+        if not spec.get("no_agent")
+    }
+
+
+def _pinned_by_kit(job, was):
+    """True when a job carries no pin, or still the one the kit gave it."""
+    if not job.get("provider") and not job.get("model"):
+        return True
+    if was is None:
+        return True
+    norm = lambda value: str(value or "").strip().lower()  # noqa: E731
+    keys = ("provider", "model", "reasoning_effort")
+    return tuple(norm(job.get(k)) for k in keys) == tuple(
+        norm(was.get(k)) for k in keys
+    )
+
+
+def apply_job_models(c, run=None, previous_routes=None):
+    """Re-pin existing kit jobs through Hermes without recreating their histories.
+
+    With `previous_routes` (previous_job_routes taken before the plan changed), a
+    routine whose pin someone changed by hand keeps it and is listed in "kept";
+    without it every routine is put on the plan, as Apply always did.
+    """
     import os
     import subprocess
     import companion_platform as cp
@@ -290,11 +324,18 @@ def apply_job_models(c, run=None):
     from companion_routing import install, job_route
 
     install(c)
-    updated = []
+    updated, kept = [], []
     with cp.file_lock(c.home / ".companion-jobs.lock"):
         for job in _read_jobs(c.home / "cron/jobs.json")["jobs"]:
             spec = specs.get(job.get("name"))
             if not spec or spec.get("no_agent"):
+                continue
+            if (
+                previous_routes is not None
+                and not job.get("no_agent")
+                and not _pinned_by_kit(job, previous_routes.get(job.get("name")))
+            ):
+                kept.append(job["name"])
                 continue
             pick = job_route(c, spec)
             migration = []
@@ -365,5 +406,6 @@ def apply_job_models(c, run=None):
             updated.append(job["name"])
     return {
         "updated": updated,
+        "kept": kept,
         "note": "Job IDs, run history, and enabled state are preserved.",
     }

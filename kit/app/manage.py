@@ -3421,7 +3421,7 @@ def register(app, select, load, operations):
         message, so nothing needs restarting for the change to land.
         """
         from kit.cli.common import T, _read_jobs
-        from kit.cli.models import apply_job_models
+        from kit.cli.models import apply_job_models, previous_job_routes
         from companion_routing import install, job_route
         from . import model_chain as mc
         from . import model_plan as mp
@@ -3467,6 +3467,14 @@ def register(app, select, load, operations):
                 name = label or c.agent
                 report(f"Applying the plan to {name}")
                 try:
+                    # Each routine's route under the plan it is leaving: a routine still
+                    # on it follows the new plan, one changed by hand keeps that choice
+                    # unless the person asked to reset every routine.
+                    was = (
+                        None
+                        if payload.get("repin") == "all"
+                        else previous_job_routes(c)
+                    )
                     moved = []
                     save_config(
                         home, lambda cfg: moved.extend(mp.write(cfg, plan, routes))
@@ -3477,9 +3485,12 @@ def register(app, select, load, operations):
                     # A running gateway keeps the plugin code it loaded.
                     restart = install(c) or restart
                     report(f"Re-pinning {name}'s routines")
-                    pinned = apply_job_models(
-                        c, run=lambda a, home=home: rt.run(a, home=home)
-                    )["updated"]
+                    applied = apply_job_models(
+                        c,
+                        run=lambda a, home=home: rt.run(a, home=home),
+                        previous_routes=was,
+                    )
+                    pinned, kept = applied["updated"], applied.get("kept", [])
                     where = mp.accounts(routes + mp.plan_routes(plan))
                     specs = {
                         spec["name"].replace("{{AGENT}}", c.agent): spec
@@ -3531,7 +3542,14 @@ def register(app, select, load, operations):
                                 home, job["id"], target.get("base_url", "")
                             )
                         moved.append(job.get("name") or job["id"])
-                    done.append({"name": name, "routines": len(pinned), "moved": moved})
+                    done.append(
+                        {
+                            "name": name,
+                            "routines": len(pinned),
+                            "moved": moved,
+                            "kept": kept,
+                        }
+                    )
                 except (ValueError, OSError) as exc:
                     failed.append(f"{name}: {hr.redact(str(exc))[:300]}")
             first = routes[0]
@@ -3567,6 +3585,13 @@ def register(app, select, load, operations):
                     + "; ".join(moved)
                     + "."
                 )
+            kept = [
+                f"{row['name']}: " + ", ".join(row["kept"])
+                for row in done
+                if row.get("kept")
+            ]
+            if kept:
+                note += " Kept the model you chose by hand for " + "; ".join(kept) + "."
             return {
                 "note": note,
                 "done": done,

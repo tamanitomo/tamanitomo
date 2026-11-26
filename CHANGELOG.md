@@ -21,6 +21,12 @@
   today. Callbacks coming due, routine anchors, deadlines, queued messages and the six-hour
   bucket still wake the jobs. A routine moving on from an activity that ran long still wakes
   the next run once.
+- **Apply on the Models page keeps the routines you set by hand.** It re-pinned every
+  routine to its tier, undoing a model or reasoning level chosen on the Scheduled jobs page.
+  Now a routine still on the kit's own pin follows the new plan, while one changed by hand
+  keeps its choice, and the result says which. Tick "Reset routines I set by hand" to put
+  them all on the plan as before. Anything on an account the plan no longer uses is still
+  moved.
 - Fix a meters test that began failing on its own at the end of October: it compared a
   fixed September date against today's clock with a 60-day window.
 

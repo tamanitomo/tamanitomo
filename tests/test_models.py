@@ -1334,6 +1334,32 @@ class ModelPlanApiTests(WorkspaceFixture):
             self.assertEqual(comp["routines"]["on_plan"], comp["routines"]["total"])
             self.assertFalse(any(h["stranded"] for h in comp["helpers"]))
 
+    def test_a_routine_set_by_hand_keeps_its_model_unless_reset(self):
+        jobs_path = self.c.home / "cron/jobs.json"
+        data = json.loads(jobs_path.read_text())
+        for job in data["jobs"]:
+            if job["id"] == "nova-pulse":
+                job.update(provider="openai-codex", model="gpt-5.4-mini")
+        jobs_path.write_text(json.dumps(data), encoding="utf-8")
+        plan = {
+            "chat": {"provider": "openai-codex", "model": "gpt-5.6-sol"},
+            "loops": {"provider": "openai-codex", "model": "gpt-5.6-luna"},
+            "profiles": ["nova"],
+        }
+        row = self.wait(self.post("/api/models/plan", plan))
+        self.assertEqual(row["status"], "complete", row)
+        jobs = self.jobs(self.c)
+        # Changed by hand on an account the plan uses: kept, and said so.
+        self.assertEqual(jobs["nova-pulse"]["model"], "gpt-5.4-mini")
+        self.assertIn("Kept the model you chose by hand", row["result"]["note"])
+        self.assertIn("pulse", row["result"]["note"])
+        # Still on the kit's own pin: follows the new plan.
+        self.assertEqual(jobs["nova-autonomy"]["model"], "gpt-5.6-luna")
+        row = self.wait(self.post("/api/models/plan", {**plan, "repin": "all"}))
+        self.assertEqual(row["status"], "complete", row)
+        self.assertEqual(self.jobs(self.c)["nova-pulse"]["model"], "gpt-5.6-luna")
+        self.assertNotIn("Kept the model", row["result"]["note"])
+
     def test_a_plan_can_be_put_on_one_companion_only(self):
         row = self.wait(
             self.post(
