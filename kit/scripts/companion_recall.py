@@ -107,7 +107,21 @@ def sources(c):
 
 
 def _matched(text, words):
-    return set(words).intersection(terms(text, set(), limit=None))
+    # "voice-note" in a note is "voice note" in a message: hyphenated words also match by part.
+    found = set(terms(text, set(), limit=None))
+    found |= {part for word in found if "-" in word for part in word.split("-") if part}
+    return set(words).intersection(found)
+
+
+# Everyday words that say nothing about which archived note is meant ("the photo", "my
+# favorite"); two of the other words must meet on a line for it to come back.
+ARCHIVE_STOP = set(
+    """photo photos picture pictures pic pics image images video videos see saw seen look
+    looked sent send sending get got getting work works worked working deal favorite
+    favourite character characters show shows watch watched big small new old lot lots
+    thing things stuff nice cool fun time times day days night which remind remember
+    one two first last said says say tell told asked ask want wants wanted like liked""".split()
+)
 
 
 def _overlap(text, words):
@@ -225,8 +239,27 @@ def search(c, query, limit=6, seconds=1.0, *, implicit=False, now=None):
     # of her already, but what was archived to keep them short is only found by looking. Two
     # of his words must meet on one line, and two such lines at most, so a passing word
     # does not pull in an unrelated note.
-    archived = 0
-    for p in (sources(c)[2:] if implicit else sources(c)):
+    # His words for the archive scan, without the everyday ones; with fewer than two left,
+    # no archived note is looked for.
+    archive_words = [w for w in words if w not in ARCHIVE_STOP] if implicit else words
+    archive_hits = []
+    # One word is enough when it is specific to a note or two ("turkey"): a word on more
+    # lines than that needs a second one beside it.
+    rare = set()
+    if implicit and archive_words:
+        counts = {}
+        for p in sources(c)[2:]:
+            try:
+                with p.open(encoding="utf-8") as f:
+                    for n, line in enumerate(f, 1):
+                        if n % 100 == 0 and time.monotonic() > deadline:
+                            break
+                        for word in _matched(line, archive_words):
+                            counts[word] = counts.get(word, 0) + 1
+            except (OSError, UnicodeError):
+                continue
+        rare = {w for w, n in counts.items() if n <= 2}
+    for p in ((sources(c)[2:] if archive_words else []) if implicit else sources(c)):
         if time.monotonic() > deadline:
             break
         try:
@@ -235,30 +268,36 @@ def search(c, query, limit=6, seconds=1.0, *, implicit=False, now=None):
                 for n, line in enumerate(f, 1):
                     if n % 100 == 0 and time.monotonic() > deadline:
                         break
-                    score = _overlap(line, words)
+                    score = _overlap(line, archive_words)
                     stripped = line.strip()
-                    if implicit and (score < 2 or archived >= 2):
+                    if (
+                        implicit
+                        and score < 2
+                        and not (_matched(line, archive_words) & rare)
+                    ):
                         continue
                     if score and stripped not in seen:
-                        archived += 1 if implicit else 0
                         seen.add(stripped)
-                        candidates.append(
-                            (
-                                score,
-                                {
-                                    "source": str(p),
-                                    "line": n,
-                                    "kind": "memory_note_requires_provenance_check",
-                                    "excerpt": snippet(stripped, words),
-                                },
-                            )
+                        row = (
+                            score,
+                            {
+                                "source": str(p),
+                                "line": n,
+                                "kind": "memory_note_requires_provenance_check",
+                                "excerpt": snippet(stripped, archive_words),
+                            },
                         )
+                        (archive_hits if implicit else candidates).append(row)
                         if len(candidates) >= 100:
                             break
         except FileNotFoundError:
             pass
         except (OSError, UnicodeError):
             out["warnings"].append("unavailable memory source: " + p.name)
+    # The best two archived lines, not the first two: a weak early line must not stand in
+    # for the note he means further down. Later lines are newer and win a tie.
+    archive_hits.sort(key=lambda x: (-x[0], -x[1]["line"]))
+    candidates.extend(archive_hits[:2])
     retired_keys, retired_quotes, corrections_complete = _retired_evidence(
         c, {fact["id"] for fact in active}, deadline
     )

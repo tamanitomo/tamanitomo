@@ -1,3 +1,14 @@
+## 3.19.2 — The note he means, not the first one that matches (2026-11-26)
+
+- **Topic callbacks bring back the archived note he means.** Measured on a live archive of 1,210
+  lines: "the KEY2 voice note button" brought back a different gadget's note, and "the turkey
+  photo" or "my favorite character" brought back unrelated notes that shared everyday words. Now
+  the best two archived lines come back, not the first two found; hyphenated words match by
+  their parts ("voice-note" is "voice note"); everyday words ("photo", "favorite", "show",
+  "working") do not count toward a match; and one word is enough only when it is specific to a
+  note or two ("turkey"). Tested on the same archive: Cold Vault drives, the KEY2 button and a
+  MacBook bring back their own notes, and everyday questions bring back none.
+
 ## 3.19.1 — Her archived note keeps a place (2026-11-26)
 
 - **A topic callback keeps a place for her archived note.** The facts and his own messages on a

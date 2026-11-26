@@ -1,4 +1,11 @@
-Tamanitomo 3.19.1: her archived note keeps a place.
+Tamanitomo 3.19.2: the note you mean, not the first one that matches.
+
+- **Better finds.** When you bring something up, the note from her archive that comes back is the
+  one about it, and everyday words like "photo" or "favorite" no longer pull in unrelated notes.
+
+No Repair needed for this update.
+
+Previous: 3.19.1 her archived note keeps a place.
 
 - **What you mention, found.** When something you bring up is in her archive, that note now always
   comes back with the rest, instead of being crowded out by your messages about it.

@@ -78,9 +78,11 @@ class MemoryTierTests(unittest.TestCase):
         self.assertNotIn("turkey", self.read("MEMORY.md"))
         hits = rec.search(self.c, "Did you like the turkey photo?", limit=3, implicit=True)
         self.assertTrue(any("turkey" in r["excerpt"] for r in hits["results"]))
-        # One shared word is not enough to bring a note in.
-        brush = rec.search(self.c, "The turkey was dry", limit=3, implicit=True)
-        self.assertFalse(any("turkey photo" in r.get("excerpt", "") for r in brush["results"]))
+        # An everyday word alone ("the photo") does not bring a note in; a specific one does.
+        brush = rec.search(self.c, "Did you like the photo?", limit=3, implicit=True)
+        self.assertFalse(any("turkey" in r.get("excerpt", "") for r in brush["results"]))
+        specific = rec.search(self.c, "The turkey was dry", limit=3, implicit=True)
+        self.assertTrue(any("turkey" in r.get("excerpt", "") for r in specific["results"]))
 
 
     def test_her_archived_note_keeps_a_place_beside_stronger_matches(self):
@@ -103,6 +105,26 @@ class MemoryTierTests(unittest.TestCase):
         self.assertIn("memory_note_requires_provenance_check", kinds)
         self.assertEqual(len(hits["results"]), 2)
 
+
+    def test_an_archived_note_needs_two_words_that_say_what_it_is_about(self):
+        generic = [f"- Favorite character {i} in a show Alex watched once." for i in range(6)]
+        self.write(
+            "MEMORY.md",
+            generic
+            + ["- Alex's favorite anime is DanMachi; his favorite character is Ryuu."]
+            + ["- The KEY2 cyberdeck has a working one-button voice-note control."]
+            + [f"- Filler {i}." for i in range(900)],
+        )
+        mem.archive(self.c, "MEMORY.md", apply=True)
+        hits = rec.search(self.c, "Is DanMachi still on Ryuu's arc?", limit=2, implicit=True)
+        notes = [r["excerpt"] for r in hits["results"] if r.get("kind") == "memory_note_requires_provenance_check"]
+        self.assertTrue(notes and "Ryuu" in notes[0])
+        hits = rec.search(self.c, "Did the KEY2 voice note button work?", limit=2, implicit=True)
+        self.assertTrue(any("cyberdeck" in r["excerpt"] for r in hits["results"]))
+        everyday = rec.search(self.c, "Who is your favorite character in the show?", limit=2, implicit=True)
+        self.assertFalse(
+            any(r.get("kind") == "memory_note_requires_provenance_check" for r in everyday["results"])
+        )
 
 if __name__ == "__main__":
     unittest.main()
