@@ -1,4 +1,12 @@
-Tamanitomo 3.17.0: settings start with the essentials, and her routines stop waking each other.
+Tamanitomo 3.17.1: a context budget you fix stays fixed.
+
+- **Your budget, kept.** Repair (which runs after every settings save) used to reset a context
+  budget you had set by hand to the model's full window. It now keeps it, and the doctor notes the
+  difference instead of calling it a fault.
+
+No Repair needed for this update.
+
+Previous: 3.17.0 settings start with the essentials, and her routines stop waking each other.
 
 - **Settings open with Essentials:** model, contact and outreach, where she is, photos and voice,
   the few things to set once. Everything below keeps working defaults.

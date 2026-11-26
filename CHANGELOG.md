@@ -1,3 +1,14 @@
+## 3.17.1 — A budget you fix stays fixed (2026-11-26)
+
+- **A context budget fixed by choice stays fixed.** Repair, which also runs after every
+  settings save, resized the companion's context budget to whatever window the model reports,
+  even when the budget was set by hand. A budget chosen to keep a pay-per-token model
+  affordable came back at the model's full window on the next save. Repair now keeps a fixed
+  budget and says so; the doctor notes the difference instead of reporting a fault. An
+  automatic budget still follows the model.
+- The Hermes compatibility check accepts a conversation's first-turn snapshot in its new
+  base fence (3.17.0); scheduled runs still use the plain one. Verified against Hermes v0.23.4.
+
 ## 3.17.0 — Settings start with the essentials (2026-11-26)
 
 - **Photos from slow image servers arrive** (#5). A photo made through Hermes's image

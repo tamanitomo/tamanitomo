@@ -95,8 +95,9 @@ def cmd_doctor(args):
                 ok = False
     except (OSError, ValueError):
         pass
-    detected, how = cc.detect_context_tokens(c.home, c.hermes_root)
-    if detected != c.context_tokens and cc.detected_for_real(how):
+    drift = window_drift(c)
+    if drift and drift[2]:
+        detected, how, _ = drift
         print(
             f"  ! the model now reports {detected:,} tokens ({how}), not the {c.context_tokens:,} "
             f"recorded at setup"
@@ -105,6 +106,11 @@ def cmd_doctor(args):
             f"    budgets are still being sized for the old number; run `tamanitomo repair` to update it"
         )
         ok = False
+    elif drift:
+        print(
+            f"  context: kept at {c.context_tokens:,} tokens by choice (the model reports "
+            f"{drift[0]:,}); set context_mode to auto to follow the model"
+        )
     import yaml
 
     config = yaml.safe_load((c.home / "config.yaml").read_text(encoding="utf-8")) or {}
@@ -446,6 +452,22 @@ def schedule_state_mismatches(c, jobs, scripted):
     return out
 
 
+def window_drift(c):
+    """(detected, how, follow) when the model's window differs from the budget's, else None.
+
+    `follow` is False for a budget fixed by choice (context_mode "fixed"): repair keeps it and
+    doctor only notes the difference. Resizing it anyway undid a deliberate budget, one chosen to
+    keep a pay-per-token model affordable, on the next settings save."""
+    detected, how = cc.detect_context_tokens(c.home, c.hermes_root)
+    if (
+        detected == c.context_tokens
+        or not cc.detected_for_real(how)
+        or not 2048 <= detected <= 10_000_000
+    ):
+        return None
+    return detected, how, c.context_mode != "fixed"
+
+
 def cmd_repair(args):
     """Retry missing hooks and scheduled jobs without rewriting identity or ledgers."""
     c = resolve(args, require_config=True)
@@ -467,12 +489,14 @@ def cmd_repair(args):
                 )
     except (OSError, ValueError):
         pass
-    detected, how = cc.detect_context_tokens(c.home, c.hermes_root)
-    if (
-        detected != c.context_tokens
-        and cc.detected_for_real(how)
-        and 2048 <= detected <= 10_000_000
-    ):
+    drift = window_drift(c)
+    if drift and not drift[2]:
+        report.append(
+            f"  context window kept at {c.context_tokens:,} tokens (fixed by choice; the model "
+            f"reports {drift[0]:,})"
+        )
+    elif drift:
+        detected, how, _ = drift
         old = c.context_tokens
         c = cc.dataclasses.replace(c, context_tokens=detected)
         c.save()
