@@ -606,7 +606,7 @@
       if (restored) await loadHistory(false);
       if (scopeKey() !== capturedScope) return;
       state.unseen = !state.open;
-      status.textContent = 'Enter to send · Shift+Enter for a new line';
+      status.textContent = final.moved || 'Enter to send · Shift+Enter for a new line';
       if (voiceTurn && !turn.interrupted && !final.interrupted) updateBrowserRealtimeReply(voiceTurn, reply.content, true);
       if (final.interrupted || turn.interrupted) status.textContent = 'Reply interrupted.';
       if (!voiceTurn && !turn.interrupted && !final.interrupted && typeof speakBrowserReply === 'function') {

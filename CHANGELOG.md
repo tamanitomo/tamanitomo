@@ -1,13 +1,27 @@
+## 3.19.3 — A conversation in the app follows the model plan (2026-11-26)
+
+- **The app's chat follows a new model plan.** Hermes 0.23 keeps a local conversation on the model
+  it started with: `--resume` runs the launch policy frozen at its first message. So after a new
+  plan, the workspace chat, and any client that keeps one conversation going through `/api/chat`,
+  still answered from the old model, or from an exhausted account's fallbacks, while Telegram had
+  moved on. The chat now reads the model a conversation is locked to (Hermes's
+  `gateway.local_policy.v1:<session>` record in state.db, read-only). When that differs from the
+  model config.yaml starts a new conversation on, it continues in a fresh conversation on the
+  plan, and the continuity hook's cross-channel handoff quotes the recent messages into it. The
+  reply says so (`moved`), the chat dock shows it, and the Models page's Apply note mentions it.
+  A store without the record (older Hermes) resumes as before; the compatibility check now
+  watches the key.
+
 ## 3.19.2 — The note he means, not the first one that matches (2026-11-26)
 
 - **Topic callbacks bring back the archived note he means.** Measured on a live archive of 1,210
-  lines: "the KEY2 voice note button" brought back a different gadget's note, and "the turkey
-  photo" or "my favorite character" brought back unrelated notes that shared everyday words. Now
-  the best two archived lines come back, not the first two found; hyphenated words match by
-  their parts ("voice-note" is "voice note"); everyday words ("photo", "favorite", "show",
-  "working") do not count toward a match; and one word is enough only when it is specific to a
-  note or two ("turkey"). Tested on the same archive: Cold Vault drives, the KEY2 button and a
-  MacBook bring back their own notes, and everyday questions bring back none.
+  lines: a question about one gadget's button brought back a different gadget's note, and
+  questions about a photo or a favorite character brought back unrelated notes that shared
+  everyday words. Now the best two archived lines come back, not the first two found; hyphenated
+  words match by their parts ("voice-note" is "voice note"); everyday words ("photo", "favorite",
+  "show", "working") do not count toward a match; and one word is enough only when it is specific
+  to a note or two. Tested on the same archive: questions about particular drives, a device's
+  button and a laptop bring back their own notes, and everyday questions bring back none.
 
 ## 3.19.1 — Her archived note keeps a place (2026-11-26)
 

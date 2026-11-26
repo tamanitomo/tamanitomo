@@ -3433,7 +3433,9 @@ def register(app, select, load, operations):
         companion's tiers, every routine's pin (through the same tier rules a fresh
         install uses), and any helper, delegation or job still pointing at an
         account the plan no longer uses. The gateway reads the model on every
-        message, so nothing needs restarting for the change to land.
+        message, so nothing needs restarting for the change to land. Hermes keeps a
+        local conversation on the model it started with, so the app's chat moves
+        such a conversation to the plan on its next message (`plan_moved_on`).
         """
         from kit.cli.common import T, _read_jobs
         from kit.cli.models import apply_job_models, previous_job_routes
@@ -3607,6 +3609,11 @@ def register(app, select, load, operations):
             ]
             if kept:
                 note += " Kept the model you chose by hand for " + "; ".join(kept) + "."
+            if names:
+                note += (
+                    " A conversation in the app picks up a new chat model with your next"
+                    " message there, in a fresh conversation that carries the recent messages over."
+                )
             return {
                 "note": note,
                 "done": done,
@@ -3865,9 +3872,28 @@ def register(app, select, load, operations):
 
         def run(rt, p, h, report):
             report("Waiting for " + c.agent)
-            args = ["chat", "--quiet", "--oneshot", "-q", message]
+            # Hermes keeps a resumed conversation on the model it started with. When the
+            # model plan has moved on since, continue in a fresh conversation on the
+            # plan: its continuity carries the recent messages over (the cross-channel
+            # handoff), so the thread is kept and the new model answers.
+            resume, moved = session, None
             if session:
-                args += ["--resume", session]
+                try:
+                    current = config(h)
+                except (OSError, ValueError):
+                    current = {}  # unreadable config: resume as before
+                drift = hr.plan_moved_on(c, session, current)
+                if drift:
+                    resume = None
+                    moved = (
+                        f"Continued in a fresh conversation on {drift[1]['model']}: this one "
+                        f"was still on {drift[0]['model']} from before the model plan changed. "
+                        "Recent messages carry over."
+                    )
+                    report(f"Moving to {drift[1]['model']}, the current model plan")
+            args = ["chat", "--quiet", "--oneshot", "-q", message]
+            if resume:
+                args += ["--resume", resume]
             # No auto-approval of arbitrary existing hooks. Setup has its own
             # explicit, reviewable hook approval action.
             before = {r["id"] for r in hr.sessions(c)}
@@ -3880,18 +3906,21 @@ def register(app, select, load, operations):
                     if row["id"] not in before
                     and row.get("source") in ("cli", "desktop", "tui", "oneshot")
                 ),
-                session,
+                resume,
             )
             # Hermes files this as a cli session; the feed should still be able
             # to say it happened here rather than at a terminal.
             hr.note_workspace_session(c, new)
-            return {
+            result = {
                 "response": ANSI_TEXT(r.stdout),
                 "interrupted": bool(getattr(r, "interrupted", False)),
                 "session": new,
                 "messages": hr.messages(c, new) if new else [],
                 "note": "Hermes owns this conversation. All channels share this profile’s identity, memory, and lived state.",
             }
+            if moved:
+                result["moved"] = moved
+            return result
 
         operation = op("Chat with " + c.agent, run, cancellable=True)
         if "text/event-stream" not in request.headers.get("accept", ""):

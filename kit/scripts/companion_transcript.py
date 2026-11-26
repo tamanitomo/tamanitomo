@@ -27,6 +27,10 @@ LOCAL_SOURCES = ("cli", "desktop", "tui", "oneshot")
 # feed take most of a second on every load.
 OWNER_SOURCES = LOCAL_SOURCES + ("telegram",)
 BINDING_FILE = ".tamanitomo-chat-owner.json"
+# Hermes 0.23 freezes a local conversation's launch policy (its model among it) when the
+# conversation starts and keeps it in state_meta under this key plus the session id.
+# `--resume` runs that policy, so a model plan applied later never reaches it.
+LOCAL_POLICY_PREFIX = "gateway.local_policy.v1:"
 
 
 class SourceUnavailable(ValueError):
@@ -250,6 +254,41 @@ class Transcript:
     def owner_session(self, ident):
         row = self.session(ident)
         return session_kind(row, self.binding, self.workspace)[0] if row else None
+
+    def locked_route(self, ident):
+        """The model this profile's local conversation is locked to, or None.
+
+        {"model", "provider"} from the policy Hermes froze when the conversation began
+        (`/model` and `/model reset` rewrite it). None when Hermes keeps no such
+        record (older versions run the profile's current model) or it is unreadable."""
+        if self.session(ident) is None:
+            return None
+        try:
+            row = self.con.execute(
+                "SELECT value FROM state_meta WHERE key=?",
+                (LOCAL_POLICY_PREFIX + str(ident),),
+            ).fetchone()
+        except sqlite3.Error:
+            return None
+        if row is None:
+            return None
+        try:
+            policy = json.loads(row[0])["policy"]
+            frozen = json.loads(policy.get("config_json") or "{}").get("model")
+        except (KeyError, TypeError, ValueError, AttributeError):
+            return None
+        if isinstance(frozen, str):
+            frozen = {"default": frozen}
+        if not isinstance(frozen, dict):
+            frozen = {}
+        model = policy.get("model") or frozen.get("default")
+        provider = frozen.get("provider")
+        if not isinstance(model, str) or not model.strip():
+            return None
+        return {
+            "model": model.strip(),
+            "provider": provider.strip() if isinstance(provider, str) else None,
+        }
 
     def lineage(self, ident):
         result, current = [], str(ident)

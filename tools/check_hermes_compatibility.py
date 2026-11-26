@@ -254,6 +254,23 @@ def probe(scratch, checkout):
         "Context engine kept old snapshots in a resumed session",
     )
     checks.append("resumed_history_keeps_only_newest_snapshot")
+    # The app's chat reads a local conversation's frozen model from Hermes's own store
+    # (companion_transcript.locked_route) to move it onto a newer plan. A renamed key would
+    # silently resume old conversations on their old model again, so check it here.
+    import companion_transcript as _transcript
+
+    try:
+        from persistence.sqlite.conversation._store import local as _local_store
+    except ImportError:
+        _local_store = None  # no frozen local policies: resumes follow config.yaml
+    if _local_store is not None:
+        require(
+            getattr(_local_store, "POLICY_PREFIX", None)
+            == _transcript.LOCAL_POLICY_PREFIX,
+            "Hermes keeps local conversation policies under a new key; update "
+            "companion_transcript.LOCAL_POLICY_PREFIX",
+        )
+        checks.append("local_conversation_policy_key")
     cfg = load_config()
     enrolled = cfg["tamanitomo_routing"]["jobs"]
     pinned = {

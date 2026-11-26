@@ -243,7 +243,7 @@ def search(c, query, limit=6, seconds=1.0, *, implicit=False, now=None):
     # no archived note is looked for.
     archive_words = [w for w in words if w not in ARCHIVE_STOP] if implicit else words
     archive_hits = []
-    # One word is enough when it is specific to a note or two ("turkey"): a word on more
+    # One word is enough when it is specific to a note or two ("lighthouse"): a word on more
     # lines than that needs a second one beside it.
     rare = set()
     if implicit and archive_words:

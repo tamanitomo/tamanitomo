@@ -1,4 +1,13 @@
-Tamanitomo 3.19.2: the note you mean, not the first one that matches.
+Tamanitomo 3.19.3: the app's chat follows your model plan.
+
+- **New models reach the app's chat.** After you changed models, a conversation kept going in the
+  app, or on a device that talks to your companion through it, went on answering from the model it
+  started on. Now your next message there continues in a fresh conversation on the new model, with
+  your recent messages carried over.
+
+No Repair needed for this update.
+
+Previous: 3.19.2 the note you mean, not the first one that matches.
 
 - **Better finds.** When you bring something up, the note from her archive that comes back is the
   one about it, and everyday words like "photo" or "favorite" no longer pull in unrelated notes.

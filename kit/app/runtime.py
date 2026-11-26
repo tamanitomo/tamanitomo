@@ -1462,6 +1462,59 @@ def resumable_session(c, ident):
     return ident
 
 
+def configured_route(cfg):
+    """{"model", "provider"} a new conversation starts on, from Hermes's config.yaml."""
+    model = (cfg or {}).get("model") if isinstance(cfg, dict) else None
+    if isinstance(model, str):
+        model = {"default": model}
+    if not isinstance(model, dict):
+        return None
+    default = model.get("default") or model.get("model")
+    provider = model.get("provider")
+    if not isinstance(default, str) or not default.strip():
+        return None
+    return {
+        "model": default.strip(),
+        "provider": provider.strip() if isinstance(provider, str) else None,
+    }
+
+
+def _bare_model(route):
+    """The model without a leading "<provider>/" (config.yaml may spell it either way)."""
+    model, provider = route["model"], (route.get("provider") or "").lower()
+    if provider and model.lower().startswith(provider + "/"):
+        return model[len(provider) + 1 :]
+    return model
+
+
+def plan_moved_on(c, session, cfg):
+    """(locked, current) routes when a local conversation runs another model than the plan.
+
+    Hermes keeps a local conversation on the model it started with: `--resume` never
+    picks up a later model plan, so the workspace chat (and any app client that keeps one
+    conversation going) would answer from a model the owner moved away from, or from an
+    exhausted account's fallbacks. None when they agree or either side is unknown."""
+    import companion_transcript as transcript
+
+    want = configured_route(cfg)
+    if want is None:
+        return None
+    try:
+        have = transcript.owner_evidence(
+            c, lambda view: view.locked_route(session) if view else None
+        )
+    except transcript.SourceUnavailable:
+        return None
+    if not have:
+        return None
+    have_p = (have.get("provider") or "").lower()
+    want_p = (want.get("provider") or "").lower()
+    unknown = not have_p or not want_p or "auto" in (have_p, want_p)
+    if (unknown or have_p == want_p) and _bare_model(have) == _bare_model(want):
+        return None
+    return have, want
+
+
 def latest_session(c):
     """Newest owner conversation that this workspace can safely continue."""
     import companion_transcript as transcript
