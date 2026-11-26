@@ -329,8 +329,15 @@ def probe(scratch, checkout):
         user_message="Hello from the compatibility fixture",
     )
     context = "\n".join(r.get("context", "") for r in result if isinstance(r, dict))
+    # A conversation's first turn carries the whole snapshot in the base fence (later turns
+    # send updates); a scheduled run keeps the plain one. Either is the continuity block.
+    from companion_context import BASE_END
+
+    fenced = (BEGIN in context and END in context) or (
+        "<!-- tamanitomo:continuity-base:begin " in context and BASE_END in context
+    )
     require(
-        BEGIN in context and END in context and c.agent in context,
+        fenced and c.agent in context,
         "Actual Hermes hook invocation lost companion continuity",
     )
     manager.invoke_hook(
