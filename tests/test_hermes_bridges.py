@@ -27,7 +27,11 @@ FAKE = {
                 "runpy.run_path(%r, run_name='__main__')"
                 % (os.path.dirname(os.path.abspath(__file__)), sys.argv, sys.argv[0])
             )
-            os.execv(sys.executable, [sys.executable, "-I", "-c", code])
+            command = [sys.executable, "-I", "-c", code]
+            if os.name == "nt":  # as Hermes's own bootstrap: Windows has no exec that keeps the process
+                import subprocess
+                raise SystemExit(subprocess.call(command))
+            os.execv(sys.executable, command)
     """,
     # Hermes's own provider and tool code reaches its bootstrap like this.
     "agent/__init__.py": "import hermes_bootstrap\n",

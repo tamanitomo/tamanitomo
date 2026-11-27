@@ -283,7 +283,10 @@ def test_guard_blocks_installed_bootstrap_side_effects_before_import(
     assert "private sentinel" not in json.dumps(result)
 
 
-@pytest.mark.skipif(not hasattr(os, "fchmod"), reason="fchmod is Unix-only")
+@pytest.mark.skipif(
+    not hasattr(os, "fchmod") or os.name == "nt",
+    reason="POSIX permission bits (Windows, which has os.fchmod since Python 3.13, keeps only a read-only flag)",
+)
 @pytest.mark.parametrize("target", ["scratch", "external", "symlink", "hardlink"])
 def test_guard_checks_actual_file_behind_mutating_descriptor(tmp_path, target):
     home = tmp_path / "isolated"

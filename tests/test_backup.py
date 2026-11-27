@@ -547,5 +547,55 @@ class RecoveryTests(unittest.TestCase):
         self.assertFalse(status["credentials_included"])
 
 
+class WindowsPathRebaseTests(unittest.TestCase):
+    """A restore rebases every old path to the new one, however a file spells it: plain, inside a Python or JSON
+    string literal (Windows doubles its backslashes there) or with forward slashes. Windows paths are checked on
+    every system: the rebasing is text work."""
+
+    MAPPINGS = [
+        (r"C:\Users\Robin\.hermes", r"D:\restored\home"),
+        (r"C:\Users\Robin\life", r"D:\restored\life"),
+    ]
+
+    def test_a_script_literal_is_rebased(self):
+        script = (
+            "HOME = "
+            + repr(r"C:\Users\Robin\.hermes")
+            + "\nLIFE = "
+            + repr(r"C:\Users\Robin\life\x")
+            + "\n"
+        )
+        out = backup._replace(script, self.MAPPINGS)
+        self.assertEqual(
+            out,
+            "HOME = "
+            + repr(r"D:\restored\home")
+            + "\nLIFE = "
+            + repr(r"D:\restored\life\x")
+            + "\n",
+        )
+
+    def test_plain_and_forward_slash_spellings_are_rebased(self):
+        self.assertEqual(
+            backup._replace(r"cd C:\Users\Robin\.hermes\cron", self.MAPPINGS),
+            r"cd D:\restored\home\cron",
+        )
+        self.assertEqual(backup._replace("C:/Users/Robin/life/events.jsonl", self.MAPPINGS),
+                         "D:/restored/life/events.jsonl")  # fmt: skip
+
+    def test_json_values_are_rebased_as_plain_text(self):
+        jobs = {"jobs": [{"prompt": "Read C:\\Users\\Robin\\life\\soul.md first"}]}
+        self.assertEqual(
+            backup._replace(jobs, self.MAPPINGS)["jobs"][0]["prompt"],
+            "Read D:\\restored\\life\\soul.md first",
+        )
+
+    def test_posix_paths_are_unchanged_by_the_windows_forms(self):
+        out = backup._replace(
+            "HOME = '/home/robin/.hermes'", [("/home/robin/.hermes", "/srv/new")]
+        )
+        self.assertEqual(out, "HOME = '/srv/new'")
+
+
 if __name__ == "__main__":
     unittest.main()

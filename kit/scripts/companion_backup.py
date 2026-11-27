@@ -639,9 +639,24 @@ def _inspect(bundle, *, extract_to=None):
         return manifest
 
 
+def _path_forms(mappings):
+    """Each (old, new) path as text may appear plain, inside a Python or JSON string literal (on Windows its
+    backslashes doubled: a restored cron script's HOME = 'C:\\\\Users\\\\...' kept pointing at the old home), or
+    with forward slashes. All three are rebased."""
+    for before, after in mappings:
+        yield before, after
+        if before and "\\" in before:
+            yield before.replace("\\", "\\\\"), after.replace("\\", "\\\\")
+            yield before.replace("\\", "/"), after.replace("\\", "/")
+
+
 def _replace(value, mappings):
     if isinstance(value, str):
-        replacements = {before: after for before, after in reversed(mappings) if before}
+        replacements = {
+            before: after
+            for before, after in reversed(list(_path_forms(mappings)))
+            if before
+        }
         if not replacements:
             return value
         pattern = "|".join(

@@ -332,7 +332,9 @@ def simulate(folder, transport=None):
             "actor": "Python subprocess",
             "exit_code": calculation.returncode,
             "stdout": calculation.stdout.strip(),
-            "artifact": str(result_path.relative_to(folder)),
+            "artifact": result_path.relative_to(
+                folder
+            ).as_posix(),  # as saved_artifacts spells it
             "sha256": digest(result_path),
         }
     )
