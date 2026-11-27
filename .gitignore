@@ -88,3 +88,6 @@ tests/test_analysis.txt
 
 # Vault editor build (tools/editor): dependencies are installed with npm ci, never committed
 tools/editor/node_modules/
+
+# hand-made backup copies (file.py.bak-<tag>-<stamp>) stay local
+*.bak-*
