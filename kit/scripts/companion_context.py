@@ -1192,6 +1192,18 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
     except (OSError, ValueError, ImportError):
         pass
 
+    # Their word (companion_plans): read live, because "you said goodnight twenty minutes ago"
+    # is worth nothing fifteen minutes late. Nothing at all unless the evening went another way.
+    if "plans" in (c.sensors or []):
+        try:
+            import companion_plans
+
+            word, _data = companion_plans.render(c, now)
+            if word:
+                parts.append((5, "[" + word.replace("Their word:", "Their word]", 1)))
+        except (OSError, ValueError, ImportError):
+            pass
+
     # On this day (companion_onthisday): a few true memories from this date, kept by the
     # senses job. Today's file only; a short slot of its own, the first to give way.
     if "onthisday" in (c.sensors or []):
@@ -1262,7 +1274,12 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
             if (c.soul_dir / "ambient").is_dir()
             else []
         ):
-            if p.stem in ("viewing", "scene", "onthisday"):  # each has its own section
+            if p.stem in (
+                "viewing",
+                "scene",
+                "onthisday",
+                "plans",
+            ):  # each has its own section
                 continue
             t = read(p, 1000).strip()
             if t:

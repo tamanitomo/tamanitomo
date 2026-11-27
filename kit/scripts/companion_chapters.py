@@ -53,6 +53,10 @@ NOISE = re.compile(
     r"\[(?:Image|File|Audio|Video) attached[^\]]*\]|\[screenshot\]|<!--.*?-->",
     re.I | re.S,
 )
+# A line written for a machine, not a person: a test prompt ("reply with exactly ...") or a status token.
+MACHINE = re.compile(
+    r"(?i:\breply (?:with|only) exactly\b)|\b[A-Z][A-Z0-9]+(?:_[A-Z0-9]+)+\b"
+)
 PLACEHOLDER = re.compile(r"<a title you give it>|<up to three|\{label\}")
 
 
@@ -123,7 +127,7 @@ def conversation(c, month):
     days, events = {}, []
     for row in _rows(archive.folder(c) / month[:4] / f"{month}.jsonl"):
         text = " ".join(NOISE.sub(" ", str(row.get("text") or "")).split())
-        if not text or SECRET.search(text):
+        if not text or SECRET.search(text) or MACHINE.search(text):
             continue
         event = EVENT.match(text)
         if event:

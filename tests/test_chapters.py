@@ -100,15 +100,18 @@ class ChapterTests(unittest.TestCase):
         self.store.say(
             "tg", "user", "[Game event: Rook just reached level 30.]", at(2026, 12, 5)
         )
+        self.store.say(
+            "tg", "user", "Reply with exactly: SETUP_WORKS_OK", at(2026, 12, 6)
+        )
         archive.update(self.c, now=NOW)
         talk, lines = chapters.conversation(self.c, "2026-12")
         self.assertIn(
             "Robin: We went to the lake today and I laughed so much, day 1", talk
         )
         self.assertNotIn("restart the server", talk)
-        self.assertNotIn(
-            "hunter-two", talk
-        )  # a line about a password is never material
+        # a line about a password is never material, nor one written for a machine
+        self.assertNotIn("hunter-two", talk)
+        self.assertNotIn("SETUP_WORKS_OK", talk)
         self.assertIn(
             "## In a game, as it happened\n- 2026-12-05: Rook just reached level 30.",
             talk,

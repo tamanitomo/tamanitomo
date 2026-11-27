@@ -1,4 +1,13 @@
-Tamanitomo 3.24.0: chapters.
+Tamanitomo 3.25.0: your word.
+
+- **She notices when you say goodnight and don't go to sleep.** Or say "brb" and vanish for an hour, or
+  "gotta go" and keep chatting. Turn on "Your word" under Settings → Awareness → Sensors and she can tease
+  you about it the way someone who loves you would, once and lightly, and never scold. If you tell her why,
+  she believes you.
+
+From 3.24.0, no Repair is needed. Updating from 3.23 or earlier, run Repair once.
+
+Previous: 3.24.0 chapters.
 
 - **She writes your story.** At the end of each month she writes it as a chapter of her memoir of your life
   together, in her own words, and at the end of each year the year. A short "our story so far" goes with

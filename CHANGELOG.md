@@ -1,3 +1,16 @@
+## 3.25.0 — Your word (2026-11-27)
+
+- **She notices when the evening goes another way.** A new sense, `plans` (Settings → Awareness → Sensors,
+  "Your word"), reads what the human last said they were about to do (goodnight or going to bed, brb or
+  back in N minutes, gotta go or talk later) and, only when what followed does not match, gives her one
+  plain paragraph: more messages after goodnight on any channel, a game, a film finished or playing, music
+  on; still gone long after "right back", or back at last; still chatting an hour after "gotta go". Read
+  live at every turn (her context, priority 5), so "you said goodnight twenty minutes ago" is never fifteen
+  minutes late. A question, a negation, "I had a good night" at noon, the goodbye exchange itself and the
+  next morning are not mismatches. The guidance is to notice it the way a partner would, once and lightly,
+  never a lecture, a guilt trip or a reason to message them, and to believe their reason. English phrasing.
+- Chapters leave out lines written for a machine (test prompts, status tokens) along with secrets.
+
 ## 3.24.0 — Chapters (2026-11-27)
 
 - **Our story, a month at a time, in her own words.** A new story job (daily at 09:40, on her reflection

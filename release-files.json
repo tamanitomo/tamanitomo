@@ -193,6 +193,7 @@
   "kit/scripts/companion_perspectives.py",
   "kit/scripts/companion_places.py",
   "kit/scripts/companion_plan.py",
+  "kit/scripts/companion_plans.py",
   "kit/scripts/companion_platform.py",
   "kit/scripts/companion_portrait.py",
   "kit/scripts/companion_preread.py",
