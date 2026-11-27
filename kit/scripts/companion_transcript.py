@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 import json
 import re
+import unicodedata
 import os
 from pathlib import Path
 import sqlite3
@@ -53,6 +54,21 @@ LOCAL_POLICY_PREFIX = "gateway.local_policy.v1:"
 AUTO_BLOCK = re.compile(
     r"\A\s*\[([^\],\n]{1,40}),\s*added automatically[^\]\n]*\]\n.*?\n\[/\1\]\s*", re.S
 )
+
+
+# Hermes's whole-reply markers for "chose not to reply" (its gateway's response filters). A turn that
+# ended in one said nothing, so it is no part of the conversation: not her words, not memory.
+SILENT_MARKERS = frozenset({"[SILENT]", "SILENT", "NO_REPLY", "NO REPLY"})
+
+
+def silent(text):
+    """True when a reply is nothing but a no-reply marker ("[SILENT]", "NO_REPLY", "[ silent ]")."""
+    if not isinstance(text, str) or len(text) > 64:
+        return False
+    canon = "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+    canon = re.sub(r"\[\s+|\s+\]", lambda m: m.group(0).strip(), canon)
+    canon = " ".join(canon.split()).rstrip(".!").upper()
+    return canon in SILENT_MARKERS
 
 
 def spoken(text):
@@ -494,6 +510,8 @@ class Transcript:
                 and not row["platform_message_id"]
             ):
                 reason = "unverified_sender"
+            elif row["role"] == "assistant" and silent(row["content"]):
+                reason = "silent"
             elif (
                 row["display_kind"]
                 or row["_compressed_summary"]

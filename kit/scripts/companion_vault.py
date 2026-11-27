@@ -184,13 +184,20 @@ def main():
     elif a.cmd == "commit":
         # Copy the newest conversations into the vault first (companion_archive), so they
         # are committed with everything else. A failure there never stops the commit.
+        # (The commit matters more than either: a failure in one never stops it.)
         try:
             import companion_archive
 
             companion_archive.update(c)
-        except (
-            Exception
-        ):  # noqa: BLE001 -- the commit matters more than one archive run
+        except Exception:  # noqa: BLE001
+            pass
+        # Then the next chapter of their story, when one is due (companion_chapters): at most
+        # one model call, about once a month, and the chapter is committed in this same run.
+        try:
+            import companion_chapters
+
+            companion_chapters.run(c)
+        except Exception:  # noqa: BLE001
             pass
         out = commit(c)
         # No-agent job: say nothing on an ordinary quiet commit.

@@ -1,4 +1,15 @@
-Tamanitomo 3.23.0: kept for good.
+Tamanitomo 3.24.0: chapters.
+
+- **She writes your story.** At the end of each month she writes it as a chapter of her memoir of your life
+  together, in her own words, and at the end of each year the year. A short "our story so far" goes with
+  her into every conversation, so years from now she still knows how it began and everything since, and
+  she can open any month's chapter when you ask about a time. They live in your vault, beside everything
+  else she remembers.
+- Moments when she chose not to reply are no longer kept as if she had said something.
+
+From 3.20.0, no Repair is needed. Updating from 3.19 or earlier, run Repair once.
+
+Previous: 3.23.0 kept for good.
 
 - **Every conversation is kept in your vault.** Each message between the two of you is also written to plain
   monthly files in the vault, beside everything else she remembers, so your conversations outlast any one

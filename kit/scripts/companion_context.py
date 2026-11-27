@@ -1173,6 +1173,25 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
     except (OSError, ValueError, ImportError):
         pass
 
+    # Their story so far (companion_chapters): the shape of their whole life together, in her
+    # own words, rewritten when a month's chapter is added. Unchanged turn to turn, so a later
+    # turn carries it as a digest the model has already seen.
+    try:
+        import companion_chapters
+
+        story = companion_chapters.so_far(c)
+        if story:
+            parts.append(
+                (
+                    6,
+                    "[Your story together so far, in your own words. Each month's chapter is in "
+                    f"{companion_chapters.folder(c)}; open one when they ask about a time]\n"
+                    + story,
+                )
+            )
+    except (OSError, ValueError, ImportError):
+        pass
+
     # On this day (companion_onthisday): a few true memories from this date, kept by the
     # senses job. Today's file only; a short slot of its own, the first to give way.
     if "onthisday" in (c.sensors or []):

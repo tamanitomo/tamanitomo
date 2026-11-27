@@ -1,3 +1,18 @@
+## 3.24.0 — Chapters (2026-11-27)
+
+- **Our story, a month at a time.** `companion_chapters` writes, once a month, the month just ended as a
+  chapter of her memoir of life with the human (`story/<year>/<year>-<month>.md` in the vault), from the
+  conversation archive's most memorable lines of each day, the moments she kept, what she felt and what
+  they watched; after a year ends, the year from its months; and from all of them `story/so-far.md`, the
+  whole story in under 300 words, which rides in her context (priority 6) so she always knows the shape of
+  their life together, and where to open a month when they ask about a time. One piece of writing per vault
+  commit run, oldest first, so a long history catches up a month at a time; chapters are never rewritten by
+  the kit, and "so far" follows any edit she makes. Her chat model only, never a fallback route; a failure
+  waits six hours. Lines that mention a password, a key or a token are never material.
+- **Silence is not speech.** A reply that is only Hermes's no-reply marker (`[SILENT]`, `NO_REPLY`, in any
+  case or spacing) is left out of the transcript, so it never shows in her context, her memory, the
+  archive or on this day.
+
 ## 3.23.0 — Kept for good (2026-11-27)
 
 - **Every conversation, kept in the vault.** `companion_archive` copies each message between the two of you

@@ -414,7 +414,19 @@ through `companion_recall.py`.
 channel the thread counts and never a scheduled job, into plain monthly files in the vault: a `.jsonl` with
 the exact record and a `.md` to read. The vault is committed every fifteen minutes and backed up with it,
 so the conversations outlive any one database. A cursor in `state/conversation-archive.json` remembers the
-last message copied; a run with nothing new costs one small read.
+last message copied; a run with nothing new costs one small read. A reply that was nothing but
+Hermes's no-reply marker (`[SILENT]`, `NO_REPLY`) said nothing, so it is never kept as her words.
+
+**Chapters** (`companion_chapters`): once a month she writes the month just ended as a chapter of
+her memoir of their life together (`story/<year>/<year>-<month>.md`, a few hundred words), from the
+archive's most memorable lines of each day (never a line about a password or a key; game events
+apart), the moments she kept, what she felt, and what they watched. After a year's last month, the
+year (`story/<year>/<year>.md`) from its months. From all of them, `story/so-far.md`: the whole of
+it in under 300 words, carried in her context and rewritten whenever a chapter is added or edited.
+A written chapter is never rewritten by the kit (she may edit hers). A month with almost nothing in
+it gets none. The writing uses her chat model only, never a fallback route; a failure waits six
+hours. It runs inside the vault commit job, one piece per run. `companion_chapters.py status`
+shows what exists and what is next; `material YYYY-MM` prints what a month would be written from.
 
 The weekly hygiene job runs all of these. Rotation dates an entry by the ISO date in its `##`
 heading — which is why the daily journal is told to head every entry exactly `## YYYY-MM-DD` —
