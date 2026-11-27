@@ -1,3 +1,14 @@
+## 3.30.0 — Plex and Jellyfin, both (2026-11-27)
+
+- **Follow two media servers at once.** Settings → Awareness → "Also follow" adds a second server (a Jellyfin
+  beside a Plex, or the other way round) with its own account and token (kept privately in
+  `secrets/media-server-also.token`, never shown back; an empty address forgets it). Config `media_also`.
+- What is on, and what was finished, come from every server followed, each item tagged with its server (`source`,
+  `base`); a server that cannot be read leaves the others standing, and only none readable is an error. Her line
+  about what is on names the right server. Watching together follows the film on whichever server it plays, and
+  reads its subtitles, its stream and (on Jellyfin) its screen there. "Save and check" reports the second server
+  too.
+
 ## 3.29.1 — Story view, tidier (2026-11-27)
 
 - The collapsed "Our story so far" is a slim bar, not a page-sized empty card, and Older and Newer step from the

@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import contextvars
+import dataclasses
 import datetime as dt
 import json
 import pathlib
@@ -89,6 +90,11 @@ def token_path(c):
     return c.home / "secrets" / "media-server.token"
 
 
+def also_token_path(c):
+    """Where the app keeps the token for the other server it follows (`media_also`)."""
+    return c.home / "secrets" / "media-server-also.token"
+
+
 def _token(c):
     if not c.media_token_file:
         return None
@@ -106,6 +112,63 @@ def _token(c):
 
 def configured(c):
     return bool(c.media_server and _token(c))
+
+
+def servers(c):
+    """Every media server this companion follows: the main one, then the others in `media_also`, each as a view of
+    the companion with that server's address, kind, account and token file, so every helper here works unchanged.
+    """
+    out = [c] if c.media_server else []
+    for extra in getattr(c, "media_also", None) or []:
+        try:
+            out.append(
+                dataclasses.replace(
+                    c,
+                    media_server=str(extra["server"]),
+                    media_kind=str(extra.get("kind") or "jellyfin"),
+                    media_user=str(extra.get("user") or ""),
+                    media_token_file=str(extra.get("token_file") or ""),
+                    media_also=[],
+                )
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
+def any_configured(c):
+    return any(configured(s) for s in servers(c))
+
+
+def server_for(c, item):
+    """The server view an item came from (its "base" address), or the main server."""
+    base = (item or {}).get("base")
+    for view in servers(c):
+        if base and view.media_server == base:
+            return view
+    return c
+
+
+def _each(c, read):
+    """`read(view)` on every configured server, items tagged with where they came from. A server that cannot be read
+    leaves the others standing; only when none could be read is that an error."""
+    items, errors, tried = [], [], 0
+    for view in servers(c):
+        if not _token(view):
+            continue
+        tried += 1
+        try:
+            for item in read(view):
+                items.append(
+                    {**item, "source": view.media_kind, "base": view.media_server}
+                )
+        except ValueError as exc:
+            errors.append(str(exc))
+    if tried and len(errors) == tried:
+        raise ValueError("; ".join(errors))
+    if not tried and c.media_server:
+        raise ValueError("the media server token is missing or unreadable")
+    return items
 
 
 def source_name(c):
@@ -386,22 +449,33 @@ def _jellyfin_summary(c, key):
     return str(row.get("Overview") or "").strip()
 
 
-def history(c, since):
-    """Episodes and films the human finished since `since`, newest first, as the server says."""
+def _history_one(c, since):
     return (_plex_history if c.media_kind == "plex" else _jellyfin_history)(c, since)
 
 
-def now_playing(c):
-    """What the human has on right now (playing or paused). Music is left to the music sensor."""
+def _now_one(c):
     return (_plex_now if c.media_kind == "plex" else _jellyfin_now)(c)
+
+
+def history(c, since):
+    """Episodes and films the human finished since `since`, newest first, from every server followed."""
+    found = _each(c, lambda view: _history_one(view, since))
+    return sorted(found, key=lambda i: i["at"], reverse=True)
+
+
+def now_playing(c):
+    """What the human has on right now (playing or paused), on any server followed. Music is left to the music
+    sensor."""
+    return _each(c, _now_one)
 
 
 def _summary(c, item):
     text = item.get("summary") or ""
     if not text and item.get("key"):
+        view = server_for(c, item)
         try:
-            text = (_plex_summary if c.media_kind == "plex" else _jellyfin_summary)(
-                c, item["key"]
+            text = (_plex_summary if view.media_kind == "plex" else _jellyfin_summary)(
+                view, item["key"]
             )
         except ValueError:
             text = ""
@@ -554,9 +628,8 @@ def sync(c, now=None):
         known = {r.get("id") for r in slf._read(path)}
         for item in reported:
             at = item["at"].astimezone(_tz(c))
-            ident = slf._mkid(
-                "seen", c.media_kind, item["key"], str(int(at.timestamp()))
-            )
+            source = item.get("source") or c.media_kind
+            ident = slf._mkid("seen", source, item["key"], str(int(at.timestamp())))
             if ident in known:
                 continue
             row = {
@@ -576,7 +649,7 @@ def sync(c, now=None):
                     )
                 },
                 "together": _covered(item, at, agreed),
-                "source": c.media_kind,
+                "source": source,
                 "recorded_at": now.isoformat(),
             }
             known.add(ident)
@@ -964,7 +1037,7 @@ def render(c, now, playing=(), limit=800):
         length = f" of {item['length_min']}" if item.get("length_min") else ""
         paused = ", paused" if item.get("paused") else ""
         lines.append(
-            f"- At {now:%H:%M} {c.human} was watching {label(item)} on {source_name(c)}, "
+            f"- At {now:%H:%M} {c.human} was watching {label(item)} on {source_name(server_for(c, item))}, "
             f"{item.get('position_min', 0)}{length} minutes in{paused}."
         )
         shared = next(
@@ -1029,11 +1102,11 @@ def sense(c, now=None):
             "together": [s["title"] for s in running],
             "lately": 0,
         }
-    if not c.media_server:
+    if not servers(c):
         return None, "no media server is set"
     from companion_sensors import Broken
 
-    if not _token(c):
+    if not any(_token(view) for view in servers(c)):
         return None, Broken("the media server token is missing or unreadable")
     try:
         sync(c, now)
@@ -1042,10 +1115,11 @@ def sense(c, now=None):
         # Unreadable is not "nothing on": say nothing rather than a half-true picture.
         return None, Broken(str(exc))
     text = render(c, now, playing)
+    names = " and ".join(dict.fromkeys(source_name(view) for view in servers(c)))
     if not text:
-        return None, f"nothing watched on {source_name(c)} lately"
+        return None, f"nothing watched on {names} lately"
     return text, {
-        "source": c.media_kind,
+        "source": ",".join(dict.fromkeys(view.media_kind for view in servers(c))),
         "playing": [label(i) for i in playing],
         "together": [a["title"] for a in active(c, now)],
         "lately": len(lately(c, now)),
@@ -1064,9 +1138,37 @@ def check(c, now=None):
         _plex_account(c)
     else:
         account = _jellyfin_user(c)[1]
-    recent = history(c, now - dt.timedelta(days=HISTORY_DAYS))
-    playing = now_playing(c)
+    recent = _history_one(c, now - dt.timedelta(days=HISTORY_DAYS))
+    playing = _now_one(c)
     latest = max(recent, key=lambda i: i["at"]) if recent else None
+    also = []
+    for view in servers(c)[1:]:
+        try:
+            if not _token(view):
+                raise ValueError("add the server's token")
+            account_also = (
+                (view.media_user or "the server's owner")
+                if view.media_kind == "plex"
+                else _jellyfin_user(view)[1]
+            )
+            _now_one(view)
+            also.append(
+                {
+                    "server": source_name(view),
+                    "address": view.media_server,
+                    "ok": True,
+                    "account": account_also,
+                }
+            )
+        except ValueError as exc:
+            also.append(
+                {
+                    "server": source_name(view),
+                    "address": view.media_server,
+                    "ok": False,
+                    "detail": str(exc),
+                }
+            )
     return {
         "ok": True,
         "server": source_name(c),
@@ -1074,6 +1176,7 @@ def check(c, now=None):
         "playing": label(playing[0]) if playing else None,
         "latest": label(latest) if latest else None,
         "latest_when": _when(latest["at"], now.astimezone(_tz(c))) if latest else None,
+        "also": also,
     }
 
 

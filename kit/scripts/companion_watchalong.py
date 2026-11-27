@@ -288,7 +288,7 @@ def enabled(c):
 
     return (
         (getattr(c, "watchalong", "off") or "off") != "off"
-        and viewing.configured(c)
+        and viewing.any_configured(c)
         and "viewing" in (c.sensors or [])
     )
 
@@ -366,7 +366,27 @@ def _post(c, path, body, timeout=8):
 
 
 def playing(c):
-    """What the human plays now, with the playhead: a list of dicts (usually one)."""
+    """What the human plays now, on any server followed, with the playhead: a list of dicts (usually one), each
+    tagged with the server it is on ("base"). A server that cannot be read leaves the others standing.
+    """
+    import companion_viewing as viewing
+
+    out, errors, tried = [], [], 0
+    for view in viewing.servers(c):
+        if not viewing._token(view):
+            continue
+        tried += 1
+        try:
+            out += [{**row, "base": view.media_server} for row in _playing_one(view)]
+        except ValueError as exc:
+            errors.append(str(exc))
+    if tried and len(errors) == tried:
+        raise ValueError("; ".join(errors))
+    return out
+
+
+def _playing_one(c):
+    """What the human plays now on one server."""
     import companion_viewing as viewing
 
     if c.media_kind == "plex":
@@ -1235,7 +1255,8 @@ class Follower:
         self.c = c
         self.clock = clock
         self.read, self.fetch, self.speak, self.send = read, fetch, speak, send
-        self.item = None  # the title being followed: (server, key)
+        self.item = None  # the title being followed: (kind, server address, key)
+        self.view = c  # the companion as seen from the server that title is on
         self.track = Track([])
         self.track_note = ""
         self.head = Playhead()
@@ -1287,7 +1308,7 @@ class Follower:
                 if self.now is not None:
                     self._finish()
                 return READ_IDLE_S
-            if (current["server"], current["key"]) != self.item:
+            if (current["server"], current.get("base"), current["key"]) != self.item:
                 self._start(current)
             first = self.head.reported_at is None
             seek = self.head.update(current["position_ms"], current["state"], at)
@@ -1327,12 +1348,15 @@ class Follower:
 
     def _start(self, current):
         self._stop_reader()
-        self.item = (current["server"], current["key"])
+        self.item = (current["server"], current.get("base"), current["key"])
+        import companion_viewing as viewing
+
+        self.view = viewing.server_for(self.c, current)
         self.head = Playhead()
         self.said, self.last_said_at, self.loudest = [], None, (0, None)
         self.paused_since = None
         try:
-            plan = self.fetch(self.c, current)
+            plan = self.fetch(self.view, current)
         except ValueError as exc:
             plan = {"raw": None, "why": str(exc), "read": None}
         if isinstance(plan, tuple):  # (raw, why), as a simple fetch says it
@@ -1344,7 +1368,7 @@ class Follower:
         self.track_note = ""
         how = "subtitles" if self.track.cues else ""
         if not self.track.cues:
-            ok, why = can_read(self.c, plan)
+            ok, why = can_read(self.view, plan)
             if ok:
                 self.track.live = True
                 how = (
@@ -1380,7 +1404,7 @@ class Follower:
             self.track.live = False
             return
         self.reader = Reader(
-            self.c, self.plan, self.track, position_ms, self.transcriber
+            self.view, self.plan, self.track, position_ms, self.transcriber
         )
         self.reader.start()
 
@@ -1481,7 +1505,7 @@ class Follower:
                 },
             )
             return
-        reached = self.send(self.c, self.now, reply) if chosen else []
+        reached = self.send(self.view, self.now, reply) if chosen else []
         row = {
             "event": "said",
             "title": _title(self.now),

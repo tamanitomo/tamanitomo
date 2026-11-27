@@ -924,6 +924,16 @@ def build(home=None, token="", state_dir=None):
             "media_user": c.media_user,
             # Whether one is kept, never the token itself.
             "media_token_set": viewing.configured(c) or bool(c.media_token_file),
+            # Another server followed the same way (a Plex and a Jellyfin), without its token.
+            "media_also": [
+                {
+                    "server": x.get("server", ""),
+                    "kind": x.get("kind", "jellyfin"),
+                    "user": x.get("user", ""),
+                    "token_set": bool(x.get("token_file")),
+                }
+                for x in (c.media_also or [])
+            ],
             "watchalong": c.watchalong,
             "watchalong_reach": list(c.watchalong_reach),
             "watchalong_scope": c.watchalong_scope,
@@ -1061,11 +1071,49 @@ def build(home=None, token="", state_dir=None):
         bridge_token = payload.pop("device_bridge_token", None)
         if bridge_token is not None and not isinstance(bridge_token, str):
             raise HTTPException(400, "device_bridge_token must be text")
+        # One more server to follow (media_also), set from its own four fields.
+        also = {
+            key: payload.pop(key)
+            for key in (
+                "media_also_server",
+                "media_also_kind",
+                "media_also_user",
+                "media_also_token",
+            )
+            if key in payload
+        }
+        if any(v is not None and not isinstance(v, str) for v in also.values()):
+            raise HTTPException(400, "the other server's fields must be text")
         unknown = sorted(set(payload) - ALLOWED)
         if unknown:
             raise HTTPException(400, f'not settable from here: {", ".join(unknown)}')
         for key, value in payload.items():
             setattr(c, key, value)
+        import companion_viewing as viewing
+
+        if also:
+            before = dict((c.media_also or [{}])[0]) if c.media_also else {}
+            address = str(
+                also.get("media_also_server", before.get("server", "")) or ""
+            ).strip()
+            if not address:
+                if before.get("token_file") == str(viewing.also_token_path(c)):
+                    viewing.also_token_path(c).unlink(missing_ok=True)
+                c.media_also = []
+            else:
+                c.media_also = [
+                    {
+                        "server": address.rstrip("/"),
+                        "kind": also.get("media_also_kind")
+                        or before.get("kind")
+                        or "jellyfin",
+                        "user": str(
+                            also.get("media_also_user", before.get("user", "")) or ""
+                        ).strip(),
+                        "token_file": before.get("token_file", ""),
+                    }
+                ]
+            payload["media_also"] = "(saved)"
         try:
             c.__post_init__()  # the same validation the CLI gets
         except ValueError as exc:
@@ -1086,6 +1134,20 @@ def build(home=None, token="", state_dir=None):
                 path.chmod(0o600)
             c.media_token_file = str(path)
             payload["media_token"] = "(saved)"
+        typed_also = str(also.get("media_also_token") or "").strip()
+        if typed_also:
+            if not c.media_also:
+                raise HTTPException(400, "set the other server's address first")
+            if len(typed_also) > 500 or any(ch.isspace() for ch in typed_also):
+                raise HTTPException(400, "That does not look like a server token")
+            path = viewing.also_token_path(c)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if os.name != "nt":
+                path.parent.chmod(0o700)
+            cp.atomic_write(path, typed_also + "\n")
+            if os.name != "nt":
+                path.chmod(0o600)
+            c.media_also[0]["token_file"] = str(path)
         if bridge_token and bridge_token.strip():
             token = bridge_token.strip()
             if len(token) > 500 or any(ch.isspace() for ch in token):

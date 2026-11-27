@@ -432,6 +432,9 @@ class Companion:
     media_kind: str = "plex"  # plex | jellyfin
     media_user: str = ""
     media_token_file: str = ""
+    # More servers followed the same way (a Plex and a Jellyfin, say): each
+    # {"server": address, "kind": plex|jellyfin, "user": account or "", "token_file": path}.
+    media_also: list = dataclasses.field(default_factory=list)
     # Watching together, live (companion_watchalong): while the human plays something on
     # that server, she follows its dialogue and knows the scene whenever they talk.
     # watchalong is how often she speaks up on her own: off | quiet (only when spoken to)
@@ -528,6 +531,31 @@ class Companion:
             raise ValueError("media_user must be an account name, or empty")
         if not isinstance(self.media_token_file, str):
             raise ValueError("media_token_file must be a path, or empty")
+        if not isinstance(self.media_also, list) or len(self.media_also) > 3:
+            raise ValueError("media_also must be a list of up to three more servers")
+        for extra in self.media_also:
+            if not isinstance(extra, dict):
+                raise ValueError(
+                    "each of media_also is {server, kind, user, token_file}"
+                )
+            address = extra.get("server")
+            if not isinstance(address, str) or not address.startswith(
+                ("https://", "http://")
+            ):
+                raise ValueError("each of media_also needs an http(s) server address")
+            if any(mark in address for mark in ("?", "#", "@")):
+                raise ValueError(
+                    "a media_also server is its address alone; the token goes in its own file"
+                )
+            if extra.get("kind", "jellyfin") not in ("plex", "jellyfin"):
+                raise ValueError('a media_also kind must be "plex" or "jellyfin"')
+            if (
+                not isinstance(extra.get("user", ""), str)
+                or len(extra.get("user", "")) > 100
+            ):
+                raise ValueError("a media_also user must be an account name, or empty")
+            if not isinstance(extra.get("token_file", ""), str):
+                raise ValueError("a media_also token_file must be a path, or empty")
         if self.watchalong not in (
             "off",
             "quiet",

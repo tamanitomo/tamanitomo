@@ -383,6 +383,28 @@ const settingsPanels=[
     <p class="small dim" id="media-help"></p>
     <p class="small" id="media-status" role="status"></p>
   </div>
+  <p class="small dim" style="margin-top:14px">Watch on two servers, a Plex and a Jellyfin? She can follow another one the same way. Leave the address empty to follow just the one above.</p>
+  <div class="contact-settings">
+    <div class="contact-row">
+      <label class="contact-label" for="media-also-server">Also follow</label>
+      <div class="contact-controls">
+        <select id="media-also-kind">${options([['jellyfin','Jellyfin'],['plex','Plex']],(s.media_also&&s.media_also[0]||{}).kind||'jellyfin')}</select>
+        <input id="media-also-server" value="${esc((s.media_also&&s.media_also[0]||{}).server||'')}" placeholder="http://192.168.1.10:8096" style="max-width:280px">
+      </div>
+    </div>
+    <div class="contact-row">
+      <label class="contact-label" for="media-also-user">Your account there</label>
+      <div class="contact-controls">
+        <input id="media-also-user" value="${esc((s.media_also&&s.media_also[0]||{}).user||'')}" placeholder="the server's owner" style="max-width:220px">
+      </div>
+    </div>
+    <div class="contact-row">
+      <label class="contact-label" for="media-also-token">Its token</label>
+      <div class="contact-controls">
+        <input id="media-also-token" type="password" autocomplete="off" spellcheck="false" placeholder="${(s.media_also&&s.media_also[0]||{}).token_set?'Saved. Type to replace it':'Paste that server\'s token'}" style="max-width:280px">
+      </div>
+    </div>
+  </div>
   ${settingsFooter('Save')}`;
   wireToggles(host);
   const kind=host.querySelector('#media-kind');
@@ -396,6 +418,11 @@ const settingsPanels=[
     // Sent only when typed, so saving never clears a token it cannot show.
     const typed=host.querySelector('#media-token').value.trim();
     if(typed)payload.media_token=typed;
+    payload.media_also_server=host.querySelector('#media-also-server').value.trim();
+    payload.media_also_kind=host.querySelector('#media-also-kind').value;
+    payload.media_also_user=host.querySelector('#media-also-user').value.trim();
+    const typedAlso=host.querySelector('#media-also-token').value.trim();
+    if(typedAlso)payload.media_also_token=typedAlso;
     return payload;
   };
   host.querySelector('#media-check').onclick=async()=>{
@@ -403,13 +430,14 @@ const settingsPanels=[
     status.className='small dim';status.textContent='Checking…';
     try{
       await saveSettings(media());
-      host.querySelector('#media-token').value='';
+      host.querySelector('#media-token').value='';host.querySelector('#media-also-token').value='';
       const r=await api('/viewing/check',{method:'POST'});
       if(!r.ok)throw Error(r.detail);
       status.className='small';
       status.textContent=`Connected to ${r.server}, reading ${r.account}.`
         +(r.playing?` On now: ${r.playing}.`:'')
-        +(r.latest?` Last finished: ${r.latest}, ${r.latest_when}.`:' Nothing finished in the last two weeks.');
+        +(r.latest?` Last finished: ${r.latest}, ${r.latest_when}.`:' Nothing finished in the last two weeks.')
+        +(r.also||[]).map(x=>x.ok?` Also connected to ${x.server}, reading ${x.account}.`:` ${x.server} at ${x.address}: ${x.detail}.`).join('');
     }catch(error){
       const said=String(error.message||'The check failed');
       status.innerHTML=`<span class="bad">${esc(said.charAt(0).toUpperCase()+said.slice(1))}.</span>`;

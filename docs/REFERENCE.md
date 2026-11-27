@@ -285,7 +285,7 @@ Optional, cheap, silent when they have nothing. Chosen at setup, changeable in t
 | `care` | Things worth asking about again | a `care.md` you write |
 | `durations` | "married 13 years", counted from the date | dated lines in `dates.md` |
 | `thread` | How long since either of you wrote, and what that gap means | nothing |
-| `viewing` | What you watch on your own Plex or Jellyfin: what is on, what you finished lately, what you watch together | the server's address and token, set in Settings → Awareness |
+| `viewing` | What you watch on your own Plex or Jellyfin (or both: a second server under "Also follow", `media_also`): what is on, what you finished lately, what you watch together. Each item knows its server; one server down leaves the other standing | the server's address and token, set in Settings → Awareness |
 | `onthisday` | What the two of you had on today's date a month, three and six months, and each year ago: something you said, a film you watched together, a moment she kept, a time she felt close. Furthest back first, at most four lines; she may bring one up, once and lightly | nothing; read from her own records |
 | `plans` | Your word: when you said goodnight, brb or gotta go and what followed does not match (more messages on any channel, a game, a film finishing or playing, music on, arriving somewhere or leaving the house per `ambient/where.json`, or still gone long after "right back"), one plain paragraph so she can notice it the way a partner would: a tease, a raised eyebrow, care if it is very late. Read live each turn; nothing when the evening went as you said. Never a lecture or a reason to message you. English phrasing | nothing; read from her own records |
 
