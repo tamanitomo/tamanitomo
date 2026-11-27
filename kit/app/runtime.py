@@ -1177,6 +1177,10 @@ def _feed_message(view, record):
         ),
         "cursor": _encode_cursor(record.occurred_at, int(record.source_message)),
     }
+    if record.channel:
+        # An owner API conversation: what to call the place ("the game"). Added only
+        # there, so every other row keeps the revision it already had.
+        row["channel_label"] = record.channel
     row["revision"] = hashlib.sha256(
         json.dumps(row, sort_keys=True, ensure_ascii=False).encode()
     ).hexdigest()

@@ -1,3 +1,24 @@
+## 3.20.0 — One conversation, wherever you talk (2026-11-26)
+
+- **A conversation through the Hermes API can be yours.** A game add-on or a voice front end
+  talks to the companion through Hermes's API server, and those conversations counted as an
+  unknown caller's. So nothing said on Telegram or in the app reached them, and nothing said
+  there reached anywhere else: reached in a second place, she did not know the two of you had
+  talked that day. companion.json `owner_api_conversations` now names the API conversations that
+  are you, mapped to what she calls the place (`{"game-chat": "the game"}`). The name is the
+  `conversation` a client sends to `/v1/responses`, found read-only in Hermes's
+  `response_store.db` together with the transcripts Hermes compressed it from, or a key declared
+  with `X-Hermes-Session-Key`. Named conversations are quoted into the others and the others into
+  them, appear in the app's chat feed (search: Other apps), and count as your own words for her
+  memory. Unnamed API conversations stay out, as before. The compatibility check now writes and
+  reads a named conversation through Hermes's own store.
+- **Enough of the conversation to pick up mid-thread.** Each place now carries up to forty recent
+  messages from the others (was twelve), within 2% of the window up to 16,000 characters (was
+  4,000, which held five or six). It is sent with a conversation's first turn and again only when
+  something new was said elsewhere, so the cost follows moving between places, not every turn.
+- API conversations get their own conversation note: their app's instructions say where she is
+  and how replies are shown.
+
 ## 3.19.3 — A conversation in the app follows the model plan (2026-11-26)
 
 - **The app's chat follows a new model plan.** Hermes 0.23 keeps a local conversation on the model

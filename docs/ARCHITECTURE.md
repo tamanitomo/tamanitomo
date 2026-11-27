@@ -102,16 +102,27 @@ reflection is a separate inference job. Profile type and optional settings
 control which jobs are installed.
 
 A conversation that starts fresh each morning starts empty, and every channel
-(Telegram, the app, a terminal) is its own conversation. So each turn's
-continuity block also quotes the newest owner-verified messages from the
-human's other conversations: another channel, or the same one before the
-morning's fresh start. Selection is deterministic and uses no model
-(`companion_context.cross_channel_handoff` over the read-only
-`companion_transcript` reader): the last 36 hours, at most twelve messages,
+(Telegram, the app, a terminal, an app the human talks through on the Hermes
+API) is its own conversation. To the human it is one conversation that moves
+between places, so each turn's continuity block also quotes the newest
+owner-verified messages from the human's other conversations: another channel,
+or the same one before the morning's fresh start. Selection is deterministic and
+uses no model (`companion_context.cross_channel_handoff` over the read-only
+`companion_transcript` reader): the last 36 hours, at most forty messages,
 within a reserve sized from the window (`companion_config.conversation_reserve`,
-up to 4,000 characters) that sits on top of the other sections rather than
-displacing them. Settings → Awareness → *Pick up where you left off* switches
-it off (`conversation_handoff`).
+2% of it, up to 16,000 characters) that sits on top of the other sections rather
+than displacing them. Settings → Awareness → *Pick up where you left off*
+switches it off (`conversation_handoff`).
+
+Any client holding the Hermes API key can open an API conversation (a script, a
+shared front end), so none counts as the human's by default. companion.json
+`owner_api_conversations` names the ones that are, mapped to what the companion
+calls the place: `{"game-chat": "the game"}`. A name is the one a client gives
+`conversation` on `/v1/responses`, found read-only in Hermes's
+`response_store.db` (with the transcripts Hermes compressed it from), or a key
+the client declares with `X-Hermes-Session-Key`. Those conversations are then
+read like Telegram and the app: quoted into the others, the others quoted into
+them, shown in the app's chat feed, and kept as the human's own words.
 
 These jobs need no language-model completion. They can maintain records and
 enforce policy during provider outages without paying for an agent turn that

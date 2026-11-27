@@ -99,10 +99,10 @@ class HandoffTests(unittest.TestCase):
         self.assertNotIn("Recent messages from", self.build(session="job"))
 
     def test_newest_kept_when_the_reserve_is_full(self):
-        for i in range(30):
+        for i in range(60):
             self.store.say("tg-night", "user", f"note {i:02d} " + "x" * 400, at(9) + i)
         out = self.build()
-        self.assertIn("note 29", out)
+        self.assertIn("note 59", out)
         self.assertNotIn("note 00", out)
         self.assertIn("are not shown here; nothing was deleted", out)
         section = out[out.index("[Recent messages") :].split("\n\n")[0]

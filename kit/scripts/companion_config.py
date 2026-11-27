@@ -131,9 +131,13 @@ FACTS_FRACTION = 0.02
 FACTS_RESERVE_MAX = 60_000
 # The last messages from the human's other conversations -- another channel, or this
 # one before the morning's fresh start -- quoted so a new session can pick the thread
-# up. Reserved on top, like the facts, so it never pushes another section out.
-CONVERSATION_FRACTION = 0.004
-CONVERSATION_RESERVE_MAX = 4_000
+# up. Reserved on top, like the facts, so it never pushes another section out. Sized
+# for a real stretch of conversation (about forty messages): 4,000 characters held
+# five or six, and a companion reached in a second place did not know the two of
+# them had already talked that day. It is sent once per session and again only when
+# something new was said elsewhere, so the cost follows switching places, not turns.
+CONVERSATION_FRACTION = 0.02
+CONVERSATION_RESERVE_MAX = 16_000
 # The vault map is sent once per session and then rides in the cached prefix, so
 # it may take a larger slice than the per-turn injection. Automatic sizing gives
 # it a tenth of the window, up to 25K tokens; a fixed setting may go higher.
@@ -401,6 +405,13 @@ class Companion:
     # another channel, or this one before the morning's fresh start. Starting fresh
     # keeps replies quick; this keeps the thread.
     conversation_handoff: bool = True
+    # Conversations through Hermes's API server that are the human talking -- a game
+    # add-on, a voice front end -- by the name the client gives `conversation` on
+    # /v1/responses (or declares with X-Hermes-Session-Key), mapped to what to call
+    # the place: {"game-chat": "the game"}. An API caller is not the human by
+    # default (a script, a shared front end); named here, the conversation is read
+    # like Telegram and the app: quoted into the others and kept as the human's words.
+    owner_api_conversations: dict = dataclasses.field(default_factory=dict)
     # Read web pages on this machine instead of through a reading service. The kit
     # sets this up wherever no other reader was chosen in Hermes.
     local_web_reader: bool = True
@@ -449,6 +460,24 @@ class Companion:
             raise ValueError("peer_interaction must be true or false")
         if not isinstance(self.conversation_handoff, bool):
             raise ValueError("conversation_handoff must be true or false")
+        if isinstance(self.owner_api_conversations, list):
+            # A bare list of names: each place is called by its name.
+            self.owner_api_conversations = {
+                name: name for name in self.owner_api_conversations
+            }
+        if not isinstance(self.owner_api_conversations, dict) or any(
+            not isinstance(name, str)
+            or not name.strip()
+            or len(name) > 256
+            or not isinstance(label, str)
+            or len(label) > 60
+            or any(ch in name + label for ch in "\r\n\t")
+            for name, label in self.owner_api_conversations.items()
+        ):
+            raise ValueError(
+                "owner_api_conversations must map API conversation names (up to 256 "
+                "characters) to what to call each place (up to 60 characters)"
+            )
         if not isinstance(self.local_web_reader, bool):
             raise ValueError("local_web_reader must be true or false")
         if self.alerts not in ("app", "chat"):

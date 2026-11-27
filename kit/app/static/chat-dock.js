@@ -50,7 +50,7 @@
               <input id="chat-search-text" type="search" maxlength="200" placeholder="Find exact text…">
               <div class="chat-search-filters">
                 <label>Day<input id="chat-search-day" type="date"></label>
-                <label>Channel<select id="chat-search-channel"><option value="all">All channels</option><option value="workspace">Tamanitomo</option><option value="terminal">Terminal</option><option value="telegram">Telegram</option></select></label>
+                <label>Channel<select id="chat-search-channel"><option value="all">All channels</option><option value="workspace">Tamanitomo</option><option value="terminal">Terminal</option><option value="telegram">Telegram</option><option value="api">Other apps</option></select></label>
                 <button class="quiet" type="submit">Find</button>
               </div>
             </form>
@@ -335,7 +335,7 @@
     searchContextRows = [];
     const host = $('chat-search-results');
     host.innerHTML = searchMatches.map(row => `<button type="button" class="chat-search-result" data-message="${esc(row.id)}">
-      <small>${esc(new Date(row.timestamp * 1000).toLocaleString())} · ${esc(row.channel === 'workspace' ? 'Tamanitomo' : row.channel)} · ${esc(row.role === 'user' ? 'You' : chatName())}</small>
+      <small>${esc(new Date(row.timestamp * 1000).toLocaleString())} · ${esc(row.channel_label || (row.channel === 'workspace' ? 'Tamanitomo' : row.channel))} · ${esc(row.role === 'user' ? 'You' : chatName())}</small>
       <span>${esc(row.excerpt)}</span><small>Read surrounding messages →</small></button>`).join('');
     for (const button of host.querySelectorAll('[data-message]')) button.onclick = () => searchContext(button.dataset.message);
     $('chat-search-more').hidden = !searchCursor;

@@ -271,6 +271,52 @@ def probe(scratch, checkout):
             "companion_transcript.LOCAL_POLICY_PREFIX",
         )
         checks.append("local_conversation_policy_key")
+    # The owner's named API conversations are found in Hermes's response store
+    # (companion_transcript.api_sessions). Write one the way the API server does and
+    # read it back through the kit's reader: a changed store would otherwise quietly
+    # drop those conversations from the rest of the human's conversation.
+    import importlib
+
+    _responses = None  # no API server store: named conversations stay unread
+    # Its own module since Hermes 0.23; inside the API server module before that.
+    for _module in (
+        "gateway.platforms.api_server_response_store",
+        "gateway.platforms.api_server",
+    ):
+        try:
+            _candidate = importlib.import_module(_module)
+        except ImportError:
+            continue
+        if hasattr(_candidate, "ResponseStore"):
+            _responses = _candidate
+            break
+    if _responses is not None:
+        import types
+
+        home = Path(tempfile.mkdtemp(dir=scratch))
+        store = _responses.ResponseStore(
+            db_path=str(home / _transcript.RESPONSE_STORE)
+        )
+        store.put(
+            "resp_probe",
+            {
+                "response": {},
+                "conversation_history": [],
+                "instructions": "",
+                "session_id": "probe-session",
+            },
+        )
+        store.set_conversation("probe-chat", "resp_probe")
+        found = _transcript.api_sessions(
+            types.SimpleNamespace(home=home),
+            _transcript.OwnerBinding(api=(("probe-chat", "the probe"),)),
+        )
+        require(
+            found == {"probe-session": "the probe"},
+            "Hermes keeps named API conversations differently; update "
+            "companion_transcript.api_sessions",
+        )
+        checks.append("api_conversation_store")
     cfg = load_config()
     enrolled = cfg["tamanitomo_routing"]["jobs"]
     pinned = {

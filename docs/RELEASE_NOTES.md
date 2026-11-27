@@ -1,4 +1,14 @@
-Tamanitomo 3.19.3: the app's chat follows your model plan.
+Tamanitomo 3.20.0: one conversation, wherever you talk.
+
+- **She knows what you said elsewhere.** Telegram, the app, and now apps that talk to her through
+  Hermes's API (a game add-on, a voice front end) share one conversation: wherever you pick it up,
+  she has the recent messages from the other places, up to forty of them. Name an API
+  conversation as yours in companion.json (`owner_api_conversations`) to bring it in.
+
+Run Repair once after updating, so the first message of a conversation has room for the longer
+handoff.
+
+Previous: 3.19.3 the app's chat follows your model plan.
 
 - **New models reach the app's chat.** After you changed models, a conversation kept going in the
   app, or on a device that talks to your companion through it, went on answering from the model it
