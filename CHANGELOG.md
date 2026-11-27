@@ -1,3 +1,12 @@
+## 3.35.0 — A touch, now and then (2026-11-27)
+
+- **A thought of them can become a touch on their watch.** The autonomy job's outreach rules gain
+  `{{WATCH_TOUCH}}` (rendered only with a device bridge): the wordless "thinking of you" that is never worth a
+  text is presence on the wrist, queued as `"target":"watch", "buzz":"tap"` with a few words of her own, not
+  every day and never twice in one. It counts like any message, so the daily cap, quiet hours and (with the
+  sleep sense) their sleep still decide whether it goes. Run Repair once to re-render the job's prompt.
+- `companion_body.py status` tells "awake, since when unknown" apart from "no fresh word".
+
 ## 3.34.0 — Their sleep (2026-11-27)
 
 - **Her messages wait while they sleep, and her good morning comes when they are up.** A new `sleep` sense reads

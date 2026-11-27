@@ -869,6 +869,34 @@ class UnconfirmedPhotoTests(unittest.TestCase):
         )
 
 
+class WatchTouchHintTests(OutboxFixture):
+    """The autonomy job may send a wordless "thinking of you" only as a touch on the watch, and only when a watch is
+    connected: the hint renders with a device bridge and is absent without one, with no placeholder left behind.
+    """
+
+    def prompt(self):
+        import companion_render as cr
+
+        root = pathlib.Path(__file__).resolve().parents[1]
+        return cr.render(
+            (root / "kit/templates/cron/autonomy.md.tmpl").read_text(encoding="utf-8"),
+            cr.mapping_for(self.c),
+        )
+
+    def test_with_and_without_a_watch(self):
+        import companion_render as cr
+
+        without = self.prompt()
+        self.assertEqual(cr.unresolved(without), [])
+        self.assertNotIn('"target":"watch"', without)
+        self.c.device_bridge_url = "http://127.0.0.1:9/knock"
+        with_watch = self.prompt()
+        self.assertEqual(cr.unresolved(with_watch), [])
+        self.assertIn('a touch there ("target":"watch", "buzz":"tap"', with_watch)
+        self.assertIn("Not every day, never twice in one", with_watch)
+        self.assertIn(f"{self.c.human}'s watch", with_watch)
+
+
 class TouchTests(OutboxFixture):
     """A touch in the middle of a conversation ("oh stoppp" with a nudge): straight to the watch, never queued, never
     counted against her outreach, a few words only, at most six an hour, and offered only while they are talking.

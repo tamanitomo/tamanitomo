@@ -174,11 +174,16 @@ def main():
     c = cc.load(Path(args.home).expanduser()) if args.home else cc.load()
     now = dt.datetime.now(_tz(c))
     line, _data = render(c, now)
-    on = SENSE in (c.sensors or [])
-    print(
-        line
-        or ("the sleep sense is off" if not on else "no fresh word from a wearable")
-    )
+    if line:
+        print(line)
+    elif SENSE not in (c.sensors or []):
+        print("the sleep sense is off")
+    elif not read(c, now):
+        print("no fresh word from a wearable (nothing in the last half hour)")
+    else:
+        print(
+            f"{c.human} is awake, by the wearable (since when is not known, or too long ago to mention)"
+        )
 
 
 if __name__ == "__main__":

@@ -351,6 +351,13 @@ def mapping_for(
         ),
         "OUTREACH_PER_DAY": str(c.outreach_per_day or "no limit"),
         # A good morning or a goodnight can be a touch on the watch rather than a text.
+        "WATCH_TOUCH": (
+            " The one exception is {{HUMAN}}'s watch: once in a while, when you really are thinking of {{OBJ_H}}, "
+            'a touch there ("target":"watch", "buzz":"tap", with a few words of your own) is presence, not a ping. '
+            "Not every day, never twice in one, and it counts like any message."
+            if getattr(c, "device_bridge_url", "")
+            else ""
+        ),
         "WATCH_RITUAL": (
             ' It can also be a few words on {{HUMAN}}\'s watch ("target":"watch", "buzz":"tap"): a '
             "touch, not a ping, and it counts like any message."

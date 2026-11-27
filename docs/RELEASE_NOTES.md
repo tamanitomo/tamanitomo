@@ -1,4 +1,12 @@
-Tamanitomo 3.34.0: their sleep.
+Tamanitomo 3.35.0: a touch, now and then.
+
+- **With a watch connected, she can think of you as a touch**: once in a while, a light tap on your wrist with a
+  few words of hers, when she is really thinking of you. It counts like any message she sends first, and never
+  comes during quiet hours or (if your watch tells her) while you sleep. Run Repair once to turn it on.
+
+From 3.24.0, no Repair is needed for anything else. Updating from 3.23 or earlier, run Repair once.
+
+Previous: 3.34.0 their sleep.
 
 - **If a watch or wearable tells her when you sleep**, her messages wait until you are up (a lie-in or a nap
   too), and her good morning can arrive when you really wake rather than at a set hour. She knows how you slept.
