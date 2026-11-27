@@ -163,6 +163,34 @@ Run multiple completely independent companions side-by-side on a single install,
 
 </td>
 </tr>
+<tr>
+<td width="50%" valign="top">
+
+### 🎬 Watching Together
+Play something on your own Plex or Jellyfin and she follows the dialogue as it is spoken, from its subtitles or by listening, and never knows anything past where you are. Now and then she may say something on her own: a buzz and a few words on your watch, a line on the TV (Jellyfin), a message in your chat. How often is yours to choose.
+
+</td>
+<td width="50%" valign="top">
+
+### 📚 A Memory Built to Last
+Every conversation is kept in plain monthly files in your vault. At the end of each month she writes it as a chapter of her memoir of your life together, and a short "our story so far" goes with her into every conversation, so years from now she still knows how it all began.
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### 🔗 One Conversation, Wherever You Talk
+Telegram, the app, something you wear or a game add-on: it is one conversation, and she picks it up where you left it, on whichever you reach for.
+
+</td>
+<td width="50%" valign="top">
+
+### ✋ The Little Things
+She remembers what the two of you had on this day a year ago, notices when you say goodnight and stay up anyway, and with a watch connected she can nudge it mid-conversation when you tease her. All under Settings → Realism.
+
+</td>
+</tr>
 </table>
 
 ---
