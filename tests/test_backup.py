@@ -1,5 +1,6 @@
 """Recovery bundles preserve data in isolated homes and never activate delivery."""
 
+import ast
 from contextlib import closing
 from concurrent.futures import ThreadPoolExecutor
 import json
@@ -164,10 +165,11 @@ class RecoveryTests(unittest.TestCase):
             (False, True, None),
         )
         self.assertIn(str(restored.canonical_soul), jobs[0]["prompt"])
-        self.assertIn(
-            str(restored.home),
-            (restored.home / "cron/pulse.py").read_text(encoding="utf-8"),
-        )
+        # the script's HOME literal names the restored home: compared as directories, since Windows may spell
+        # one path two ways (the runner's TEMP is an 8.3 short name; cc.load resolves it to the long one)
+        pulse = (restored.home / "cron/pulse.py").read_text(encoding="utf-8")
+        written = ast.literal_eval(pulse.split("=", 1)[1].strip())
+        self.assertEqual(Path(written).resolve(), restored.home.resolve())
         config = yaml.safe_load(
             (restored.home / "config.yaml").read_text(encoding="utf-8")
         )
