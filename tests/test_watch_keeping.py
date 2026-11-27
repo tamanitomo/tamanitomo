@@ -54,9 +54,7 @@ class KeepingTests(unittest.TestCase):
         )
         archive.update(self.c, now=NOW)
         self.assertFalse([p for p in self.problems() if "archive" in p])
-        self.store.say(
-            "tg", "user", "fresh words a minute old", NOW.timestamp() - 60
-        )
+        self.store.say("tg", "user", "fresh words a minute old", NOW.timestamp() - 60)
         self.assertFalse(
             [p for p in self.problems() if "archive" in p]
         )  # recent is not behind
@@ -99,6 +97,27 @@ class KeepingTests(unittest.TestCase):
         self.assertTrue(
             any("chapter for January 2027 is 9 days overdue" in p for p in found),
             found,
+        )
+        # A job that arrived yesterday owes its backlog from yesterday: catching up is not late.
+        jobs = self.c.home / "cron/jobs.json"
+        made = (NOW - dt.timedelta(days=1)).isoformat()
+        jobs.write_text(
+            json.dumps(
+                {"jobs": [{"name": "Nova story", "id": "s1", "created_at": made}]}
+            )
+        )
+        self.assertFalse([p for p in self.problems() if "chapter" in p])
+        made = (NOW - dt.timedelta(days=6)).isoformat()
+        jobs.write_text(
+            json.dumps(
+                {"jobs": [{"name": "Nova story", "id": "s1", "created_at": made}]}
+            )
+        )
+        self.assertTrue(
+            any(
+                "chapter for January 2027 is 6 days overdue" in p
+                for p in self.problems()
+            )
         )
 
     def test_a_backup_that_reports_itself(self):

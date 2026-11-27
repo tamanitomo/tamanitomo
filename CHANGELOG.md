@@ -1,3 +1,8 @@
+## 3.31.1 — A backlog is not late (2026-11-27)
+
+- The health watch counts a chapter as overdue from when the story job arrived, not from the end of a month
+  long past: a companion whose history is just catching up is not behind.
+
 ## 3.31.0 — Her memory, watched (2026-11-27)
 
 - **The health watch checks that her memory is still being kept**, every hour and without a model: the

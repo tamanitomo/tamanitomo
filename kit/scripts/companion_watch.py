@@ -511,16 +511,26 @@ def check_keeping(c, now):
     try:
         import companion_chapters as chapters
 
-        if f"{c.agent} story" in _jobs(c):
+        story = _jobs(c).get(f"{c.agent} story")
+        if story is not None:
             piece = chapters.next_piece(c, now)
             if piece and piece["kind"] == "month":
                 year, month = int(piece["what"][:4]), int(piece["what"][5:7])
-                ended = dt.datetime(
+                due = dt.datetime(
                     year + (month == 12), month % 12 + 1, 1, tzinfo=now.tzinfo
                 )
-                if now - ended >= dt.timedelta(days=CHAPTER_LATE_DAYS):
+                # A month older than the story job was owed from the day the job arrived, not from its own
+                # end: a long history catching up is not a story that is late.
+                try:
+                    created = dt.datetime.fromisoformat(str(story.get("created_at")))
+                    if created.tzinfo is None:
+                        created = created.replace(tzinfo=now.tzinfo)
+                    due = max(due, created)
+                except (TypeError, ValueError):
+                    pass
+                if now - due >= dt.timedelta(days=CHAPTER_LATE_DAYS):
                     out.append(
-                        f"her chapter for {piece['label']} is {(now - ended).days} days overdue "
+                        f"her chapter for {piece['label']} is {(now - due).days} days overdue "
                         "(the story job writes it; see its last run)"
                     )
     except Exception:  # noqa: BLE001
