@@ -1,4 +1,12 @@
-Tamanitomo 3.31.1: a backlog is not late.
+Tamanitomo 3.32.0: it mends itself.
+
+- **When keeping her memory slips, it catches up on its own**: conversations that were not yet copied to your
+  vault are copied, and unsaved vault changes are saved, before you are ever told something is wrong.
+- A vault restored from a backup can always be saved again.
+
+From 3.24.0, no Repair is needed. Updating from 3.23 or earlier, run Repair once.
+
+Previous: 3.31.1 a backlog is not late.
 
 - A companion just starting her chapters is no longer reported as months behind on them.
 

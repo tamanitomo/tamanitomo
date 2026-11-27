@@ -438,7 +438,7 @@ a problem when the conversation archive is more than three hours behind the conv
 has had changes waiting twelve hours without a commit, when a month's chapter is five days overdue while
 the story job exists, and when a backup that reports itself in `state/vault-backup-last.json`
 (`{"ok": true|false, "at": ISO time, "error": "..."}`) failed or is 36 hours old. Problems show like any
-other: the banner, Diagnostics, `ambient/health.md`, and the alert you chose.
+other: the banner, Diagnostics, `ambient/health.md`, and the alert you chose. Before telling anyone, the watch mends what it safely can: it copies the conversations the archive missed and commits a vault left with changes waiting (the vault commit job's own work), and keeps the last twenty mends in `state/companion-watch-healed.jsonl`. A vault repo that knows no author (made by hand, restored from a backup) is given the vault's own identity, so its commits never fail quietly.
 
 **Chapters** (`companion_chapters`, the story job): once a month she writes the month just ended
 as a chapter of her memoir of their life together (`story/<year>/<year>-<month>.md`, a few hundred

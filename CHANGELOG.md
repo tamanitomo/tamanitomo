@@ -1,3 +1,14 @@
+## 3.32.0 — It mends itself (2026-11-27)
+
+- **The health watch mends what keeping her memory can mend, before telling anyone**: conversations the
+  archive missed are copied, and a vault left with changes waiting is committed (the same work the vault
+  commit job does), so her memory recovers on its own after that job was paused or failing. The last twenty
+  mends are kept in `state/companion-watch-healed.jsonl`; whatever is still wrong after mending is reported
+  as before.
+- **A vault repo that knows no author can still commit.** One made by hand or restored from a backup without
+  `user.name`/`user.email` made every commit fail with "Author identity unknown", quietly; it now gets the
+  vault's own identity (an identity already set is left alone).
+
 ## 3.31.1 — A backlog is not late (2026-11-27)
 
 - The health watch counts a chapter as overdue from when the story job arrived, not from the end of a month

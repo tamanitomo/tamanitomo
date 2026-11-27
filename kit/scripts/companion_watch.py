@@ -580,6 +580,22 @@ def problems(c, now=None):
     return out
 
 
+def _record_healed(c, now, healed):
+    """What the watch mended, kept beside its state for Diagnostics: the last twenty."""
+    path = pathlib.Path(c.home) / "state" / "companion-watch-healed.jsonl"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        rows = (
+            path.read_text(encoding="utf-8").splitlines()[-19:] if path.exists() else []
+        )
+        rows.append(
+            json.dumps({"at": now.isoformat(timespec="seconds"), "done": healed})
+        )
+        atomic_write(path, "\n".join(rows) + "\n")
+    except OSError:
+        pass
+
+
 def _state_path(c):
     return c.home / "state/companion-watch.json"
 
@@ -604,6 +620,35 @@ def write_ambient(c, found, now):
     )
 
 
+def heal_keeping(c, now):
+    """Mend what keeping her memory can mend by itself, before anyone is told: copy the conversations the archive
+    missed, and commit a vault left with changes waiting. Both are what the vault commit job does every fifteen
+    minutes, so running them here is safe; it is how her memory recovers on its own when that job was paused or
+    failed for a while. Returns what was done (empty when nothing needed it)."""
+    done = []
+    found = check_keeping(c, now)
+    if any("conversation archive is behind" in p for p in found):
+        try:
+            import companion_archive as archive
+
+            copied = archive.update(c, now=now).get("copied", 0)
+            if copied:
+                done.append(f"copied {copied} message(s) the archive had missed")
+        except Exception:  # noqa: BLE001 -- reported below if it is still behind
+            pass
+    if any("the vault has changes waiting" in p for p in found):
+        try:
+            import companion_vault as vault
+
+            if vault.commit(
+                c, now=now, message="health watch: changes left waiting"
+            ).get("committed"):
+                done.append("committed the vault's waiting changes")
+        except Exception:  # noqa: BLE001
+            pass
+    return done
+
+
 def run(c, now=None, renotify=RENOTIFY_SECONDS, notify=None, record=True):
     """Check, and when `notify` is given, deliver an alert through it.
 
@@ -611,6 +656,12 @@ def run(c, now=None, renotify=RENOTIFY_SECONDS, notify=None, record=True):
     alert held for quiet hours or lost to a failed send is tried again next run.
     """
     now = now or dt.datetime.now(_tz(c))
+    try:
+        healed = heal_keeping(c, now)
+    except Exception:  # noqa: BLE001 -- mending is a bonus; the checks below still run
+        healed = []
+    if healed:
+        _record_healed(c, now, healed)
     found = problems(c, now)
     write_ambient(c, found, now)
     path = _state_path(c)

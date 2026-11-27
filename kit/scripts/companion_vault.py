@@ -68,6 +68,13 @@ def init(c):
         return {"ready": False, "reason": "git is not installed"}
     root.mkdir(parents=True, exist_ok=True)
     if is_repo(root):
+        # A repo made by hand or restored from a backup may know no author, and then every commit fails quietly
+        # ("Author identity unknown"): her history would stop being kept with nobody told. Give it the vault's
+        # own identity when it has none; an identity already there is left alone.
+        if not (_git(root, "config", "user.name").stdout or "").strip():
+            _git(root, "config", "user.name", "tamanitomo")
+        if not (_git(root, "config", "user.email").stdout or "").strip():
+            _git(root, "config", "user.email", "tamanitomo@localhost")
         return {"ready": True, "created": False, "root": str(root)}
     r = _git(root, "init", "-q")
     if r.returncode:

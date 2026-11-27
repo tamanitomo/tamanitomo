@@ -143,6 +143,37 @@ class KeepingTests(unittest.TestCase):
         )
         self.assertFalse([p for p in self.problems() if "backup" in p])
 
+    def test_the_watch_mends_what_it_can_before_telling_anyone(self):
+        self.store.say("tg", "user", "We walked to the old mill and back", at(2, 10, 6))
+        vault = pathlib.Path(self.c.vault)
+        vault.mkdir(parents=True, exist_ok=True)
+        env = {**os.environ, "GIT_AUTHOR_DATE": "2027-02-09T08:00:00-05:00",
+               "GIT_COMMITTER_DATE": "2027-02-09T08:00:00-05:00", "GIT_AUTHOR_NAME": "t",
+               "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}  # fmt: skip
+        subprocess.run(["git", "init", "-q", str(vault)], check=True)
+        (vault / "note.md").write_text("one")
+        subprocess.run(["git", "-C", str(vault), "add", "-A"], check=True)
+        subprocess.run(
+            ["git", "-C", str(vault), "commit", "-qm", "first"], check=True, env=env
+        )
+        (vault / "note.md").write_text("two")
+        self.assertEqual(
+            len(self.problems()), 2
+        )  # behind, and uncommitted (a repo with no author, too)
+        watch.run(self.c, NOW, notify=lambda *a, **k: (True, "test"))
+        healed = (self.c.home / "state" / "companion-watch-healed.jsonl").read_text()
+        self.assertIn("copied 1 message(s) the archive had missed", healed)
+        self.assertIn("committed the vault's waiting changes", healed)
+        log = subprocess.run(
+            ["git", "-C", str(vault), "log", "--format=%s"],
+            capture_output=True,
+            text=True,
+        ).stdout
+        self.assertIn(
+            "health watch: changes left waiting", log
+        )  # the repo had no author; now it has the vault's
+        self.assertFalse([p for p in self.problems() if "archive" in p])
+
     def test_part_of_the_hourly_watch(self):
         self.assertIn(
             "check_keeping",
