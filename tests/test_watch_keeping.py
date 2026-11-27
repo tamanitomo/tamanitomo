@@ -174,6 +174,47 @@ class KeepingTests(unittest.TestCase):
         )  # the repo had no author; now it has the vault's
         self.assertFalse([p for p in self.problems() if "archive" in p])
 
+    def fts(self):
+        with self.store.db() as db:
+            db.executescript("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(content);
+                INSERT INTO messages_fts(rowid, content) SELECT id, content FROM messages;
+            """)
+
+    def test_her_recall_drilled_against_things_said_long_ago(self):
+        import random
+        from unittest.mock import patch
+
+        old = [
+            "The lighthouse keeper waved at us from the gallery",
+            "We bought a kite shaped like a heron at the fair",
+            "My sister finally finished the quilt with the blue squares",
+            "The bakery on Elm closed early because of the storm",
+        ]
+        for n, text in enumerate(old):
+            self.store.say("tg", "user", text, at(1, 2 + n, 9))
+        for n in range(30):
+            self.store.say("tg", "user", f"maybe we should see the storm tonight {n}", at(2, 9, 8) + n)
+        self.fts()
+        archive.update(self.c, now=NOW)
+        report = watch.recall_drill(self.c, NOW, rng=random.Random(1))
+        self.assertEqual((report["tried"], report["found"]), (4, 4), report)  # only lines a month old or more
+        self.assertEqual(json.loads(watch.recall_drill_path(self.c).read_text())["found"], 4)
+        self.assertEqual(watch.check_recall(self.c, NOW), [])
+        # A broken search: the next drill misses, and the hourly checks say so (with the dates), without re-running
+        # the drill until a week has passed.
+        stale = NOW + dt.timedelta(days=8)
+        with patch("companion_recall.search", return_value={"results": []}):
+            found = watch.check_recall(self.c, stale)
+        self.assertTrue(found and "her recall missed 4 of 4" in found[0], found)
+        self.assertIn("2027-01-02", found[0])
+        with patch("companion_recall.search") as search:
+            self.assertTrue(watch.check_recall(self.c, stale + dt.timedelta(hours=1)))
+        search.assert_not_called()
+
+    def test_no_archive_no_drill_problem(self):
+        self.assertEqual(watch.check_recall(self.c, NOW), [])
+
     def test_part_of_the_hourly_watch(self):
         self.assertIn(
             "check_keeping",

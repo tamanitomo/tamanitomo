@@ -302,6 +302,28 @@ class RecallCallbacksTests(unittest.TestCase):
         self.assertEqual(result["results"][0]["excerpt"], "Interview latest update")
         self.assertTrue(result["warnings"])
 
+    def test_an_old_message_with_every_word_is_found_past_many_recent_ones(self):
+        # The recall drill's finding (3.36): a common word on hundreds of recent messages used to fill the bounded
+        # candidate window, so the old message holding all the words was never even read.
+        for number in range(250):
+            self.say(f"maybe later, item {number}", days=1 + number / 1000)
+        self.say("That is the dream, but maybe it will rain", days=200)
+        result = self.search("dream maybe rain")
+        self.assertEqual(
+            result["results"][0]["excerpt"], "That is the dream, but maybe it will rain"
+        )
+        self.assertEqual(result["results"][0]["matched"], ["dream", "maybe", "rain"])
+
+    def test_two_of_three_words_still_beat_one_common_word(self):
+        for number in range(250):
+            self.say(f"maybe later, item {number}", days=1 + number / 1000)
+        self.say("We kept the lighthouse key, maybe", days=300)
+        result = self.search("lighthouse maybe gondola")
+        self.assertIn(
+            "We kept the lighthouse key, maybe",
+            [r["excerpt"] for r in result["results"]],
+        )
+
     def test_exhausted_budget_performs_no_transcript_search(self):
         self.say("Interview private context")
         with patch("companion_transcript.owner_evidence") as evidence:

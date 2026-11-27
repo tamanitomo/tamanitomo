@@ -1,3 +1,16 @@
+## 3.36.0 — Her far memory (2026-11-27)
+
+- **Recall reaches the far past again.** `companion_transcript` search ORed the query words and read the 200
+  newest matches, so one common word on hundreds of recent messages kept an old message holding every word
+  from ever being read; ranking afterwards could not bring back what was never fetched. Candidates now come in
+  tiers (every word, then any two, then any one), each newest first and bounded, deduplicated. On a real
+  history, her search found 6 of 15 of the human's own lines from a month or more ago before, and 50 of 50 after;
+  a search still takes well under a tenth of a second.
+- **Her recall, drilled weekly** (`companion_watch.check_recall`, in the hourly health watch, no model): a few of
+  the human's own lines at least 30 days old, sampled from the vault's conversation archive, each searched by its
+  most distinctive words the way her recall tool searches; two or more misses raise a problem, with the dates.
+  The verdict is kept in `state/recall-drill.json`; `companion_watch.py --recall-drill` tries again now.
+
 ## 3.35.0 — A touch, now and then (2026-11-27)
 
 - **A thought of them can become a touch on their watch.** The autonomy job's outreach rules gain

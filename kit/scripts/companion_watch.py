@@ -454,6 +454,135 @@ CHAPTER_LATE_DAYS = (
 BACKUP_STALE_HOURS = (
     36  # a backup that reports itself (state/vault-backup-last.json) this old
 )
+RECALL_DRILL_DAYS = 7  # how often her recall is tried against things they said long ago
+RECALL_DRILL_TRIES = 5
+RECALL_DRILL_MIN_AGE_DAYS = (
+    30  # only lines at least this old: the drill is about the far past
+)
+
+
+def recall_drill_path(c):
+    return pathlib.Path(c.home) / "state" / "recall-drill.json"
+
+
+def _drill_sample(c, now, tries, rng):
+    """A uniform random handful of their own lines (six words or more) from the vault's conversation archive, at
+    least RECALL_DRILL_MIN_AGE_DAYS old, read as a stream (reservoir sampling) so a decade of months costs no memory.
+    """
+    cutoff = now - dt.timedelta(days=RECALL_DRILL_MIN_AGE_DAYS)
+    picks, seen = [], 0
+    import companion_archive as archive
+
+    for path in sorted(archive.folder(c).glob("*/*.jsonl")):
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                row = json.loads(line)
+                at = dt.datetime.fromisoformat(str(row.get("at")))
+            except (ValueError, TypeError):
+                continue
+            if at.tzinfo is None:
+                at = at.replace(tzinfo=now.tzinfo)
+            text = str(row.get("text") or "")
+            if row.get("who") != "owner" or at > cutoff or len(text.split()) < 6:
+                continue
+            seen += 1
+            item = {"session": row.get("session"), "at": at, "text": text}
+            if len(picks) < tries:
+                picks.append(item)
+            else:
+                j = rng.randrange(seen)
+                if j < tries:
+                    picks[j] = item
+    return picks
+
+
+def _drill_found(row, result):
+    """Did a recall result bring back this very line: the same session within two minutes, or its own words."""
+    head = " ".join(row["text"].split())[:48].lower()
+    for r in result.get("results") or []:
+        stamp = r.get("timestamp")
+        if stamp is None and r.get("recorded_at"):
+            try:
+                stamp = dt.datetime.fromisoformat(str(r["recorded_at"])).timestamp()
+            except ValueError:
+                stamp = None
+        if (
+            r.get("session") == row["session"]
+            and stamp
+            and abs(stamp - row["at"].timestamp()) <= 120
+        ):
+            return True
+        if head and head[:32] in " ".join(str(r.get("excerpt") or "").split()).lower():
+            return True
+    return False
+
+
+def recall_drill(c, now, tries=RECALL_DRILL_TRIES, rng=None):
+    """Try her recall the way she uses it: a few of their own lines from at least a month ago, each searched by its
+    most distinctive words. Returns {"at", "tried", "found", "missed": [dates]} and keeps it in state/recall-drill.json.
+    No model is called; only her own search runs."""
+    import random
+
+    import companion_recall as recall
+
+    rng = rng or random.Random()
+    rows = _drill_sample(c, now, tries, rng)
+    stop = recall.stopwords(c)
+    found, missed = 0, []
+    for row in rows:
+        words = sorted(
+            recall.terms(row["text"], stop, limit=12), key=lambda w: (-len(w), w)
+        )[:4]
+        try:
+            result = recall.search(c, " ".join(words), limit=12, seconds=3.0, now=now)
+        except (
+            Exception
+        ):  # noqa: BLE001 -- a search that breaks is a miss, which is the point
+            result = {}
+        if _drill_found(row, result):
+            found += 1
+        else:
+            missed.append(row["at"].date().isoformat())
+    report = {
+        "at": now.isoformat(),
+        "tried": len(rows),
+        "found": found,
+        "missed": missed,
+    }
+    path = recall_drill_path(c)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(report), encoding="utf-8")
+    return report
+
+
+def check_recall(c, now):
+    """Her recall, tried once a week against things they said long ago; the last drill's verdict until the next."""
+    try:
+        last = json.loads(recall_drill_path(c).read_text(encoding="utf-8"))
+        at = dt.datetime.fromisoformat(str(last.get("at")))
+        if at.tzinfo is None:
+            at = at.replace(tzinfo=now.tzinfo)
+    except (OSError, ValueError, TypeError):
+        last, at = None, None
+    if last is None or now - at >= dt.timedelta(days=RECALL_DRILL_DAYS):
+        try:
+            last = recall_drill(c, now)
+        except (
+            Exception
+        ):  # noqa: BLE001 -- no archive yet, or one this check cannot read
+            return []
+    tried, found = int(last.get("tried") or 0), int(last.get("found") or 0)
+    if tried >= 3 and tried - found >= 2:
+        days = ", ".join((last.get("missed") or [])[:3])
+        return [
+            f"her recall missed {tried - found} of {tried} things {c.human} said a month or more ago (from {days}); "
+            "her memory search may be broken (companion_watch.py --recall-drill tries again now)"
+        ]
+    return []
 
 
 def check_keeping(c, now):
@@ -572,6 +701,7 @@ def problems(c, now=None):
         lambda: check_senses(c, now),
         lambda: check_delivery(c, now),
         lambda: check_keeping(c, now),
+        lambda: check_recall(c, now),
     ):
         try:
             out += check()
@@ -803,8 +933,24 @@ def main():
     p.add_argument(
         "--json", action="store_true", help="report even when healthy, as JSON"
     )
+    p.add_argument(
+        "--recall-drill",
+        action="store_true",
+        help="try her recall now against a few things said a month or more ago",
+    )
     a = p.parse_args()
     c = cc.load(a.home)
+    if a.recall_drill:
+        report = recall_drill(c, dt.datetime.now(_tz(c)))
+        print(
+            f"her recall found {report['found']} of {report['tried']} lines from a month or more ago"
+            + (
+                f"; missed lines from {', '.join(report['missed'])}"
+                if report["missed"]
+                else ""
+            )
+        )
+        return 0
     if a.json:
         print(json.dumps(run(c, record=False), ensure_ascii=False, indent=2))
         return 0

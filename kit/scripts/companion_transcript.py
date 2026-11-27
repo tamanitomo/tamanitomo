@@ -11,6 +11,7 @@ lock, or additional message store.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import itertools
 import json
 import re
 import unicodedata
@@ -617,7 +618,11 @@ class Transcript:
 
         The FTS index narrows candidates only. Session and message identity,
         visibility, compression and source eligibility still pass through _record.
-        Newest matches win ties, so a busy archive does not hide later corrections.
+        Candidates come in tiers: messages holding every word, then any two of them,
+        then any one, each tier newest first and bounded. Newest matches win ties, so a
+        busy archive does not hide later corrections; and a common word on hundreds of
+        recent messages no longer hides the old message that holds all of them, which
+        is what kept far-back memories out of reach as the history grew (3.36).
         """
         if not words or time.monotonic() >= deadline:
             return [], False
@@ -625,28 +630,45 @@ class Transcript:
             f"PRAGMA busy_timeout={max(1, int((deadline-time.monotonic())*1000))}"
         )
         self.con.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
-        match = " OR ".join('"' + word.replace('"', '""') + '"' for word in words)
+        quoted = ['"' + word.replace('"', '""') + '"' for word in words]
+        tiers = []
+        if len(quoted) > 1:
+            tiers.append(" AND ".join(quoted))
+        if len(quoted) > 2:
+            tiers.append(
+                " OR ".join(
+                    f"({a} AND {b})" for a, b in itertools.combinations(quoted, 2)
+                )
+            )
+        tiers.append(" OR ".join(quoted))
         condition = " AND m.role='user' AND m.id IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?)"
-        values = [*self.params, match]
+        extra = []
         if since is not None:
             condition += " AND m.timestamp>=?"
-            values.append(float(since))
+            extra.append(float(since))
         if until is not None:
             condition += " AND m.timestamp<=?"
-            values.append(float(until))
-        rows = self.con.execute(
-            self._select()
-            + condition
-            + " ORDER BY m.timestamp DESC,m.id DESC LIMIT 200",
-            values,
-        ).fetchall()
-        records = []
-        for row in rows:
-            if time.monotonic() >= deadline:
-                return records, False
-            record = self._record(row)
-            if record and len(record.content) <= 30000:
+            extra.append(float(until))
+        records, seen, complete = [], set(), True
+        for match in tiers:
+            rows = self.con.execute(
+                self._select()
+                + condition
+                + " ORDER BY m.timestamp DESC,m.id DESC LIMIT 200",
+                [*self.params, match, *extra],
+            ).fetchall()
+            complete = complete and len(rows) < 200
+            for row in rows:
+                if time.monotonic() >= deadline:
+                    return records, False
+                record = self._record(row)
+                if not record or len(record.content) > 30000:
+                    continue
+                key = (record.source_session, record.source_message)
+                if key in seen:
+                    continue
+                seen.add(key)
                 records.append(record)
                 if len(records) >= limit:
                     return records, False
-        return records, len(rows) < 200
+        return records, complete

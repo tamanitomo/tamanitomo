@@ -443,6 +443,8 @@ reading), her context also gets a "Comings and goings" line for 45 minutes after
 outside quiet hours (a message's own expiry still decides whether it goes later), and quiet hours lifted once they
 have been awake ten minutes within the night's last three hours. A stale or missing file changes nothing.
 
+**Her recall, drilled** (`companion_watch.check_recall`, weekly within the hourly health watch, no model): up to five of the human's own lines (six words or more, at least 30 days old) are sampled from the vault's conversation archive and each is searched by its four most distinctive words through `companion_recall.search`; a line counts as found when a result is the same session within two minutes or carries its words. Two or more misses raise a problem naming the lines' dates. The last verdict is in `state/recall-drill.json`; `companion_watch.py --recall-drill` runs one now. Transcript candidates are fetched in tiers (every word, any two, any one; newest first within each), so old messages that hold all the words are never crowded out by recent one-word matches.
+
 **Her memory, watched** (`companion_watch.check_keeping`, in the hourly health watch, no model): it raises
 a problem when the conversation archive is more than three hours behind the conversations, when the vault
 has had changes waiting twelve hours without a commit, when a month's chapter is five days overdue while

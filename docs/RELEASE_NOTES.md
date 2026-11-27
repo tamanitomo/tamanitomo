@@ -1,4 +1,14 @@
-Tamanitomo 3.35.0: a touch, now and then.
+Tamanitomo 3.36.0: her far memory.
+
+- **She can find what you said long ago, not just lately.** When you ask her about something from months back,
+  her search no longer gets crowded out by recent messages that share one ordinary word with it. On a real
+  history it went from finding fewer than half of those old lines to finding all of them.
+- **Her memory is now tested every week**: a few things you said a month or more ago are looked up the way she
+  looks things up, and the health watch tells you if she starts missing them.
+
+From 3.24.0, no Repair is needed. Updating from 3.23 or earlier, run Repair once.
+
+Previous: 3.35.0 a touch, now and then.
 
 - **With a watch connected, she can think of you as a touch**: once in a while, a light tap on your wrist with a
   few words of hers, when she is really thinking of you. It counts like any message she sends first, and never
