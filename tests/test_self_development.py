@@ -6,7 +6,6 @@ planner proves natural frontier-model behavior.
 """
 
 import datetime as dt
-import json
 import pathlib
 import sys
 from concurrent.futures import ThreadPoolExecutor

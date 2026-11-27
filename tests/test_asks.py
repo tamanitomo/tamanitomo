@@ -1,7 +1,6 @@
 """She can ask things of the human, and whether they come through can land."""
 
 import datetime as dt
-import json
 from unittest.mock import patch
 
 import pytest

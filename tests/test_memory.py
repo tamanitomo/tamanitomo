@@ -27,26 +27,26 @@ BUDGET_WINDOWS = [2048, 4096, 8192, 16384, 32768, 65536, 131072, 200192, 272000,
 class BudgetTests(unittest.TestCase):
 
     def test_allocation_never_exceeds_the_cap(self):
-        for ctx in BUDGET_WINDOWS:
-            b = cc.Companion(context_tokens=ctx).budgets()
+        for window in BUDGET_WINDOWS:
+            b = cc.Companion(context_tokens=window).budgets()
             used = sum((v for k, v in b.items() if k != "total"))
-            self.assertLessEqual(used, b["total"], f"overspent at {ctx}")
+            self.assertLessEqual(used, b["total"], f"overspent at {window}")
 
     def test_rules_and_tail_are_always_reserved(self):
-        for ctx in BUDGET_WINDOWS:
-            b = cc.Companion(context_tokens=ctx).budgets()
+        for window in BUDGET_WINDOWS:
+            b = cc.Companion(context_tokens=window).budgets()
             self.assertGreater(b["rules"], 0)
             self.assertGreater(b["tail"], 0)
 
     def test_priority_is_respected_when_sections_compete(self):
-        for ctx in BUDGET_WINDOWS:
-            b = cc.Companion(context_tokens=ctx).budgets()
+        for window in BUDGET_WINDOWS:
+            b = cc.Companion(context_tokens=window).budgets()
             # The facts reserve sits outside the weighted pool on purpose.
-            b["facts"] -= cc.facts_reserve(ctx)
+            b["facts"] -= cc.facts_reserve(window)
             present = [k for k in cc._PRIORITY if b[k]]
             vals = [b[k] for k in present]
             self.assertEqual(
-                vals, sorted(vals, reverse=True), f"inverted at {ctx}: {b}"
+                vals, sorted(vals, reverse=True), f"inverted at {window}: {b}"
             )
 
     def test_small_windows_drop_sections_rather_than_starve_them(self):
@@ -1798,7 +1798,7 @@ class HeldDecisionProtocolTests(unittest.TestCase):
     def test_every_interruption_boundary_recovers_to_one_outcome(self):
         from unittest import mock
 
-        real_append, real_record = (slf._append, slf.record_fact)
+        real_append = slf._append
 
         class Crash(Exception):
             pass

@@ -115,7 +115,6 @@ def main(argv=None):
     out.mkdir(parents=True, exist_ok=False)
     files = {}
     for given in map(pathlib.Path, args.inputs):
-        base = given if given.is_dir() else given.parent
         for src in sorted([given] if given.is_file() else [p for p in given.rglob('*') if p.is_file()]):
             rel = pathlib.Path(given.name) / src.relative_to(given) if given.is_dir() else pathlib.Path(src.name)
             dst = out / rel

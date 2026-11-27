@@ -1231,14 +1231,14 @@ class ModelPlanApiTests(WorkspaceFixture):
         specs = json.loads(
             (Path(__file__).resolve().parents[1] / "kit/templates/cron/manifest.json").read_text()
         )["jobs"]
-        for comp, provider, model in (
+        for comp, provider_name, model in (
             (self.c, "xai-oauth", "grok-4.6"),
             (self.other, "custom", "local-model"),
         ):
             (comp.home / "config.yaml").write_text(
                 yaml.safe_dump(
                     {
-                        "model": {"provider": provider, "default": model},
+                        "model": {"provider": provider_name, "default": model},
                         "auxiliary": {
                             "vision": {
                                 "provider": "custom",
@@ -1259,7 +1259,7 @@ class ModelPlanApiTests(WorkspaceFixture):
                     "id": f"{comp.profile}-{s['key']}",
                     "name": s["name"].replace("{{AGENT}}", comp.agent),
                     "no_agent": bool(s.get("no_agent")),
-                    "provider": provider,
+                    "provider": provider_name,
                     "model": model,
                     "enabled": True,
                 }
