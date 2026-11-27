@@ -290,6 +290,65 @@ def read(c, now=None):
     return {**plan, "since": since}
 
 
+ARRIVAL_WINDOW = 45  # minutes an arrival or a departure stays news
+
+
+def comings(c, now=None):
+    """One line when they just got somewhere or just left somewhere (in the last ARRIVAL_WINDOW minutes), from
+    `ambient/where.json`; "" otherwise. Only a real change counts: a client writes "from" when it saw them come from
+    somewhere, never on its first reading, so a restarted bridge is not an arrival."""
+    now = now or dt.datetime.now(_tz(c))
+    try:
+        data = json.loads(
+            (c.soul_dir / "ambient" / "where.json").read_text(encoding="utf-8")
+        )
+        since = dt.datetime.fromisoformat(str(data.get("since")))
+        came = str(data.get("from") or "").strip()
+    except (OSError, ValueError, TypeError, AttributeError):
+        return ""
+    if since.tzinfo is None:
+        since = since.replace(tzinfo=_tz(c))
+    age = (now - since).total_seconds() / 60
+    if not came or not (0 <= age <= ARRIVAL_WINDOW):
+        return ""
+    stay = ""
+    try:
+        before = dt.datetime.fromisoformat(str(data.get("from_since")))
+        if before.tzinfo is None:
+            before = before.replace(tzinfo=_tz(c))
+        minutes = (since - before).total_seconds() / 60
+        if minutes >= 20:
+            stay = f", after {_span(minutes)} " + (
+                "out" if came == "out" else f"at {came}"
+            )
+    except (TypeError, ValueError):
+        pass
+    at = since.astimezone(_tz(c)).strftime("%H:%M")
+    place, left = (
+        str(data.get("place") or "").strip(),
+        str(data.get("left") or "").strip(),
+    )
+    if place:
+        line = (
+            f"{c.human} got "
+            + ("home" if place.lower() == "home" else f"to {place}")
+            + f" at {at}{stay}."
+        )
+    elif left:
+        line = (
+            f"{c.human} left "
+            + ("home" if left.lower() == "home" else left)
+            + f" at {at}{stay}."
+        )
+    else:
+        return ""
+    return (
+        line
+        + " If it fits, notice it the way someone who loves them would (a welcome home, how was it); never "
+        "track, question or keep score of where they go."
+    )
+
+
 def render(c, now=None):
     """(text, data) for the senses job and her context: nothing at all when their word and the evening agree."""
     now = now or dt.datetime.now(_tz(c))

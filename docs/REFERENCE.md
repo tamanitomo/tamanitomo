@@ -431,7 +431,9 @@ Hermes's no-reply marker (`[SILENT]`, `NO_REPLY`) said nothing, so it is never k
 bridge may tell her where the human is as a named place and times, never coordinates:
 `{"checked_at", "updated_at", "place" ("" when between places), "since", "left", "moving", "source"}`.
 `plans` uses it ("they got to the shop at 00:15" after a goodnight; "they left Home"); arriving at a place
-named Home is never a mismatch.
+named Home is never a mismatch. With `"from"` and `"from_since"` (written only on a real change, never a first
+reading), her context also gets a "Comings and goings" line for 45 minutes after an arrival or a departure
+("got home at 17:40, after 9 hours out"), with the rule never to track or question where they go.
 
 **Her memory, watched** (`companion_watch.check_keeping`, in the hourly health watch, no model): it raises
 a problem when the conversation archive is more than three hours behind the conversations, when the vault

@@ -199,6 +199,50 @@ class PlanTests(unittest.TestCase):
             )
             self.assertNotIn("Their word", out)
 
+    def test_comings_and_goings(self):
+        where = self.c.soul_dir / "ambient/where.json"
+        where.write_text(json.dumps({"place": "Home", "since": on(5, 17, 40).isoformat(), "from": "out",
+                                     "from_since": on(5, 8, 30).isoformat(), "source": "wifi"}))  # fmt: skip
+        text = plans.comings(self.c, on(5, 17, 55))
+        self.assertTrue(
+            text.startswith("Robin got home at 17:40, after 9 hours 10 minutes out."),
+            text,
+        )
+        self.assertIn("never track, question or keep score", text)
+        self.assertEqual(
+            plans.comings(self.c, on(5, 18, 40)), ""
+        )  # old news after 45 minutes
+        where.write_text(json.dumps({"place": "", "left": "Home", "since": on(5, 8, 30).isoformat(), "from": "Home",
+                                     "from_since": on(4, 18, 0).isoformat()}))  # fmt: skip
+        self.assertTrue(
+            plans.comings(self.c, on(5, 8, 40)).startswith(
+                "Robin left home at 08:30, after 14 hours 30 minutes at Home."
+            )
+        )
+        where.write_text(
+            json.dumps(
+                {"place": "Home", "since": on(5, 17, 40).isoformat(), "source": "wifi"}
+            )
+        )
+        self.assertEqual(
+            plans.comings(self.c, on(5, 17, 45)), ""
+        )  # a first reading (a restart) is not an arrival
+        where.write_text(
+            json.dumps(
+                {
+                    "place": "Corner Market",
+                    "since": on(5, 17, 40).isoformat(),
+                    "from": "out",
+                }
+            )
+        )
+        out = ctx.build(
+            self.c,
+            {"extra": {"user_message": "hey", "platform": "telegram"}},
+            now=on(5, 17, 50),
+        )
+        self.assertIn("[Comings and goings] Robin got to Corner Market at 17:40.", out)
+
     def test_her_context_reads_it_live(self):
         self.say(on(5, 23, 40), "night night")
         self.say(on(6, 0, 30), "ok one more episode")

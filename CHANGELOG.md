@@ -1,3 +1,11 @@
+## 3.33.0 — Comings and goings (2026-11-27)
+
+- **She knows when you get home.** When a client's `where.json` says where the human came from (`from`,
+  `from_since`, written only on a real change, so a restarted bridge is never an arrival), her context gets a
+  "Comings and goings" line for 45 minutes: "got home at 17:40, after 9 hours out", "left home at 08:30". A
+  welcome home if she would say it anyway; never tracking, questioning or keeping score of where they go. Part of
+  the Your word sense.
+
 ## 3.32.0 — It mends itself (2026-11-27)
 
 - **The health watch mends what keeping her memory can mend, before telling anyone**: conversations the

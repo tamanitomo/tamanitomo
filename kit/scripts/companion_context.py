@@ -1201,6 +1201,9 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
             word, _data = companion_plans.render(c, now)
             if word:
                 parts.append((5, "[" + word.replace("Their word:", "Their word]", 1)))
+            moved = companion_plans.comings(c, now)
+            if moved:
+                parts.append((4, "[Comings and goings] " + moved))
         except (
             Exception
         ):  # noqa: BLE001 -- an optional section never costs her the reply
