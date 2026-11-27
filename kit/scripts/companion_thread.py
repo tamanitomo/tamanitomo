@@ -83,6 +83,65 @@ def _shares_store(c, resolved):
 
 _recent_rows: dict = {}
 
+# Conversations with the human by their nature. Hermes files the app's own chats (a
+# voice device, the app window) as one-shot runs, and a game add-on's chat as an API
+# conversation; those join when the app knows them as the human's
+# (_owner_conversations). Without them the last message, the gap and her missing the
+# human ignored a whole evening's talk in a game.
+THREAD_SOURCES = ("telegram", "cli", "desktop", "tui", "discord")
+_owner_cache: dict = {}
+
+
+def _stamp(path):
+    try:
+        stat = pathlib.Path(path).stat()
+        return (stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return None
+
+
+def _owner_conversations(c, resolved):
+    """Session ids of the human's conversations outside THREAD_SOURCES, with the
+    transcripts they continue: the app's own chats and the API conversations
+    companion.json names as the human's (companion_transcript decides both)."""
+    import companion_transcript as transcript
+
+    try:
+        named = json.dumps(
+            getattr(c, "owner_api_conversations", None) or {},
+            sort_keys=True,
+            default=str,
+        )
+        key = (
+            str(resolved),
+            _store_version(resolved),
+            named,
+            _stamp(transcript._runtime().workspace_sessions_path(c)),
+            _stamp(pathlib.Path(c.home) / transcript.RESPONSE_STORE),
+        )
+    except (OSError, ValueError, TypeError, ImportError):
+        return ()
+    if key in _owner_cache:
+        return _owner_cache[key]
+
+    def collect(view):
+        if view is None:
+            return ()
+        ids = set()
+        for session in set(view.api) | set(view.workspace):
+            if view.owner_session(session) in ("api", "workspace"):
+                ids.update(view.lineage(session))
+        return tuple(sorted(ids))
+
+    try:
+        found = transcript.owner_evidence(c, collect)
+    except (transcript.SourceUnavailable, sqlite3.Error, OSError, ValueError):
+        found = ()
+    if len(_owner_cache) > 16:
+        _owner_cache.clear()
+    _owner_cache[key] = found
+    return found
+
 
 def _store_version(db):
     out = []
@@ -100,7 +159,8 @@ def _store_scope(c):
 
     The one place that decides which conversations belong to this companion. A
     shared store must never let one companion read another's messages, so every
-    reader goes through here rather than re-deriving the scope.
+    reader goes through here rather than re-deriving the scope. The scope also keeps
+    to conversations with the human: THREAD_SOURCES and _owner_conversations.
     """
     db = c.home / "state.db"
     if not db.exists():
@@ -114,22 +174,17 @@ def _store_scope(c):
     except OSError as exc:
         return None, f"session database unreadable: {exc}"
     if c.is_root:
-        return (
-            resolved,
-            "lower(coalesce(s.profile_name,'')) IN ('','default')",
-            (),
-        ), None
-    if _shares_store(c, resolved):
-        return (
-            resolved,
-            "lower(coalesce(s.profile_name,''))=?",
-            (c.profile.lower(),),
-        ), None
-    return (
-        resolved,
-        "lower(coalesce(s.profile_name,'')) IN ('','default',?)",
-        (c.profile.lower(),),
-    ), None
+        scope, params = "lower(coalesce(s.profile_name,'')) IN ('','default')", ()
+    elif _shares_store(c, resolved):
+        scope, params = "lower(coalesce(s.profile_name,''))=?", (c.profile.lower(),)
+    else:
+        scope = "lower(coalesce(s.profile_name,'')) IN ('','default',?)"
+        params = (c.profile.lower(),)
+    sources = "s.source IN (" + ",".join(f"'{s}'" for s in THREAD_SOURCES) + ")"
+    extra = _owner_conversations(c, resolved)
+    if extra:
+        sources = f"({sources} OR s.id IN ({','.join('?' for _ in extra)}))"
+    return (resolved, f"{scope} AND {sources}", (*params, *extra)), None
 
 
 def _message_query(con, scope, columns="m.role,m.content,m.timestamp"):
@@ -142,8 +197,7 @@ def _message_query(con, scope, columns="m.role,m.content,m.timestamp"):
     return f"""
         SELECT {columns} FROM messages m JOIN sessions s ON s.id=m.session_id
         WHERE m.role IN ('user','assistant') AND {scope} {visible}
-          AND coalesce(m._compressed_summary,0)=0 AND coalesce(m.content,'')<>''
-          AND s.source IN ('telegram','cli','desktop','tui','discord')"""
+          AND coalesce(m._compressed_summary,0)=0 AND coalesce(m.content,'')<>''"""
 
 
 def _query_rows(con, scope, params):

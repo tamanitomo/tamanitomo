@@ -7,6 +7,7 @@ one turn each and keep one plain snapshot.
 """
 
 import datetime as dt
+import os
 import pathlib
 import sys
 import tempfile
@@ -71,6 +72,23 @@ class ConversationTurnTests(unittest.TestCase):
         self.assertNotIn(
             "[Current time:", third
         )  # nothing changed since the last update
+
+    def test_a_section_whose_age_only_ticks_is_not_sent_again(self):
+        # "confirmed 3 minutes ago" becoming "5 minutes ago" is not news: each turn
+        # re-sent the whole section for it, and the history kept every copy.
+        self.c.soul_dir.mkdir(parents=True, exist_ok=True)
+        active = self.c.soul_dir / "ActiveContext.md"
+        active.write_text("## Right now\nReading by the window.\n", encoding="utf-8")
+        os.utime(active, (NOW.timestamp(), NOW.timestamp()))
+        label = "[Current handoff — the present it describes was confirmed"
+        first = self.turn("Hi", first=True)
+        self.assertIn(label + " just now", first)
+        history = [self.sent("Hi", first)]
+        soon = self.turn("Page turner?", history, minutes=3)
+        self.assertNotIn(label, soon)
+        history.append(self.sent("Page turner?", soon))
+        later = self.turn("Still?", history, minutes=45)
+        self.assertIn(label + " 45 minutes ago", later)
 
     def test_a_snapshot_the_history_no_longer_holds_is_sent_whole_again(self):
         self.turn("Hi", first=True)

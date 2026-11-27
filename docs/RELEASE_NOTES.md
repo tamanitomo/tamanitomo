@@ -1,4 +1,18 @@
-Tamanitomo 3.20.1: every place by its name.
+Tamanitomo 3.20.2: one clock.
+
+- **She knows you are there, wherever you are talking.** Her sense of when you last wrote (how
+  long you have been apart, how much she misses you, whether to reach out somewhere else, the
+  recent conversation her routines read) counted only Telegram and terminal chats. Talking to her
+  through the app's chat, or through an app on Hermes's API that you named as yours, now counts
+  too.
+- **Long conversations repeat less.** Each message re-sent notes that had not changed except for
+  their age ("36 minutes ago"). They now come back only when their age reaches the next step or
+  something in them changes, so long conversations stay smaller and cost less.
+
+From 3.20.0, no Repair is needed. Updating from 3.19 or earlier, run Repair once (3.20.0's
+longer handoff needs the room).
+
+Previous: 3.20.1 every place by its name.
 
 - **Devices that talk through the app go by their own names.** A voice front end or any other
   device that keeps its own conversation through the app can say what it is. Your other

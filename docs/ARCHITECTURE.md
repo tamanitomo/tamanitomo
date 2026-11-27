@@ -133,6 +133,21 @@ kept) before the turn runs: the companion's own turn there says where it is,
 her other conversations quote those messages under that name, the feed shows
 it, and the app's own window does not take that conversation over.
 
+The same conversations count toward her sense of when the human last wrote.
+`companion_thread` (the last message each way, the gap, the recent tail, the
+days the human wrote) reads messaging and terminal sessions plus the
+conversations `companion_transcript` knows as the human's elsewhere: the app's
+own chats and the named API conversations, with the transcripts they continue.
+That clock feeds her missing the human, her choice to reach out on another
+channel, the recent conversation her routines read, and the rhythm she learns.
+
+A conversation's first turn carries the whole continuity snapshot and later
+turns only the sections whose digest it has not seen. Some sections carry their
+age ("confirmed 36 minutes ago", "4.32h"), which changes every minute while the
+section says the same, so the digest reads an age by steps (10, 30 and 90
+minutes; 3, 6, 12, 24 and 48 hours; then days): the section comes back when its
+age reaches the next step or anything else in it changes.
+
 These jobs need no language-model completion. They can maintain records and
 enforce policy during provider outages without paying for an agent turn that
 only checks a clock or moves a file. They still depend on the files, devices,

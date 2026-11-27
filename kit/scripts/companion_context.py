@@ -47,8 +47,33 @@ TURNS_DIR = "context-turns"
 TURNS_KEEP_SECONDS = 3 * 86400
 
 
+# A section's age ("36 minutes ago", "4.32h") changes every minute while what the
+# section says stands. Hashed as written, each later turn re-sent the unchanged section,
+# 4,000-6,000 characters a message that the history then kept. The digest reads an age by
+# these steps (minutes), so a section comes back when its age reaches the next step or
+# anything else in it changes.
+AGE_STEPS = (10, 30, 90, 180, 360, 720, 1440, 2880)
+_AGO = re.compile(r"\b(\d+) (minute|hour|day)s? ago\b")
+_HOURS = re.compile(r"(?<![\w.])(\d+(?:\.\d+)?)h\b")
+_MINUTES = {"minute": 1, "hour": 60, "day": 1440}
+
+
+def age_step(minutes):
+    for edge in AGE_STEPS:
+        if minutes < edge:
+            return f"<{edge}m"
+    return f"{int(minutes // 1440)}d"
+
+
+def settled(text):
+    """The text with each age read by AGE_STEPS: what a section digest compares."""
+    text = text.replace("just now", age_step(0))
+    text = _AGO.sub(lambda m: age_step(int(m.group(1)) * _MINUTES[m.group(2)]), text)
+    return _HOURS.sub(lambda m: age_step(float(m.group(1)) * 60), text)
+
+
 def section_digest(text):
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:20]
+    return hashlib.sha256(settled(text).encode("utf-8")).hexdigest()[:20]
 
 
 def _turns_path(c, session):

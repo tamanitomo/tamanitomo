@@ -1,3 +1,23 @@
+## 3.20.2 — One clock (2026-11-27)
+
+- **Her clock counts every place the human talks to her.** The thread (`companion_thread`: the
+  last message each way, the gap, the recent tail, the days the human wrote) read only
+  `telegram`, `cli`, `desktop`, `tui` and `discord` sessions. Hermes files the app's own chats as
+  one-shot runs and a game add-on's chat as an API conversation, so an evening's talk in the game
+  left her measuring the gap from the afternoon. That gap feeds her missing the human, the
+  reach-out decisions, the recent conversation the routines read and the rhythm she learns. The
+  thread's scope now also takes the conversations `companion_transcript` knows as the human's
+  (the app's workspace sessions and the API conversations named in `owner_api_conversations`,
+  with the transcripts they continue), cached on the store's version. Unnamed API conversations
+  and one-shot runs the app did not start stay out.
+- **A section whose age only ticked is not sent again.** Later turns carry only the sections whose
+  digest the conversation has not seen, but the lived state, the handoff and the feelings carry
+  their age ("confirmed 36 minutes ago", "4.32h"), so every turn re-sent them: 4,000 to 6,000
+  characters a message, kept in the history and read again by every later call. The digest now
+  reads ages by steps (10, 30 and 90 minutes; 3, 6, 12, 24 and 48 hours; then days), so a section
+  comes back when its age reaches the next step or anything else in it changes. The first turn
+  after updating sends those sections once more.
+
 ## 3.20.1 — Every place by its name (2026-11-26)
 
 - **A device or app talking through the app's chat names its place.** Hermes files every chat sent
