@@ -1209,6 +1209,20 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
         ):  # noqa: BLE001 -- an optional section never costs her the reply
             pass
 
+    # Their sleep (companion_body): read live from a wearable's body.json, because "asleep since
+    # 23:40" is worth nothing an hour late. Nothing unless a device said so in the last half hour.
+    if "sleep" in (c.sensors or []):
+        try:
+            import companion_body
+
+            line, _data = companion_body.render(c, now)
+            if line:
+                parts.append((4, "[Their sleep] " + line))
+        except (
+            Exception
+        ):  # noqa: BLE001 -- an optional section never costs her the reply
+            pass
+
     # On this day (companion_onthisday): a few true memories from this date, kept by the
     # senses job. Today's file only; a short slot of its own, the first to give way.
     if "onthisday" in (c.sensors or []):
@@ -1284,6 +1298,7 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
                 "scene",
                 "onthisday",
                 "plans",
+                "sleep",
             ):  # each has its own section
                 continue
             t = read(p, 1000).strip()

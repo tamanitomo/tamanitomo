@@ -4,7 +4,8 @@
 A model may write a proposed message, but this maintenance job decides whether
 it may leave the outbox. It checks expiry, not-before time, recipient, content
 permissions, quiet hours and the durable daily allowance. High priority or
-recent recorded human activity can permit delivery during quiet hours; neither
+recent recorded human activity (or, with the sleep sense, a wearable saying they are up for the day) can
+permit delivery during quiet hours, and a wearable saying they sleep holds the rest outside them; neither
 exception raises the daily cap. At most one message is dispatched per run so a
 backlog cannot arrive as a burst.
 
@@ -96,6 +97,17 @@ def recently_active(c, now, minutes=None):
     return (now - when).total_seconds() <= minutes * 60
 
 
+def wearable_says(c, now):
+    """(asleep, up for the day) from a fresh wearable (companion_body, the sleep sense), or (None, False) when
+    nothing says. The sense is a nicety: delivery never depends on it working."""
+    try:
+        import companion_body
+
+        return companion_body.asleep(c, now), companion_body.up_for_the_day(c, now)
+    except Exception:  # noqa: BLE001
+        return None, False
+
+
 def verdict(c, entry, now):
     """Whether this message goes now, and if not, what becomes of it."""
     if outbox.expired(entry, now):
@@ -135,9 +147,17 @@ def verdict(c, entry, now):
                 "reason": f"unprompted {entry.get('content')} waits until you are Friends; until then only when asked",
             }
     asleep = outreach.in_quiet_hours(c, now)
-    awake = asleep and recently_active(c, now)
+    sleeping, up = wearable_says(c, now)
+    # Up for the day by the wearable lifts quiet hours the way writing to her does (only in the night's last hours).
+    awake = asleep and (recently_active(c, now) or up)
     if asleep and entry.get("priority") != "high" and not awake:
         return {"action": "hold", "reason": f"quiet hours until {c.quiet_end}"}
+    if not asleep and sleeping is True and entry.get("priority") != "high":
+        # A lie-in or a nap: it waits until they wake, and its own expiry decides whether it is still worth it.
+        return {
+            "action": "hold",
+            "reason": f"{c.human} is asleep, by the wearable; it waits until {c.h_subj()} wakes",
+        }
     # The quiet-hours bypass is exactly that. The daily cap still applies, because
     # a cap the user set is not a bedtime and being awake does not raise it.
     urgent = entry.get("priority") == "high" or awake

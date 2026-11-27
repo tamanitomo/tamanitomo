@@ -561,6 +561,13 @@ def plans(c, now):
     return companion_plans.render(c, now)
 
 
+def sleep(c, now):
+    """Their sleep, from a wearable's ambient/body.json: asleep since when, or up since this morning."""
+    import companion_body
+
+    return companion_body.render(c, now)
+
+
 def onthisday(c, now):
     """What the two of them had on this date a month, a season, a year or years ago."""
     import companion_onthisday
@@ -720,6 +727,13 @@ REGISTRY = {
         '(more messages, a film starting, still gone an hour after "right back"), she notices, the way a '
         "partner would, and may tease you about it. Never a lecture, never a reason to message you. Read "
         "from her own records; nothing is sent anywhere.",
+    },
+    "sleep": {
+        "fn": "sleep",
+        "needs": "a watch or wearable that writes ambient/body.json",
+        "blurb": "Their sleep, from a watch or wearable that knows: her messages wait while they sleep (a lie-in or "
+        "a nap too), her good morning can go when they are really up, and she knows when they woke and how long "
+        "they slept. States and times only; silent when no device has said anything in the last half hour.",
     },
     "viewing": {
         "fn": "viewing",

@@ -1,4 +1,12 @@
-Tamanitomo 3.33.1: comings and goings, built.
+Tamanitomo 3.34.0: their sleep.
+
+- **If a watch or wearable tells her when you sleep**, her messages wait until you are up (a lie-in or a nap
+  too), and her good morning can arrive when you really wake rather than at a set hour. She knows how you slept.
+  Settings -> Realism -> Little things -> Their sleep. Without such a device nothing changes.
+
+From 3.24.0, no Repair is needed. Updating from 3.23 or earlier, run Repair once.
+
+Previous: 3.33.1 comings and goings, built.
 
 - Nothing changes in how she works: one of the checks run before a release no longer depends on the
   machine running it, so this release could be built. Everything in 3.20 to 3.33 below arrives with it.

@@ -288,6 +288,7 @@ Optional, cheap, silent when they have nothing. Chosen at setup, changeable in t
 | `viewing` | What you watch on your own Plex or Jellyfin (or both: a second server under "Also follow", `media_also`): what is on, what you finished lately, what you watch together. Each item knows its server; one server down leaves the other standing | the server's address and token, set in Settings → Awareness |
 | `onthisday` | What the two of you had on today's date a month, three and six months, and each year ago: something you said, a film you watched together, a moment she kept, a time she felt close. Furthest back first, at most four lines; she may bring one up, once and lightly | nothing; read from her own records |
 | `plans` | Your word: when you said goodnight, brb or gotta go and what followed does not match (more messages on any channel, a game, a film finishing or playing, music on, arriving somewhere or leaving the house per `ambient/where.json`, or still gone long after "right back"), one plain paragraph so she can notice it the way a partner would: a tease, a raised eyebrow, care if it is very late. Read live each turn; nothing when the evening went as you said. Never a lecture or a reason to message you. English phrasing | nothing; read from her own records |
+| `sleep` | Their sleep, from a watch or wearable that writes `ambient/body.json`: asleep since when, or up since this morning and how long they slept. With it, the dispatcher holds her messages while they sleep (a lie-in or a nap too; high priority still goes) and lets a good morning through quiet hours once they have been up ten minutes in the night's last three hours. Read live each turn; silent and without effect when no device has said anything in the last half hour | a device that writes `ambient/body.json` |
 
 **A sensor that cannot report writes nothing and deletes its old file.** Not knowing the weather is
 fine; yesterday's weather presented as today's is not.
@@ -434,6 +435,13 @@ bridge may tell her where the human is as a named place and times, never coordin
 named Home is never a mismatch. With `"from"` and `"from_since"` (written only on a real change, never a first
 reading), her context also gets a "Comings and goings" line for 45 minutes after an arrival or a departure
 ("got home at 17:40, after 9 hours out"), with the rule never to track or question where they go.
+
+**Their sleep** (`ambient/body.json`, written by a client, never by the kit): states and times, nothing medical:
+`{"checked_at", "asleep": true|false, "since" (fell asleep or woke at), "slept_minutes", "source"}`, fresh for
+30 minutes after `checked_at`. With the `sleep` sense on: a context line ("Robin is asleep (by his watch, since
+23:40)", or "up, awake since 07:12 after 6 h 40 m of sleep" for four hours), a dispatcher hold while they sleep
+outside quiet hours (a message's own expiry still decides whether it goes later), and quiet hours lifted once they
+have been awake ten minutes within the night's last three hours. A stale or missing file changes nothing.
 
 **Her memory, watched** (`companion_watch.check_keeping`, in the hourly health watch, no model): it raises
 a problem when the conversation archive is more than three hours behind the conversations, when the vault

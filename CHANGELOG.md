@@ -1,3 +1,14 @@
+## 3.34.0 — Their sleep (2026-11-27)
+
+- **Her messages wait while they sleep, and her good morning comes when they are up.** A new `sleep` sense reads
+  `ambient/body.json`, which a watch or wearable client writes (`checked_at`, `asleep`, `since`, `slept_minutes`,
+  `source`; fresh for 30 minutes). The dispatcher (`companion_dispatch.verdict`, through `wearable_says`) holds
+  anything that is not high priority while the device says they are asleep outside quiet hours (a lie-in, a nap),
+  and lifts quiet hours once they have been up ten minutes within the night's last three hours, as writing to her
+  already did; a 2 am wake never does. Her context gets a "Their sleep" line (asleep since when, or awake since this
+  morning after how long). `companion_body.py`; no model calls; a stale or missing file changes nothing. Settings ->
+  Realism -> Little things -> Their sleep.
+
 ## 3.33.1 — Comings and goings, built (2026-11-27)
 
 - **The release build passes where ffmpeg is absent.** `test_reading_is_refused_when_it_would_crowd_the_network`

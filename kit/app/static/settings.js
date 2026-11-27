@@ -352,7 +352,7 @@ const settingsPanels=[
   </div>
   <div class="sensor-grid">
     ${Object.entries(s.available_sensors).map(([k,blurb])=>
-      toggleRow('sensor-'+k,({dates:'Important dates',care:'Follow-ups',durations:'Milestones',together:'Your story together',holidays:'Holidays',thread:'Conversation rhythm',daylight:'Daylight',weather:'Weather',music:'Music',viewing:'What you watch',onthisday:'On this day',plans:'Your word'})[k]||k,({weather:'Local conditions, updated hourly.',daylight:'Seasons, moon and daylight.',dates:'Upcoming birthdays and anniversaries.',care:'Things worth checking in about.',durations:'Time since important dates.',together:'Anniversaries and day counts from your first conversation.',holidays:'Public holidays where you live, looked up once.',thread:'Time since your last conversation.',music:'Spotify: what you play, and your artists for album picks. Off, Spotify is never read.',viewing:'What is on and what you finished on your Plex or Jellyfin, and what you watch together. Set the server below.',onthisday:'What you had on this date a month, a season or years ago, from her own records, so she can remember it with you.',plans:'When you say goodnight, brb or gotta go and the evening goes another way (still messaging, a film starting), she notices, and may tease you about it. She also knows when you get home or head out, if something tells her where you are. Never a lecture.'})[k]||blurb,s.sensors.includes(k),`data-sensor="${esc(k)}"`)).join('')}
+      toggleRow('sensor-'+k,({dates:'Important dates',care:'Follow-ups',durations:'Milestones',together:'Your story together',holidays:'Holidays',thread:'Conversation rhythm',daylight:'Daylight',weather:'Weather',music:'Music',viewing:'What you watch',onthisday:'On this day',plans:'Your word',sleep:'Their sleep'})[k]||k,({weather:'Local conditions, updated hourly.',daylight:'Seasons, moon and daylight.',dates:'Upcoming birthdays and anniversaries.',care:'Things worth checking in about.',durations:'Time since important dates.',together:'Anniversaries and day counts from your first conversation.',holidays:'Public holidays where you live, looked up once.',thread:'Time since your last conversation.',music:'Spotify: what you play, and your artists for album picks. Off, Spotify is never read.',viewing:'What is on and what you finished on your Plex or Jellyfin, and what you watch together. Set the server below.',onthisday:'What you had on this date a month, a season or years ago, from her own records, so she can remember it with you.',plans:'When you say goodnight, brb or gotta go and the evening goes another way (still messaging, a film starting), she notices, and may tease you about it. She also knows when you get home or head out, if something tells her where you are. Never a lecture.',sleep:'From a watch or wearable that knows when you sleep: her messages wait until you are up, and her good morning can come when you really wake.'})[k]||blurb,s.sensors.includes(k),`data-sensor="${esc(k)}"`)).join('')}
   </div>
 
   <div class="section-heading" style="margin-top:20px">
@@ -466,7 +466,7 @@ const settingsPanels=[
 
 {id:'realism',title:'Realism',
  blurb:'Living alongside you: watching together, your devices, and the small things she does on her own',
- keywords:'realism immersion watch along watching together movie film show tv plex jellyfin subtitles dialogue commentary reactions watch smartwatch wearable buzz vibrate device bridge on this day your word goodnight plans story chapters memoir',
+ keywords:'realism immersion watch along watching together movie film show tv plex jellyfin subtitles dialogue commentary reactions watch smartwatch wearable buzz vibrate device bridge on this day your word goodnight plans story chapters memoir sleep asleep wake good morning',
  async render(host){
   const s=await api('/settings');
   const reach=new Set(s.watchalong_reach||[]);
@@ -535,6 +535,7 @@ const settingsPanels=[
   <div class="sensor-grid">
     ${senseRow('onthisday','On this day','What you had on this date a month, a season or years ago: something you said, a film you watched together, a moment she kept. She may bring one up, once and lightly.')}
     ${senseRow('plans','Your word','When you say goodnight, brb or gotta go and the evening goes another way (still messaging, a film starting, out at the shop), she notices and may tease you about it; and she knows when you get home or head out, if something tells her where you are. Never a lecture.')}
+    ${senseRow('sleep','Their sleep','From a watch or wearable that knows when you are asleep: she never messages while you sleep (a lie-in or a nap too), her good morning comes when you are really up, and she knows how you slept. Needs a device that tells her; nothing changes without one.')}
   </div>
   <p class="small dim" id="story-status" style="margin-top:10px"></p>
   ${settingsFooter('Save')}`;
