@@ -252,6 +252,7 @@
   "kit/templates/cron/quiet.md.tmpl",
   "kit/templates/cron/rollover.md.tmpl",
   "kit/templates/cron/sensors.md.tmpl",
+  "kit/templates/cron/story.md.tmpl",
   "kit/templates/cron/timeline.md.tmpl",
   "kit/templates/cron/timeline_cleanup.md.tmpl",
   "kit/templates/cron/vault.md.tmpl",
