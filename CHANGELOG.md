@@ -1,3 +1,13 @@
+## 3.26.0 — Where you went, and the little things (2026-11-27)
+
+- **Your word knows where you went.** When a client writes `ambient/where.json` (a phone or wearable
+  bridge: a named place and times, never coordinates), arriving somewhere or leaving the house after a
+  goodnight counts as the evening going another way ("they got to the shop at 00:15"). Getting home never
+  does.
+- **Realism → Little things she notices.** On this day and Your word can be switched on and off in the
+  Realism panel (the same switches as Awareness → Sensors), and the panel says how far her story has got:
+  the months and years written and whether "Our story so far" is with her. `GET /api/realism/story`.
+
 ## 3.25.1 — Your word, fewer false goodbyes (2026-11-27)
 
 - `plans` counts "have to go" and its kin as goodbye only when the phrase ends the thought ("I have to

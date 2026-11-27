@@ -1,4 +1,13 @@
-Tamanitomo 3.25.1: your word, fewer false goodbyes.
+Tamanitomo 3.26.0: where you went, and the little things.
+
+- **Realism → Little things she notices**: turn On this day and Your word on or off right where the rest of
+  her realism lives, and see how far she has got with your story.
+- **If your phone tells her where you are** (through a bridge of your own), she also notices when you said
+  goodnight and then headed out.
+
+From 3.24.0, no Repair is needed. Updating from 3.23 or earlier, run Repair once.
+
+Previous: 3.25.1 your word, fewer false goodbyes.
 
 - "Your word" no longer mistakes "we have to go with the other plan" for a goodbye.
 

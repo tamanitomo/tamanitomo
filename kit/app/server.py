@@ -1184,6 +1184,20 @@ def build(home=None, token="", state_dir=None):
             }
         return {"ok": True, "reached": reached}
 
+    @app.get("/api/realism/story")
+    def story_status():
+        """Her chapters of their story (companion_chapters): what is written and what is next."""
+        import companion_chapters as chapters
+
+        c = load()
+        out = chapters.status(c)
+        latest = out["months"][-1] if out["months"] else ""
+        return {
+            **out,
+            "latest": chapters._label(latest) if latest else "",
+            "folder": str(chapters.folder(c)),
+        }
+
     @app.post("/api/viewing/check")
     def check_viewing():
         """Whether the saved media server answers, and whose viewing it reads."""

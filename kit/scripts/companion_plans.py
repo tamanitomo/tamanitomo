@@ -183,6 +183,30 @@ def _watched_since(c, after):
     return out[-3:]
 
 
+def _where_since(c, after, until):
+    """Where they went after a plan, from `ambient/where.json` (any client may write it: names and times, never
+    coordinates): {"place" or "left", "at", "moving"} when they arrived somewhere, or left somewhere, in the window.
+    """
+    try:
+        data = json.loads(
+            (c.soul_dir / "ambient" / "where.json").read_text(encoding="utf-8")
+        )
+        since = dt.datetime.fromisoformat(str(data.get("since"))).timestamp()
+    except (OSError, ValueError, TypeError):
+        return {}
+    if not (after < since <= until):
+        return {}
+    place, left = (
+        str(data.get("place") or "").strip(),
+        str(data.get("left") or "").strip(),
+    )
+    if place and place.lower() != "home":
+        return {"place": place[:60], "at": since}
+    if not place and left:
+        return {"left": left[:60], "at": since, "moving": bool(data.get("moving"))}
+    return {}
+
+
 def _clock(c, stamp):
     return dt.datetime.fromtimestamp(stamp, _tz(c)).strftime("%H:%M")
 
@@ -248,6 +272,9 @@ def read(c, now=None):
             }
         if games:
             since["game"] = {"count": len(games), "last": games[-1][0]}
+    went = _where_since(c, grace, min(horizon, stamp))
+    if went:
+        since["where"] = went
     if stamp <= horizon:
         watched = _watched_since(c, grace)
         if watched:
@@ -296,6 +323,15 @@ def render(c, now=None):
             parts.append(
                 f"{m['count']} more message{'s' if m['count'] > 1 else ''}{where}, the last at {_clock(c, m['last'])}"
             )
+        if "where" in since:
+            w = since["where"]
+            if w.get("place"):
+                parts.append(f"they got to {w['place']} at {_clock(c, w['at'])}")
+            else:
+                parts.append(
+                    f"they left {w['left']} at {_clock(c, w['at'])}"
+                    + (", on the move" if w.get("moving") else "")
+                )
         if "game" in since:
             parts.append(
                 f"they were playing a game (last at {_clock(c, since['game']['last'])})"

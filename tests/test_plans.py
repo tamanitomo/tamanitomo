@@ -131,6 +131,49 @@ class PlanTests(unittest.TestCase):
         self.assertIn("they were playing a game (last at 01:10); they finished Harbor Lights (2019); "
                       "playing now: Tidewater (2021). So not asleep, then.", text)  # fmt: skip
 
+    def test_out_after_goodnight(self):
+        self.say(on(5, 23, 40), "ok going to bed, night")
+        where = self.c.soul_dir / "ambient/where.json"
+        where.write_text(
+            json.dumps(
+                {
+                    "place": "Corner Market",
+                    "since": on(6, 0, 15).isoformat(),
+                    "source": "phone",
+                }
+            )
+        )
+        text, _ = plans.render(self.c, on(6, 0, 20))
+        self.assertIn(
+            "Since then: they got to Corner Market at 00:15. So not asleep, then.", text
+        )
+        where.write_text(
+            json.dumps(
+                {
+                    "place": "",
+                    "left": "Home",
+                    "moving": True,
+                    "since": on(6, 0, 5).isoformat(),
+                }
+            )
+        )
+        self.assertIn(
+            "they left Home at 00:05, on the move",
+            plans.render(self.c, on(6, 0, 10))[0],
+        )
+        where.write_text(
+            json.dumps({"place": "Home", "since": on(6, 0, 5).isoformat()})
+        )
+        self.assertEqual(
+            plans.render(self.c, on(6, 0, 10)), ("", {})
+        )  # getting home is no mismatch
+        where.write_text(
+            json.dumps({"place": "Corner Market", "since": on(5, 23, 0).isoformat()})
+        )
+        self.assertEqual(
+            plans.render(self.c, on(6, 0, 10)), ("", {})
+        )  # there before goodnight
+
     def test_still_here_after_gotta_go(self):
         self.say(on(5, 18, 0), "gotta run, ttyl")
         self.say(on(5, 18, 30), "ok one more thing")

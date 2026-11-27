@@ -438,11 +438,13 @@ const settingsPanels=[
 
 {id:'realism',title:'Realism',
  blurb:'Living alongside you: watching together, your devices, and the small things she does on her own',
- keywords:'realism immersion watch along watching together movie film show tv plex jellyfin subtitles dialogue commentary reactions watch smartwatch wearable buzz vibrate device bridge',
+ keywords:'realism immersion watch along watching together movie film show tv plex jellyfin subtitles dialogue commentary reactions watch smartwatch wearable buzz vibrate device bridge on this day your word goodnight plans story chapters memoir',
  async render(host){
   const s=await api('/settings');
   const reach=new Set(s.watchalong_reach||[]);
   const reachRow=(key,label,blurb)=>toggleRow('reach-'+key,label,blurb,reach.has(key),`data-reach="${esc(key)}"`);
+  const senses=new Set(s.sensors||[]);
+  const senseRow=(key,label,blurb)=>toggleRow('real-'+key,label,blurb,senses.has(key),`data-realsense="${esc(key)}"`);
   host.innerHTML=`
   <div class="section-heading">
     <h3 class="section-subheading">Watching together</h3>
@@ -497,13 +499,34 @@ const settingsPanels=[
     </div>
     <p class="small" id="bridge-status" role="status"></p>
   </div>
+
+  <div class="section-heading" style="margin-top:20px">
+    <h3 class="section-subheading">Little things she notices</h3>
+  </div>
+  <p class="small dim">Read from her own records; nothing new is sent anywhere. The same switches are under Awareness → Sensors.</p>
+  <div class="sensor-grid">
+    ${senseRow('onthisday','On this day','What you had on this date a month, a season or years ago: something you said, a film you watched together, a moment she kept. She may bring one up, once and lightly.')}
+    ${senseRow('plans','Your word','When you say goodnight, brb or gotta go and the evening goes another way (still messaging, a film starting, out at the shop), she notices and may tease you about it. Never a lecture.')}
+  </div>
+  <p class="small dim" id="story-status" style="margin-top:10px"></p>
   ${settingsFooter('Save')}`;
   wireToggles(host);
-  const collect=()=>{
+  api('/realism/story').then(st=>{
+    const el=host.querySelector('#story-status');
+    if(!el)return;
+    const n=(st.months||[]).length;
+    el.textContent=n
+      ?`Her story: ${n} month${n===1?'':'s'} written (the latest, ${st.latest})${(st.years||[]).length?`, and ${st.years.length} year${st.years.length===1?'':'s'}`:''}. ${st.so_far?'"Our story so far" goes with her into every conversation.':''} The chapters are in ${st.folder}.`
+      :'Her story: she writes the first chapter after your first month together ends (the story job).';
+  }).catch(()=>{});
+  const collect=(current=s)=>{
+    const real=[...host.querySelectorAll('[data-realsense]')];
+    const mine=new Set(real.map(x=>x.dataset.realsense));
     const payload={
       watchalong:host.querySelector('#watchalong').value,
       watchalong_scope:host.querySelector('#watchalong-scope').value,
       watchalong_reach:[...host.querySelectorAll('[data-reach]')].filter(x=>x.checked).map(x=>x.dataset.reach),
+      sensors:[...(current.sensors||[]).filter(k=>!mine.has(k)),...real.filter(x=>x.checked).map(x=>x.dataset.realsense)],
       device_bridge_url:host.querySelector('#bridge-url').value.trim()};
     const typed=host.querySelector('#bridge-token').value.trim();
     if(typed)payload.device_bridge_token=typed;
@@ -522,7 +545,7 @@ const settingsPanels=[
       status.innerHTML=`<span class="bad">${esc(String(error.message||'The test failed'))}.</span>`;
     }
   };
-  wireSave(host,()=>saveSettings(collect()));
+  wireSave(host,async()=>saveSettings(collect(await api('/settings'))));
  }},
 
 {id:'photos',title:'Photo sessions',
