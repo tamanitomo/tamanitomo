@@ -408,7 +408,9 @@ companion starts.
 ## Memory and retention
 
 Life and memory records are archived rather than discarded, and every archive stays searchable
-through `companion_recall.py`.
+through `companion_recall.py`. An explicit question about the past also reads her chapters (her own
+account of a month, a lead to when something happened), and when Hermes's session store is gone or
+unreadable, the human's own messages come from the vault's conversation archive instead.
 
 | File | Window | Archived to |
 | --- | --- | --- |

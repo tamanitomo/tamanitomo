@@ -1,3 +1,14 @@
+## 3.28.0 — Recall that outlasts the database (2026-11-27)
+
+- **"When did we...?" finds the month.** `companion_recall` reads her chapters for an explicit question about
+  the past (up to three lines where the question's words meet, kind `her_chapter_summary`): her own account of
+  a month, a lead to when something happened rather than proof of a detail. Never for an automatic callback.
+- **The conversation archive stands in for the session store.** When Hermes's `state.db` is gone, moved or
+  unreadable, recall searches the human's own messages in the vault's conversation archive (newest month
+  first, inside the same time budget) and says so in its warnings, so years of conversation stay findable
+  through a migration or a lost database.
+- README: watching together, a memory built to last, one conversation wherever you talk, the little things.
+
 ## 3.27.0 — A touch while you talk (2026-11-27)
 
 - **She can touch your watch in the middle of a conversation.** With a device bridge set, her context in a

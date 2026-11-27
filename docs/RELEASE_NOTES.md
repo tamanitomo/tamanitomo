@@ -1,4 +1,12 @@
-Tamanitomo 3.27.0: a touch while you talk.
+Tamanitomo 3.28.0: recall that outlasts the database.
+
+- **Ask her "when did we...?" and she can find the month**, from the chapters she writes of your story.
+- **Your conversations stay findable even if her database is lost**: she can search the copy kept in your
+  vault instead.
+
+From 3.24.0, no Repair is needed. Updating from 3.23 or earlier, run Repair once.
+
+Previous: 3.27.0 a touch while you talk.
 
 - **Tease her and she can nudge your watch.** With your watch connected (Settings → Realism), in the middle
   of a conversation she can send a playful nudge ("oh stoppp"), a light tap, or a few words with a buzz,
