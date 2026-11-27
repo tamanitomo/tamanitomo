@@ -568,6 +568,13 @@ def sleep(c, now):
     return companion_body.render(c, now)
 
 
+def activity(c, now):
+    """Their day in motion, from a wearable's ambient/steps.json: steps so far against their usual by now."""
+    import companion_activity
+
+    return companion_activity.render(c, now)
+
+
 def onthisday(c, now):
     """What the two of them had on this date a month, a season, a year or years ago."""
     import companion_onthisday
@@ -734,6 +741,14 @@ REGISTRY = {
         "blurb": "Their sleep, from a watch or wearable that knows: her messages wait while they sleep (a lie-in or "
         "a nap too), her good morning can go when they are really up, and she knows when they woke and how long "
         "they slept. States and times only; silent when no device has said anything in the last half hour.",
+    },
+    "activity": {
+        "fn": "activity",
+        "needs": "a watch or wearable that writes ambient/steps.json",
+        "blurb": "Their day in motion, from a watch or wearable that counts steps: she knows how much they have been "
+        "on their feet today and, once the device knows their usual, whether it is a busy day or a quiet one. For "
+        "noticing the way a partner would, never a goal or a lecture, and never a reason to message. Counts only; "
+        "silent without a fresh count from today.",
     },
     "viewing": {
         "fn": "viewing",

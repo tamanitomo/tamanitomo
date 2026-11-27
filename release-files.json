@@ -148,6 +148,7 @@
   "kit/scripts/companion_backup.py",
   "kit/scripts/companion_bars.py",
   "kit/scripts/companion_body.py",
+  "kit/scripts/companion_activity.py",
   "kit/scripts/companion_canon.py",
   "kit/scripts/companion_catalog.py",
   "kit/scripts/companion_checkin.py",

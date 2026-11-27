@@ -536,6 +536,7 @@ const settingsPanels=[
     ${senseRow('onthisday','On this day','What you had on this date a month, a season or years ago: something you said, a film you watched together, a moment she kept. She may bring one up, once and lightly.')}
     ${senseRow('plans','Your word','When you say goodnight, brb or gotta go and the evening goes another way (still messaging, a film starting, out at the shop), she notices and may tease you about it; and she knows when you get home or head out, if something tells her where you are. Never a lecture.')}
     ${senseRow('sleep','Their sleep','From a watch or wearable that knows when you are asleep: she never messages while you sleep (a lie-in or a nap too), her good morning comes when you are really up, and she knows how you slept. Needs a device that tells her; nothing changes without one.')}
+    ${senseRow('activity','Their steps','From a watch or wearable that counts steps: she knows how much you have been on your feet today and, once it knows your usual, whether it is a busy day or a quiet one. Never a goal or a lecture. Needs a device that tells her; nothing changes without one.')}
   </div>
   <p class="small dim" id="story-status" style="margin-top:10px"></p>
   ${settingsFooter('Save')}`;

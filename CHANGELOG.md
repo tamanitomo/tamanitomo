@@ -1,3 +1,16 @@
+## 3.37.0 — Their day in motion (2026-11-27)
+
+- **A new sense, `activity`: their steps today, against their usual.** Any watch or wearable may write
+  `<soul>/ambient/steps.json` (`checked_at`, `steps` so far today, an optional `usual_by_now` for this time of
+  day, `source`). With the sense on and a fresh count from today (45 minutes), her context gains
+  `[Their day in motion]`: about how many steps by when, and, once the device knows their usual, whether it is a
+  busy day on their feet (1.5x their usual or more), a quiet one (half or less, past an early hour) or about the
+  usual. It is for noticing the way a partner would, never a goal, a score or a lecture, and never a reason to
+  message: the line says so. Stale, another day's, malformed or missing counts say nothing. Counts only, no model
+  call. Settings gains "Their steps" under senses.
+- The file is `steps.json`, not `activity.json`: the senses job writes `activity.md` and `activity.json` itself,
+  and a device writing that name would have been overwritten every run.
+
 ## 3.36.1 — Clean and portable (2026-11-27)
 
 - **Windows: text is UTF-8 everywhere.** 300 reads, writes and subprocess decodes that relied on the platform

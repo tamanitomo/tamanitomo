@@ -1223,6 +1223,20 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
         ):  # noqa: BLE001 -- an optional section never costs her the reply
             pass
 
+    # Their day in motion (companion_activity): today's steps from a wearable's steps.json, against their
+    # usual by this hour. Nothing unless a device counted in the last 45 minutes, today.
+    if "activity" in (c.sensors or []):
+        try:
+            import companion_activity
+
+            line, _data = companion_activity.render(c, now)
+            if line:
+                parts.append((4, "[Their day in motion] " + line))
+        except (
+            Exception
+        ):  # noqa: BLE001 -- an optional section never costs her the reply
+            pass
+
     # On this day (companion_onthisday): a few true memories from this date, kept by the
     # senses job. Today's file only; a short slot of its own, the first to give way.
     if "onthisday" in (c.sensors or []):
@@ -1299,6 +1313,7 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
                 "onthisday",
                 "plans",
                 "sleep",
+                "activity",
             ):  # each has its own section
                 continue
             t = read(p, 1000).strip()
