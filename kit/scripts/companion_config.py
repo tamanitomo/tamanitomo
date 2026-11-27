@@ -432,6 +432,26 @@ class Companion:
     media_kind: str = "plex"  # plex | jellyfin
     media_user: str = ""
     media_token_file: str = ""
+    # Watching together, live (companion_watchalong): while the human plays something on
+    # that server, she follows its dialogue and knows the scene whenever they talk.
+    # watchalong is how often she speaks up on her own: off | quiet (only when spoken to)
+    # | moments (a few big ones) | occasional (now and then) | commentary (often) | auto
+    # (occasional on a hosted chat model, commentary on a local one). watchalong_reach is
+    # where it reaches the human, in order: last (where the two of them last talked),
+    # watch, wearable (both through the device bridge), telegram, screen (Jellyfin shows it
+    # on the TV). watchalong_scope: anything the human plays, or only titles the two of
+    # them agreed to watch together.
+    watchalong: str = "quiet"
+    watchalong_reach: list = dataclasses.field(
+        default_factory=lambda: ["last", "watch"]
+    )
+    watchalong_scope: str = "anything"
+    # A bridge to the human's own devices for her short messages (a buzz on the watch, a
+    # line on something they wear): POST {text, kind: tap|message|nudge, surface: auto |
+    # watch | wearable | both, id} with a bearer
+    # token read from device_bridge_token_file, so no secret sits in this file.
+    device_bridge_url: str = ""
+    device_bridge_token_file: str = ""
     # Which sensors this profile has switched on, by name.
     sensors: list = dataclasses.field(default_factory=list)
     # Per-job model choices, written by `tamanitomo models`. Empty means "whatever
@@ -508,6 +528,43 @@ class Companion:
             raise ValueError("media_user must be an account name, or empty")
         if not isinstance(self.media_token_file, str):
             raise ValueError("media_token_file must be a path, or empty")
+        if self.watchalong not in (
+            "off",
+            "quiet",
+            "moments",
+            "occasional",
+            "commentary",
+            "auto",
+        ):
+            raise ValueError(
+                "watchalong must be off, quiet, moments, occasional, commentary or auto"
+            )
+        reach = self.watchalong_reach
+        if (
+            not isinstance(reach, list)
+            or len(reach) > 5
+            or any(
+                r not in ("last", "watch", "wearable", "telegram", "screen")
+                for r in reach
+            )
+            or len(set(reach)) != len(reach)
+        ):
+            raise ValueError(
+                "watchalong_reach must list last, watch, wearable, telegram or screen, each once"
+            )
+        if self.watchalong_scope not in ("anything", "together"):
+            raise ValueError('watchalong_scope must be "anything" or "together"')
+        if not isinstance(self.device_bridge_url, str) or (
+            self.device_bridge_url
+            and not self.device_bridge_url.startswith(("https://", "http://"))
+        ):
+            raise ValueError("device_bridge_url must be an http(s) address, or empty")
+        if any(mark in self.device_bridge_url for mark in ("#", "@")):
+            raise ValueError(
+                "device_bridge_url must be the address alone (the token goes in its own file)"
+            )
+        if not isinstance(self.device_bridge_token_file, str):
+            raise ValueError("device_bridge_token_file must be a path, or empty")
         if not isinstance(self.adult_images, bool):
             raise ValueError("adult_images must be true or false")
         if self.adult_images and not self.explicit:

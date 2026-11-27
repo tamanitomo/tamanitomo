@@ -299,6 +299,39 @@ of guidance, never an instruction. After four days of silence she may say she ha
 plainly, as a feeling of hers — the guidance says explicitly that it is never a reproach and never a
 reason you must reply.
 
+### Watching together, live
+
+While you play something on your own server, `companion_watchalong` follows its dialogue line by line
+(Settings → Realism). It runs inside the app; no model is called to follow, only to speak.
+
+- **Where the lines come from**, in order: a subtitle file the server hands out (Plex sidecars; any
+  text track on Jellyfin, which extracts embedded ones itself); the film's own embedded text track,
+  read with ffmpeg at the film's pace from a little ahead of the playhead; or, with no text track at
+  all, the film's sound, heard by faster-whisper (the interpreter Hermes installs for its own voice
+  transcription; `TAMANITOMO_LISTEN_PYTHON` names another). Reading the film is skipped above 20 Mbps
+  so it never crowds your own stream. The server's token reaches ffmpeg through a relay on
+  127.0.0.1, never on a command line.
+- **The playhead** comes from the server every five seconds and runs on between reports. A jump of
+  more than fifteen seconds is a seek: lines skipped over are never reacted to.
+- **She never sees past the playhead.** Her context while something plays has the last minute or so
+  of dialogue ("On screen now"), and that is all.
+- **Speaking up** (`watchalong`): `off`, `quiet` (only when you talk to her), `moments`, `occasional`,
+  `commentary`, or `auto` (occasional on a hosted chat model, commentary on a local one). Lines that
+  land (a confession, a promise, a goodbye, a gasp in the hearing-impaired track) are scored without a
+  model; at one that clears the pace's bar, and no sooner than its gap allows, she is asked in a small
+  call of her chat model whether she would say anything. She may say nothing.
+- **Reach** (`watchalong_reach`, in order): `last` (the wearable or the chat you last talked on),
+  `watch`, `wearable`, `telegram`, `screen` (Jellyfin shows it on the TV; Plex has no way to).
+- Everything she says is kept in `companion-life/watchalong.jsonl` and shown back to her afterwards.
+
+### Your devices
+
+`device_bridge_url` and `device_bridge_token_file`: a bridge to your own devices for her short
+messages, a buzz on the watch or a line on something you wear. It receives `POST {text, kind, surface,
+id}` with `Authorization: Bearer <token>`; `kind` is `tap`, `message` or `nudge`, `surface` is `auto`,
+`watch`, `wearable` or `both`, and it answers `{"delivered": [...]}`. Settings → Realism has a button
+that sends one test.
+
 ### The computed bars
 
 Off by default. A *feeling the gap* bar from the thread, and a *wellbeing* bar from the moods she has

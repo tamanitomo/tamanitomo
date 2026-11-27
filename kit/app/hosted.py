@@ -13,6 +13,26 @@ from .runtime import app_directory
 import companion_platform as cp
 
 
+def start_watchalong(root):
+    """One follower per companion (companion_watchalong): each idles until its companion
+    has watching-together on and something plays. Started here, not in build(), so the
+    app's tests never run one."""
+    try:
+        import companion_config as cc
+        import companion_watchalong
+        from kit.cli.roster import discover
+    except ImportError:
+        return []
+    followers = []
+    for _name, home in discover(root):
+        if home.is_symlink() or not (home / cc.CONFIG_NAME).exists():
+            continue
+        follower = companion_watchalong.Runner(home)
+        follower.start()
+        followers.append(follower)
+    return followers
+
+
 def main():
     state = app_directory()
     state.mkdir(parents=True, exist_ok=True)
@@ -28,6 +48,8 @@ def main():
             "root": str(app.state.runtimes["existing"].root),
             "protocol": 1,
         }
+
+    followers = start_watchalong(app.state.runtimes["existing"].root)
 
     port = int(
         os.environ.get("TAMANITOMO_PORT") or os.environ.get("COMPANION_PORT", "38439")
@@ -54,6 +76,8 @@ def main():
             )
         ).run(sockets=sockets)
     finally:
+        for follower in followers:
+            follower.stop_event.set()
         for sock in sockets:
             sock.close()
         app.state.dashboards.close()

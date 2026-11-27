@@ -436,6 +436,95 @@ const settingsPanels=[
   });
  }},
 
+{id:'realism',title:'Realism',
+ blurb:'Living alongside you: watching together, your devices, and the small things she does on her own',
+ keywords:'realism immersion watch along watching together movie film show tv plex jellyfin subtitles dialogue commentary reactions watch smartwatch wearable buzz vibrate device bridge',
+ async render(host){
+  const s=await api('/settings');
+  const reach=new Set(s.watchalong_reach||[]);
+  const reachRow=(key,label,blurb)=>toggleRow('reach-'+key,label,blurb,reach.has(key),`data-reach="${esc(key)}"`);
+  host.innerHTML=`
+  <div class="section-heading">
+    <h3 class="section-subheading">Watching together</h3>
+  </div>
+  <p class="small dim">While you play something on your own media server (set under Awareness), she follows its dialogue line by line from its subtitles, so whatever you say to her about it, she knows the scene. She never knows anything past the point you are at. The titles and lines reach her model provider like the rest of what she knows.</p>
+  <div class="contact-settings">
+    <div class="contact-row">
+      <label class="contact-label" for="watchalong">Speaking up</label>
+      <div class="contact-controls">
+        <select id="watchalong">${options([
+          ['off','Off: she does not follow along'],
+          ['quiet','Only when you talk to her'],
+          ['moments','Big moments only'],
+          ['occasional','Now and then'],
+          ['commentary','Running commentary'],
+          ['auto','Automatic: now and then, running commentary on a local model']],s.watchalong)}</select>
+      </div>
+    </div>
+    <div class="contact-row">
+      <label class="contact-label" for="watchalong-scope">Follows</label>
+      <div class="contact-controls">
+        <select id="watchalong-scope">${options([['anything','Anything you play'],['together','Only what you agreed to watch together']],s.watchalong_scope)}</select>
+      </div>
+    </div>
+  </div>
+  <p class="small dim" style="margin-top:10px">Where what she says reaches you, in this order:</p>
+  <div class="sensor-grid">
+    ${reachRow('last','Where you last talked','On the device you wear if that is where you were talking, in the chat if that is where you were. Your other choices below still apply.')}
+    ${reachRow('watch','Your watch','A buzz and a few words: a light tap, a note, or a playful nudge. Through your device bridge.')}
+    ${reachRow('wearable','Something you wear','Shown on a wearable when it is on: a badge, a necklace. Through your device bridge.')}
+    ${reachRow('telegram','Telegram','A chat message, so the conversation can carry on there.')}
+    ${reachRow('screen','The TV screen','Jellyfin can show her words on the playing screen. Plex has no way to.')}
+  </div>
+
+  <div class="section-heading" style="margin-top:20px">
+    <h3 class="section-subheading">Your devices</h3>
+  </div>
+  <p class="small dim">A bridge to your own devices for her short messages on her own: a watch buzz, a line on something you wear. It gets a POST with the text, a kind (tap, message or nudge) and where to show it (auto, watch, wearable or both), with this token.</p>
+  <div class="contact-settings">
+    <div class="contact-row">
+      <label class="contact-label" for="bridge-url">Bridge address</label>
+      <div class="contact-controls">
+        <input id="bridge-url" value="${esc(s.device_bridge_url||'')}" placeholder="http://127.0.0.1:8080/knock" style="max-width:320px">
+      </div>
+    </div>
+    <div class="contact-row">
+      <label class="contact-label" for="bridge-token">Token</label>
+      <div class="contact-controls">
+        <input id="bridge-token" type="password" autocomplete="off" spellcheck="false" placeholder="${s.device_bridge_token_set?'Saved. Type to replace it':'Paste the bridge token'}" style="max-width:280px">
+        <button class="quiet" id="bridge-test" type="button">Save and send a test buzz</button>
+      </div>
+    </div>
+    <p class="small" id="bridge-status" role="status"></p>
+  </div>
+  ${settingsFooter('Save')}`;
+  wireToggles(host);
+  const collect=()=>{
+    const payload={
+      watchalong:host.querySelector('#watchalong').value,
+      watchalong_scope:host.querySelector('#watchalong-scope').value,
+      watchalong_reach:[...host.querySelectorAll('[data-reach]')].filter(x=>x.checked).map(x=>x.dataset.reach),
+      device_bridge_url:host.querySelector('#bridge-url').value.trim()};
+    const typed=host.querySelector('#bridge-token').value.trim();
+    if(typed)payload.device_bridge_token=typed;
+    return payload;
+  };
+  host.querySelector('#bridge-test').onclick=async()=>{
+    const status=host.querySelector('#bridge-status');
+    status.className='small dim';status.textContent='Sending…';
+    try{
+      await saveSettings(collect());
+      host.querySelector('#bridge-token').value='';
+      const r=await api('/realism/test-bridge',{method:'POST'});
+      if(!r.ok)throw Error(r.detail||'The bridge did not take it');
+      status.className='small';status.textContent=`Sent: it reached ${r.reached}.`;
+    }catch(error){
+      status.innerHTML=`<span class="bad">${esc(String(error.message||'The test failed'))}.</span>`;
+    }
+  };
+  wireSave(host,()=>saveSettings(collect()));
+ }},
+
 {id:'photos',title:'Photo sessions',
  blurb:'Pictures from their day, taken with your image provider, and what stays blurred',
  keywords:'photos timeline images style budget nsfw blur scanner nudenet review',
@@ -1637,7 +1726,7 @@ function androidHostingTips(){
    when she may write, where she is, photos, voice). Everything below them has
    working defaults and is there for when someone wants it. */
 const SETTINGS_NAV=[
-  ['Essentials',['models','contact','awareness','photos','connect-voice']],
+  ['Essentials',['models','contact','awareness','realism','photos','connect-voice']],
   ['Companion',[
     {route:'roster',title:'Companions',blurb:'Create, adopt, switch or archive a companion'},
     {route:'identity',title:'Identity',blurb:'Name, personality, appearance and story'},

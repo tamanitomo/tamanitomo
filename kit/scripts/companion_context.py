@@ -1156,6 +1156,23 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
     except (OSError, ValueError, ImportError):
         pass
 
+    # Watching something right now, line by line (companion_watchalong): the actual scene,
+    # what was just said and what she said about it, ahead of everything a film is not.
+    try:
+        import companion_watchalong
+
+        scene = companion_watchalong.scene_now(c, now)
+        if scene:
+            parts.append(
+                (
+                    5,
+                    "[On screen now: talk about what was actually said; you know nothing past the playhead]\n"
+                    + scene,
+                )
+            )
+    except (OSError, ValueError, ImportError):
+        pass
+
     watching_together = False
     if "viewing" in (c.sensors or []):
         # While the two of them are watching something together, what is on moves by
@@ -1208,7 +1225,7 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
             if (c.soul_dir / "ambient").is_dir()
             else []
         ):
-            if p.stem == "viewing":
+            if p.stem in ("viewing", "scene"):  # each has its own section
                 continue
             t = read(p, 1000).strip()
             if t:

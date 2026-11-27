@@ -169,8 +169,13 @@ def _get(c, path, params=()):
             "X-Plex-Client-Identifier": "tamanitomo",
         }
     else:
+        # Jellyfin 12 turned the legacy token headers off by default and expects the
+        # whole MediaBrowser form; X-Emby-Token stays for older servers.
         headers = {
-            "Authorization": f'MediaBrowser Token="{token}"',
+            "Authorization": (
+                f'MediaBrowser Client="Tamanitomo", Device="companion", '
+                f'DeviceId="tamanitomo", Version="1", Token="{token}"'
+            ),
             "X-Emby-Token": token,
         }
     url = c.media_server.rstrip("/") + path + (f"?{query}" if query else "")
@@ -418,7 +423,10 @@ def label(item):
             name += f" “{title}”"
         return name
     title = item.get("title") or "a film"
-    return f"{title} ({item['year']})" if item.get("year") else title
+    # A film named from its folder ("Title (2020)") already carries its year.
+    if not item.get("year") or title.rstrip().endswith(f"({item['year']})"):
+        return title
+    return f"{title} ({item['year']})"
 
 
 def _norm(text):

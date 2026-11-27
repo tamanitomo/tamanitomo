@@ -1,4 +1,18 @@
-Tamanitomo 3.20.2: one clock.
+Tamanitomo 3.21.0: watching together, live.
+
+- **She watches with you.** While you play something on your own Plex or Jellyfin, she follows the
+  dialogue as it is spoken: from its subtitles, from the subtitles inside the file, or, when it has
+  none, by listening to it. Talk to her about it on any channel and she knows the scene you are in,
+  and never anything after it.
+- **Now and then she says something on her own.** At a line that lands, she may buzz your watch with
+  a few words, show them on something you wear, send them in your chat, or put them on the TV screen
+  (Jellyfin). How often is yours to choose under Settings → Realism, from never to a running
+  commentary.
+- **Jellyfin 12 works.** Its new sign-in rules no longer stop her from seeing what you watch.
+
+From 3.20.0, no Repair is needed. Updating from 3.19 or earlier, run Repair once.
+
+Previous: 3.20.2 one clock.
 
 - **She knows you are there, wherever you are talking.** Her sense of when you last wrote (how
   long you have been apart, how much she misses you, whether to reach out somewhere else, the

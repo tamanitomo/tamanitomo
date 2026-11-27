@@ -924,6 +924,11 @@ def build(home=None, token="", state_dir=None):
             "media_user": c.media_user,
             # Whether one is kept, never the token itself.
             "media_token_set": viewing.configured(c) or bool(c.media_token_file),
+            "watchalong": c.watchalong,
+            "watchalong_reach": list(c.watchalong_reach),
+            "watchalong_scope": c.watchalong_scope,
+            "device_bridge_url": c.device_bridge_url,
+            "device_bridge_token_set": bool(c.device_bridge_token_file),
             "learn_rhythm": _learn_rhythm(c),
             "local_web_reader": reader["local"],
             "web_reader_other": reader["other"],
@@ -962,6 +967,10 @@ def build(home=None, token="", state_dir=None):
         "media_server",
         "media_kind",
         "media_user",
+        "watchalong",
+        "watchalong_reach",
+        "watchalong_scope",
+        "device_bridge_url",
         "local_web_reader",
         "image_style",
         "explicit",
@@ -1049,6 +1058,9 @@ def build(home=None, token="", state_dir=None):
         media_token = payload.pop("media_token", None)
         if media_token is not None and not isinstance(media_token, str):
             raise HTTPException(400, "media_token must be text")
+        bridge_token = payload.pop("device_bridge_token", None)
+        if bridge_token is not None and not isinstance(bridge_token, str):
+            raise HTTPException(400, "device_bridge_token must be text")
         unknown = sorted(set(payload) - ALLOWED)
         if unknown:
             raise HTTPException(400, f'not settable from here: {", ".join(unknown)}')
@@ -1074,6 +1086,26 @@ def build(home=None, token="", state_dir=None):
                 path.chmod(0o600)
             c.media_token_file = str(path)
             payload["media_token"] = "(saved)"
+        if bridge_token and bridge_token.strip():
+            token = bridge_token.strip()
+            if len(token) > 500 or any(ch.isspace() for ch in token):
+                raise HTTPException(
+                    400, "That does not look like a device bridge token"
+                )
+            path = c.home / "secrets" / "device-bridge.token"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if os.name != "nt":
+                path.parent.chmod(0o700)
+            cp.atomic_write(path, token + "\n")
+            if os.name != "nt":
+                path.chmod(0o600)
+            c.device_bridge_token_file = str(path)
+            payload["device_bridge_token"] = "(saved)"
+        if "device_bridge_url" in payload and not c.device_bridge_url:
+            path = c.home / "secrets" / "device-bridge.token"
+            if c.device_bridge_token_file == str(path):
+                path.unlink(missing_ok=True)
+                c.device_bridge_token_file = ""
         if "media_server" in payload and not c.media_server:
             # Removing the server forgets the token the app kept for it.
             if c.media_token_file == str(viewing.token_path(c)):
@@ -1132,6 +1164,25 @@ def build(home=None, token="", state_dir=None):
             resp.delete_cookie("tamanitomo_pin_session")
             resp.delete_cookie("companion_pin_session")
         return resp
+
+    @app.post("/api/realism/test-bridge")
+    def test_device_bridge():
+        """Send one short test through the device bridge (a light tap), so the human feels
+        it arrive. Only from this button; nothing else here sends one."""
+        c = load()
+        import companion_watchalong as watchalong
+
+        if not c.device_bridge_url or not c.device_bridge_token_file:
+            return {"ok": False, "detail": "set the bridge address and its token first"}
+        reached = watchalong.to_device(
+            c, f"A test from {c.agent}: can you feel this?", "tap", "auto", ""
+        )
+        if not reached:
+            return {
+                "ok": False,
+                "detail": "the bridge did not answer or refused the token",
+            }
+        return {"ok": True, "reached": reached}
 
     @app.post("/api/viewing/check")
     def check_viewing():

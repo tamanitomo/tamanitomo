@@ -1,3 +1,32 @@
+## 3.21.0 — Watching together, live (2026-11-27)
+
+- **She follows what you are watching, line by line.** While you play a film or an episode on your own
+  Plex or Jellyfin server, `companion_watchalong` (a thread per companion inside the app) follows its
+  dialogue in step with playback: a subtitle file the server hands out (Plex sidecars; any text track
+  on Jellyfin, which extracts embedded ones), the film's own embedded text track read with ffmpeg at
+  the film's pace from a little ahead of the playhead, or, with no text track at all, the film's sound
+  through faster-whisper in its own process. The playhead comes from the server every five seconds and
+  runs on between reports; a jump of more than fifteen seconds is a seek, and lines skipped over are
+  never reacted to. Reading the film is skipped above 20 Mbps, and the server's token reaches ffmpeg
+  through a 127.0.0.1 relay, never a command line.
+- **She knows the scene whenever you talk to her about it.** Her context while something plays has an
+  "On screen now" section: the title, where you are, the last minute of dialogue (nothing past the
+  playhead) and what she has said about it.
+- **And now and then she says something on her own.** Lines that land (a confession, a promise, a
+  proposal, a goodbye, a gasp in the hearing-impaired track) are scored without a model. At one that
+  clears the pace's bar she is asked, in a small call of her chat model, whether she would say anything
+  right now; silence is an answer. `watchalong`: off, quiet (only when you talk to her), moments,
+  occasional, commentary, or auto (occasional on a hosted model, commentary on a local one). Everything
+  she says is kept in `companion-life/watchalong.jsonl`.
+- **It reaches you where you are.** `watchalong_reach`, in order: where you last talked (a wearable that
+  keeps its own conversation through the app, or the chat), your watch, something you wear, Telegram,
+  or the TV itself (Jellyfin's on-screen message; Plex has none).
+- **A device bridge** (`device_bridge_url` + `device_bridge_token_file`): her short messages to your own
+  devices as `POST {text, kind: tap|message|nudge, surface, id}`. Settings → Realism, a new section,
+  has both, and a button that sends one test buzz.
+- **Jellyfin 12.** It turned the legacy token headers off by default; the viewing sense now sends the
+  whole `MediaBrowser` authorization form. A film named from its folder no longer shows its year twice.
+
 ## 3.20.2 — One clock (2026-11-27)
 
 - **Her clock counts every place the human talks to her.** The thread (`companion_thread`: the

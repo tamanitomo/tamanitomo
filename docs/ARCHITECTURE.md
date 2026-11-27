@@ -141,6 +141,14 @@ own chats and the named API conversations, with the transcripts they continue.
 That clock feeds her missing the human, her choice to reach out on another
 channel, the recent conversation her routines read, and the rhythm she learns.
 
+While the human plays something on their own media server, the app follows its
+dialogue line by line (`companion_watchalong`, a thread per companion in the app's
+process): subtitles the server hands out, the film's own embedded track read at the
+film's pace, or its sound heard by a speech model, matched to a playhead carried
+forward between the server's reports. The last minute of dialogue, never anything past
+the playhead, becomes her "On screen now" section, and at lines that land she may say
+something on her own through the watch, a wearable, a chat or the TV (Jellyfin).
+
 A conversation's first turn carries the whole continuity snapshot and later
 turns only the sections whose digest it has not seen. Some sections carry their
 age ("confirmed 36 minutes ago", "4.32h"), which changes every minute while the
