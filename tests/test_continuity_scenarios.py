@@ -38,7 +38,7 @@ def test_six_day_scenario_preserves_real_work_and_fictional_life(tmp_path):
     assert "mesh screen" in final["context"]
     assert "PRIVATE STRANGER" not in final["context"]
     assert "copper-pencil moth" in final["context"]
-    assert json.loads((output / "report.json").read_text())["passed"]
+    assert json.loads((output / "report.json").read_text(encoding="utf-8"))["passed"]
     assert "auth.json" not in " ".join(report["saved_artifacts"])
 
 
@@ -116,7 +116,7 @@ def test_frontier_unavailable_stops_and_removes_only_temporary_auth(
     tmp_path, monkeypatch
 ):
     original = tmp_path / "credentials.json"
-    original.write_text('{"access_token":"synthetic-secret-value"}')
+    original.write_text('{"access_token":"synthetic-secret-value"}', encoding="utf-8")
     seen = []
 
     def unavailable(snapshot, **kwargs):
@@ -144,16 +144,21 @@ def test_frontier_unavailable_stops_and_removes_only_temporary_auth(
     )
     assert len(seen) == 1
     assert not seen[0].exists()
-    assert original.read_text() == '{"access_token":"synthetic-secret-value"}'
+    assert (
+        original.read_text(encoding="utf-8")
+        == '{"access_token":"synthetic-secret-value"}'
+    )
     assert report["frontier"]["turns"][0]["usage"]["input"] is None
-    assert "synthetic-secret-value" not in (output / "report.json").read_text()
+    assert "synthetic-secret-value" not in (output / "report.json").read_text(
+        encoding="utf-8"
+    )
     assert report["passed"] is True  # Clearly separate from frontier availability.
     assert report["frontier"]["turns"][0]["completed"] is False
 
 
 def test_frontier_timeout_keeps_unknown_usage_and_does_not_retry(tmp_path, monkeypatch):
     auth = tmp_path / "credentials.json"
-    auth.write_text("{}")
+    auth.write_text("{}", encoding="utf-8")
     calls = []
 
     def timeout(*args, **kwargs):
@@ -195,22 +200,25 @@ def test_actual_child_redacts_auth_and_bearer_values_from_provider_failure(
     runtime = tmp_path / "runtime"
     package = runtime / "hermes_cli"
     package.mkdir(parents=True)
-    (package / "__init__.py").write_text("")
+    (package / "__init__.py").write_text("", encoding="utf-8")
     (package / "env_loader.py").write_text(
-        "def load_hermes_dotenv(*args, **kwargs): return []\n"
+        "def load_hermes_dotenv(*args, **kwargs): return []\n", encoding="utf-8"
     )
     (package / "_early_recovery.py").write_text(
-        "def restore_interrupted_pull(): return False\n"
+        "def restore_interrupted_pull(): return False\n", encoding="utf-8"
     )
     (package / "runtime_provider.py").write_text(
         "def resolve_runtime_provider(**kwargs):\n"
         "    print('Diagnostic: Bearer temporary-secret; saved synthetic-auth-token')\n"
-        f"    raise {exception}('Provider unavailable: Bearer transient-secret; saved synthetic-auth-token')\n"
+        f"    raise {exception}('Provider unavailable: Bearer transient-secret; saved synthetic-auth-token')\n",
+        encoding="utf-8",
     )
-    (runtime / "run_agent.py").write_text("class AIAgent: pass\n")
+    (runtime / "run_agent.py").write_text("class AIAgent: pass\n", encoding="utf-8")
     home = tmp_path / "isolated"
     (home / "hermes").mkdir(parents=True)
-    (home / "hermes/auth.json").write_text('{"access_token":"synthetic-auth-token"}')
+    (home / "hermes/auth.json").write_text(
+        '{"access_token":"synthetic-auth-token"}', encoding="utf-8"
+    )
     result = continuity.frontier_turn(
         {"case": "failure"},
         folder=home,
@@ -237,15 +245,15 @@ def test_guard_blocks_installed_bootstrap_side_effects_before_import(
     runtime = tmp_path / "runtime"
     package = runtime / "hermes_cli"
     package.mkdir(parents=True)
-    (package / "__init__.py").write_text("")
+    (package / "__init__.py").write_text("", encoding="utf-8")
     launcher = runtime / "launcher"
-    launcher.write_text("original installed launcher")
+    launcher.write_text("original installed launcher", encoding="utf-8")
     private = runtime / ".env"
-    private.write_text("private sentinel")
+    private.write_text("private sentinel", encoding="utf-8")
     home = tmp_path / "isolated"
     home.mkdir()
     candidate = home / "replacement"
-    candidate.write_text("replacement")
+    candidate.write_text("replacement", encoding="utf-8")
     operations = {
         "write": f"Path({str(launcher)!r}).write_text('modified')",
         "rename": f"Path({str(candidate)!r}).replace({str(launcher)!r})",
@@ -255,7 +263,8 @@ def test_guard_blocks_installed_bootstrap_side_effects_before_import(
     (package / "env_loader.py").write_text(
         "from pathlib import Path\nimport subprocess\n"
         + operations[operation]
-        + "\nraise AssertionError('The isolation guard was bypassed')\n"
+        + "\nraise AssertionError('The isolation guard was bypassed')\n",
+        encoding="utf-8",
     )
     result = continuity.frontier_turn(
         {"case": "bootstrap-isolation"},
@@ -269,8 +278,8 @@ def test_guard_blocks_installed_bootstrap_side_effects_before_import(
     assert "PermissionError" in result["error"]
     assert result["stage"] == "bootstrap"
     assert result["request_started"] is False
-    assert launcher.read_text() == "original installed launcher"
-    assert candidate.read_text() == "replacement"
+    assert launcher.read_text(encoding="utf-8") == "original installed launcher"
+    assert candidate.read_text(encoding="utf-8") == "replacement"
     assert "private sentinel" not in json.dumps(result)
 
 
@@ -280,7 +289,7 @@ def test_guard_checks_actual_file_behind_mutating_descriptor(tmp_path, target):
     home = tmp_path / "isolated"
     home.mkdir()
     external = tmp_path / "external"
-    external.write_text("external sentinel")
+    external.write_text("external sentinel", encoding="utf-8")
     external.chmod(0o600)
     local = home / "temporary-auth"
     if target == "symlink":
@@ -288,7 +297,7 @@ def test_guard_checks_actual_file_behind_mutating_descriptor(tmp_path, target):
     elif target == "hardlink":
         os.link(external, local)
     else:
-        local.write_text("synthetic scratch auth")
+        local.write_text("synthetic scratch auth", encoding="utf-8")
         local.chmod(0o600)
     selected = external if target == "external" else local
     # Open before the guard so the external test reaches the fd-specific check.
@@ -309,9 +318,11 @@ def test_guard_checks_actual_file_behind_mutating_descriptor(tmp_path, target):
         capture_output=True,
         check=True,
         timeout=10,
+        encoding="utf-8",
+        errors="replace",
     )
     assert result.stdout.strip() == ("allowed" if target == "scratch" else "blocked")
     assert external.stat().st_mode & 0o777 == 0o600
-    assert external.read_text() == "external sentinel"
+    assert external.read_text(encoding="utf-8") == "external sentinel"
     if target == "scratch":
         assert local.stat().st_mode & 0o777 == 0o640

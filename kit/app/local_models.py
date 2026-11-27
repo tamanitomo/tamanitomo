@@ -266,6 +266,8 @@ def _service_status(unit_name=None):
                 capture_output=True,
                 text=True,
                 timeout=3,
+                encoding="utf-8",
+                errors="replace",
             )
             out = res.stdout.strip()
             is_run = out.startswith("run:")
@@ -299,6 +301,8 @@ def _service_status(unit_name=None):
             capture_output=True,
             text=True,
             timeout=5,
+            encoding="utf-8",
+            errors="replace",
         )
         if res.returncode != 0:
             return {"found": False}
@@ -746,7 +750,11 @@ def server_control(rt, action: str, report=None):
             if report:
                 report(f"Running sv {cmd_action} {unit}")
             res = subprocess.run(
-                [sv_bin, cmd_action, str(sv_dir / unit)], capture_output=True, text=True
+                [sv_bin, cmd_action, str(sv_dir / unit)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
             )
             if res.returncode != 0:
                 raise ValueError(f"Failed to {action} {unit}: {res.stderr.strip()}")
@@ -760,7 +768,11 @@ def server_control(rt, action: str, report=None):
         if report:
             report(f"Running systemctl --user {action} {unit}")
         res = subprocess.run(
-            ["systemctl", "--user", action, unit], capture_output=True, text=True
+            ["systemctl", "--user", action, unit],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if res.returncode != 0:
             raise ValueError(f"Failed to {action} {unit}: {res.stderr.strip()}")
@@ -1086,13 +1098,15 @@ def assign(rt, home, ident):
 
         with cp.file_lock(home / ".companion-profile-editor.lock"):
             path = home / cc.CONFIG_NAME
-            raw = json.loads(path.read_text()) if path.exists() else None
+            raw = (
+                json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+            )
             if raw is not None:
                 cp.atomic_write(
                     home
                     / "companion-config-backups"
                     / ("local-model-" + uuid.uuid4().hex + ".json"),
-                    path.read_text(),
+                    path.read_text(encoding="utf-8"),
                 )
             save_config(home, mutate)
             if raw is not None:

@@ -223,7 +223,9 @@ def install(c):
     )
     changed = install_context_plugin(c) or changed
     changed = install_reader_plugin(c) or changed
-    specs = json.loads((kit / "templates/cron/manifest.json").read_text())["jobs"]
+    specs = json.loads(
+        (kit / "templates/cron/manifest.json").read_text(encoding="utf-8")
+    )["jobs"]
     with cp.file_lock(c.home / ".companion-config.lock"):
         cfg = inference.read_config(c)
         cfg["tamanitomo_routing"] = {

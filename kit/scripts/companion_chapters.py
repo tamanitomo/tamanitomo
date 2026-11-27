@@ -156,7 +156,8 @@ def conversation(c, month):
         best.sort(key=lambda r: str(r.get("at") or ""))
         work = sum(1 for r in theirs if otd.score(r["text"]) <= 0)
         try:
-            heading = dt.date.fromisoformat(day).strftime("%a %-d")
+            when = dt.date.fromisoformat(day)
+            heading = f"{when:%a} {when.day}"  # %-d is glibc-only; Windows refuses it
         except ValueError:
             continue
         note = (

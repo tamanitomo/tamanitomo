@@ -42,7 +42,8 @@ def test_twenty_months_apart_preserves_familiarity_without_forcing_friendship(
                 "days": {"2025-02-12": {"closeness": 80}},
                 "contact": {},
             }
-        )
+        ),
+        encoding="utf-8",
     )
     original = ledger.read_bytes()
     state = intimacy.compute(companion, NOW)
@@ -75,7 +76,8 @@ def test_a_new_relationship_warming_up_is_not_distant(companion):
                 "days": {d: {"closeness": v} for d, v in zip(days, (6, 12, 18))},
                 "contact": {d: {"credit": 1.0} for d in days},
             }
-        )
+        ),
+        encoding="utf-8",
     )
     state = intimacy.compute(companion, NOW)
     assert state["stage"] == 0 and state["effective_days"] >= 4
@@ -89,7 +91,7 @@ def test_a_new_relationship_warming_up_is_not_distant(companion):
 def test_old_level_record_retains_familiarity_before_meter_migration(companion):
     path = companion.home / intimacy.LEVELS_FILE
     path.parent.mkdir(parents=True)
-    path.write_text(json.dumps({"seen": 0, "highest": 3}))
+    path.write_text(json.dumps({"seen": 0, "highest": 3}), encoding="utf-8")
     state = intimacy.compute(companion, NOW)
     assert state["stage_name"] == "Distant"
     regained = intimacy.level_event(
@@ -191,7 +193,8 @@ def test_first_open_while_distant_retains_historical_level_for_regain(companion)
                 "days": {"2025-02-12": {"closeness": 80}},
                 "contact": {},
             }
-        )
+        ),
+        encoding="utf-8",
     )
     distant = intimacy.compute(companion, NOW)
     assert intimacy.level_event(companion, distant) is None
@@ -218,7 +221,8 @@ def test_newly_reached_stage_is_still_announced_as_new_high(companion):
                 "days": {"2026-10-12": {"closeness": 30}},
                 "contact": {},
             }
-        )
+        ),
+        encoding="utf-8",
     )
     event = intimacy.level_event(
         companion,
@@ -290,14 +294,16 @@ def test_real_boundary_violations_are_enforced_on_read_persisted_only_by_mainten
     path = companion.home / ".permanent-friend.json"
     assert not path.exists()
     intimacy.compute(companion, NOW, record=True)
-    saved = json.loads(path.read_text())
+    saved = json.loads(path.read_text(encoding="utf-8"))
     assert saved["violation_ids"] == [row["id"] for row in rows]
     assert saved["permanent_friend"]
 
 
 def test_legacy_permanent_decision_without_evidence_is_not_silently_reversed(companion):
     path = companion.home / ".permanent-friend.json"
-    path.write_text(json.dumps({"permanent_friend": True, "violations": 2}))
+    path.write_text(
+        json.dumps({"permanent_friend": True, "violations": 2}), encoding="utf-8"
+    )
     original = path.read_bytes()
     correct_ruptures(companion, boundary_ruptures(companion))
     state = intimacy.compute(companion, NOW)

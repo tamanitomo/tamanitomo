@@ -111,13 +111,15 @@ def test_repair_rewrites_the_kit_shims_of_an_existing_job_and_nothing_else(compa
     from kit.cli import scaffold
 
     root = pathlib.Path(__file__).resolve().parents[1]
-    specs = json.loads((root / "kit/templates/cron/manifest.json").read_text())["jobs"]
+    specs = json.loads(
+        (root / "kit/templates/cron/manifest.json").read_text(encoding="utf-8")
+    )["jobs"]
     spec = next(s for s in specs if s["key"] == "checkin")
     scripts = companion.home / "scripts"
     scripts.mkdir()
     old = "runpy.run_module('companion_preread',run_name=\"__main__\")\n"
-    (scripts / "companion-checkin-preread.py").write_text(old)
-    (scripts / "mine.py").write_text("print('mine')\n")
+    (scripts / "companion-checkin-preread.py").write_text(old, encoding="utf-8")
+    (scripts / "mine.py").write_text("print('mine')\n", encoding="utf-8")
     job = {
         "script": "companion-checkin-preread.py",
         "monitor_script": "companion-checkin-fingerprint.py",
@@ -126,6 +128,8 @@ def test_repair_rewrites_the_kit_shims_of_an_existing_job_and_nothing_else(compa
         "companion-checkin-preread.py",
         "companion-checkin-fingerprint.py",
     ]
-    assert "companion_checkin" in (scripts / "companion-checkin-preread.py").read_text()
+    assert "companion_checkin" in (scripts / "companion-checkin-preread.py").read_text(
+        encoding="utf-8"
+    )
     assert scaffold.refresh_shims(companion, spec, {"script": "mine.py"}) == []
-    assert (scripts / "mine.py").read_text() == "print('mine')\n"
+    assert (scripts / "mine.py").read_text(encoding="utf-8") == "print('mine')\n"

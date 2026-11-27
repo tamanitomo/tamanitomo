@@ -167,7 +167,7 @@ def record_metadata(root, payload):
         raise ValueError("Library metadata cannot be a symbolic link")
     temporary = manifest / (uuid.uuid4().hex + ".tmp")
     try:
-        temporary.write_text(json.dumps(meta, indent=2))
+        temporary.write_text(json.dumps(meta, indent=2), encoding="utf-8")
         os.replace(temporary, record)
     finally:
         temporary.unlink(missing_ok=True)
@@ -183,7 +183,7 @@ def library(payload):
         if path.is_symlink():
             continue
         try:
-            row = json.loads(path.read_text())
+            row = json.loads(path.read_text(encoding="utf-8"))
             if (
                 row.get("slot") in SLOTS
                 and (root / "models" / SLOTS[row["slot"]] / row["filename"]).is_file()

@@ -346,7 +346,7 @@ def process_matches(pid, start_time):
         try:
             fields = (
                 (pathlib.Path("/proc") / str(pid) / "stat")
-                .read_text()
+                .read_text(encoding="utf-8")
                 .rsplit(")", 1)[1]
                 .split()
             )
@@ -416,11 +416,18 @@ def host_memory():
                         capture_output=True,
                         text=True,
                         timeout=1,
+                        encoding="utf-8",
+                        errors="replace",
                     )
                     if result.returncode == 0:
                         total = max(0, int(result.stdout.strip()))
                 result = subprocess.run(
-                    ["vm_stat"], capture_output=True, text=True, timeout=1
+                    ["vm_stat"],
+                    capture_output=True,
+                    text=True,
+                    timeout=1,
+                    encoding="utf-8",
+                    errors="replace",
                 )
                 if result.returncode == 0:
                     size = re.search(r"page size of (\d+) bytes", result.stdout)

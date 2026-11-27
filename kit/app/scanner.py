@@ -32,7 +32,12 @@ def status(c):
     if python.is_file():
         try:
             r = subprocess.run(
-                [str(python), "-c", CHECK], capture_output=True, text=True, timeout=15
+                [str(python), "-c", CHECK],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                encoding="utf-8",
+                errors="replace",
             )
             if r.returncode == 0:
                 details = json.loads(r.stdout)
@@ -65,7 +70,14 @@ def install(c, report):
             raise ValueError("Free at least 600 MB to install the scanner runtime")
 
         def run(args):
-            result = subprocess.run(args, capture_output=True, text=True, timeout=600)
+            result = subprocess.run(
+                args,
+                capture_output=True,
+                text=True,
+                timeout=600,
+                encoding="utf-8",
+                errors="replace",
+            )
             if result.returncode:
                 raise ValueError(
                     "Scanner installation failed: "

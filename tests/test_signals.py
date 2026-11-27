@@ -108,9 +108,13 @@ class SeasonsFollowTheHemisphereTests(unittest.TestCase):
             july = dt.datetime(2026, 7, 15, 12, tzinfo=UTC)
             weather = c.soul_dir / "ambient"
             weather.mkdir(exist_ok=True)
-            (weather / "weather.json").write_text(json.dumps({"latitude": -37.8}))
+            (weather / "weather.json").write_text(
+                json.dumps({"latitude": -37.8}), encoding="utf-8"
+            )
             self.assertEqual(sensors.season_for(c, july), "winter")
-            (weather / "weather.json").write_text(json.dumps({"latitude": 1.3}))
+            (weather / "weather.json").write_text(
+                json.dumps({"latitude": 1.3}), encoding="utf-8"
+            )
             self.assertIsNone(sensors.season_for(c, july))
             text, _ = sensors.daylight(c, july)
             self.assertNotIn(" in summer", text)

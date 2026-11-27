@@ -412,6 +412,8 @@ class OutreachGateTests(unittest.TestCase):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
             )
             for _ in range(8)
         ]
@@ -932,7 +934,9 @@ class TouchTests(OutboxFixture):
         )  # not her outreach: the daily limit is untouched
         logged = [
             json.loads(line)
-            for line in outbox.touches_path(self.c).read_text().splitlines()
+            for line in outbox.touches_path(self.c)
+            .read_text(encoding="utf-8")
+            .splitlines()
         ]
         self.assertEqual(
             (logged[0]["text"], logged[0]["buzz"], logged[0]["reached"]),

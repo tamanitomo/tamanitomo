@@ -19,7 +19,7 @@ def read_json(path):
     if path.is_symlink() or not path.is_file() or path.stat().st_size > 1_000_000:
         return {}
     try:
-        value = json.loads(path.read_text())
+        value = json.loads(path.read_text(encoding="utf-8"))
         return value if isinstance(value, dict) else {}
     except (OSError, ValueError):
         return {}

@@ -83,7 +83,7 @@ def stage(raw, root=ROOT):
             raise ValueError(
                 "This is a development checkout. Install updates in an extracted release, not this working tree."
             )
-        old = json.loads(current.read_text())
+        old = json.loads(current.read_text(encoding="utf-8"))
         if any((root / n).exists() and n not in old for n in files):
             raise ValueError(
                 "Update would overwrite an unmanaged local file; move it aside first"
@@ -121,7 +121,7 @@ def stage(raw, root=ROOT):
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(data)
             dest.chmod(modes[name])
-        (folder / "SHA256SUMS.json").write_text(json.dumps(hashes))
+        (folder / "SHA256SUMS.json").write_text(json.dumps(hashes), encoding="utf-8")
         return {
             "staged": True,
             "version": version,
@@ -242,6 +242,8 @@ def _delayed_restart():
                     capture_output=True,
                     text=True,
                     timeout=5,
+                    encoding="utf-8",
+                    errors="replace",
                 )
                 if result.returncode == 0 and result.stdout.strip() == str(os.getpid()):
                     subprocess.run(
@@ -324,7 +326,14 @@ def _dispatch_running():
             else ["ps", "-eo", "args="]
         )
         try:
-            result = subprocess.run(command, capture_output=True, text=True, timeout=5)
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                encoding="utf-8",
+                errors="replace",
+            )
             if result.returncode or "TAMANITOMO_UNREADABLE_PROCESS" in result.stdout:
                 return None
             return "companion_dispatch" in result.stdout
@@ -419,6 +428,8 @@ def _install_dependencies(root, requirements):
         capture_output=True,
         text=True,
         timeout=600,
+        encoding="utf-8",
+        errors="replace",
     )
     if result.returncode:
         raise ValueError(
@@ -434,7 +445,7 @@ def perform_in_app_update(report, root=ROOT, hermes_root=None):
     import threading
     import urllib.request
 
-    version = (root / "VERSION").read_text().strip()
+    version = (root / "VERSION").read_text(encoding="utf-8").strip()
     report({"stage": "Checking the official release...", "percent": 10})
     info = check_github_update(version, force=True)
     if not info.get("checked"):
@@ -462,6 +473,8 @@ def perform_in_app_update(report, root=ROOT, hermes_root=None):
                     capture_output=True,
                     text=True,
                     timeout=120,
+                    encoding="utf-8",
+                    errors="replace",
                 )
                 if result.returncode:
                     raise ValueError(
@@ -489,7 +502,8 @@ def perform_in_app_update(report, root=ROOT, hermes_root=None):
             with tempfile.TemporaryDirectory() as tmp:
                 requirements = Path(tmp) / "requirements.txt"
                 requirements.write_text(
-                    git("show", info["tag"] + ":requirements.txt") + "\n"
+                    git("show", info["tag"] + ":requirements.txt") + "\n",
+                    encoding="utf-8",
                 )
                 _install_dependencies(root, requirements)
             git("merge", "--ff-only", info["tag"])
@@ -516,7 +530,7 @@ def perform_in_app_update(report, root=ROOT, hermes_root=None):
             stage(data, root=root)
             try:
                 staged = root / ".pending-update"
-                if (staged / "VERSION").read_text().strip() != latest:
+                if (staged / "VERSION").read_text(encoding="utf-8").strip() != latest:
                     raise ValueError(
                         "Release version does not match the published tag."
                     )
@@ -558,7 +572,7 @@ def register(app):
     @app.get("/api/updates")
     def status(force: bool = False):
         version = (
-            (ROOT / "VERSION").read_text().strip()
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip()
             if (ROOT / "VERSION").exists()
             else "2.2.1"
         )
@@ -575,7 +589,7 @@ def register(app):
     @app.post("/api/updates/check")
     def check_now():
         version = (
-            (ROOT / "VERSION").read_text().strip()
+            (ROOT / "VERSION").read_text(encoding="utf-8").strip()
             if (ROOT / "VERSION").exists()
             else "2.2.1"
         )

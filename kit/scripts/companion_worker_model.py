@@ -59,6 +59,8 @@ def _bridge(c, payload):
         capture_output=True,
         text=True,
         timeout=payload.get("timeout", 300) + 60,
+        encoding="utf-8",
+        errors="replace",
     )
     try:
         reply = json.loads(

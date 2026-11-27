@@ -697,7 +697,7 @@ def register(app, select, load, operations):
                 c = cc.load(home)
                 label_path = home / "companion-display-name.json"
                 label = (
-                    json.loads(label_path.read_text()).get("name")
+                    json.loads(label_path.read_text(encoding="utf-8")).get("name")
                     if label_path.is_file() and not label_path.is_symlink()
                     else None
                 )
@@ -1048,8 +1048,12 @@ def register(app, select, load, operations):
             # the order of each staged credential pool intact.
             with cp.file_lock(home / ".companion-auth.lock"):
                 path = home / "auth.json"
-                current = json.loads(path.read_text()) if path.exists() else {}
-                staged = json.loads((source / "auth.json").read_text())
+                current = (
+                    json.loads(path.read_text(encoding="utf-8"))
+                    if path.exists()
+                    else {}
+                )
+                staged = json.loads((source / "auth.json").read_text(encoding="utf-8"))
                 for key, value in staged.items():
                     if isinstance(value, dict) and isinstance(current.get(key), dict):
                         current[key].update(value)
@@ -1062,8 +1066,10 @@ def register(app, select, load, operations):
         if models_path.exists():
             with cp.file_lock(home / ".companion-profile-editor.lock"):
                 path = home / cc.CONFIG_NAME
-                cfg = json.loads(path.read_text())
-                cfg.setdefault("models", {}).update(json.loads(models_path.read_text()))
+                cfg = json.loads(path.read_text(encoding="utf-8"))
+                cfg.setdefault("models", {}).update(
+                    json.loads(models_path.read_text(encoding="utf-8"))
+                )
                 cp.atomic_write(path, json.dumps(cfg, indent=2) + "\n")
 
     @app.get("/api/onboarding/attempt/{ident}")
@@ -1725,6 +1731,8 @@ def register(app, select, load, operations):
                     text=True,
                     timeout=30,
                     check=True,
+                    encoding="utf-8",
+                    errors="replace",
                 ).stdout
             else:
                 prefix = rt.command()
@@ -1785,6 +1793,8 @@ def register(app, select, load, operations):
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
+                encoding="utf-8",
+                errors="replace",
             )
         except Exception as exc:
             raise ValueError(f"Failed to start OAuth flow: {exc}")
@@ -2055,6 +2065,8 @@ def register(app, select, load, operations):
                 capture_output=True,
                 text=True,
                 timeout=660,
+                encoding="utf-8",
+                errors="replace",
             )
             if result.returncode:
                 raise ValueError(hr.redact(result.stderr or result.stdout)[-4000:])
@@ -2151,6 +2163,8 @@ def register(app, select, load, operations):
                 capture_output=True,
                 text=True,
                 timeout=660,
+                encoding="utf-8",
+                errors="replace",
             )
             if result.returncode:
                 raise ValueError(hr.redact(result.stderr)[-3000:])

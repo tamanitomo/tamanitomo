@@ -298,6 +298,8 @@ def apply_job_models(c, run=None, previous_routes=None):
                 text=True,
                 timeout=60,
                 env={**os.environ, "HERMES_HOME": str(c.home)},
+                encoding="utf-8",
+                errors="replace",
             )
             if result.returncode:
                 raise ValueError(result.stderr or "Hermes cron edit failed")

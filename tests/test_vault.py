@@ -48,7 +48,11 @@ class VaultHistoryTests(unittest.TestCase):
         self.assertTrue(first["created"])
         self.assertFalse(second["created"])
         remotes = subprocess.run(
-            ["git", "-C", str(self.c.vault), "remote"], capture_output=True, text=True
+            ["git", "-C", str(self.c.vault), "remote"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         self.assertEqual(remotes.stdout.strip(), "")
 

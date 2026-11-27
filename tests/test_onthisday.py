@@ -46,7 +46,9 @@ class OnThisDayTests(unittest.TestCase):
         )
         self.store = HermesStore(self.c.home)
         owner = dict(user_id=OWNER_TELEGRAM, chat_id=OWNER_TELEGRAM, chat_type="dm")
-        self.store.session("tg", "telegram", started=on(2026, 1, 1).timestamp(), **owner)
+        self.store.session(
+            "tg", "telegram", started=on(2026, 1, 1).timestamp(), **owner
+        )
 
     def say(self, when, text, role="user"):
         self.store.say("tg", role, text, when.timestamp())
@@ -61,15 +63,24 @@ class OnThisDayTests(unittest.TestCase):
 
     def test_the_best_line_of_a_day_a_year_ago(self):
         self.say(on(2027, 3, 14, 9), "ok restart the gateway and check the logs")
-        self.say(on(2027, 3, 14, 21), "We went to the harbor festival and I laughed the whole time, best night")
+        self.say(
+            on(2027, 3, 14, 21),
+            "We went to the harbor festival and I laughed the whole time, best night",
+        )
         self.say(on(2027, 3, 14, 22), "lol")
         text, data = otd.render(self.c, TODAY)
-        self.assertIn('- A year ago today (14 March 2027): Robin said on Telegram: "We went to the harbor festival', text)
+        self.assertIn(
+            '- A year ago today (14 March 2027): Robin said on Telegram: "We went to the harbor festival',
+            text,
+        )
         self.assertNotIn("restart the gateway", text)
         self.assertEqual(data["items"][0]["date"], "2027-03-14")
 
     def test_machinery_and_paths_are_not_memories(self):
-        self.say(on(2027, 3, 14), "copy it to /srv/files/backup/today and run the install script")
+        self.say(
+            on(2027, 3, 14),
+            "copy it to /srv/files/backup/today and run the install script",
+        )
         self.assertEqual(otd.render(self.c, TODAY)[0], "")
 
     def test_what_she_kept_watched_and_felt(self):
@@ -86,14 +97,22 @@ class OnThisDayTests(unittest.TestCase):
                                          "at": on(2028, 2, 14, 21).isoformat()}])  # fmt: skip
         text, data = otd.render(self.c, TODAY)
         labels = [row["label"] for row in data["items"]]
-        self.assertEqual(labels, ["Six months ago", "Three months ago", "A month ago"])  # the furthest back first
+        self.assertEqual(
+            labels, ["Six months ago", "Three months ago", "A month ago"]
+        )  # the furthest back first
         self.assertIn('you felt close: "We stayed up talking about stars"', text)
         self.assertIn('you wrote down: "Robin taught me a card trick"', text)
-        self.assertIn('you two watched Harbor Lights (2019); you said "aww, same" while watching Harbor Lights', text)
+        self.assertIn(
+            'you two watched Harbor Lights (2019); you said "aww, same" while watching Harbor Lights',
+            text,
+        )
 
     def test_at_most_four_lines(self):
         for years in range(1, 7):
-            self.say(on(2028 - years, 3, 14), f"Our favourite dinner again, year {years}, I love these nights")
+            self.say(
+                on(2028 - years, 3, 14),
+                f"Our favourite dinner again, year {years}, I love these nights",
+            )
         _text, data = otd.render(self.c, TODAY)
         self.assertEqual(sum(len(row["lines"]) for row in data["items"]), otd.MAX_ITEMS)
         self.assertEqual(data["items"][0]["label"], "6 years ago")
@@ -101,12 +120,22 @@ class OnThisDayTests(unittest.TestCase):
     def test_a_leap_day_and_short_months(self):
         days = dict((label, day) for label, day in otd.past_days(dt.date(2028, 2, 29)))
         self.assertEqual(days["A year ago"], dt.date(2027, 2, 28))
-        self.assertEqual(dict(otd.past_days(dt.date(2028, 5, 31)))["Three months ago"], dt.date(2028, 2, 29))
+        self.assertEqual(
+            dict(otd.past_days(dt.date(2028, 5, 31)))["Three months ago"],
+            dt.date(2028, 2, 29),
+        )
 
     def test_her_context_carries_todays_memories(self):
-        self.say(on(2027, 3, 14), "We went to the harbor festival and I laughed the whole time, best night")
+        self.say(
+            on(2027, 3, 14),
+            "We went to the harbor festival and I laughed the whole time, best night",
+        )
         sensors.run_one(self.c, "onthisday", TODAY.astimezone(dt.timezone.utc))
-        out = ctx.build(self.c, {"extra": {"user_message": "hey", "platform": "telegram"}}, now=TODAY)
+        out = ctx.build(
+            self.c,
+            {"extra": {"user_message": "hey", "platform": "telegram"}},
+            now=TODAY,
+        )
         self.assertIn("[On this day]", out)
         self.assertIn("harbor festival", out)
         self.assertNotIn("On this day:", out)  # its own section, not the ambient block

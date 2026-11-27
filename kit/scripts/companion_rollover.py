@@ -253,6 +253,8 @@ def end_sessions(c, ids, python=None):
                 text=True,
                 timeout=30,
                 env=env,
+                encoding="utf-8",
+                errors="replace",
             )
             try:
                 command = json.loads(probe.stdout) if probe.returncode == 0 else None
@@ -278,6 +280,8 @@ def end_sessions(c, ids, python=None):
             text=True,
             timeout=60,
             env=env,
+            encoding="utf-8",
+            errors="replace",
         )
     if r.returncode:
         raise ValueError(

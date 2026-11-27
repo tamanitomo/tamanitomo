@@ -196,6 +196,8 @@ def cmd_doctor(args):
                     "COMPANION_HOME": str(c.home),
                     "COMPANION_MEMORY_READ_ONLY": "1",
                 },
+                encoding="utf-8",
+                errors="replace",
             )
             if r.returncode:
                 raise ValueError(f"hook exited {r.returncode}: {r.stderr[:200]}")

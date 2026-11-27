@@ -52,7 +52,9 @@ def register(app, select, load):
         import companion_identity as identity
 
         soul = (
-            identity.sections(c.soul.read_text()).get("appearance", {}).get("body", "")
+            identity.sections(c.soul.read_text(encoding="utf-8"))
+            .get("appearance", {})
+            .get("body", "")
             if c.soul.exists()
             else ""
         )
@@ -771,6 +773,8 @@ def register(app, select, load):
                     text=True,
                     stdin=subprocess.DEVNULL,
                     timeout=timeout,
+                    encoding="utf-8",
+                    errors="replace",
                 )
                 if result.returncode:
                     raise ValueError(redact(result.stderr or result.stdout)[-4000:])

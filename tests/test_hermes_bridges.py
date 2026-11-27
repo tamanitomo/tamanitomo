@@ -100,6 +100,8 @@ class BridgeRerunTests(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=60,
+            encoding="utf-8",
+            errors="replace",
         )
         line = next(
             line for line in run.stdout.splitlines() if line.startswith("COMPANION_")

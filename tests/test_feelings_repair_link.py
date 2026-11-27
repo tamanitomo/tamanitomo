@@ -17,12 +17,24 @@ NOW = dt.datetime(2026, 10, 10, 12, tzinfo=dt.timezone.utc)
 
 @pytest.fixture
 def companion(tmp_path):
-    c = cc.Companion(agent="Nova", human="Robin", timezone="UTC", hermes_root=tmp_path / "h", vault=tmp_path / "v")
+    c = cc.Companion(
+        agent="Nova",
+        human="Robin",
+        timezone="UTC",
+        hermes_root=tmp_path / "h",
+        vault=tmp_path / "v",
+    )
     c.life.mkdir(parents=True)
     feelings.record(
         c,
-        {"kind": "rupture", "id": "photo-wait", "topic": "let down", "text": "I asked for a photo and it slipped by",
-         "evidence": "Synthetic", "at": (NOW - dt.timedelta(days=1)).isoformat()},
+        {
+            "kind": "rupture",
+            "id": "photo-wait",
+            "topic": "let down",
+            "text": "I asked for a photo and it slipped by",
+            "evidence": "Synthetic",
+            "at": (NOW - dt.timedelta(days=1)).isoformat(),
+        },
         NOW,
     )
     return c
@@ -31,8 +43,12 @@ def companion(tmp_path):
 def test_a_repair_can_name_its_rupture_the_way_she_tried_to(companion):
     feelings.record(
         companion,
-        {"kind": "repair", "rupture": "photo-wait", "text": "The photo came, late, and that was enough",
-         "evidence": "Synthetic"},
+        {
+            "kind": "repair",
+            "rupture": "photo-wait",
+            "text": "The photo came, late, and that was enough",
+            "evidence": "Synthetic",
+        },
         NOW,
     )
     [repair] = [r for r in feelings.experiences(companion) if r["kind"] == "repair"]
@@ -41,5 +57,9 @@ def test_a_repair_can_name_its_rupture_the_way_she_tried_to(companion):
 
 def test_an_unlinked_repair_is_told_the_field_and_the_ruptures(companion):
     with pytest.raises(ValueError) as refused:
-        feelings.record(companion, {"kind": "repair", "text": "It's fine now", "evidence": "Synthetic"}, NOW)
+        feelings.record(
+            companion,
+            {"kind": "repair", "text": "It's fine now", "evidence": "Synthetic"},
+            NOW,
+        )
     assert '"related"' in str(refused.value) and "photo-wait" in str(refused.value)

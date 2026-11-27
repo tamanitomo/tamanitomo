@@ -541,6 +541,8 @@ class Runtime:
                 capture_output=True,
                 text=True,
                 timeout=30,
+                encoding="utf-8",
+                errors="replace",
             )
             rows = json.loads(r.stdout)
             return rows if r.returncode == 0 and isinstance(rows, list) else []

@@ -32,10 +32,11 @@ jobs:
         if: matrix.python == '3.13'
         run: |
           python -m pip install -r requirements-dev.txt
-          python -m black --check kit/scripts kit/cli kit/app launch.py update_release.py
-          python -m ruff check kit/scripts kit/cli kit/app
+          python -m black --check kit/scripts kit/cli kit/app launch.py update_release.py tests tools
+          python -m ruff check kit/scripts kit/cli kit/app tests tools
       - name: Run tests (no hermes on PATH)
-        run: python -m pytest -q -rs --durations=5 --junitxml=junit.xml
+        # Text read or written without an encoding is an error here: Windows would use cp1252 for it.
+        run: python -X warn_default_encoding -W error::EncodingWarning -m pytest -q -rs --durations=5 --junitxml=junit.xml
       - name: Report failed tests as annotations
         # Job logs need a signed-in viewer; check-run annotations are public. So an annotation
         # carries only the test id, its file and the exception class as a category -- never the
@@ -89,15 +90,30 @@ jobs:
           node-version: '22'
       - run: python -m pip install -r requirements.txt
       - name: Run all domain suites
-        shell: bash
+        run: python -m pytest -q -rs --durations=5 --junitxml=junit.xml
+      - name: Report failed tests as annotations
+        shell: bash  # the heredoc below is bash; Windows runners default to PowerShell
+        # Job logs need a signed-in viewer; check-run annotations are public. So an annotation
+        # carries only the test id, its file and the exception class as a category -- never the
+        # assertion text or traceback, which can contain arbitrary strings. Details: the job log.
+        if: failure()
         run: |
-          set -o pipefail
-          python -m pytest -q -rs --durations=5 2>&1 | tee pytest.log && exit 0
-          # A failure's reason travels as an annotation: readable without a token, unlike the job log.
           python - <<'PY'
-          import os, pathlib
-          tail = pathlib.Path('pytest.log').read_text(errors='replace')[-5000:]
-          esc = tail.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-          print(f"::error title=pytest failed on {os.environ.get('RUNNER_OS', 'this runner')}::{esc}")
+          import os, re
+          import xml.etree.ElementTree as ET
+          if not os.path.exists('junit.xml'):
+              print('::notice title=No test report::junit.xml was not written; see the job log.')
+              raise SystemExit(0)
+          safe = lambda text, n: re.sub(r'[^A-Za-z0-9_.:/ -]', '', str(text or ''))[:n]
+          for case in ET.parse('junit.xml').getroot().iter('testcase'):
+              for tag in ('failure', 'error'):
+                  node = case.find(tag)
+                  if node is None:
+                      continue
+                  kind = re.match(r'\s*([A-Za-z_][\w.]*)', node.get('message') or '')
+                  category = safe(kind.group(1).rsplit('.', 1)[-1] if kind else tag, 60)
+                  cls = safe(case.get('classname'), 120)
+                  path = cls.rsplit('.', 1)[0].replace('.', '/') + '.py' if '.' in cls else ''
+                  print(f"::error file={path},title=Test {tag}::{cls}::{safe(case.get('name'), 120)} "
+                        f"({category}); details in the job log")
           PY
-          exit 1

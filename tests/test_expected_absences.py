@@ -514,7 +514,12 @@ def test_cli_reads_and_records_only_the_requested_profile(companion):
     ]
     initial = json.loads(
         subprocess.run(
-            [*command, "absences"], capture_output=True, text=True, check=True
+            [*command, "absences"],
+            capture_output=True,
+            text=True,
+            check=True,
+            encoding="utf-8",
+            errors="replace",
         ).stdout
     )
     payload = {
@@ -531,6 +536,8 @@ def test_cli_reads_and_records_only_the_requested_profile(companion):
             capture_output=True,
             text=True,
             check=True,
+            encoding="utf-8",
+            errors="replace",
         ).stdout
     )
     assert result["written"] is True

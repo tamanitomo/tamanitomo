@@ -11,7 +11,7 @@ import yaml
 
 
 def synthesize(home, provider, text, output):
-    cfg = yaml.safe_load((home / "config.yaml").read_text()) or {}
+    cfg = yaml.safe_load((home / "config.yaml").read_text(encoding="utf-8")) or {}
     block = (cfg.get("tts") or {}).get(provider) or {}
     if provider == "pockettts":
         binary = Path(sys.executable).parent / (

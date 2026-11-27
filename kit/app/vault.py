@@ -182,7 +182,11 @@ def trash_list(c):
                     if folder.is_symlink() or not (folder / "file").is_file():
                         continue
                     try:
-                        rows.append(json.loads((folder / "metadata.json").read_text()))
+                        rows.append(
+                            json.loads(
+                                (folder / "metadata.json").read_text(encoding="utf-8")
+                            )
+                        )
                     except (OSError, ValueError):
                         continue
     return {"files": sorted(rows, key=lambda r: r["deleted_at"], reverse=True)}
@@ -208,7 +212,7 @@ def restore(c, ident):
     ):
         raise ValueError("Invalid trash entry")
     with cp.file_lock(c.vault / ".companion-editor.lock"):
-        row = json.loads((folder / "metadata.json").read_text())
+        row = json.loads((folder / "metadata.json").read_text(encoding="utf-8"))
         dest = resolve(c, row["path"])
         if protected(c, row["path"]):
             raise ValueError("The restore destination is protected")
@@ -260,7 +264,7 @@ def backup(c, relative, data, now=None):
     ours = (
         last.is_file()
         and not last.is_symlink()
-        and last.read_text().strip() == hashlib.sha256(data).hexdigest()
+        and last.read_text(encoding="utf-8").strip() == hashlib.sha256(data).hexdigest()
     )
     if ours and kept and now - kept[-1].stat().st_mtime < BACKUP_WINDOW:
         return None

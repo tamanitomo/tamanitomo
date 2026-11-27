@@ -121,7 +121,11 @@ class SameFactTests(unittest.TestCase):
         self.assertTrue(
             self.fact("Robin told Nova he loves her.", agent="Nova")["written"]
         )
-        self.assertFalse((self.root / "facts.jsonl").read_text().count("Nova finished"))
+        self.assertFalse(
+            (self.root / "facts.jsonl")
+            .read_text(encoding="utf-8")
+            .count("Nova finished")
+        )
 
     def test_a_batch_says_why_a_fact_was_not_written(self):
         c = cc.Companion(

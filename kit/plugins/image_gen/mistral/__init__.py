@@ -8,10 +8,20 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from agent.image_gen_provider import DEFAULT_ASPECT_RATIO, resolve_aspect_ratio, success_response
+from agent.image_gen_provider import (
+    DEFAULT_ASPECT_RATIO,
+    resolve_aspect_ratio,
+    success_response,
+)
 from agent.secret_scope import get_secret
 from plugins.image_gen._common import (
-    StaticImageGenProvider, catalog_rows, error_factory, materialize_image, post_json, prompt_required_error)
+    StaticImageGenProvider,
+    catalog_rows,
+    error_factory,
+    materialize_image,
+    post_json,
+    prompt_required_error,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -79,8 +89,12 @@ class MistralImageGenProvider(StaticImageGenProvider):
         return {"modalities": ["text"], "max_reference_images": 0}
 
     def generate(
-        self, prompt: str, aspect_ratio: str = DEFAULT_ASPECT_RATIO, *,
-        image_url: Optional[str] = None, reference_image_urls: Optional[List[str]] = None,
+        self,
+        prompt: str,
+        aspect_ratio: str = DEFAULT_ASPECT_RATIO,
+        *,
+        image_url: Optional[str] = None,
+        reference_image_urls: Optional[List[str]] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         prompt = (prompt or "").strip()
@@ -89,7 +103,9 @@ class MistralImageGenProvider(StaticImageGenProvider):
             return prompt_required_error(self.provider_id, aspect)
 
         api_key = _resolve_key()
-        fail = error_factory(self.provider_id, aspect, model=DEFAULT_MODEL, prompt=prompt)
+        fail = error_factory(
+            self.provider_id, aspect, model=DEFAULT_MODEL, prompt=prompt
+        )
         if not api_key:
             return fail(
                 "MISTRAL_API_KEY not set. Add your Mistral API key in Settings or .env.",
@@ -106,7 +122,9 @@ class MistralImageGenProvider(StaticImageGenProvider):
         payload = {
             "model": "mistral-small-latest",
             "tools": [{"type": "image_generation"}],
-            "inputs": [{"role": "user", "content": f"Generate an image: {prompt}{aspect_text}"}],
+            "inputs": [
+                {"role": "user", "content": f"Generate an image: {prompt}{aspect_text}"}
+            ],
         }
 
         result, failure = post_json(
@@ -120,12 +138,17 @@ class MistralImageGenProvider(StaticImageGenProvider):
             return fail(failure.error, failure.error_type)
 
         image_url_found = None
-        for entry in (result.get("outputs") or []):
-            if entry.get("type") == "tool.execution" and entry.get("name") == "image_generation":
+        for entry in result.get("outputs") or []:
+            if (
+                entry.get("type") == "tool.execution"
+                and entry.get("name") == "image_generation"
+            ):
                 info = entry.get("info") or {}
                 res_str = info.get("result") or "{}"
                 try:
-                    res_json = json.loads(res_str) if isinstance(res_str, str) else res_str
+                    res_json = (
+                        json.loads(res_str) if isinstance(res_str, str) else res_str
+                    )
                     image_url_found = res_json.get("url")
                 except Exception:
                     pass
@@ -133,7 +156,10 @@ class MistralImageGenProvider(StaticImageGenProvider):
                     break
 
         if not image_url_found:
-            return fail("Mistral returned no image data from image_generation tool", "empty_response")
+            return fail(
+                "Mistral returned no image data from image_generation tool",
+                "empty_response",
+            )
 
         image_ref, err = materialize_image(
             None,

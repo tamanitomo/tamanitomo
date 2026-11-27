@@ -47,7 +47,9 @@ class RecoveryTests(unittest.TestCase):
             self.c.soul.symlink_to(self.c.canonical_soul)
             self.linked = True
         except OSError:
-            self.c.soul.write_text(self.c.canonical_soul.read_text(), encoding="utf-8")
+            self.c.soul.write_text(
+                self.c.canonical_soul.read_text(encoding="utf-8"), encoding="utf-8"
+            )
             self.linked = False
         self.c.life.mkdir(parents=True)
         (self.c.life / "events.jsonl").write_text(
@@ -144,7 +146,9 @@ class RecoveryTests(unittest.TestCase):
         result, restored = self.restore()
         self.assertEqual(restored.profile, "nova")
         self.assertEqual(restored.vault, self.base / "restored-life")
-        self.assertEqual(restored.soul.read_text(), "Nova's authored identity.\n")
+        self.assertEqual(
+            restored.soul.read_text(encoding="utf-8"), "Nova's authored identity.\n"
+        )
         self.assertEqual(
             (restored.life / "events.jsonl").read_bytes(),
             (self.c.life / "events.jsonl").read_bytes(),
@@ -152,18 +156,27 @@ class RecoveryTests(unittest.TestCase):
         self.assertFalse(restored.cron_active)
         self.assertEqual(restored.outreach, "never")
         self.assertFalse(outreach.decide(restored)["allowed"])
-        jobs = json.loads((restored.home / "cron/jobs.json").read_text())["jobs"]
+        jobs = json.loads(
+            (restored.home / "cron/jobs.json").read_text(encoding="utf-8")
+        )["jobs"]
         self.assertEqual(
             (jobs[0]["enabled"], jobs[0]["paused"], jobs[0]["next_run_at"]),
             (False, True, None),
         )
         self.assertIn(str(restored.canonical_soul), jobs[0]["prompt"])
-        self.assertIn(str(restored.home), (restored.home / "cron/pulse.py").read_text())
-        config = yaml.safe_load((restored.home / "config.yaml").read_text())
+        self.assertIn(
+            str(restored.home),
+            (restored.home / "cron/pulse.py").read_text(encoding="utf-8"),
+        )
+        config = yaml.safe_load(
+            (restored.home / "config.yaml").read_text(encoding="utf-8")
+        )
         self.assertEqual(config["path"], str(restored.soul))
         self.assertNotIn("platforms", config)
         self.assertTrue(
-            json.loads((restored.home / "recovery.json").read_text())["review_required"]
+            json.loads((restored.home / "recovery.json").read_text(encoding="utf-8"))[
+                "review_required"
+            ]
         )
         self.assertEqual(
             original.execute("SELECT count(*) FROM sessions").fetchone()[0], 3
@@ -220,7 +233,9 @@ class RecoveryTests(unittest.TestCase):
             self.assertIn(b"model-secret", archive.read("home/config.yaml"))
         _, restored = self.restore()
         self.assertEqual(restored.remote_pin, "")
-        self.assertIn("env-secret", (restored.home / ".env").read_text())
+        self.assertIn(
+            "env-secret", (restored.home / ".env").read_text(encoding="utf-8")
+        )
 
     def test_shared_transcript_source_preserves_selected_history(self):
         self.database(shared=True)
@@ -263,7 +278,9 @@ class RecoveryTests(unittest.TestCase):
         restored.canonical_soul.write_text(
             "Updated authored identity.", encoding="utf-8"
         )
-        self.assertEqual(restored.soul.read_text(), "Updated authored identity.")
+        self.assertEqual(
+            restored.soul.read_text(encoding="utf-8"), "Updated authored identity."
+        )
 
     def test_external_linked_memory_is_materialized_and_preserved(self):
         external = self.base / "shared-memory"
@@ -277,7 +294,8 @@ class RecoveryTests(unittest.TestCase):
         self.assertIn("home/memories", manifest["materialized_links"])
         _, restored = self.restore()
         self.assertEqual(
-            (restored.home / "memories/USER.md").read_text(), "Robin likes tea."
+            (restored.home / "memories/USER.md").read_text(encoding="utf-8"),
+            "Robin likes tea.",
         )
 
     def rewrite(self, transform):
@@ -396,7 +414,7 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(restored.outreach, "never")
         self.assertIn(
             response.json()["installation"],
-            json.loads((self.base / "linked.json").read_text()),
+            json.loads((self.base / "linked.json").read_text(encoding="utf-8")),
         )
         self.assertEqual(list((self.base / "app/recovery-uploads").glob("*")), [])
 
@@ -431,7 +449,10 @@ class RecoveryTests(unittest.TestCase):
         self.assertIn("do not restore", result["note"])
         self.assertIn("registry is read-only", result["registration_error"])
         restored = cc.load(Path(result["home"]))
-        self.assertEqual(restored.soul.read_text(), self.c.soul.read_text())
+        self.assertEqual(
+            restored.soul.read_text(encoding="utf-8"),
+            self.c.soul.read_text(encoding="utf-8"),
+        )
         self.assertEqual(restored.outreach, "never")
         self.assertFalse(restored.cron_active)
         self.assertEqual(client.app.state.runtimes, {})
@@ -502,7 +523,7 @@ class RecoveryTests(unittest.TestCase):
         for response in responses:
             self.assertEqual(response.status_code, 200, response.text)
             self.assertTrue(response.json()["linked"], response.text)
-        saved = json.loads((self.base / "linked.json").read_text())
+        saved = json.loads((self.base / "linked.json").read_text(encoding="utf-8"))
         self.assertEqual(len(saved), 3)
         self.assertEqual(saved["linked-111111111111"], existing["linked-111111111111"])
         for response in responses:

@@ -1502,6 +1502,8 @@ class ReleaseManifestTests(unittest.TestCase):
             cwd=ROOT,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if tracked.returncode:
             self.skipTest("not a git checkout")
@@ -1677,14 +1679,23 @@ class PromiseTests(AwakeFingerprintProseTests):
         said = self.now + dt.timedelta(minutes=5)
         item = presence.promise(self.c, "call back", 30, now=said)["commitment"]
         with self.assertRaisesRegex(ValueError, "--reason"):
-            presence.promise(self.c, drop=item["id"], now=said + dt.timedelta(minutes=40))
+            presence.promise(
+                self.c, drop=item["id"], now=said + dt.timedelta(minutes=40)
+            )
         presence.promise(
-            self.c, drop=item["id"], reason="Fell asleep early.", now=said + dt.timedelta(minutes=40)
+            self.c,
+            drop=item["id"],
+            reason="Fell asleep early.",
+            now=said + dt.timedelta(minutes=40),
         )
         held = presence.current(self.c)["state"]["commitments"]
-        self.assertEqual([i["status"] for i in held if i["id"] == item["id"]], ["cancelled"])
+        self.assertEqual(
+            [i["status"] for i in held if i["id"] == item["id"]], ["cancelled"]
+        )
         with self.assertRaisesRegex(ValueError, "no commitment 'nope'"):
-            presence.promise(self.c, done="nope", reason="x", now=said + dt.timedelta(minutes=41))
+            presence.promise(
+                self.c, done="nope", reason="x", now=said + dt.timedelta(minutes=41)
+            )
 
 
 class OverdueFingerprintTests(AwakeFingerprintProseTests):
@@ -1703,7 +1714,9 @@ class OverdueFingerprintTests(AwakeFingerprintProseTests):
         )
         started = self.now + dt.timedelta(minutes=15)
         within = preread.fingerprint(self.c, started + dt.timedelta(minutes=30))
-        self.assertEqual(within, preread.fingerprint(self.c, started + dt.timedelta(minutes=44)))
+        self.assertEqual(
+            within, preread.fingerprint(self.c, started + dt.timedelta(minutes=44))
+        )
         overdue = preread.fingerprint(self.c, started + dt.timedelta(minutes=46))
         self.assertNotEqual(within, overdue)
         later = preread.fingerprint(self.c, started + dt.timedelta(minutes=46 + 60))
@@ -1711,8 +1724,14 @@ class OverdueFingerprintTests(AwakeFingerprintProseTests):
 
     def test_an_ordinary_moment_is_left_alone_for_an_afternoon(self):
         first = preread.fingerprint(self.c, self.now + dt.timedelta(minutes=10))
-        self.assertEqual(first, preread.fingerprint(self.c, self.now + dt.timedelta(hours=2, minutes=50)))
-        self.assertNotEqual(first, preread.fingerprint(self.c, self.now + dt.timedelta(hours=3, minutes=5)))
+        self.assertEqual(
+            first,
+            preread.fingerprint(self.c, self.now + dt.timedelta(hours=2, minutes=50)),
+        )
+        self.assertNotEqual(
+            first,
+            preread.fingerprint(self.c, self.now + dt.timedelta(hours=3, minutes=5)),
+        )
 
     def test_its_own_estimate_decides_when_it_has_run_long(self):
         presence.transition_scene(
@@ -1744,18 +1763,31 @@ class OverdueFingerprintTests(AwakeFingerprintProseTests):
         )
         state = presence.current(self.c)["state"]
         started = self.now + dt.timedelta(minutes=15)
-        self.assertNotIn("RUNNING LONG", companion_day.render(state, started + dt.timedelta(minutes=30)))
-        self.assertIn("RUNNING LONG: 50 minutes in", companion_day.render(state, started + dt.timedelta(minutes=50)))
+        self.assertNotIn(
+            "RUNNING LONG",
+            companion_day.render(state, started + dt.timedelta(minutes=30)),
+        )
+        self.assertIn(
+            "RUNNING LONG: 50 minutes in",
+            companion_day.render(state, started + dt.timedelta(minutes=50)),
+        )
 
 
 class OutfitIdErrorTests(AwakeFingerprintProseTests):
     """A wrong outfit id is answered with the id she meant and the ones she has."""
 
     def test_a_described_towel_points_at_the_towel_id(self):
-        with self.assertRaisesRegex(ValueError, r"'soft white towel' is not a wardrobe id\. Did you mean towel\?.*tee"):
+        with self.assertRaisesRegex(
+            ValueError,
+            r"'soft white towel' is not a wardrobe id\. Did you mean towel\?.*tee",
+        ):
             presence.transition_scene(
-                self.c, "wrapped in a towel", "Grabbed one.", "Warm.",
-                outfit=["soft white towel"], setting="private",
+                self.c,
+                "wrapped in a towel",
+                "Grabbed one.",
+                "Warm.",
+                outfit=["soft white towel"],
+                setting="private",
                 now=self.now + dt.timedelta(minutes=5),
             )
 
@@ -1769,7 +1801,12 @@ class RoutineWakeTests(AwakeFingerprintProseTests):
                 {
                     "kind": "imagined_routine",
                     "daily": [
-                        {"start": "13:00", "end": "14:30", "activity": "a walk outside", "setting": "the park"}
+                        {
+                            "start": "13:00",
+                            "end": "14:30",
+                            "activity": "a walk outside",
+                            "setting": "the park",
+                        }
                     ],
                 }
             ),

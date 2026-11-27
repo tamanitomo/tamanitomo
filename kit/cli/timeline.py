@@ -54,6 +54,8 @@ def cmd_timeline(args):
                     text=True,
                     timeout=30,
                     env={**os.environ, "HERMES_HOME": str(c.home)},
+                    encoding="utf-8",
+                    errors="replace",
                 )
                 if result.returncode:
                     raise ValueError(

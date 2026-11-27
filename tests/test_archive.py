@@ -63,7 +63,9 @@ class ArchiveTests(unittest.TestCase):
             self.months(),
             ["2026-01.jsonl", "2026-01.md", "2026-02.jsonl", "2026-02.md"],
         )
-        january = (self.c.data / "conversations/2026/2026-01.md").read_text()
+        january = (self.c.data / "conversations/2026/2026-01.md").read_text(
+            encoding="utf-8"
+        )
         self.assertTrue(january.startswith("# Conversations, January 2026\n"))
         self.assertIn("## Saturday 31 January", january)
         self.assertIn(
@@ -74,7 +76,7 @@ class ArchiveTests(unittest.TestCase):
         rows = [
             json.loads(line)
             for line in (self.c.data / "conversations/2026/2026-02.jsonl")
-            .read_text()
+            .read_text(encoding="utf-8")
             .splitlines()
         ]
         self.assertEqual(
@@ -85,18 +87,24 @@ class ArchiveTests(unittest.TestCase):
     def test_each_message_once_and_new_ones_under_their_day(self):
         archive.update(self.c)
         self.assertEqual(archive.update(self.c)["copied"], 0)
-        before = (self.c.data / "conversations/2026/2026-02.md").read_text()
+        before = (self.c.data / "conversations/2026/2026-02.md").read_text(
+            encoding="utf-8"
+        )
         self.store.say("tg", "assistant", "You're on!", at(2, 1, 21, 31))
         self.store.say("tg", "user", "Good night", at(2, 2, 23, 0))
         self.assertEqual(archive.update(self.c)["copied"], 2)
-        after = (self.c.data / "conversations/2026/2026-02.md").read_text()
+        after = (self.c.data / "conversations/2026/2026-02.md").read_text(
+            encoding="utf-8"
+        )
         self.assertTrue(after.startswith(before))  # append-only
         self.assertEqual(
             after.count("## Sunday 1 February"), 1
         )  # the day it was already under
         self.assertIn("## Monday 2 February", after)
         lines = (
-            (self.c.data / "conversations/2026/2026-02.jsonl").read_text().splitlines()
+            (self.c.data / "conversations/2026/2026-02.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
         )
         self.assertEqual(len(lines), 3)
 
@@ -110,7 +118,9 @@ class ArchiveTests(unittest.TestCase):
             "tg", "assistant", "[silent] but this one has words", at(2, 3, 20, 2)
         )
         archive.update(self.c)
-        february = (self.c.data / "conversations/2026/2026-02.md").read_text()
+        february = (self.c.data / "conversations/2026/2026-02.md").read_text(
+            encoding="utf-8"
+        )
         self.assertIn(
             "Robin:** [Game event: Robin just reached level 4]", february
         )  # a game note, kept as one

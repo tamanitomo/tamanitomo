@@ -34,7 +34,7 @@ def settings(root):
     if p.is_symlink():
         raise ValueError("Comfy settings must not be a symbolic link")
     return (
-        json.loads(p.read_text())
+        json.loads(p.read_text(encoding="utf-8"))
         if p.exists()
         else {
             "mode": "local",
@@ -257,7 +257,7 @@ def run_scan(config, folders, hash_unknown=False, known=None):
             "-o",
             "ConnectTimeout=10",
             config["host"],
-            "python3 -c " + shlex.quote(worker.read_text()),
+            "python3 -c " + shlex.quote(worker.read_text(encoding="utf-8")),
         ]
     proc = subprocess.Popen(
         args,
@@ -265,6 +265,8 @@ def run_scan(config, folders, hash_unknown=False, known=None):
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     result = None
     error = "Could not read the model files on the Comfy host"
@@ -323,7 +325,7 @@ def run_worker(config, request, report=lambda _: None):
             "-o",
             "ConnectTimeout=10",
             config["host"],
-            "python3 -c " + shlex.quote(worker.read_text()),
+            "python3 -c " + shlex.quote(worker.read_text(encoding="utf-8")),
         ]
     proc = subprocess.Popen(
         args,
@@ -331,6 +333,8 @@ def run_worker(config, request, report=lambda _: None):
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     result = None
     error = "Model downloader failed; check the Comfy path and SSH access"

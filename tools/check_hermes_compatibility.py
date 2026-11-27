@@ -104,6 +104,8 @@ def revision(checkout):
         capture_output=True,
         text=True,
         timeout=10,
+        encoding="utf-8",
+        errors="replace",
     ).stdout.strip()
 
 
@@ -294,9 +296,7 @@ def probe(scratch, checkout):
         import types
 
         home = Path(tempfile.mkdtemp(dir=scratch))
-        store = _responses.ResponseStore(
-            db_path=str(home / _transcript.RESPONSE_STORE)
-        )
+        store = _responses.ResponseStore(db_path=str(home / _transcript.RESPONSE_STORE))
         store.put(
             "resp_probe",
             {
@@ -379,7 +379,9 @@ def probe(scratch, checkout):
         "unrelated_job_policy",
     ]
 
-    specs = json.loads((ROOT / "kit/templates/cron/manifest.json").read_text())["jobs"]
+    specs = json.loads(
+        (ROOT / "kit/templates/cron/manifest.json").read_text(encoding="utf-8")
+    )["jobs"]
     maintenance = [s for s in specs if s.get("no_agent")]
     require(
         all(
@@ -541,6 +543,8 @@ def main(argv=None):
             text=True,
             capture_output=True,
             timeout=90,
+            encoding="utf-8",
+            errors="replace",
         )
         if result.returncode:
             print(result.stdout, file=sys.stderr, end="")

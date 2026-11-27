@@ -133,7 +133,7 @@ class ChapterTests(unittest.TestCase):
             piece = chapters.next_piece(self.c, NOW)
         self.assertEqual(done, ["month November 2026", "month December 2026", "month January 2027", "year 2026",
                                 "so-far Our story so far"])  # fmt: skip
-        nov = chapters.month_path(self.c, "2026-11").read_text()
+        nov = chapters.month_path(self.c, "2026-11").read_text(encoding="utf-8")
         self.assertTrue(nov.startswith("# November 2026: Lanterns and long walks\n"))
         self.assertTrue(nov.rstrip().endswith("<!-- written 2027-02-10 -->"))
 
@@ -210,7 +210,10 @@ class ChapterTests(unittest.TestCase):
         )
         self.assertIsNone(chapters.next_piece(self.c, NOW))
         path = chapters.month_path(self.c, "2027-01")
-        path.write_text(path.read_text() + "\nI added this later, by hand.\n")
+        path.write_text(
+            path.read_text(encoding="utf-8") + "\nI added this later, by hand.\n",
+            encoding="utf-8",
+        )
         self.touch(path)
         self.assertEqual(
             chapters.next_piece(self.c, NOW)["kind"], "so-far"
@@ -285,14 +288,16 @@ class ChapterTests(unittest.TestCase):
     def test_the_story_job(self):
         import companion_render as cr
 
-        manifest = json.loads((ROOT / "kit/templates/cron/manifest.json").read_text())
+        manifest = json.loads(
+            (ROOT / "kit/templates/cron/manifest.json").read_text(encoding="utf-8")
+        )
         spec = next(j for j in manifest["jobs"] if j["key"] == "story")
         self.assertEqual(
             (spec["preread_module"], spec["tier"]), ("companion_chapters", "reflection")
         )
         self.assertFalse(spec.get("no_agent"))
         prompt = cr.render(
-            (ROOT / "kit/templates/cron" / spec["file"]).read_text(),
+            (ROOT / "kit/templates/cron" / spec["file"]).read_text(encoding="utf-8"),
             cr.mapping_for(self.c),
         )
         self.assertEqual(cr.unresolved(prompt), [])

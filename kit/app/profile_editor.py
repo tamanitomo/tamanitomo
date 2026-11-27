@@ -120,7 +120,7 @@ def save(c, payload):
             raise HTTPException(409, "This companion changed. Reload the editor.")
         backup = c.home / "companion-config-backups" / ("editor-" + uuid.uuid4().hex)
         backup.mkdir(parents=True)
-        old_raw = (c.home / cc.CONFIG_NAME).read_text()
+        old_raw = (c.home / cc.CONFIG_NAME).read_text(encoding="utf-8")
         cp.atomic_write(backup / "companion.json", old_raw)
         cp.atomic_write(backup / "SOUL.md", original["soul"])
         # Preserve extensions the installed kit may not understand yet.

@@ -37,7 +37,8 @@ def companion(tmp_path):
                 "days": {"2026-10-11": {"closeness": 80, "trust": 0.8}},
                 "contact": {},
             }
-        )
+        ),
+        encoding="utf-8",
     )
     return c
 
@@ -67,9 +68,15 @@ def test_a_friendship_has_no_towel_stage(companion):
 @pytest.mark.parametrize(
     "state, why",
     [
-        ({"meters": {"hurt": 0.4, "trust": 0.8}}, "something between you and Alex still hurts"),
+        (
+            {"meters": {"hurt": 0.4, "trust": 0.8}},
+            "something between you and Alex still hurts",
+        ),
         ({"meters": {"hurt": 0.0, "trust": 0.5}}, "you do not trust Alex that far yet"),
-        ({"permanent_friend": True, "meters": {}}, "that is not what things are between you and Alex"),
+        (
+            {"permanent_friend": True, "meters": {}},
+            "that is not what things are between you and Alex",
+        ),
     ],
 )
 def test_why_not_is_a_feeling_never_the_gate(companion, state, why):

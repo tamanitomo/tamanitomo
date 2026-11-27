@@ -46,10 +46,16 @@ class RealtimeAPI(WorkspaceFixture):
     def test_saved_settings_preserve_hermes_voice_and_hide_key(self):
         from kit.app.manage import config, save_config
 
-        save_config(self.c.home, lambda c: c.update(tts={
-            "provider": "pockettts", "pockettts": {"voice": "alba"},
-            "realtime": {"api_key": "private-test-key"},
-        }))
+        save_config(
+            self.c.home,
+            lambda c: c.update(
+                tts={
+                    "provider": "pockettts",
+                    "pockettts": {"voice": "alba"},
+                    "realtime": {"api_key": "private-test-key"},
+                }
+            ),
+        )
         self.enable()
         public = self.get("/api/voice-chat/settings").json()
         assert "private-test-key" not in json.dumps(public)
@@ -64,7 +70,9 @@ class RealtimeAPI(WorkspaceFixture):
 
         def upstream(request):
             requests.append(request)
-            return httpx.Response(200, headers={"content-type": "audio/pcm"}, stream=audio)
+            return httpx.Response(
+                200, headers={"content-type": "audio/pcm"}, stream=audio
+            )
 
         with patch.object(httpx, "AsyncClient", client_factory(upstream)):
             response = self.post("/api/voice-chat/stream", {"text": "こんにちは！"})
@@ -82,7 +90,9 @@ class RealtimeAPI(WorkspaceFixture):
         assert "authorization" not in requests[0].headers
 
     def test_openai_shaped_service_gets_standard_fields_and_named_key(self):
-        (self.c.home / ".env").write_text("OPENAI_API_KEY=speech-test-key\n")
+        (self.c.home / ".env").write_text(
+            "OPENAI_API_KEY=speech-test-key\n", encoding="utf-8"
+        )
         saved = self.enable(
             base_url="https://speech.example/v1",
             model="gpt-4o-mini-tts",
@@ -98,7 +108,9 @@ class RealtimeAPI(WorkspaceFixture):
 
         def upstream(request):
             requests.append(request)
-            return httpx.Response(200, headers={"content-type": "audio/pcm"}, stream=Audio())
+            return httpx.Response(
+                200, headers={"content-type": "audio/pcm"}, stream=Audio()
+            )
 
         with patch.object(httpx, "AsyncClient", client_factory(upstream)):
             response = self.post("/api/voice-chat/stream", {"text": "こんにちは！"})
@@ -118,69 +130,167 @@ class RealtimeAPI(WorkspaceFixture):
 
         def upstream(request):
             requests.append(request)
-            return httpx.Response(200, headers={"content-type": "audio/pcm"}, stream=Audio())
+            return httpx.Response(
+                200, headers={"content-type": "audio/pcm"}, stream=Audio()
+            )
 
         with patch.object(httpx, "AsyncClient", client_factory(upstream)):
-            assert self.post("/api/voice-chat/stream", {"text": "hello"}).status_code == 200
+            assert (
+                self.post("/api/voice-chat/stream", {"text": "hello"}).status_code
+                == 200
+            )
         assert "authorization" not in requests[0].headers
 
     def test_auth_origin_and_profile_still_protect_stream(self):
         self.enable()
         with patch.object(httpx, "AsyncClient") as client:
-            assert self.client.post("/api/voice-chat/stream", json={"text": "hello"}).status_code == 401
-            assert self.client.post("/api/voice-chat/stream?profile=nova", json={"text": "hello"}, headers={**self.headers, "Origin": "https://evil.test"}).status_code == 403
-            assert self.post("/api/voice-chat/stream", {"text": "hello"}, "rowan").status_code == 409
-            assert self.post("/api/voice-chat/stream", {"text": "hello"}, "unknown").status_code == 400
+            assert (
+                self.client.post(
+                    "/api/voice-chat/stream", json={"text": "hello"}
+                ).status_code
+                == 401
+            )
+            assert (
+                self.client.post(
+                    "/api/voice-chat/stream?profile=nova",
+                    json={"text": "hello"},
+                    headers={**self.headers, "Origin": "https://evil.test"},
+                ).status_code
+                == 403
+            )
+            assert (
+                self.post(
+                    "/api/voice-chat/stream", {"text": "hello"}, "rowan"
+                ).status_code
+                == 409
+            )
+            assert (
+                self.post(
+                    "/api/voice-chat/stream", {"text": "hello"}, "unknown"
+                ).status_code
+                == 400
+            )
             client.assert_not_called()
 
     def test_stream_allowed_during_chat_but_mutation_and_wrong_cancel_refused(self):
         self.enable()
         release = threading.Event()
-        operation = self.app.state.operations.submit(str(self.root), "Chat", lambda report: release.wait(2), profile="nova", cancellable=True)
+        operation = self.app.state.operations.submit(
+            str(self.root),
+            "Chat",
+            lambda report: release.wait(2),
+            profile="nova",
+            cancellable=True,
+        )
         try:
-            assert self.post("/api/voice-chat/settings", speech.DEFAULTS).status_code == 409
-            assert self.post(f"/api/chat/{operation['id']}/interrupt", profile="rowan").status_code == 404
-            with patch.object(httpx, "AsyncClient", client_factory(lambda req: httpx.Response(200, headers={"content-type": "audio/pcm"}, stream=Audio()))):
-                assert self.post("/api/voice-chat/stream", {"text": "hello"}).status_code == 200
-            assert self.post(f"/api/chat/{operation['id']}/interrupt").status_code == 200
+            assert (
+                self.post("/api/voice-chat/settings", speech.DEFAULTS).status_code
+                == 409
+            )
+            assert (
+                self.post(
+                    f"/api/chat/{operation['id']}/interrupt", profile="rowan"
+                ).status_code
+                == 404
+            )
+            with patch.object(
+                httpx,
+                "AsyncClient",
+                client_factory(
+                    lambda req: httpx.Response(
+                        200, headers={"content-type": "audio/pcm"}, stream=Audio()
+                    )
+                ),
+            ):
+                assert (
+                    self.post("/api/voice-chat/stream", {"text": "hello"}).status_code
+                    == 200
+                )
+            assert (
+                self.post(f"/api/chat/{operation['id']}/interrupt").status_code == 200
+            )
         finally:
             release.set()
-        final = self.wait(SimpleNamespace(status_code=200, text="", json=lambda: operation))
+        final = self.wait(
+            SimpleNamespace(status_code=200, text="", json=lambda: operation)
+        )
         assert final["status"] == "cancelled"
         assert str(self.root) not in self.app.state.operations.busy
 
     def test_bad_upstream_releases_slot_and_hides_upstream_error(self):
         self.enable()
-        with patch.object(httpx, "AsyncClient", client_factory(lambda req: httpx.Response(500, text="private upstream details"))):
+        with patch.object(
+            httpx,
+            "AsyncClient",
+            client_factory(
+                lambda req: httpx.Response(500, text="private upstream details")
+            ),
+        ):
             response = self.post("/api/voice-chat/stream", {"text": "hello"})
         assert response.status_code == 502
         assert "private upstream" not in response.text
-        with patch.object(httpx, "AsyncClient", client_factory(lambda req: httpx.Response(200, headers={"content-type": "audio/pcm"}, stream=Audio()))):
-            assert self.post("/api/voice-chat/stream", {"text": "again"}).status_code == 200
+        with patch.object(
+            httpx,
+            "AsyncClient",
+            client_factory(
+                lambda req: httpx.Response(
+                    200, headers={"content-type": "audio/pcm"}, stream=Audio()
+                )
+            ),
+        ):
+            assert (
+                self.post("/api/voice-chat/stream", {"text": "again"}).status_code
+                == 200
+            )
 
     def test_non_pcm_or_wrong_rate_is_refused(self):
         self.enable()
-        for headers in ({"content-type": "audio/wav"}, {"content-type": "audio/pcm", "x-audio-sample-rate": "48000"}):
-            with patch.object(httpx, "AsyncClient", client_factory(lambda req: httpx.Response(200, headers=headers, stream=Audio()))):
-                assert self.post("/api/voice-chat/stream", {"text": "hello"}).status_code == 502
+        for headers in (
+            {"content-type": "audio/wav"},
+            {"content-type": "audio/pcm", "x-audio-sample-rate": "48000"},
+        ):
+            with patch.object(
+                httpx,
+                "AsyncClient",
+                client_factory(
+                    lambda req: httpx.Response(200, headers=headers, stream=Audio())
+                ),
+            ):
+                assert (
+                    self.post("/api/voice-chat/stream", {"text": "hello"}).status_code
+                    == 502
+                )
 
 
-@pytest.mark.parametrize("changes", [
-    {"base_url": "file:///etc/passwd"}, {"base_url": "http://robin@host/v1"},
-    {"base_url": "http://host/v1?key=secret"}, {"enabled": "yes"},
-    {"language": "other"}, {"voice_en": "bad\nvoice"}, {"api_key": "browser-key"},
-    {"api_key_env": "lower_case"}, {"api_key_env": "KEY=value"}, {"api_key_env": "$HOME"},
-])
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"base_url": "file:///etc/passwd"},
+        {"base_url": "http://robin@host/v1"},
+        {"base_url": "http://host/v1?key=secret"},
+        {"enabled": "yes"},
+        {"language": "other"},
+        {"voice_en": "bad\nvoice"},
+        {"api_key": "browser-key"},
+        {"api_key_env": "lower_case"},
+        {"api_key_env": "KEY=value"},
+        {"api_key_env": "$HOME"},
+    ],
+)
 def test_invalid_settings(changes):
     with pytest.raises(ValueError):
         speech.validate({**speech.DEFAULTS, **changes})
 
 
 def test_closing_stream_stops_upstream_and_allows_next_request(tmp_path):
-    (tmp_path / "config.yaml").write_text("tts:\n  realtime:\n    enabled: true\n")
+    (tmp_path / "config.yaml").write_text(
+        "tts:\n  realtime:\n    enabled: true\n", encoding="utf-8"
+    )
     app = FastAPI()
     speech.register(app, lambda: (SimpleNamespace(home=lambda p: tmp_path), "nova"))
-    endpoint = next(route.endpoint for route in app.routes if route.path == "/api/voice-chat/stream")
+    endpoint = next(
+        route.endpoint for route in app.routes if route.path == "/api/voice-chat/stream"
+    )
     audio = []
 
     def upstream(req):
@@ -189,7 +299,9 @@ def test_closing_stream_stops_upstream_and_allows_next_request(tmp_path):
         return httpx.Response(200, headers={"content-type": "audio/pcm"}, stream=stream)
 
     async def run():
-        request = SimpleNamespace(is_disconnected=lambda: asyncio.sleep(0, result=False))
+        request = SimpleNamespace(
+            is_disconnected=lambda: asyncio.sleep(0, result=False)
+        )
         with patch.object(httpx, "AsyncClient", client_factory(upstream)):
             response = await endpoint({"text": "hello"}, request)
             assert await anext(response.body_iterator) == b"\x01"
@@ -199,6 +311,7 @@ def test_closing_stream_stops_upstream_and_allows_next_request(tmp_path):
             assert await anext(second.body_iterator) == b"\x01"
             await second.body_iterator.aclose()
             assert audio[1].closed
+
     asyncio.run(run())
 
 
@@ -212,16 +325,21 @@ def test_bridge_cancellation_calls_native_interrupt(tmp_path, monkeypatch):
     assert done.wait(1)
 
 
-def test_runtime_cooperative_cancel_keeps_session_and_does_not_replay(tmp_path, monkeypatch):
+def test_runtime_cooperative_cancel_keeps_session_and_does_not_replay(
+    tmp_path, monkeypatch
+):
     cancel = threading.Event()
     worker = tmp_path / "worker.py"
-    worker.write_text('''import json,sys,time
+    worker.write_text(
+        """import json,sys,time
 from pathlib import Path
 turn=json.loads(sys.stdin.readline())
 while not Path(turn['cancel_file']).exists(): time.sleep(.01)
 print(json.dumps({'event':'session','id':'same-session'}),flush=True)
 print(json.dumps({'event':'final','text':'partial reply'}),flush=True)
-''')
+""",
+        encoding="utf-8",
+    )
     rt = runtime.Runtime(tmp_path)
     monkeypatch.setattr(rt, "command", lambda: [sys.executable])
     monkeypatch.setattr(rt, "env", lambda home: {})
@@ -232,15 +350,26 @@ print(json.dumps({'event':'final','text':'partial reply'}),flush=True)
     def take(python, env):
         starts.append(1)
         errors = tempfile.TemporaryFile(mode="w+", encoding="utf-8")
-        process = subprocess.Popen([sys.executable, str(worker)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors, text=True)
+        process = subprocess.Popen(
+            [sys.executable, str(worker)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=errors,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
         return process, errors
 
     monkeypatch.setattr(runtime._warm_bridges, "take", take)
     monkeypatch.setattr(runtime._warm_bridges, "prepare", lambda *args: None)
-    def report(message): pass
+
+    def report(message):
+        pass
+
     report.stream = lambda message: None
     report.cancelled = cancel.is_set
-    timer = threading.Timer(.05, cancel.set)
+    timer = threading.Timer(0.05, cancel.set)
     timer.start()
     try:
         result = rt.chat(["chat", "hello"], tmp_path, report)

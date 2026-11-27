@@ -114,11 +114,7 @@ def test_a_long_ledger_renders_recent_threads_and_names_the_rest(companion):
                 "title": f"Thread {i:02d}",
                 "detail": "x" * 590,
                 "gentle_use": "only if it comes up",
-                **(
-                    {"follow_up_at": "2026-09-15T09:00:00+00:00"}
-                    if i == 0
-                    else {}
-                ),
+                **({"follow_up_at": "2026-09-15T09:00:00+00:00"} if i == 0 else {}),
             },
             DAY - dt.timedelta(days=40 - i),
         )

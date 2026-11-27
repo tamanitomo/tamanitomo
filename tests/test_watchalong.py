@@ -73,7 +73,11 @@ class Fake(http.server.BaseHTTPRequestHandler):
         auth = self.headers.get("Authorization", "")
         return (
             self.headers.get("X-Plex-Token") == TOKEN
-            or (auth.startswith("MediaBrowser ") and f'Token="{TOKEN}"' in auth and 'DeviceId="' in auth)
+            or (
+                auth.startswith("MediaBrowser ")
+                and f'Token="{TOKEN}"' in auth
+                and 'DeviceId="' in auth
+            )
             or auth == f"Bearer {BRIDGE}"
         )
 
@@ -91,19 +95,32 @@ class Fake(http.server.BaseHTTPRequestHandler):
         data = body(url) if callable(body) else body
         raw = data if isinstance(data, str) else json.dumps(data)
         self.send_response(200)
-        self.send_header("Content-Type", "text/plain" if isinstance(data, str) else "application/json")
+        self.send_header(
+            "Content-Type",
+            "text/plain" if isinstance(data, str) else "application/json",
+        )
         self.end_headers()
         self.wfile.write(raw.encode())
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(length) or b"{}")
-        Fake.posts.append({"path": self.path, "body": body, "auth": self.headers.get("Authorization", "")})
+        Fake.posts.append(
+            {
+                "path": self.path,
+                "body": body,
+                "auth": self.headers.get("Authorization", ""),
+            }
+        )
         if not self._ok():
             self.send_response(401)
             self.end_headers()
             return
-        reply = {"delivered": ["watch"], "id": body.get("id")} if self.path == "/knock" else {}
+        reply = (
+            {"delivered": ["watch"], "id": body.get("id")}
+            if self.path == "/knock"
+            else {}
+        )
         self.send_response(200 if self.path == "/knock" else 204)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
@@ -133,7 +150,9 @@ def companion(tmp_path):
     c.home.mkdir(parents=True)
     c.life.mkdir(parents=True)
     c.soul_dir.mkdir(parents=True, exist_ok=True)
-    (c.home / "SOUL.md").write_text("Nova: warm, wry, quick to tease.", encoding="utf-8")
+    (c.home / "SOUL.md").write_text(
+        "Nova: warm, wry, quick to tease.", encoding="utf-8"
+    )
     c.save()
     return c
 
@@ -141,7 +160,7 @@ def companion(tmp_path):
 def connect(c, url, kind="plex"):
     token = c.home / "secrets" / "media.token"
     token.parent.mkdir(parents=True, exist_ok=True)
-    token.write_text(TOKEN + "\n")
+    token.write_text(TOKEN + "\n", encoding="utf-8")
     c.media_server, c.media_kind, c.media_token_file = url, kind, str(token)
     c.sensors = ["viewing"]
     c.watchalong = "occasional"
@@ -152,7 +171,9 @@ def connect(c, url, kind="plex"):
 def test_subrip_and_webvtt_become_clean_lines():
     cues = wa.parse_subtitles(SRT)
     assert cues[0].text == "[distant thunder]"
-    assert cues[2] == wa.Cue(2_490_000, 2_493_200, "I'll always love you, no matter what.")
+    assert cues[2] == wa.Cue(
+        2_490_000, 2_493_200, "I'll always love you, no matter what."
+    )
     vtt = wa.parse_subtitles(VTT)
     assert [c.text for c in vtt] == ["Hold fast!", "We reached the shore."]
     assert vtt[1].start == 3_723_400
@@ -162,15 +183,21 @@ def test_subrip_and_webvtt_become_clean_lines():
 def test_the_window_never_reaches_past_the_playhead():
     track = wa.Track(wa.parse_subtitles(SRT))
     at = 2_493_200
-    assert [c.text for c in track.window(at)] == ["I'll always love you, no matter what."]
-    assert all(c.end <= at for c in track.window(at, span_ms=10 ** 9))
-    assert [c.text for c in track.ended_between(2_400_000, 2_500_000)] == ["I'll always love you, no matter what."]
+    assert [c.text for c in track.window(at)] == [
+        "I'll always love you, no matter what."
+    ]
+    assert all(c.end <= at for c in track.window(at, span_ms=10**9))
+    assert [c.text for c in track.ended_between(2_400_000, 2_500_000)] == [
+        "I'll always love you, no matter what."
+    ]
 
 
 def test_what_lands_and_what_does_not():
     cues = {c.text: c for c in wa.parse_subtitles(SRT)}
     length = 7_200_000
-    strong, _ = wa.score(cues["I'll always love you, no matter what."], 2_493_200, length)
+    strong, _ = wa.score(
+        cues["I'll always love you, no matter what."], 2_493_200, length
+    )
     plain, _ = wa.score(cues["The ferry leaves at noon."], 2_652_000, length)
     proposal, kind = wa.score(cues["Will you marry me?"], 3_483_000, length)
     assert strong >= wa.PACE["occasional"]["threshold"] and plain == 0
@@ -184,17 +211,31 @@ def test_the_playhead_runs_on_between_reports_and_a_jump_is_a_seek():
     head = wa.Playhead()
     assert head.update(60_000, "playing", 100.0) is True
     assert head.estimate(105.0) == 65_000
-    assert head.update(60_000, "playing", 108.0) is False  # the player has not reported since: no jump back
+    assert (
+        head.update(60_000, "playing", 108.0) is False
+    )  # the player has not reported since: no jump back
     assert head.estimate(108.0) == 68_000
-    assert head.update(66_000, "playing", 110.0) is False  # a report two seconds old: the estimate stands
+    assert (
+        head.update(66_000, "playing", 110.0) is False
+    )  # a report two seconds old: the estimate stands
     assert head.estimate(110.0) == 70_000
-    assert head.update(71_000, "playing", 110.0) is False and head.estimate(110.0) == 71_000  # ahead: taken
-    assert head.update(71_500, "paused", 120.0) is False and head.estimate(500.0) == 71_500  # paused: frozen
+    assert (
+        head.update(71_000, "playing", 110.0) is False
+        and head.estimate(110.0) == 71_000
+    )  # ahead: taken
+    assert (
+        head.update(71_500, "paused", 120.0) is False and head.estimate(500.0) == 71_500
+    )  # paused: frozen
     assert head.update(2_400_000, "playing", 501.0) is True
     assert head.update(2_380_000, "playing", 510.0) is True  # well behind: a seek back
     head.update(2_390_000, "playing", 520.0)
-    assert head.update(2_393_000, "playing", 523.0) is False  # a short skip back shows twice running
-    assert head.update(2_394_000, "playing", 524.0) is False and head.estimate(524.0) == 2_394_000
+    assert (
+        head.update(2_393_000, "playing", 523.0) is False
+    )  # a short skip back shows twice running
+    assert (
+        head.update(2_394_000, "playing", 524.0) is False
+        and head.estimate(524.0) == 2_394_000
+    )
 
 
 # ---- the follower ------------------------------------------------------------------------------------------------
@@ -230,19 +271,34 @@ def follower(c, script, replies=None):
             return []
         if current["state"] == "playing":
             reported = since + ((clock.t - since) // 10) * 10
-            return [{**current, "position_ms": current["position_ms"] + int((reported - since) * 1000)}]
+            return [
+                {
+                    **current,
+                    "position_ms": current["position_ms"]
+                    + int((reported - since) * 1000),
+                }
+            ]
         return [current]
 
     def speak(_c, messages):
         asked.append(messages)
-        answer = (replies or []).pop(0) if replies else '{"say": "aww, same", "buzz": "tap"}'
+        answer = (
+            (replies or []).pop(0) if replies else '{"say": "aww, same", "buzz": "tap"}'
+        )
         return answer, "test-model"
 
     def send(_c, now_playing, said):
         sent.append(said)
         return ["watch"]
 
-    f = wa.Follower(c, clock=clock, read=read, fetch=lambda _c, _p: (SRT, "1"), speak=speak, send=send)
+    f = wa.Follower(
+        c,
+        clock=clock,
+        read=read,
+        fetch=lambda _c, _p: (SRT, "1"),
+        speak=speak,
+        send=send,
+    )
     return f, clock, asked, sent
 
 
@@ -252,7 +308,9 @@ def run_until(f, clock, until):
         clock.t += min(wait, 1.0)
 
 
-def test_she_says_something_at_a_line_that_lands_and_never_sees_ahead(companion, server):
+def test_she_says_something_at_a_line_that_lands_and_never_sees_ahead(
+    companion, server
+):
     c = connect(companion, server)
     c.device_bridge_url = server + "/knock"
     f, clock, asked, sent = follower(c, {1000.0: playing_at(2_480_000)})
@@ -260,11 +318,18 @@ def test_she_says_something_at_a_line_that_lands_and_never_sees_ahead(companion,
     assert len(asked) == 1 and sent == [{"say": "aww, same", "buzz": "tap"}]
     user = asked[0][1]["content"]
     assert ">> [41:30] I'll always love you, no matter what." in user
-    assert "Promise me" not in user and "marry" not in user  # what comes later is never shown
+    assert (
+        "Promise me" not in user and "marry" not in user
+    )  # what comes later is never shown
     assert "Harbor Lights" in user and "Robin" in asked[0][0]["content"]
-    rows = [json.loads(line) for line in wa.log_path(c).read_text().splitlines()]
+    rows = [
+        json.loads(line)
+        for line in wa.log_path(c).read_text(encoding="utf-8").splitlines()
+    ]
     said = [r for r in rows if r["event"] == "said"]
-    assert said[0]["said"] == "aww, same" and said[0]["line"].startswith("I'll always love you")
+    assert said[0]["said"] == "aww, same" and said[0]["line"].startswith(
+        "I'll always love you"
+    )
 
 
 def test_the_pace_keeps_her_from_talking_over_the_film(companion, server):
@@ -276,16 +341,22 @@ def test_the_pace_keeps_her_from_talking_over_the_film(companion, server):
     c.watchalong = "commentary"
     f2, clock2, asked2, _ = follower(c, {1000.0: playing_at(2_480_000)})
     run_until(f2, clock2, 1000.0 + 200)
-    assert len(asked2) == 1  # commentary waits 150 s: the second line at +105 s is still too soon
+    assert (
+        len(asked2) == 1
+    )  # commentary waits 150 s: the second line at +105 s is still too soon
     c.watchalong = "quiet"
     f3, clock3, asked3, _ = follower(c, {1000.0: playing_at(2_480_000)})
     run_until(f3, clock3, 1030.0)
-    assert asked3 == [] and wa.scene_now(c)  # quiet: no word of her own, but she knows the scene
+    assert asked3 == [] and wa.scene_now(
+        c
+    )  # quiet: no word of her own, but she knows the scene
 
 
 def test_a_seek_past_a_line_is_not_a_reaction(companion, server):
     c = connect(companion, server)
-    f, clock, asked, _ = follower(c, {1000.0: playing_at(2_400_000), 1006.0: playing_at(2_700_000)})
+    f, clock, asked, _ = follower(
+        c, {1000.0: playing_at(2_400_000), 1006.0: playing_at(2_700_000)}
+    )
     run_until(f, clock, 1030.0)
     assert asked == []  # 41:30 was jumped over, never heard
 
@@ -300,15 +371,23 @@ def test_a_pause_holds_everything(companion, server):
 
 def test_silence_is_an_answer(companion, server):
     c = connect(companion, server)
-    f, clock, asked, sent = follower(c, {1000.0: playing_at(2_480_000)}, replies=['{"say": ""}'])
+    f, clock, asked, sent = follower(
+        c, {1000.0: playing_at(2_480_000)}, replies=['{"say": ""}']
+    )
     run_until(f, clock, 1030.0)
     assert len(asked) == 1 and sent == []
-    events = [json.loads(line)["event"] for line in wa.log_path(c).read_text().splitlines()]
+    events = [
+        json.loads(line)["event"]
+        for line in wa.log_path(c).read_text(encoding="utf-8").splitlines()
+    ]
     assert "silent" in events and "said" not in events
 
 
 def test_replies_are_read_kindly():
-    assert wa.parse_reply('Sure! {"say": "  oh   stop  ", "buzz": "nudge"}') == {"say": "oh stop", "buzz": "nudge"}
+    assert wa.parse_reply('Sure! {"say": "  oh   stop  ", "buzz": "nudge"}') == {
+        "say": "oh stop",
+        "buzz": "nudge",
+    }
     assert wa.parse_reply("SILENT") is None
     assert wa.parse_reply('{"say": "hm", "buzz": "earthquake"}')["buzz"] == "message"
     assert len(wa.parse_reply(json.dumps({"say": "x" * 500}))["say"]) == wa.SAY_CHARS
@@ -319,12 +398,16 @@ def test_her_context_has_the_scene_while_it_is_now(companion, server):
     c = connect(companion, server)
     f, clock, _asked, _sent = follower(c, {1000.0: playing_at(2_480_000)})
     run_until(f, clock, 1030.0)
-    text = context.build(c, {"extra": {"user_message": "did you hear that?", "platform": "telegram"}})
+    text = context.build(
+        c, {"extra": {"user_message": "did you hear that?", "platform": "telegram"}}
+    )
     assert "[On screen now" in text and "I'll always love you, no matter what." in text
     assert 'What you said during it: "aww, same"' in text
-    data = json.loads(wa.scene_path(c).read_text())
-    data["checked_at"] = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=10)).isoformat()
-    wa.scene_path(c).write_text(json.dumps(data))
+    data = json.loads(wa.scene_path(c).read_text(encoding="utf-8"))
+    data["checked_at"] = (
+        dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=10)
+    ).isoformat()
+    wa.scene_path(c).write_text(json.dumps(data), encoding="utf-8")
     assert wa.scene_now(c) == ""  # ten minutes old while playing: not now any more
 
 
@@ -333,24 +416,35 @@ def test_reach_is_made_concrete(companion, server, monkeypatch):
     c = connect(companion, server)
     c.watchalong_reach = ["last", "watch", "screen"]
     monkeypatch.setattr(wa, "last_place", lambda _c: "wearable")
-    assert wa.targets(c, playing_at(0)) == []  # no bridge: neither the wearable nor the watch
+    assert (
+        wa.targets(c, playing_at(0)) == []
+    )  # no bridge: neither the wearable nor the watch
     c.device_bridge_url = server + "/knock"
-    assert wa.targets(c, playing_at(0)) == ["watch"]  # wearable and watch: one message, the bridge mirrors it
+    assert wa.targets(c, playing_at(0)) == [
+        "watch"
+    ]  # wearable and watch: one message, the bridge mirrors it
     assert wa.targets(c, playing_at(0, can_message=True)) == ["watch", "screen"]
     monkeypatch.setattr(wa, "last_place", lambda _c: "telegram")
     assert wa.targets(c, playing_at(0)) == ["telegram", "watch"]
     monkeypatch.setattr(wa, "last_place", lambda _c: "game")
-    assert wa.targets(c, playing_at(0)) == ["watch"]  # the game cannot be reached mid-film
+    assert wa.targets(c, playing_at(0)) == [
+        "watch"
+    ]  # the game cannot be reached mid-film
 
 
 def test_the_device_bridge_gets_a_short_knock(companion, server):
     c = connect(companion, server)
     token = c.home / "secrets" / "bridge.token"
-    token.write_text(BRIDGE)
+    token.write_text(BRIDGE, encoding="utf-8")
     c.device_bridge_url, c.device_bridge_token_file = server + "/knock", str(token)
     assert wa.to_device(c, "aww, same", "tap", "auto", "w-1") == "watch"
     post = Fake.posts[-1]
-    assert post["body"] == {"text": "aww, same", "kind": "tap", "surface": "auto", "id": "w-1"}
+    assert post["body"] == {
+        "text": "aww, same",
+        "kind": "tap",
+        "surface": "auto",
+        "id": "w-1",
+    }
     assert post["auth"] == f"Bearer {BRIDGE}"
     c.device_bridge_token_file = str(c.home / "secrets" / "missing")
     assert wa.to_device(c, "aww, same", "tap", "auto", "w-2") == ""
@@ -371,9 +465,15 @@ def test_plex_playhead_and_a_sidecar_subtitle(companion, server):
         "/library/streams/7.srt": SRT,
     })  # fmt: skip
     now = wa.playing(c)
-    assert now[0]["position_ms"] == 2_480_000 and now[0]["state"] == "playing" and now[0]["can_message"] is False
+    assert (
+        now[0]["position_ms"] == 2_480_000
+        and now[0]["state"] == "playing"
+        and now[0]["can_message"] is False
+    )
     raw, stream = wa.subtitles(c, now[0])
-    assert stream == "7" and "no matter what" in raw  # the full track, not the forced one, not the image one
+    assert (
+        stream == "7" and "no matter what" in raw
+    )  # the full track, not the forced one, not the image one
     raw_again, _ = wa.subtitles(c, now[0])
     assert raw_again == raw and len(list(wa.cache_dir(c).glob("*.srt"))) == 1
 
@@ -399,7 +499,11 @@ def test_jellyfin_playhead_subtitles_and_the_tv_screen(companion, server):
         "/Videos/it1/ms1/Subtitles/3/Stream.srt": SRT,
     })  # fmt: skip
     now = wa.playing(c)
-    assert now[0]["position_ms"] == 2_480_000 and now[0]["can_message"] and now[0]["session"] == "sess-9"
+    assert (
+        now[0]["position_ms"] == 2_480_000
+        and now[0]["can_message"]
+        and now[0]["session"] == "sess-9"
+    )
     raw, stream = wa.subtitles(c, now[0])
     assert stream == "3" and "Will you marry me?" in raw
     assert wa.to_screen(c, now[0], "aww, same") == "screen"
@@ -414,7 +518,12 @@ def test_settings_are_checked(companion):
                 {"device_bridge_url": "http://user@host/knock"}):  # fmt: skip
         with pytest.raises(ValueError):
             cc.Companion(agent="Nova", human="Robin", **bad)
-    c = cc.Companion(agent="Nova", human="Robin", watchalong="auto", watchalong_reach=["screen", "last"])
+    c = cc.Companion(
+        agent="Nova",
+        human="Robin",
+        watchalong="auto",
+        watchalong_reach=["screen", "last"],
+    )
     assert c.watchalong_reach == ["screen", "last"]
 
 
@@ -440,7 +549,9 @@ class Ranged(http.server.BaseHTTPRequestHandler):
         wanted = self.headers.get("Range", "")
         if wanted.startswith("bytes="):
             a, _, b = wanted[6:].partition("-")
-            first, last = int(a or 0), min(int(b) if b else len(data) - 1, len(data) - 1)
+            first, last = int(a or 0), min(
+                int(b) if b else len(data) - 1, len(data) - 1
+            )
             self.send_response(206)
             self.send_header("Content-Range", f"bytes {first}-{last}/{len(data)}")
         else:
@@ -499,19 +610,32 @@ def test_embedded_subtitles_are_read_from_the_film_itself(companion, ranged):
     track.live = True
     plan = {"read": {"path": "/library/parts/1/1/file.mkv", "index": 2, "kbps": 500}}
     reader = wa.Reader(c, plan, track, start_ms=0, realtime=False)
-    reader.begin_ms = 25_000  # from just before the line, as the follower would with its lead
-    assert "-re" not in reader.command("http://x") and "0:2" in reader.command("http://x")
+    reader.begin_ms = (
+        25_000  # from just before the line, as the follower would with its lead
+    )
+    assert "-re" not in reader.command("http://x") and "0:2" in reader.command(
+        "http://x"
+    )
     reader.start()
     reader.join(60)
     assert not reader.error, reader.error
-    texts = [(cue.end, cue.text) for cue in track.ended_between(0, 10 ** 9)]
-    assert (33_000, "I'll always love you, no matter what.") in texts  # on the film's own clock
+    texts = [(cue.end, cue.text) for cue in track.ended_between(0, 10**9)]
+    assert (
+        33_000,
+        "I'll always love you, no matter what.",
+    ) in texts  # on the film's own clock
     assert (38_000, "Promise me.") in texts
-    assert all(h.get("X-Plex-Token") == TOKEN for h in Ranged.seen)  # the relay added the token itself
-    assert all(TOKEN not in arg for arg in reader.command(reader.c.media_server))  # never on a command line
+    assert all(
+        h.get("X-Plex-Token") == TOKEN for h in Ranged.seen
+    )  # the relay added the token itself
+    assert all(
+        TOKEN not in arg for arg in reader.command(reader.c.media_server)
+    )  # never on a command line
 
 
-def test_a_film_without_text_subtitles_is_listened_to(companion, ranged, tmp_path, monkeypatch):
+def test_a_film_without_text_subtitles_is_listened_to(
+    companion, ranged, tmp_path, monkeypatch
+):
     c = connect(companion, ranged)
     # A stand-in for the speech model: one line per chunk, on the film's clock.
     fake = tmp_path / "fake_worker.py"
@@ -537,8 +661,11 @@ def test_a_film_without_text_subtitles_is_listened_to(companion, ranged, tmp_pat
     reader.join(60)
     transcriber.close()
     assert not reader.error, reader.error
-    texts = [cue.text for cue in track.ended_between(0, 10 ** 9)]
-    assert texts[:2] == ["heard at 4000", "heard at 16000"]  # twelve-second chunks, from where it began
+    texts = [cue.text for cue in track.ended_between(0, 10**9)]
+    assert texts[:2] == [
+        "heard at 4000",
+        "heard at 16000",
+    ]  # twelve-second chunks, from where it began
 
 
 def test_the_real_speech_model_hears_nothing_in_a_tone(companion, ranged):
@@ -548,22 +675,46 @@ def test_the_real_speech_model_hears_nothing_in_a_tone(companion, ranged):
         pytest.skip("no interpreter with faster_whisper here")
     transcriber = wa.Transcriber(python)
     try:
-        assert transcriber(0, b"\0\0" * 16000 * 3) == []  # three seconds of silence: no invented line
+        assert (
+            transcriber(0, b"\0\0" * 16000 * 3) == []
+        )  # three seconds of silence: no invented line
     finally:
         transcriber.close()
 
 
-def test_reading_is_refused_when_it_would_crowd_the_network(companion, server, monkeypatch):
+def test_reading_is_refused_when_it_would_crowd_the_network(
+    companion, server, monkeypatch
+):
     c = connect(companion, server)
     # ffmpeg is pinned both ways, so the answer never depends on what the test machine has installed.
     monkeypatch.setattr(wa.shutil, "which", lambda name, *a, **k: f"/usr/bin/{name}")
-    ok, why = wa.can_read(c, {"why": "it has no text subtitles", "read": {"path": "/x", "index": 2, "kbps": 60_000}})
+    ok, why = wa.can_read(
+        c,
+        {
+            "why": "it has no text subtitles",
+            "read": {"path": "/x", "index": 2, "kbps": 60_000},
+        },
+    )
     assert not ok and "too heavy" in why
-    ok, _ = wa.can_read(c, {"why": "", "read": {"path": "/x", "index": 2, "kbps": 8_000}})
+    ok, _ = wa.can_read(
+        c, {"why": "", "read": {"path": "/x", "index": 2, "kbps": 8_000}}
+    )
     assert ok
     monkeypatch.setattr(wa, "listen_python", lambda _c: "")
-    ok, why = wa.can_read(c, {"why": "it has no text subtitles", "read": {"path": "/x", "index": None, "kbps": 8000}})
+    ok, why = wa.can_read(
+        c,
+        {
+            "why": "it has no text subtitles",
+            "read": {"path": "/x", "index": None, "kbps": 8000},
+        },
+    )
     assert not ok and "speech model" in why
     monkeypatch.setattr(wa.shutil, "which", lambda name, *a, **k: None)
-    ok, why = wa.can_read(c, {"why": "it has no text subtitles", "read": {"path": "/x", "index": 2, "kbps": 8000}})
+    ok, why = wa.can_read(
+        c,
+        {
+            "why": "it has no text subtitles",
+            "read": {"path": "/x", "index": 2, "kbps": 8000},
+        },
+    )
     assert not ok and "ffmpeg is not installed" in why

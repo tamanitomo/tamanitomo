@@ -239,7 +239,8 @@ def test_legacy_sessions_still_end_without_grace(companion):
                 },
             ]
         )
-        + "\n"
+        + "\n",
+        encoding="utf-8",
     )
     (session,) = viewing.agreements(companion)
     assert session["mode"] == "server" and session["comments"] == "occasional"
@@ -333,7 +334,9 @@ def cached_viewing(companion):
     ]
     for path in paths:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("You are watching this together (agreed at 20:00).")
+        path.write_text(
+            "You are watching this together (agreed at 20:00).", encoding="utf-8"
+        )
     return paths
 
 
@@ -418,7 +421,10 @@ def test_natural_expiry_discards_old_cache_but_keeps_new_observed_playback(compa
 
     # A later sensor report is valid evidence again; expiry must not hide all
     # viewing context forever just because an old session remains in history.
-    cache.write_text("Robin is watching a different film, recorded after our session.")
+    cache.write_text(
+        "Robin is watching a different film, recorded after our session.",
+        encoding="utf-8",
+    )
     after = (now - dt.timedelta(minutes=1)).timestamp()
     os.utime(cache, (after, after))
     built = context.build(companion)
@@ -463,6 +469,8 @@ def test_cli_manual_lifecycle_returns_json_without_a_server(companion):
             capture_output=True,
             text=True,
             check=True,
+            encoding="utf-8",
+            errors="replace",
         )
         return json.loads(result.stdout)
 

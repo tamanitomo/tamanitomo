@@ -45,7 +45,7 @@ def make(tmp_path, name="nova", friends=None):
     routine = {"kind": "imagined_routine", "weekly": [], "daily": []}
     if friends is not None:
         routine["recurring_cast"] = friends
-    (c.life / "routine.json").write_text(json.dumps(routine))
+    (c.life / "routine.json").write_text(json.dumps(routine), encoding="utf-8")
     presence.update_wardrobe(
         c, [{"id": "jeans", "description": "blue jeans", "use": "day"}]
     )

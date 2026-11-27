@@ -76,14 +76,21 @@ class MemoryTierTests(unittest.TestCase):
         )
         mem.archive(self.c, "MEMORY.md", apply=True)
         self.assertNotIn("lighthouse", self.read("MEMORY.md"))
-        hits = rec.search(self.c, "Did you like the lighthouse photo?", limit=3, implicit=True)
+        hits = rec.search(
+            self.c, "Did you like the lighthouse photo?", limit=3, implicit=True
+        )
         self.assertTrue(any("lighthouse" in r["excerpt"] for r in hits["results"]))
         # An everyday word alone ("the photo") does not bring a note in; a specific one does.
         brush = rec.search(self.c, "Did you like the photo?", limit=3, implicit=True)
-        self.assertFalse(any("lighthouse" in r.get("excerpt", "") for r in brush["results"]))
-        specific = rec.search(self.c, "The lighthouse was foggy", limit=3, implicit=True)
-        self.assertTrue(any("lighthouse" in r.get("excerpt", "") for r in specific["results"]))
-
+        self.assertFalse(
+            any("lighthouse" in r.get("excerpt", "") for r in brush["results"])
+        )
+        specific = rec.search(
+            self.c, "The lighthouse was foggy", limit=3, implicit=True
+        )
+        self.assertTrue(
+            any("lighthouse" in r.get("excerpt", "") for r in specific["results"])
+        )
 
     def test_her_archived_note_keeps_a_place_beside_stronger_matches(self):
         import companion_self as slf
@@ -92,7 +99,10 @@ class MemoryTierTests(unittest.TestCase):
         now = dt.datetime(2026, 10, 10, 12, tzinfo=dt.timezone.utc)
         for i in range(3):
             slf.record_fact(
-                self.c.human_dir, f"Alex built a keyboard voice note button {i}", "said so", now
+                self.c.human_dir,
+                f"Alex built a keyboard voice note button {i}",
+                "said so",
+                now,
             )
         self.write(
             "MEMORY.md",
@@ -100,31 +110,56 @@ class MemoryTierTests(unittest.TestCase):
             + [f"- Filler {i}." for i in range(900)],
         )
         mem.archive(self.c, "MEMORY.md", apply=True)
-        hits = rec.search(self.c, "Did the keyboard voice button work?", limit=2, implicit=True)
+        hits = rec.search(
+            self.c, "Did the keyboard voice button work?", limit=2, implicit=True
+        )
         kinds = [r.get("kind") for r in hits["results"]]
         self.assertIn("memory_note_requires_provenance_check", kinds)
         self.assertEqual(len(hits["results"]), 2)
 
-
     def test_an_archived_note_needs_two_words_that_say_what_it_is_about(self):
-        generic = [f"- Favorite character {i} in a show Alex watched once." for i in range(6)]
+        generic = [
+            f"- Favorite character {i} in a show Alex watched once." for i in range(6)
+        ]
         self.write(
             "MEMORY.md",
             generic
-            + ["- Alex's favorite anime is Starfall Harbor; his favorite character is Mirelle."]
+            + [
+                "- Alex's favorite anime is Starfall Harbor; his favorite character is Mirelle."
+            ]
             + ["- The pocket terminal has a working one-button voice-note control."]
             + [f"- Filler {i}." for i in range(900)],
         )
         mem.archive(self.c, "MEMORY.md", apply=True)
-        hits = rec.search(self.c, "Is Starfall Harbor still on Mirelle's arc?", limit=2, implicit=True)
-        notes = [r["excerpt"] for r in hits["results"] if r.get("kind") == "memory_note_requires_provenance_check"]
-        self.assertTrue(notes and "Mirelle" in notes[0])
-        hits = rec.search(self.c, "Did the pocket terminal voice note button work?", limit=2, implicit=True)
-        self.assertTrue(any("pocket terminal" in r["excerpt"] for r in hits["results"]))
-        everyday = rec.search(self.c, "Who is your favorite character in the show?", limit=2, implicit=True)
-        self.assertFalse(
-            any(r.get("kind") == "memory_note_requires_provenance_check" for r in everyday["results"])
+        hits = rec.search(
+            self.c, "Is Starfall Harbor still on Mirelle's arc?", limit=2, implicit=True
         )
+        notes = [
+            r["excerpt"]
+            for r in hits["results"]
+            if r.get("kind") == "memory_note_requires_provenance_check"
+        ]
+        self.assertTrue(notes and "Mirelle" in notes[0])
+        hits = rec.search(
+            self.c,
+            "Did the pocket terminal voice note button work?",
+            limit=2,
+            implicit=True,
+        )
+        self.assertTrue(any("pocket terminal" in r["excerpt"] for r in hits["results"]))
+        everyday = rec.search(
+            self.c,
+            "Who is your favorite character in the show?",
+            limit=2,
+            implicit=True,
+        )
+        self.assertFalse(
+            any(
+                r.get("kind") == "memory_note_requires_provenance_check"
+                for r in everyday["results"]
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

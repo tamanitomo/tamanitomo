@@ -54,8 +54,10 @@ def test_probe_guard_blocks_network_and_writes_outside_scratch(tmp_path):
         capture_output=True,
         text=True,
         timeout=10,
+        encoding="utf-8",
+        errors="replace",
     )
-    assert outside.read_text() == "unchanged"
+    assert outside.read_text(encoding="utf-8") == "unchanged"
     assert (scratch / "network-attempted").is_file()
 
 
@@ -91,6 +93,8 @@ def test_probe_guard_reads_the_kit_when_hermes_is_checked_out_inside_it(tmp_path
             capture_output=True,
             text=True,
             timeout=10,
+            encoding="utf-8",
+            errors="replace",
         )
         assert result.returncode == 0, result.stderr
 
@@ -125,9 +129,11 @@ def test_actual_hermes_plugin_routing_and_gateway_hooks(tmp_path):
         text=True,
         capture_output=True,
         timeout=100,
+        encoding="utf-8",
+        errors="replace",
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    evidence = json.loads(report.read_text())
+    evidence = json.loads(report.read_text(encoding="utf-8"))
     assert evidence["status"] == "passed"
     assert evidence["hermes_revision"] == compatibility.SUPPORTED_REVISION
     assert evidence["model_calls"] == evidence["messages_sent"] == 0
@@ -138,6 +144,6 @@ def test_actual_hermes_plugin_routing_and_gateway_hooks(tmp_path):
 def test_ci_checks_the_same_reviewed_hermes_revision():
     workflow = (
         compatibility.ROOT / ".github/workflows/hermes-compatibility.yml"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert f"ref: {compatibility.SUPPORTED_REVISION}" in workflow
     assert "tools/check_hermes_compatibility.py" in workflow

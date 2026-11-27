@@ -71,7 +71,16 @@ class PlaceTests(unittest.TestCase):
         runtime.note_workspace_session(self.c, "radio", RADIO)
 
     def local(self, ident, *, started, **columns):
-        names = ["id", "source", "started_at", "profile_name", "user_id", "chat_id", "chat_type", *columns]
+        names = [
+            "id",
+            "source",
+            "started_at",
+            "profile_name",
+            "user_id",
+            "chat_id",
+            "chat_type",
+            *columns,
+        ]
         values = [ident, "oneshot", started, "nova", f"uid:{os.getuid()}" if hasattr(os, "getuid") else "",
                   ident, "dm", *columns.values()]  # fmt: skip
         with self.store.db() as db:
@@ -83,7 +92,11 @@ class PlaceTests(unittest.TestCase):
     def build(self, session, platform):
         payload = {
             "session_id": session,
-            "extra": {"user_message": "hi", "platform": platform, "is_first_turn": False},
+            "extra": {
+                "user_message": "hi",
+                "platform": platform,
+                "is_first_turn": False,
+            },
         }
         return ctx.build(self.c, payload, now=NOW)
 
@@ -116,7 +129,8 @@ class PlaceTests(unittest.TestCase):
     def test_the_place_knows_where_it_is(self):
         out = self.build("radio", "cli")
         self.assertIn(
-            f'This conversation is on "{RADIO}", which reaches you through the app.', out
+            f'This conversation is on "{RADIO}", which reaches you through the app.',
+            out,
         )
         self.assertNotIn("This is a terminal session", out)
         self.assertIn(f"on another channel than this one ({RADIO})", out)
@@ -132,14 +146,23 @@ class PlaceTests(unittest.TestCase):
         rows = transcript.owner_evidence(self.c, read)
         radio = [r for r in rows if r["session"] in ("radio", "radio-old")]
         self.assertEqual(len(radio), 3)
-        self.assertTrue(all(r["channel"] == "workspace" and r["channel_label"] == RADIO for r in radio))
-        self.assertTrue(all("channel_label" not in r for r in rows if r["session"] in ("web", "tg")))
+        self.assertTrue(
+            all(
+                r["channel"] == "workspace" and r["channel_label"] == RADIO
+                for r in radio
+            )
+        )
+        self.assertTrue(
+            all("channel_label" not in r for r in rows if r["session"] in ("web", "tg"))
+        )
 
     def test_the_app_window_does_not_take_over_a_places_conversation(self):
         self.assertEqual(runtime.latest_session(self.c), "web")
 
     def test_place_names(self):
-        self.assertEqual(runtime.place_name("  the kitchen\nradio "), "the kitchen radio")
+        self.assertEqual(
+            runtime.place_name("  the kitchen\nradio "), "the kitchen radio"
+        )
         self.assertEqual(runtime.place_name(None), "")
         self.assertEqual(runtime.place_name(""), "")
         for bad in (3, ["radio"], " ", "x" * 61, "a\x1b[31mb", "a‮b"):
@@ -161,9 +184,12 @@ class PlaceTests(unittest.TestCase):
 
     def test_an_edited_or_broken_file_names_nothing_it_should_not(self):
         path = runtime.workspace_places_path(self.c)
-        path.write_text(json.dumps({"radio": "x" * 200, "web": "the desk", "": "nowhere"}))
+        path.write_text(
+            json.dumps({"radio": "x" * 200, "web": "the desk", "": "nowhere"}),
+            encoding="utf-8",
+        )
         self.assertEqual(runtime.read_workspace_places(self.c), {"web": "the desk"})
-        path.write_text("not json")
+        path.write_text("not json", encoding="utf-8")
         self.assertEqual(runtime.read_workspace_places(self.c), {})
         self.assertEqual(self.labels("radio")["radio"], ("workspace", ""))
 
@@ -186,7 +212,9 @@ class ChatEndpointTests(unittest.TestCase):
         self.c.home.mkdir(parents=True)
         self.c.save()
         self.store = HermesStore(self.c.home)
-        self.store.session("radio", "oneshot", user_id=f"uid:{os.getuid()}", chat_id="radio")
+        self.store.session(
+            "radio", "oneshot", user_id=f"uid:{os.getuid()}", chat_id="radio"
+        )
         runtime.note_workspace_session(self.c, "radio")
         self.app = build(home=self.c.home, state_dir=self.tmp / "app")
         self.client = TestClient(self.app)
@@ -224,7 +252,9 @@ class ChatEndpointTests(unittest.TestCase):
             runtime.Runtime.chat = original
 
     def test_a_client_names_its_place_before_the_turn_runs(self):
-        status, row = self.chat({"message": "Turn it up", "session": "radio", "place": RADIO})
+        status, row = self.chat(
+            {"message": "Turn it up", "session": "radio", "place": RADIO}
+        )
         self.assertEqual((status, row["status"]), (200, "complete"), row)
         self.assertEqual(self.seen, [RADIO])
         self.assertEqual(runtime.read_workspace_places(self.c), {"radio": RADIO})
@@ -235,7 +265,9 @@ class ChatEndpointTests(unittest.TestCase):
         self.assertEqual(runtime.read_workspace_places(self.c), {})
 
     def test_a_bad_place_is_refused_before_anything_runs(self):
-        status, body = self.chat({"message": "hi", "session": "radio", "place": "a\nb" * 40})
+        status, body = self.chat(
+            {"message": "hi", "session": "radio", "place": "a\nb" * 40}
+        )
         self.assertEqual(status, 400)
         self.assertIn("place", body["detail"])
         self.assertEqual(self.seen, [])

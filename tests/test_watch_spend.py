@@ -19,10 +19,21 @@ NOW = dt.datetime(2026, 10, 12, 15, 30, tzinfo=dt.timezone.utc)
 
 @pytest.fixture
 def companion(tmp_path):
-    c = cc.Companion(agent="Nova", human="Alex", hermes_root=tmp_path / "home", vault=tmp_path / "vault")
+    c = cc.Companion(
+        agent="Nova",
+        human="Alex",
+        hermes_root=tmp_path / "home",
+        vault=tmp_path / "vault",
+    )
     (c.home / "cron").mkdir(parents=True)
     (c.home / "cron/jobs.json").write_text(
-        json.dumps({"jobs": [{"id": "abc123", "name": "Nova companion pulse", "enabled": True}]}),
+        json.dumps(
+            {
+                "jobs": [
+                    {"id": "abc123", "name": "Nova companion pulse", "enabled": True}
+                ]
+            }
+        ),
         encoding="utf-8",
     )
     db = sqlite3.connect(c.home / "state.db")
@@ -41,7 +52,14 @@ def runs(c, *rows):
         at = NOW - dt.timedelta(hours=hours_ago)
         db.execute(
             "insert into sessions values (?, ?, ?, ?, ?, ?)",
-            (f"cron_abc123_{at:%Y%m%d_%H%M%S}", at.timestamp(), model, total // 10, total - total // 10, 0),
+            (
+                f"cron_abc123_{at:%Y%m%d_%H%M%S}",
+                at.timestamp(),
+                model,
+                total // 10,
+                total - total // 10,
+                0,
+            ),
         )
     db.commit()
     db.close()
@@ -54,7 +72,10 @@ def test_a_run_several_times_the_usual_size_is_flagged(companion):
     runs(companion, *USUAL, (1, 2_900_000, "explorer-model"))
     found = watch.check_spend(companion, NOW)
     assert len(found) == 1
-    assert '"Nova companion pulse" is using far more than usual on explorer-model' in found[0]
+    assert (
+        '"Nova companion pulse" is using far more than usual on explorer-model'
+        in found[0]
+    )
 
 
 def test_an_ordinary_run_is_not(companion):
@@ -63,7 +84,11 @@ def test_an_ordinary_run_is_not(companion):
 
 
 def test_a_large_job_that_is_always_large_is_not(companion):
-    runs(companion, *[(h, 2_000_000, "m") for h in (30, 28, 26, 24, 22)], (1, 2_200_000, "m"))
+    runs(
+        companion,
+        *[(h, 2_000_000, "m") for h in (30, 28, 26, 24, 22)],
+        (1, 2_200_000, "m"),
+    )
     assert watch.check_spend(companion, NOW) == []
 
 

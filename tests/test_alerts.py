@@ -74,7 +74,7 @@ class TestWhereAlertsGo:
         with trouble():
             result = watch.run(companion, NOON, notify=watch.notifier(companion))
         assert result["problems"] == TROUBLE and "delivered" not in result
-        health = (companion.soul_dir / "ambient/health.md").read_text()
+        health = (companion.soul_dir / "ambient/health.md").read_text(encoding="utf-8")
         assert "not a script to read out" in health
 
     def test_her_chat_only_when_chosen(self, companion):
@@ -90,7 +90,7 @@ class TestWhereAlertsGo:
 
     def test_a_webhook_gets_json_with_its_token(self, companion, receiver, tmp_path):
         token = tmp_path / "push.token"
-        token.write_text("s3cret\n")
+        token.write_text("s3cret\n", encoding="utf-8")
         companion.alerts_webhook = receiver
         companion.alerts_webhook_token_file = str(token)
         with trouble():

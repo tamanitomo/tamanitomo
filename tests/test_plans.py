@@ -126,7 +126,8 @@ class PlanTests(unittest.TestCase):
                     "checked_at": on(6, 1, 15).isoformat(),
                     "playing": ["Tidewater (2021)"],
                 }
-            )
+            ),
+            encoding="utf-8",
         )
         text, _ = plans.render(self.c, on(6, 1, 20))
         self.assertIn("they were playing a game (last at 01:10); they finished Harbor Lights (2019); "
@@ -142,7 +143,8 @@ class PlanTests(unittest.TestCase):
                     "since": on(6, 0, 15).isoformat(),
                     "source": "phone",
                 }
-            )
+            ),
+            encoding="utf-8",
         )
         text, _ = plans.render(self.c, on(6, 0, 20))
         self.assertIn(
@@ -156,20 +158,23 @@ class PlanTests(unittest.TestCase):
                     "moving": True,
                     "since": on(6, 0, 5).isoformat(),
                 }
-            )
+            ),
+            encoding="utf-8",
         )
         self.assertIn(
             "they left Home at 00:05, on the move",
             plans.render(self.c, on(6, 0, 10))[0],
         )
         where.write_text(
-            json.dumps({"place": "Home", "since": on(6, 0, 5).isoformat()})
+            json.dumps({"place": "Home", "since": on(6, 0, 5).isoformat()}),
+            encoding="utf-8",
         )
         self.assertEqual(
             plans.render(self.c, on(6, 0, 10)), ("", {})
         )  # getting home is no mismatch
         where.write_text(
-            json.dumps({"place": "Corner Market", "since": on(5, 23, 0).isoformat()})
+            json.dumps({"place": "Corner Market", "since": on(5, 23, 0).isoformat()}),
+            encoding="utf-8",
         )
         self.assertEqual(
             plans.render(self.c, on(6, 0, 10)), ("", {})
@@ -187,7 +192,7 @@ class PlanTests(unittest.TestCase):
     def test_odd_records_are_nothing_to_say_never_a_broken_turn(self):
         self.say(on(5, 23, 40), "ok going to bed, night")
         (self.c.soul_dir / "ambient/where.json").write_text(
-            "[1, 2, 3]"
+            "[1, 2, 3]", encoding="utf-8"
         )  # a list, not an object
         self.assertEqual(plans.render(self.c, on(6, 0, 20)), ("", {}))
         with patch("companion_plans.read", side_effect=KeyError("boom")):
@@ -202,7 +207,7 @@ class PlanTests(unittest.TestCase):
     def test_comings_and_goings(self):
         where = self.c.soul_dir / "ambient/where.json"
         where.write_text(json.dumps({"place": "Home", "since": on(5, 17, 40).isoformat(), "from": "out",
-                                     "from_since": on(5, 8, 30).isoformat(), "source": "wifi"}))  # fmt: skip
+                                     "from_since": on(5, 8, 30).isoformat(), "source": "wifi"}), encoding="utf-8")  # fmt: skip
         text = plans.comings(self.c, on(5, 17, 55))
         self.assertTrue(
             text.startswith("Robin got home at 17:40, after 9 hours 10 minutes out."),
@@ -213,7 +218,7 @@ class PlanTests(unittest.TestCase):
             plans.comings(self.c, on(5, 18, 40)), ""
         )  # old news after 45 minutes
         where.write_text(json.dumps({"place": "", "left": "Home", "since": on(5, 8, 30).isoformat(), "from": "Home",
-                                     "from_since": on(4, 18, 0).isoformat()}))  # fmt: skip
+                                     "from_since": on(4, 18, 0).isoformat()}), encoding="utf-8")  # fmt: skip
         self.assertTrue(
             plans.comings(self.c, on(5, 8, 40)).startswith(
                 "Robin left home at 08:30, after 14 hours 30 minutes at Home."
@@ -222,7 +227,8 @@ class PlanTests(unittest.TestCase):
         where.write_text(
             json.dumps(
                 {"place": "Home", "since": on(5, 17, 40).isoformat(), "source": "wifi"}
-            )
+            ),
+            encoding="utf-8",
         )
         self.assertEqual(
             plans.comings(self.c, on(5, 17, 45)), ""
@@ -234,7 +240,8 @@ class PlanTests(unittest.TestCase):
                     "since": on(5, 17, 40).isoformat(),
                     "from": "out",
                 }
-            )
+            ),
+            encoding="utf-8",
         )
         out = ctx.build(
             self.c,

@@ -377,7 +377,7 @@ class EnrollmentTests(unittest.TestCase):
                          hermes_root=tmp / ".hermes", vault=tmp / "vault")  # fmt: skip
         c.home.mkdir(parents=True)
         (c.home / "config.yaml").write_text(
-            yaml.safe_dump({"web": {"backend": "searxng"}})
+            yaml.safe_dump({"web": {"backend": "searxng"}}), encoding="utf-8"
         )
         self.assertTrue(routing.install(c), "a new plugin needs a gateway restart")
         self.assertFalse(routing.install(c), "nothing changed the second time")
@@ -389,7 +389,7 @@ class EnrollmentTests(unittest.TestCase):
         self.assertTrue(routing.reader_status(c)["local"])
         routing.set_reader(c, False)
         self.assertEqual(routing.reader_status(c), {"local": False, "other": ""})
-        cfg = yaml.safe_load((c.home / "config.yaml").read_text())
+        cfg = yaml.safe_load((c.home / "config.yaml").read_text(encoding="utf-8"))
         self.assertEqual(cfg["web"]["backend"], "searxng")
         # Switched off in the app, a later repair leaves it off.
         c.local_web_reader = False

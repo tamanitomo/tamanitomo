@@ -94,7 +94,7 @@ class ImageTimeoutTests(unittest.TestCase):
     def test_the_bridge_waits_as_long_and_tells_the_provider(self):
         self.image_server("http://192.168.1.50:8080/v1")
         python = pathlib.Path(self.tmp.name) / "python"
-        python.write_text("")
+        python.write_text("", encoding="utf-8")
         seen = {}
 
         def run(args, **kwargs):

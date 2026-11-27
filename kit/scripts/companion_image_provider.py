@@ -79,7 +79,11 @@ def review(payload):
     from agent.auxiliary_client import resolve_provider_client
 
     cfg = (
-        yaml.safe_load((Path(os.environ["HERMES_HOME"]) / "config.yaml").read_text())
+        yaml.safe_load(
+            (Path(os.environ["HERMES_HOME"]) / "config.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
         or {}
     )
     aux = cfg.get("auxiliary", {})

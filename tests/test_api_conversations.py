@@ -55,7 +55,9 @@ class ApiConversationTests(unittest.TestCase):
         self.store.say("api-old", "user", "Finally beat the second boss", at(25))
         self.session("api-now", started=at(24), parent_session_id="api-old")
         self.store.say("api-now", "user", "Which quest should I do next?", at(0.5))
-        self.store.say("api-now", "assistant", "The lighthouse one, obviously.", at(0.5))
+        self.store.say(
+            "api-now", "assistant", "The lighthouse one, obviously.", at(0.5)
+        )
         # A script on the same API key: not the human.
         self.session("api-script", started=at(3))
         self.store.say("api-script", "user", "Summarise the server log", at(2))
@@ -75,8 +77,26 @@ class ApiConversationTests(unittest.TestCase):
 
     def session(self, ident, *, started, **columns):
         with self.store.db() as db:
-            names = ["id", "source", "started_at", "profile_name", "user_id", "chat_id", "chat_type", *columns]
-            values = [ident, "api_server", started, "nova", "api", ident, "dm", *columns.values()]
+            names = [
+                "id",
+                "source",
+                "started_at",
+                "profile_name",
+                "user_id",
+                "chat_id",
+                "chat_type",
+                *columns,
+            ]
+            values = [
+                ident,
+                "api_server",
+                started,
+                "nova",
+                "api",
+                ident,
+                "dm",
+                *columns.values(),
+            ]
             db.execute(
                 f"INSERT INTO sessions ({','.join(names)}) VALUES ({','.join('?' for _ in names)})",
                 values,
@@ -95,13 +115,22 @@ class ApiConversationTests(unittest.TestCase):
             for i, (name, session) in enumerate(latest.items()):
                 record = {"response": {}, "conversation_history": [{"role": "user", "content": "x" * 50}],
                           "instructions": "", "session_id": session}  # fmt: skip
-                db.execute("INSERT INTO responses VALUES (?,?,?)", (f"resp_{i}", json.dumps(record), 1.0))
-                db.execute("INSERT INTO conversations VALUES (?,?)", (name, f"resp_{i}"))
+                db.execute(
+                    "INSERT INTO responses VALUES (?,?,?)",
+                    (f"resp_{i}", json.dumps(record), 1.0),
+                )
+                db.execute(
+                    "INSERT INTO conversations VALUES (?,?)", (name, f"resp_{i}")
+                )
 
     def build(self, session, platform, c=None):
         payload = {
             "session_id": session,
-            "extra": {"user_message": "hi", "platform": platform, "is_first_turn": False},
+            "extra": {
+                "user_message": "hi",
+                "platform": platform,
+                "is_first_turn": False,
+            },
         }
         return ctx.build(c or self.c, payload, now=NOW)
 
@@ -143,7 +172,9 @@ class ApiConversationTests(unittest.TestCase):
         out = self.build("tg", "telegram", c=c)
         self.assertNotIn("second boss", out)
         self.assertNotIn("Which quest", out)
-        self.assertNotIn("Recent messages from", self.build("api-now", "api_server", c=c))
+        self.assertNotIn(
+            "Recent messages from", self.build("api-now", "api_server", c=c)
+        )
 
     def test_a_declared_session_key_names_it_without_the_response_store(self):
         (self.c.home / transcript.RESPONSE_STORE).unlink()
@@ -172,13 +203,26 @@ class ApiConversationTests(unittest.TestCase):
         rows = transcript.owner_evidence(self.c, read)
         game = [r for r in rows if r["session"] == "api-now"]
         self.assertTrue(game)
-        self.assertTrue(all(r["channel"] == "api" and r["channel_label"] == "the game" for r in game))
-        self.assertTrue(all("channel_label" not in r for r in rows if r["session"] == "tg"))
+        self.assertTrue(
+            all(
+                r["channel"] == "api" and r["channel_label"] == "the game" for r in game
+            )
+        )
+        self.assertTrue(
+            all("channel_label" not in r for r in rows if r["session"] == "tg")
+        )
 
     def test_setting_shapes(self):
         listed = self.companion(["game-chat"])
         self.assertEqual(listed.owner_api_conversations, {"game-chat": "game-chat"})
-        for bad in ({"": "x"}, {"a": "x" * 61}, {"a\nb": "x"}, {"a": 3}, "game-chat", [3]):
+        for bad in (
+            {"": "x"},
+            {"a": "x" * 61},
+            {"a\nb": "x"},
+            {"a": 3},
+            "game-chat",
+            [3],
+        ):
             with self.assertRaises(ValueError):
                 self.companion(bad)
 

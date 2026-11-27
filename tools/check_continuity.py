@@ -174,7 +174,7 @@ def simulate(folder, transport=None):
         encoding="utf-8",
     )
     (c.home / ".tamanitomo-chat-owner.json").write_text(
-        json.dumps({"telegram": [OWNER_TELEGRAM]})
+        json.dumps({"telegram": [OWNER_TELEGRAM]}), encoding="utf-8"
     )
     feelings.save_settings(
         c,
@@ -321,6 +321,8 @@ def simulate(folder, transport=None):
         text=True,
         check=True,
         timeout=10,
+        encoding="utf-8",
+        errors="replace",
     )
     receipts.append(
         {

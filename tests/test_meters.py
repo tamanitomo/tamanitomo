@@ -113,9 +113,13 @@ class TestConnectionWindow:
 
     def test_an_older_setting_outside_it_is_read_at_the_nearest_bound(self, companion):
         path = companion.life / "feelings-settings.json"
-        path.write_text('{"personality": "steady", "connection_hours": 168}\n')
+        path.write_text(
+            '{"personality": "steady", "connection_hours": 168}\n', encoding="utf-8"
+        )
         assert feelings.settings(companion)["settings"]["connection_hours"] == 96
-        path.write_text('{"personality": "steady", "connection_hours": 6}\n')
+        path.write_text(
+            '{"personality": "steady", "connection_hours": 6}\n', encoding="utf-8"
+        )
         assert feelings.settings(companion)["settings"]["connection_hours"] == 12
 
 
@@ -322,7 +326,7 @@ class TestDailyCaps:
         ]
 
     def test_a_damaged_record_is_set_aside(self, companion):
-        meters.path(companion).write_text("{not json")
+        meters.path(companion).write_text("{not json", encoding="utf-8")
         meters.settle(companion, on(0), START, write=True)
         assert meters.path(companion).with_name("meters.json.damaged").exists()
         assert meters.history(companion, on(0))[0]["closeness"] == 50

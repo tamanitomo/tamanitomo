@@ -127,7 +127,8 @@ class SetupRecoveryTests(WorkspaceFixture):
         saved = list((self.app.state.operations.directory / "setup").rglob("*.json"))
         self.assertEqual(len(saved), 1)
         self.assertEqual(
-            set(json.loads(saved[0].read_text())), {"profile", "digest", "operation"}
+            set(json.loads(saved[0].read_text(encoding="utf-8"))),
+            {"profile", "digest", "operation"},
         )
 
     def test_hermes_folder_without_companion_config_requires_inspection_not_replay(
@@ -165,7 +166,8 @@ class SetupRecoveryTests(WorkspaceFixture):
             result = self.wait(self.post("/api/profiles", changed))
         self.assertEqual(result["status"], "complete")
         self.assertIn(
-            "synthetic-private-key", (self.root / "profiles/iris/.env").read_text()
+            "synthetic-private-key",
+            (self.root / "profiles/iris/.env").read_text(encoding="utf-8"),
         )
 
     def stage_inference(self):
@@ -184,10 +186,12 @@ class SetupRecoveryTests(WorkspaceFixture):
     def test_connection_staging_does_not_change_existing_profiles_or_installation(self):
         for home in (self.root, self.c.home, self.other.home):
             (home / ".env").write_text(
-                'OPENAI_API_KEY="original"\nTELEGRAM_BOT_TOKEN="original-bot"\n'
+                'OPENAI_API_KEY="original"\nTELEGRAM_BOT_TOKEN="original-bot"\n',
+                encoding="utf-8",
             )
             (home / "config.yaml").write_text(
-                "model:\n  default: original-model\n  provider: original-provider\n"
+                "model:\n  default: original-model\n  provider: original-provider\n",
+                encoding="utf-8",
             )
         originals = {
             path: path.read_bytes()
@@ -211,16 +215,23 @@ class SetupRecoveryTests(WorkspaceFixture):
                 "complete",
             )
         target = self.root / "profiles/iris"
-        self.assertIn("synthetic-private-key", (target / ".env").read_text())
-        self.assertIn("1234:abcdefghijklmnopqrstuvwxyz", (target / ".env").read_text())
-        self.assertIn("synthetic-model", (target / "config.yaml").read_text())
+        self.assertIn(
+            "synthetic-private-key", (target / ".env").read_text(encoding="utf-8")
+        )
+        self.assertIn(
+            "1234:abcdefghijklmnopqrstuvwxyz",
+            (target / ".env").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "synthetic-model", (target / "config.yaml").read_text(encoding="utf-8")
+        )
         self.assertEqual(originals, {path: path.read_bytes() for path in originals})
         self.assertFalse(
             list((self.app.state.operations.directory / "setup").rglob("*.connections"))
         )
         journal = next(
             (self.app.state.operations.directory / "setup").rglob("*.json")
-        ).read_text()
+        ).read_text(encoding="utf-8")
         self.assertNotIn("synthetic-private-key", journal)
 
     def test_staged_connections_cannot_be_applied_from_another_owner_profile(self):
@@ -240,7 +251,9 @@ class SetupRecoveryTests(WorkspaceFixture):
         )
 
     def test_adoption_applies_staging_only_to_selected_profile(self):
-        (self.root / ".env").write_text('OPENAI_API_KEY="root-original"\n')
+        (self.root / ".env").write_text(
+            'OPENAI_API_KEY="root-original"\n', encoding="utf-8"
+        )
         self.stage_inference()
         payload = {
             key: value for key, value in self.payload.items() if key != "profile"
@@ -251,9 +264,12 @@ class SetupRecoveryTests(WorkspaceFixture):
         ):
             result = self.wait(self.post("/api/adopt", payload))
         self.assertEqual(result["status"], "complete")
-        self.assertIn("synthetic-private-key", (self.c.home / ".env").read_text())
+        self.assertIn(
+            "synthetic-private-key", (self.c.home / ".env").read_text(encoding="utf-8")
+        )
         self.assertEqual(
-            (self.root / ".env").read_text(), 'OPENAI_API_KEY="root-original"\n'
+            (self.root / ".env").read_text(encoding="utf-8"),
+            'OPENAI_API_KEY="root-original"\n',
         )
         self.assertFalse((self.other.home / ".env").exists())
 
@@ -269,7 +285,8 @@ class SetupRecoveryTests(WorkspaceFixture):
                 Path(captured["HERMES_HOME"], "auth.json").write_text(
                     json.dumps(
                         {"providers": {"xai-oauth": {"tokens": "synthetic-oauth"}}}
-                    )
+                    ),
+                    encoding="utf-8",
                 )
 
             with (
@@ -324,7 +341,8 @@ class SetupRecoveryTests(WorkspaceFixture):
                 "complete",
             )
         self.assertIn(
-            "synthetic-oauth", (self.root / "profiles/iris/auth.json").read_text()
+            "synthetic-oauth",
+            (self.root / "profiles/iris/auth.json").read_text(encoding="utf-8"),
         )
         self.assertFalse((self.root / "auth.json").exists())
         self.assertFalse((self.c.home / "auth.json").exists())
@@ -386,7 +404,9 @@ class SetupRecoveryTests(WorkspaceFixture):
             self.wait(self.post("/api/profiles", self.payload))
         import yaml
 
-        config = yaml.safe_load((self.root / "profiles/iris/config.yaml").read_text())
+        config = yaml.safe_load(
+            (self.root / "profiles/iris/config.yaml").read_text(encoding="utf-8")
+        )
         self.assertEqual(config["model"]["context_length"], 65536)
         self.assertNotIn("ollama_num_ctx", config["model"])
 
@@ -428,5 +448,7 @@ class SetupRecoveryTests(WorkspaceFixture):
                 self.wait(self.post("/api/profiles", self.payload))["status"],
                 "complete",
             )
-        target = json.loads((self.root / "profiles/iris/companion.json").read_text())
+        target = json.loads(
+            (self.root / "profiles/iris/companion.json").read_text(encoding="utf-8")
+        )
         self.assertEqual(target["models"]["chat"]["model"], "synthetic")

@@ -277,6 +277,8 @@ def check_hook(c):
                 "COMPANION_HOME": str(c.home),
                 "COMPANION_MEMORY_READ_ONLY": "1",
             },
+            encoding="utf-8",
+            errors="replace",
         )
         if r.returncode:
             return [

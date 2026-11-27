@@ -266,7 +266,8 @@ class IsolationTests(unittest.TestCase):
             )
             for i, profile in enumerate(("default", "other"), 1):
                 db.execute(
-                    "INSERT INTO sessions(id,profile_name,source) VALUES (?,?,?)", (str(i), profile, "cli")
+                    "INSERT INTO sessions(id,profile_name,source) VALUES (?,?,?)",
+                    (str(i), profile, "cli"),
                 )
                 db.execute(
                     "INSERT INTO messages VALUES (?,?,?,?,?,?)",
@@ -581,7 +582,9 @@ class LedgerTests(unittest.TestCase):
         r = slf.ledger_batch(self.c, path, self.now)
         self.assertEqual((r["applied"], r["failed_at"]), (2, None))
         self.assertIn("'household'", r["results"][0]["note"])
-        by_statement = {f["statement"]: f["category"] for f in slf.facts(self.c.human_dir)}
+        by_statement = {
+            f["statement"]: f["category"] for f in slf.facts(self.c.human_dir)
+        }
         self.assertEqual(by_statement["Robin does the laundry on Sundays."], "other")
         self.assertEqual(
             by_statement["Robin starts a new shift pattern next week."], "work"
@@ -815,7 +818,10 @@ class RecallScopeTests(unittest.TestCase):
         con = sqlite3.connect(path)
         con.executescript(self.SCHEMA)
         for i, (profile, text) in enumerate(rows, 1):
-            con.execute("INSERT INTO sessions(id,profile_name,source) VALUES (?,?,?)", (str(i), profile, "cli"))
+            con.execute(
+                "INSERT INTO sessions(id,profile_name,source) VALUES (?,?,?)",
+                (str(i), profile, "cli"),
+            )
             con.execute(
                 "INSERT INTO messages VALUES (?,?,?,?,?,?)",
                 (i, str(i), "user", text, 1, 0),
@@ -977,7 +983,13 @@ class AutomaticMemoryTests(unittest.TestCase):
                 str(home),
             ]
             first = subprocess.run(
-                command, input="{}", text=True, capture_output=True, check=True
+                command,
+                input="{}",
+                text=True,
+                capture_output=True,
+                check=True,
+                encoding="utf-8",
+                errors="replace",
             )
             self.assertTrue(json.loads(first.stdout)["context"])
             self.assertLess(memory.status(c)[1]["fraction"], 0.8)
@@ -985,7 +997,13 @@ class AutomaticMemoryTests(unittest.TestCase):
             self.assertIn(entries[0], archive)
             self.assertIn(entries[-1], source.read_text(encoding="utf-8"))
             subprocess.run(
-                command, input="{}", text=True, capture_output=True, check=True
+                command,
+                input="{}",
+                text=True,
+                capture_output=True,
+                check=True,
+                encoding="utf-8",
+                errors="replace",
             )
             self.assertEqual(
                 archive, memory.archive_for(c, "MEMORY.md").read_text(encoding="utf-8")
@@ -1092,7 +1110,13 @@ class FactQualityTests(unittest.TestCase):
     def plan(self, **facts):
         plan = empty()
         plan["facts"] = [
-            {"quote_id": "7", "category": "likes", "relation": "new", "target_id": "", **facts}
+            {
+                "quote_id": "7",
+                "category": "likes",
+                "relation": "new",
+                "target_id": "",
+                **facts,
+            }
         ]
         return plan
 
@@ -1130,7 +1154,10 @@ class FactQualityTests(unittest.TestCase):
         fact = reflection.schema("daily", self.source, [])["properties"]["facts"][
             "items"
         ]
-        self.assertEqual(set(fact["required"]), {"quote_id", "category", "statement", "relation", "target_id"})
+        self.assertEqual(
+            set(fact["required"]),
+            {"quote_id", "category", "statement", "relation", "target_id"},
+        )
         with self.assertRaises(ValueError):
             reflection.validate(self.plan(), "daily", self.source, [], "Robin")
         for bad in ("", "   ", "x" * 401):
@@ -1641,8 +1668,20 @@ class HeldFactTests(unittest.TestCase):
     def plan(self):
         plan = empty()
         plan["facts"] = [
-            {"quote_id": "1", "category": "other", "statement": "Robin has 3 cats.", "relation": "new", "target_id": ""},
-            {"quote_id": "2", "category": "likes", "statement": "Robin loves hiking.", "relation": "new", "target_id": ""},
+            {
+                "quote_id": "1",
+                "category": "other",
+                "statement": "Robin has 3 cats.",
+                "relation": "new",
+                "target_id": "",
+            },
+            {
+                "quote_id": "2",
+                "category": "likes",
+                "statement": "Robin loves hiking.",
+                "relation": "new",
+                "target_id": "",
+            },
         ]
         return plan
 
@@ -1899,6 +1938,8 @@ class HeldDecisionProtocolTests(unittest.TestCase):
                 ],
                 stdout=subprocess.PIPE,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
             )
             for i in range(6)
         ]
@@ -2028,20 +2069,31 @@ class FactsKnownTests(unittest.TestCase):
 
     def fact(self, statement, category="other", **kw):
         return slf.record_fact(
-            self.c.human_dir, statement, "2026-09-23: said so", self.now,
-            category, human="Robin", **kw,
+            self.c.human_dir,
+            statement,
+            "2026-09-23: said so",
+            self.now,
+            category,
+            human="Robin",
+            **kw,
         )
 
     def test_a_similar_restatement_is_refused_with_the_way_forward(self):
-        first = self.fact("Robin keeps three tanks of tropical fish and feeds them each morning.")
-        again = self.fact("Robin keeps three tropical fish tanks and feeds the fish every morning.")
+        first = self.fact(
+            "Robin keeps three tanks of tropical fish and feeds them each morning."
+        )
+        again = self.fact(
+            "Robin keeps three tropical fish tanks and feeds the fish every morning."
+        )
         self.assertFalse(again["written"])
         self.assertEqual(again["similar_to"][0]["id"], first["entry"]["id"])
         self.assertIn("supersedes", again["next"])
         self.assertEqual(len(slf.facts(self.c.human_dir)), 1)
 
     def test_similar_can_be_refined_or_confirmed_distinct(self):
-        first = self.fact("Robin keeps three tanks of tropical fish and feeds them each morning.")
+        first = self.fact(
+            "Robin keeps three tanks of tropical fish and feeds them each morning."
+        )
         refined = self.fact(
             "Robin keeps three tanks of tropical fish, feeds them each morning, and breeds guppies.",
             supersedes=first["entry"]["id"],
@@ -2066,7 +2118,10 @@ class FactsKnownTests(unittest.TestCase):
     def test_every_fact_is_injected_on_a_large_window_and_core_leads(self):
         self.fact("Robin uses a wheelchair.", category="health")
         for i in range(60):
-            self.fact(f"Robin owns gadget number{i} named {'xyz'[i % 3]}{i}widget with extra lore about it.", confirm_distinct=True)
+            self.fact(
+                f"Robin owns gadget number{i} named {'xyz'[i % 3]}{i}widget with extra lore about it.",
+                confirm_distinct=True,
+            )
         out = ctx.build(self.c, {"extra": {"user_message": "hi"}}, now=self.now)
         self.assertIn("wheelchair", out)
         self.assertEqual(out.count(" gadget number"), 60, "facts were dropped")
@@ -2075,8 +2130,13 @@ class FactsKnownTests(unittest.TestCase):
     def test_core_survives_when_the_budget_cannot_hold_everything(self):
         self.fact("Robin uses a wheelchair.", category="health")
         for i in range(60):
-            self.fact(f"Robin owns gadget number{i} with a long story attached to it, page {i}.", confirm_distinct=True)
-        tight = slf.summary(self.c, {"facts": 600, "preferences": 100, "questions": 100})
+            self.fact(
+                f"Robin owns gadget number{i} with a long story attached to it, page {i}.",
+                confirm_distinct=True,
+            )
+        tight = slf.summary(
+            self.c, {"facts": 600, "preferences": 100, "questions": 100}
+        )
         self.assertIn("wheelchair", tight["human_profile"])
         self.assertIn("more facts not shown", tight["human_profile"])
 
@@ -2115,8 +2175,14 @@ class UserMemoryDedupeTests(unittest.TestCase):
 
     def record(self, statement, **kw):
         return slf.record_fact(
-            self.c.human_dir, statement, "2026-09-23: said so", self.now,
-            "other", human="Robin", user_memory=self.c, **kw,
+            self.c.human_dir,
+            statement,
+            "2026-09-23: said so",
+            self.now,
+            "other",
+            human="Robin",
+            user_memory=self.c,
+            **kw,
         )
 
     def test_a_fact_already_in_user_md_is_not_stored(self):
@@ -2149,8 +2215,12 @@ class UserMemoryDedupeTests(unittest.TestCase):
 
     def test_without_user_memory_nothing_changes(self):
         out = slf.record_fact(
-            self.c.human_dir, "Robin bought the Framework Desktop for its unified memory.",
-            "2026-09-23: said so", self.now, "other", human="Robin",
+            self.c.human_dir,
+            "Robin bought the Framework Desktop for its unified memory.",
+            "2026-09-23: said so",
+            self.now,
+            "other",
+            human="Robin",
         )
         self.assertTrue(out["written"])
 
@@ -2160,22 +2230,43 @@ class FactRelationTests(unittest.TestCase):
 
     def setUp(self):
         FactQualityTests.setUp(self)
-        for i, quote in (("9", "I love pizza so much."), ("10", "Pizza again tonight, obviously."), ("11", "I bake sourdough on Sundays.")):
+        for i, quote in (
+            ("9", "I love pizza so much."),
+            ("10", "Pizza again tonight, obviously."),
+            ("11", "I bake sourdough on Sundays."),
+        ):
             self.source[i] = {
-                "id": i, "role": "user", "content": quote,
-                "timestamp": self.now.timestamp(), "session_id": "chat",
+                "id": i,
+                "role": "user",
+                "content": quote,
+                "timestamp": self.now.timestamp(),
+                "session_id": "chat",
             }
         self.first = slf.record_fact(
-            self.c.human_dir, "Robin loves pizza.", "2026-09-01: I love pizza",
-            self.now, "likes", human="Robin",
+            self.c.human_dir,
+            "Robin loves pizza.",
+            "2026-09-01: I love pizza",
+            self.now,
+            "likes",
+            human="Robin",
         )["entry"]
 
     def apply(self, **fact):
         plan = empty()
-        plan["facts"] = [{"quote_id": "9", "category": "likes", "statement": "Robin loves pizza deeply.",
-                          "relation": "new", "target_id": "", **fact}]
+        plan["facts"] = [
+            {
+                "quote_id": "9",
+                "category": "likes",
+                "statement": "Robin loves pizza deeply.",
+                "relation": "new",
+                "target_id": "",
+                **fact,
+            }
+        ]
         reflection.validate(plan, "daily", self.source, [], "Robin")
-        return reflection.apply_plan(self.c, "daily", "2026-09-22", plan, self.source, self.now)
+        return reflection.apply_plan(
+            self.c, "daily", "2026-09-22", plan, self.source, self.now
+        )
 
     def test_adds_to_keeps_the_quote_as_a_bullet_not_a_second_fact(self):
         self.apply(relation="adds_to", target_id=self.first["id"])
@@ -2186,9 +2277,14 @@ class FactRelationTests(unittest.TestCase):
         self.assertIn("love pizza so much", slf.facts_index(self.c.human_dir))
 
     def test_replaces_supersedes_and_keeps_the_old_bullets(self):
-        slf.add_evidence(self.c.human_dir, self.first["id"], "2026-09-05: pizza is life", self.now)
-        self.apply(relation="replaces", target_id=self.first["id"],
-                   statement="Robin adores pizza.")
+        slf.add_evidence(
+            self.c.human_dir, self.first["id"], "2026-09-05: pizza is life", self.now
+        )
+        self.apply(
+            relation="replaces",
+            target_id=self.first["id"],
+            statement="Robin adores pizza.",
+        )
         [fact] = slf.facts(self.c.human_dir)
         self.assertEqual(fact["statement"], "Robin adores pizza.")
         self.assertEqual(fact["more_evidence"], ["2026-09-05: pizza is life"])
@@ -2198,7 +2294,12 @@ class FactRelationTests(unittest.TestCase):
         self.assertEqual(len(slf.facts(self.c.human_dir)), 1)
 
     def test_a_target_that_is_not_there_costs_nothing(self):
-        self.apply(quote_id="11", relation="adds_to", target_id="fact-missing", statement="Robin bakes sourdough on Sundays.")
+        self.apply(
+            quote_id="11",
+            relation="adds_to",
+            target_id="fact-missing",
+            statement="Robin bakes sourdough on Sundays.",
+        )
         self.assertEqual(len(slf.facts(self.c.human_dir)), 2)
 
     def test_a_near_verbatim_restatement_becomes_evidence_automatically(self):
@@ -2208,15 +2309,24 @@ class FactRelationTests(unittest.TestCase):
 
     def test_the_same_evidence_is_not_added_twice_and_bullets_are_capped(self):
         for i in range(8):
-            slf.add_evidence(self.c.human_dir, self.first["id"], f"2026-09-{i+2:02d}: more pizza {i}", self.now + dt.timedelta(minutes=i))
-        again = slf.add_evidence(self.c.human_dir, self.first["id"], "2026-09-09: more pizza 7", self.now)
+            slf.add_evidence(
+                self.c.human_dir,
+                self.first["id"],
+                f"2026-09-{i+2:02d}: more pizza {i}",
+                self.now + dt.timedelta(minutes=i),
+            )
+        again = slf.add_evidence(
+            self.c.human_dir, self.first["id"], "2026-09-09: more pizza 7", self.now
+        )
         self.assertFalse(again["written"])
         [fact] = slf.facts(self.c.human_dir)
         self.assertEqual(len(fact["more_evidence"]), slf.MAX_EXTRA_EVIDENCE)
 
     def test_the_model_is_shown_hermes_memory(self):
         (self.c.home / "memories").mkdir(parents=True, exist_ok=True)
-        (self.c.home / "memories/USER.md").write_text("Robin keeps bees.", encoding="utf-8")
+        (self.c.home / "memories/USER.md").write_text(
+            "Robin keeps bees.", encoding="utf-8"
+        )
         data = reflection.context(self.c, "daily", self.now, self.now, "2026-09-22", [])
         self.assertEqual(data["hermes_memory_about_human"], ["Robin keeps bees."])
         self.assertEqual(data["existing_facts"][0]["statement"], "Robin loves pizza.")

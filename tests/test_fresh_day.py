@@ -1,5 +1,6 @@
 """A new day starts fresh: last night's reading of the human does not outlive it,
-a good morning is part of a close relationship, and teeth do not block getting dressed."""
+a good morning is part of a close relationship, and teeth do not block getting dressed.
+"""
 
 import datetime as dt
 import json
@@ -53,7 +54,8 @@ def last_heard(at):
 
 def declare(c, start, until):
     sleep.path(c).write_text(
-        json.dumps({"from": start.isoformat(), "until": until.isoformat()})
+        json.dumps({"from": start.isoformat(), "until": until.isoformat()}),
+        encoding="utf-8",
     )
 
 
@@ -87,7 +89,8 @@ def test_the_morning_job_hears_about_its_good_morning_at_a_close_stage(companion
 
 def dressing(companion, elapsed_minutes, teeth_at=None):
     (companion.life / "routine.json").write_text(
-        json.dumps({"kind": "imagined_routine", "lifestyle": {"enabled": True}})
+        json.dumps({"kind": "imagined_routine", "lifestyle": {"enabled": True}}),
+        encoding="utf-8",
     )
     start = MORNING
     previous = {

@@ -136,6 +136,8 @@ def hermes_tts(c, text, output_path):
         capture_output=True,
         text=True,
         timeout=660,
+        encoding="utf-8",
+        errors="replace",
     )
     reply = next(
         (

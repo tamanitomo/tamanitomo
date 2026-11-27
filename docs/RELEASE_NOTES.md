@@ -1,4 +1,12 @@
-Tamanitomo 3.36.0: her far memory.
+Tamanitomo 3.36.1: clean and portable.
+
+- **On Windows, her files and messages keep their curly quotes and emoji**, and her monthly chapters and
+  on-this-day memories work as they do elsewhere.
+- Nothing changes on Linux or macOS beyond tidier code.
+
+From 3.24.0, no Repair is needed. Updating from 3.23 or earlier, run Repair once.
+
+Previous: 3.36.0 her far memory.
 
 - **She can find what you said long ago, not just lately.** When you ask her about something from months back,
   her search no longer gets crowded out by recent messages that share one ordinary word with it. On a real

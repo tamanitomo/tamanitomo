@@ -186,7 +186,8 @@ def test_unknown_or_malformed_provenance_is_never_automatically_retired(
 ):
     path = persisted(companion)
     path.write_text(
-        replacement if isinstance(replacement, str) else json.dumps(replacement)
+        replacement if isinstance(replacement, str) else json.dumps(replacement),
+        encoding="utf-8",
     )
     correct(companion, "first")
     correct(companion, "second")
@@ -297,9 +298,9 @@ def test_review_cannot_apply_to_changed_lock_or_reappearing_source(companion, ch
     retire(companion)
     if change == "lock":
         path = companion.home / reviews.LOCK_FILE
-        record = json.loads(path.read_text())
+        record = json.loads(path.read_text(encoding="utf-8"))
         record["at"] = (NOW + dt.timedelta(seconds=1)).isoformat()
-        path.write_text(json.dumps(record))
+        path.write_text(json.dumps(record), encoding="utf-8")
     else:
         path = companion.life / "relationship-feelings.jsonl"
         rows = feelings.experiences(companion)
@@ -307,11 +308,11 @@ def test_review_cannot_apply_to_changed_lock_or_reappearing_source(companion, ch
             rows = [r for r in rows if r["id"] != "correct-first"]
         else:
             rows[0]["evidence"] = "Different source evidence"
-        path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+        path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
     assert intimacy.compute(companion, NOW + dt.timedelta(seconds=2))[
         "permanent_friend"
     ]
-    assert (companion.life / reviews.REVIEWS_FILE).read_text()
+    assert (companion.life / reviews.REVIEWS_FILE).read_text(encoding="utf-8")
 
 
 def test_future_correction_and_future_review_cannot_change_the_past(companion):
@@ -345,7 +346,7 @@ def test_explicit_human_reason_is_required(companion, reason):
 def test_revocation_is_independent_of_corrected_relationship_restriction(companion):
     retire(companion)
     (companion.home / ".nsfw-revoked.json").write_text(
-        json.dumps({"reason": "User choice"})
+        json.dumps({"reason": "User choice"}), encoding="utf-8"
     )
     state = intimacy.compute(companion, NOW)
     assert not state["permanent_friend"] and state["nsfw_revoked"]
@@ -357,7 +358,9 @@ def test_revocation_is_independent_of_corrected_relationship_restriction(compani
 def test_malformed_experience_data_blocks_review_and_report_stays_read_only(companion):
     path = persisted(companion)
     correct(companion, "first")
-    with (companion.life / "relationship-feelings.jsonl").open("a") as stream:
+    with (companion.life / "relationship-feelings.jsonl").open(
+        "a", encoding="utf-8"
+    ) as stream:
         stream.write(
             json.dumps(
                 {"id": [], "kind": "rupture", "topic": [], "at": NOW.isoformat()}
@@ -381,7 +384,7 @@ def test_unverifiable_new_incident_cannot_be_ignored_to_retire_a_lock(companion)
     new["evidence"] = ""
     path = companion.life / "relationship-feelings.jsonl"
     rows = [new if r["id"] == "third" else r for r in feelings.experiences(companion)]
-    path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
     report = reviews.report(companion, NOW)
     assert report["restriction"]["effective"]
     assert not report["restriction"]["eligible"]
@@ -390,7 +393,7 @@ def test_unverifiable_new_incident_cannot_be_ignored_to_retire_a_lock(companion)
 
 def test_corrupt_audit_log_cannot_silently_keep_a_restriction_retired(companion):
     retire(companion)
-    with (companion.life / reviews.REVIEWS_FILE).open("a") as stream:
+    with (companion.life / reviews.REVIEWS_FILE).open("a", encoding="utf-8") as stream:
         stream.write("not a review\n")
     before = snapshot(companion)
     report = reviews.report(companion, NOW)
@@ -458,7 +461,9 @@ def test_uncovered_current_sources_persist_even_before_original_review(companion
     correct(companion, "first")
     incident(companion, "third", at=NOW)
     intimacy.compute(companion, NOW, record=True)
-    saved = json.loads((companion.life / reviews.RESTRICTIONS_FILE).read_text())
+    saved = json.loads(
+        (companion.life / reviews.RESTRICTIONS_FILE).read_text(encoding="utf-8")
+    )
     assert saved["violation_ids"] == ["second", "third"]
     correct(companion, "second")
     for expected in (["second", "third"], ["first", "second"]):
@@ -485,7 +490,7 @@ def test_changed_older_correction_is_not_hidden_by_later_retirement(companion):
     assert not intimacy.compute(companion, NOW)["permanent_friend"]
     path = companion.life / "relationship-feelings.jsonl"
     rows = [r for r in feelings.experiences(companion) if r["id"] != "correct-first"]
-    path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
     report = reviews.report(companion, NOW)
     assert report["restriction"]["source_ids"] == ["first", "second"]
     assert report["restriction"]["effective"]
@@ -498,7 +503,7 @@ def test_corrupt_generations_cannot_hide_a_saved_restriction(companion, bad):
     next_restriction(companion)
     correct(companion, "third")
     path = companion.life / reviews.RESTRICTIONS_FILE
-    with path.open("a") as stream:
+    with path.open("a", encoding="utf-8") as stream:
         stream.write(bad + "\n")
     before = snapshot(companion)
     report = reviews.report(companion, NOW)

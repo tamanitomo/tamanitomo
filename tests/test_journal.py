@@ -1000,8 +1000,8 @@ class ReflectionTests(unittest.TestCase):
                     "quote_id": "1:0",
                     "category": "people",
                     "statement": "Alex's sister is Bee.",
-                "relation": "new",
-                "target_id": "",
+                    "relation": "new",
+                    "target_id": "",
                 }
             ]
             return (plan, {})

@@ -43,7 +43,11 @@ def images(c, endpoint, provider="comfyui"):
                 "version": 1,
                 "presets": [
                     {"id": "look", "provider": provider, "endpoint": endpoint},
-                    {"id": "unused", "provider": "comfyui", "endpoint": "http://spare:8188"},
+                    {
+                        "id": "unused",
+                        "provider": "comfyui",
+                        "endpoint": "http://spare:8188",
+                    },
                 ],
                 "routes": {"portrait": "look"},
                 "default_preset": "look",
@@ -132,10 +136,14 @@ def test_nothing_to_report_is_not_broken(companion, monkeypatch):
     assert sensors.broken_senses(companion) == {}
 
 
-def test_a_sense_broken_for_hours_is_a_problem_and_a_blip_is_not(companion, monkeypatch):
+def test_a_sense_broken_for_hours_is_a_problem_and_a_blip_is_not(
+    companion, monkeypatch
+):
     companion.sensors = ["weather", "music"]
     monkeypatch.setattr(
-        sensors, "music", lambda c, now: (None, sensors.Broken("sign-in stopped working"))
+        sensors,
+        "music",
+        lambda c, now: (None, sensors.Broken("sign-in stopped working")),
     )
     sensors.run_one(companion, "music", NOW)
     assert watch.check_senses(companion, NOW + dt.timedelta(hours=1)) == []
@@ -163,9 +171,17 @@ def outbox(c, *rows):
     for n, (status, hours_ago, detail) in enumerate(rows):
         at = (NOW - dt.timedelta(hours=hours_ago)).isoformat()
         ident = f"msg-{n}"
-        lines.append({"id": ident, "kind": "outbox", "status": "queued", "queued_at": at})
         lines.append(
-            {"id": ident, "kind": "outbox_update", "status": status, "detail": detail, "at": at}
+            {"id": ident, "kind": "outbox", "status": "queued", "queued_at": at}
+        )
+        lines.append(
+            {
+                "id": ident,
+                "kind": "outbox_update",
+                "status": status,
+                "detail": detail,
+                "at": at,
+            }
         )
     path.write_text("".join(json.dumps(r) + "\n" for r in lines), encoding="utf-8")
 
@@ -184,7 +200,11 @@ def test_a_failure_followed_by_a_delivery_is_not(companion):
 def test_one_unconfirmed_photo_is_not_a_problem_but_two_are(companion):
     outbox(companion, ("unknown", 1, "upload timed out"))
     assert watch.check_delivery(companion, NOW) == []
-    outbox(companion, ("unknown", 2, "upload timed out"), ("unknown", 1, "upload timed out"))
+    outbox(
+        companion,
+        ("unknown", 2, "upload timed out"),
+        ("unknown", 1, "upload timed out"),
+    )
     assert len(watch.check_delivery(companion, NOW)) == 1
 
 

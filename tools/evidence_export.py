@@ -15,6 +15,7 @@ that is already malformed only because an earlier export wrote a raw `="<placeho
 attribute value is repaired by escaping exactly those attribute values before parsing; any
 other malformation fails the export.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -46,9 +47,9 @@ def scrub_json(obj, subs):
 
 def junit_cases(root):
     out = []
-    for case in root.iter('testcase'):
-        status = 'passed'
-        for tag in ('failure', 'error', 'skipped'):
+    for case in root.iter("testcase"):
+        status = "passed"
+        for tag in ("failure", "error", "skipped"):
             if case.find(tag) is not None:
                 status = tag
         out.append((f"{case.get('classname')}::{case.get('name')}", status))
@@ -63,18 +64,25 @@ def load_xml(text):
         repaired = RAW_PLACEHOLDER_ATTR.findall(text)
         if not repaired:
             raise
-        fixed = RAW_PLACEHOLDER_ATTR.sub(lambda m: '="' + m.group(1).replace('<', '&lt;').replace('>', '&gt;') + '"',
-                                         text)
+        fixed = RAW_PLACEHOLDER_ATTR.sub(
+            lambda m: '="' + m.group(1).replace("<", "&lt;").replace(">", "&gt;") + '"',
+            text,
+        )
         return ET.fromstring(fixed), sorted(set(repaired))
 
 
 def export_file(src, dst, subs):
     data = src.read_bytes()
-    record = {'source': str(src), 'source_sha256': hashlib.sha256(data).hexdigest(), 'format': None,
-              'repaired': [], 'validated': False}
-    if src.suffix == '.xml':
-        record['format'] = 'xml'
-        root, record['repaired'] = load_xml(data.decode('utf-8'))
+    record = {
+        "source": str(src),
+        "source_sha256": hashlib.sha256(data).hexdigest(),
+        "format": None,
+        "repaired": [],
+        "validated": False,
+    }
+    if src.suffix == ".xml":
+        record["format"] = "xml"
+        root, record["repaired"] = load_xml(data.decode("utf-8"))
         before = junit_cases(root)
         for el in root.iter():
             el.attrib.update({k: substitute(v, subs) for k, v in el.attrib.items()})
@@ -82,67 +90,103 @@ def export_file(src, dst, subs):
                 el.text = substitute(el.text, subs)
             if el.tail:
                 el.tail = substitute(el.tail, subs)
-        out = ET.tostring(root, encoding='utf-8', xml_declaration=True)
+        out = ET.tostring(root, encoding="utf-8", xml_declaration=True)
         dst.write_bytes(out)
-        after = junit_cases(ET.fromstring(out))             # re-parse what was written
+        after = junit_cases(ET.fromstring(out))  # re-parse what was written
         if before != after:
-            raise SystemExit(f'{src}: test case identities/statuses changed by the export')
-        record['junit_cases'] = len(after)
-        record['junit_status_counts'] = {s: sum(1 for _, x in after if x == s) for s in sorted({x for _, x in after})}
-    elif src.suffix == '.json':
-        record['format'] = 'json'
-        obj = scrub_json(json.loads(data.decode('utf-8')), subs)
-        dst.write_text(json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False) + '\n', encoding='utf-8')
-        json.loads(dst.read_text(encoding='utf-8'))
+            raise SystemExit(
+                f"{src}: test case identities/statuses changed by the export"
+            )
+        record["junit_cases"] = len(after)
+        record["junit_status_counts"] = {
+            s: sum(1 for _, x in after if x == s) for s in sorted({x for _, x in after})
+        }
+    elif src.suffix == ".json":
+        record["format"] = "json"
+        obj = scrub_json(json.loads(data.decode("utf-8")), subs)
+        dst.write_text(
+            json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        json.loads(dst.read_text(encoding="utf-8"))
     else:
-        record['format'] = 'text'
-        dst.write_text(substitute(data.decode('utf-8', errors='replace'), subs), encoding='utf-8')
-    record['validated'] = True
+        record["format"] = "text"
+        dst.write_text(
+            substitute(data.decode("utf-8", errors="replace"), subs), encoding="utf-8"
+        )
+    record["validated"] = True
     return record
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
-    ap.add_argument('--out', required=True)
-    ap.add_argument('--kind', choices=('executed', 'derivative'), required=True)
-    ap.add_argument('--source-note', required=True)
-    ap.add_argument('--sub', action='append', default=[], help='OLD=NEW, applied in order')
-    ap.add_argument('--forbid', action='append', default=[], help='a string that must not remain in any output')
-    ap.add_argument('inputs', nargs='+')
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--kind", choices=("executed", "derivative"), required=True)
+    ap.add_argument("--source-note", required=True)
+    ap.add_argument(
+        "--sub", action="append", default=[], help="OLD=NEW, applied in order"
+    )
+    ap.add_argument(
+        "--forbid",
+        action="append",
+        default=[],
+        help="a string that must not remain in any output",
+    )
+    ap.add_argument("inputs", nargs="+")
     args = ap.parse_args(argv)
-    subs = [tuple(s.split('=', 1)) for s in args.sub]
+    subs = [tuple(s.split("=", 1)) for s in args.sub]
     out = pathlib.Path(args.out)
     out.mkdir(parents=True, exist_ok=False)
     files = {}
     for given in map(pathlib.Path, args.inputs):
-        for src in sorted([given] if given.is_file() else [p for p in given.rglob('*') if p.is_file()]):
-            rel = pathlib.Path(given.name) / src.relative_to(given) if given.is_dir() else pathlib.Path(src.name)
+        for src in sorted(
+            [given] if given.is_file() else [p for p in given.rglob("*") if p.is_file()]
+        ):
+            rel = (
+                pathlib.Path(given.name) / src.relative_to(given)
+                if given.is_dir()
+                else pathlib.Path(src.name)
+            )
             dst = out / rel
             dst.parent.mkdir(parents=True, exist_ok=True)
             record = export_file(src, dst, subs)
-            record['source'] = substitute(str(src), subs)
+            record["source"] = substitute(str(src), subs)
             files[str(rel)] = record
     leaks = []
     for rel in files:
-        text = (out / rel).read_text(encoding='utf-8', errors='replace')
+        text = (out / rel).read_text(encoding="utf-8", errors="replace")
         leaks += [(rel, f) for f in args.forbid if f in text]
     if leaks:
-        raise SystemExit(f'forbidden strings remain: {leaks[:5]}')
+        raise SystemExit(f"forbidden strings remain: {leaks[:5]}")
     for rel, record in files.items():
         data = (out / rel).read_bytes()
         record.update(bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
-    manifest = {'kind': args.kind, 'source_note': args.source_note,
-                'note': ('format-only derivative of earlier evidence: NOT a test rerun' if args.kind == 'derivative'
-                         else 'newly executed evidence, sanitised by a format-aware export'),
-                'files': files}
-    text = json.dumps(manifest, indent=2, sort_keys=True) + '\n'
+    manifest = {
+        "kind": args.kind,
+        "source_note": args.source_note,
+        "note": (
+            "format-only derivative of earlier evidence: NOT a test rerun"
+            if args.kind == "derivative"
+            else "newly executed evidence, sanitised by a format-aware export"
+        ),
+        "files": files,
+    }
+    text = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
     leaked = [f for f in args.forbid if f in text]
     if leaked:
-        raise SystemExit(f'forbidden strings remain in the manifest: {leaked}')
-    (out / 'MANIFEST.json').write_text(text, encoding='utf-8')
-    print(json.dumps({'out': str(out), 'files': len(files), 'all_validated': all(r['validated'] for r in files.values())}))
+        raise SystemExit(f"forbidden strings remain in the manifest: {leaked}")
+    (out / "MANIFEST.json").write_text(text, encoding="utf-8")
+    print(
+        json.dumps(
+            {
+                "out": str(out),
+                "files": len(files),
+                "all_validated": all(r["validated"] for r in files.values()),
+            }
+        )
+    )
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

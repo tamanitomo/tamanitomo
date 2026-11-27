@@ -45,7 +45,7 @@ class SentPhotoTests(unittest.TestCase):
         (images / f"{PHOTO}.png").write_bytes(b"png")
         scene = {"text": "Coffee at the kitchen table, hair still damp from the rain."}
         (captures / f"{PHOTO}.json").write_text(
-            json.dumps({"id": PHOTO, "scene": scene})
+            json.dumps({"id": PHOTO, "scene": scene}), encoding="utf-8"
         )
         entry = outbox.queue(
             self.c,

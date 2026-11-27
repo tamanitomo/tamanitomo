@@ -47,7 +47,7 @@ def write(c, checked, asleep, since=None, slept=None, source="watch"):
         row["since"] = since.isoformat()
     if slept:
         row["slept_minutes"] = slept
-    (folder / "body.json").write_text(json.dumps(row))
+    (folder / "body.json").write_text(json.dumps(row), encoding="utf-8")
 
 
 SEQ = iter(range(1000))
@@ -69,7 +69,7 @@ def test_fresh_word_is_read_and_stale_or_odd_is_not(companion):
     write(companion, now + dt.timedelta(hours=1), True)
     assert body.read(companion, now) == {}  # from the future
     (companion.soul_dir / "ambient" / "body.json").write_text(
-        '{"asleep": "maybe", "checked_at": "now"}'
+        '{"asleep": "maybe", "checked_at": "now"}', encoding="utf-8"
     )
     assert body.read(companion, now) == {}
     write(companion, now, False, since=at(7, 12), slept=400)

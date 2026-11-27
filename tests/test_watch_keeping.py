@@ -65,7 +65,7 @@ class KeepingTests(unittest.TestCase):
         env = {**os.environ, "GIT_AUTHOR_DATE": "2027-02-09T08:00:00-05:00", "GIT_COMMITTER_DATE": "2027-02-09T08:00:00-05:00",
                "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}  # fmt: skip
         subprocess.run(["git", "init", "-q", str(vault)], check=True)
-        (vault / "note.md").write_text("one")
+        (vault / "note.md").write_text("one", encoding="utf-8")
         subprocess.run(["git", "-C", str(vault), "add", "-A"], check=True)
         subprocess.run(
             ["git", "-C", str(vault), "commit", "-qm", "first"], check=True, env=env
@@ -73,7 +73,7 @@ class KeepingTests(unittest.TestCase):
         self.assertFalse(
             [p for p in self.problems() if "vault" in p]
         )  # nothing waiting
-        (vault / "note.md").write_text("two")
+        (vault / "note.md").write_text("two", encoding="utf-8")
         found = self.problems()
         self.assertTrue(any("no commit for 28 hours" in p for p in found), found)
 
@@ -91,7 +91,7 @@ class KeepingTests(unittest.TestCase):
         )  # no story job: nothing to blame
         (self.c.home / "cron").mkdir(parents=True, exist_ok=True)
         (self.c.home / "cron/jobs.json").write_text(
-            json.dumps({"jobs": [{"name": "Nova story", "id": "s1"}]})
+            json.dumps({"jobs": [{"name": "Nova story", "id": "s1"}]}), encoding="utf-8"
         )
         found = self.problems()
         self.assertTrue(
@@ -104,14 +104,16 @@ class KeepingTests(unittest.TestCase):
         jobs.write_text(
             json.dumps(
                 {"jobs": [{"name": "Nova story", "id": "s1", "created_at": made}]}
-            )
+            ),
+            encoding="utf-8",
         )
         self.assertFalse([p for p in self.problems() if "chapter" in p])
         made = (NOW - dt.timedelta(days=6)).isoformat()
         jobs.write_text(
             json.dumps(
                 {"jobs": [{"name": "Nova story", "id": "s1", "created_at": made}]}
-            )
+            ),
+            encoding="utf-8",
         )
         self.assertTrue(
             any(
@@ -127,7 +129,8 @@ class KeepingTests(unittest.TestCase):
         report.write_text(
             json.dumps(
                 {"ok": False, "at": NOW.isoformat(), "error": "repo init failed"}
-            )
+            ),
+            encoding="utf-8",
         )
         self.assertTrue(
             any(
@@ -135,11 +138,13 @@ class KeepingTests(unittest.TestCase):
             )
         )
         report.write_text(
-            json.dumps({"ok": True, "at": (NOW - dt.timedelta(hours=40)).isoformat()})
+            json.dumps({"ok": True, "at": (NOW - dt.timedelta(hours=40)).isoformat()}),
+            encoding="utf-8",
         )
         self.assertTrue(any("no backup for 40 hours" in p for p in self.problems()))
         report.write_text(
-            json.dumps({"ok": True, "at": (NOW - dt.timedelta(hours=5)).isoformat()})
+            json.dumps({"ok": True, "at": (NOW - dt.timedelta(hours=5)).isoformat()}),
+            encoding="utf-8",
         )
         self.assertFalse([p for p in self.problems() if "backup" in p])
 
@@ -151,23 +156,27 @@ class KeepingTests(unittest.TestCase):
                "GIT_COMMITTER_DATE": "2027-02-09T08:00:00-05:00", "GIT_AUTHOR_NAME": "t",
                "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}  # fmt: skip
         subprocess.run(["git", "init", "-q", str(vault)], check=True)
-        (vault / "note.md").write_text("one")
+        (vault / "note.md").write_text("one", encoding="utf-8")
         subprocess.run(["git", "-C", str(vault), "add", "-A"], check=True)
         subprocess.run(
             ["git", "-C", str(vault), "commit", "-qm", "first"], check=True, env=env
         )
-        (vault / "note.md").write_text("two")
+        (vault / "note.md").write_text("two", encoding="utf-8")
         self.assertEqual(
             len(self.problems()), 2
         )  # behind, and uncommitted (a repo with no author, too)
         watch.run(self.c, NOW, notify=lambda *a, **k: (True, "test"))
-        healed = (self.c.home / "state" / "companion-watch-healed.jsonl").read_text()
+        healed = (self.c.home / "state" / "companion-watch-healed.jsonl").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("copied 1 message(s) the archive had missed", healed)
         self.assertIn("committed the vault's waiting changes", healed)
         log = subprocess.run(
             ["git", "-C", str(vault), "log", "--format=%s"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         ).stdout
         self.assertIn(
             "health watch: changes left waiting", log
@@ -194,12 +203,24 @@ class KeepingTests(unittest.TestCase):
         for n, text in enumerate(old):
             self.store.say("tg", "user", text, at(1, 2 + n, 9))
         for n in range(30):
-            self.store.say("tg", "user", f"maybe we should see the storm tonight {n}", at(2, 9, 8) + n)
+            self.store.say(
+                "tg",
+                "user",
+                f"maybe we should see the storm tonight {n}",
+                at(2, 9, 8) + n,
+            )
         self.fts()
         archive.update(self.c, now=NOW)
         report = watch.recall_drill(self.c, NOW, rng=random.Random(1))
-        self.assertEqual((report["tried"], report["found"]), (4, 4), report)  # only lines a month old or more
-        self.assertEqual(json.loads(watch.recall_drill_path(self.c).read_text())["found"], 4)
+        self.assertEqual(
+            (report["tried"], report["found"]), (4, 4), report
+        )  # only lines a month old or more
+        self.assertEqual(
+            json.loads(watch.recall_drill_path(self.c).read_text(encoding="utf-8"))[
+                "found"
+            ],
+            4,
+        )
         self.assertEqual(watch.check_recall(self.c, NOW), [])
         # A broken search: the next drill misses, and the hourly checks say so (with the dates), without re-running
         # the drill until a week has passed.

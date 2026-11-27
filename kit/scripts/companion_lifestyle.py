@@ -65,7 +65,9 @@ Feelings and enjoyment are yours to author, not a compulsory cheerful mood."""
 
 def policy(c):
     try:
-        return json.loads((c.life / "routine.json").read_text()).get("lifestyle", {})
+        return json.loads((c.life / "routine.json").read_text(encoding="utf-8")).get(
+            "lifestyle", {}
+        )
     except FileNotFoundError:
         return {}
 
@@ -1241,7 +1243,7 @@ def seed(c, palette="auto", refresh=False):
             presence.update_wardrobe(c, fresh)
         path = c.life / "routine.json"
         routine = (
-            json.loads(path.read_text())
+            json.loads(path.read_text(encoding="utf-8"))
             if path.exists()
             else {"kind": "imagined_routine", "weekly": []}
         )

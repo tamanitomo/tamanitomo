@@ -45,7 +45,9 @@ def run_refresh(tmp_path, expr, old_minutes, new_minutes):
     new = dataclasses.replace(old, image_interval_minutes=new_minutes)
     (new.home / "cron").mkdir(parents=True)
     job = {"id": "t1", "name": "Nova image timeline", "schedule": {"expr": expr}}
-    (new.home / "cron/jobs.json").write_text(json.dumps({"jobs": [job]}))
+    (new.home / "cron/jobs.json").write_text(
+        json.dumps({"jobs": [job]}), encoding="utf-8"
+    )
     calls = []
 
     def run_cmd(args, home=None):

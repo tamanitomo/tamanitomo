@@ -526,6 +526,8 @@ def _install_jobs_locked(c, m, report):
                             "HERMES_HOME": str(c.home),
                             "HERMES_TIMEZONE": c.timezone,
                         },
+                        encoding="utf-8",
+                        errors="replace",
                     )
                     if result.returncode:
                         raise ValueError("Hermes cron edit failed")
@@ -558,6 +560,8 @@ def _install_jobs_locked(c, m, report):
                 text=True,
                 timeout=30,
                 env={**os.environ, "HERMES_HOME": str(c.home)},
+                encoding="utf-8",
+                errors="replace",
             )
             if result.returncode:
                 report.append("  ! could not pause image timeline; retry repair")
@@ -651,6 +655,8 @@ def _cron_bridge(c, changes):
         capture_output=True,
         text=True,
         timeout=120,
+        encoding="utf-8",
+        errors="replace",
     )
     try:
         return json.loads(

@@ -65,7 +65,7 @@ def companion(tmp_path):
     c.home.mkdir(parents=True)
     c.life.mkdir(parents=True)
     c.save()
-    (c.life / "routine.json").write_text(json.dumps(ROUTINE))
+    (c.life / "routine.json").write_text(json.dumps(ROUTINE), encoding="utf-8")
     return c
 
 
@@ -77,7 +77,8 @@ def night(c, start, end):
                 "until": end.isoformat(),
                 "hours": (end - start).total_seconds() / 3600,
             }
-        )
+        ),
+        encoding="utf-8",
     )
 
 
@@ -88,6 +89,8 @@ def run_life(c, *args):
         capture_output=True,
         text=True,
         check=True,
+        encoding="utf-8",
+        errors="replace",
     )
     return json.loads(out.stdout)
 
@@ -130,7 +133,8 @@ class TestHerEveningPlan:
                     {"start": "09:30", "end": "11:00", "activity": "market"},
                     {"start": "12:00", "end": "13:00", "activity": "lunch out"},
                 ]
-            )
+            ),
+            encoding="utf-8",
         )
         out = run_life(
             companion,
@@ -170,7 +174,8 @@ class TestHerEveningPlan:
                     {"start": "12:00", "end": "13:00", "activity": "lunch out"},
                     {"start": "18:30", "end": "19:30", "activity": "dinner"},
                 ]
-            )
+            ),
+            encoding="utf-8",
         )
         out = run_life(
             companion,
@@ -201,7 +206,9 @@ class TestHerEveningPlan:
         )
         # The promise restated as a passing idea, with no reason: settling refuses it.
         anchors = tmp_path / "anchors.json"
-        anchors.write_text(json.dumps([{**self.PROMISE, "kind": "idea"}]))
+        anchors.write_text(
+            json.dumps([{**self.PROMISE, "kind": "idea"}]), encoding="utf-8"
+        )
         out = run_life(
             companion,
             "plan-tomorrow",
@@ -319,7 +326,9 @@ class TestSomewhereToBe:
         import companion_presence as presence
 
         routine = dict(ROUTINE, lifestyle={"enabled": True})
-        (companion.life / "routine.json").write_text(json.dumps(routine))
+        (companion.life / "routine.json").write_text(
+            json.dumps(routine), encoding="utf-8"
+        )
         presence.update_wardrobe(
             companion, [{"id": "tee", "description": "green tee", "use": "everyday"}]
         )
@@ -360,7 +369,9 @@ class TestSomewhereToBe:
                 "setting": "the community studio",
             },
         )
-        weekly = json.loads((companion.life / "routine.json").read_text())["weekly"]
+        weekly = json.loads(
+            (companion.life / "routine.json").read_text(encoding="utf-8")
+        )["weekly"]
         assert len(weekly) == 1 and weekly[0]["commitment"] is True
         assert life.commitments(companion.life)[0]["id"].startswith("commit-tuesday")
 

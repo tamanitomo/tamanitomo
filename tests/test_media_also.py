@@ -67,7 +67,7 @@ def two(tmp_path):
     c.soul_dir.mkdir(parents=True, exist_ok=True)
     token = c.home / "secrets" / "media.token"
     token.parent.mkdir(parents=True, exist_ok=True)
-    token.write_text(TOKEN + "\n")
+    token.write_text(TOKEN + "\n", encoding="utf-8")
     c.media_server, c.media_kind, c.media_token_file = plex_url, "plex", str(token)
     c.media_also = [
         {
@@ -128,7 +128,10 @@ def test_both_servers_are_read_and_each_item_knows_its_own(two):
         == jelly_url
     )
     viewing.sync(c, NIGHT)
-    rows = [json.loads(line) for line in viewing.path_for(c).read_text().splitlines()]
+    rows = [
+        json.loads(line)
+        for line in viewing.path_for(c).read_text(encoding="utf-8").splitlines()
+    ]
     assert sorted(r["source"] for r in rows) == ["jellyfin", "plex"]
     text, facts = viewing.sense(c, NIGHT)
     assert (
@@ -197,7 +200,7 @@ class MediaAlsoSettingsTests(AppFixture):
             {"server": "http://192.0.2.20:8096", "kind": "jellyfin", "user": "robin"},
         )
         token = pathlib.Path(c.media_also[0]["token_file"])
-        self.assertEqual(token.read_text().strip(), "other-s3cret")
+        self.assertEqual(token.read_text(encoding="utf-8").strip(), "other-s3cret")
         if os.name != "nt":
             self.assertEqual(token.stat().st_mode & 0o777, 0o600)
         got = self.client.get("/api/settings").json()
@@ -220,7 +223,9 @@ class MediaAlsoSettingsTests(AppFixture):
         self.assertEqual(cc.load(self.c.home).media_also, [])
 
     def test_a_token_needs_an_address(self):
-        r = self.client.post("/api/settings", json={"media_also_token": "tok-without-address"})
+        r = self.client.post(
+            "/api/settings", json={"media_also_token": "tok-without-address"}
+        )
         self.assertEqual(r.status_code, 400, r.text)
         bad = self.client.post(
             "/api/settings", json={"media_also_server": "ftp://nope"}

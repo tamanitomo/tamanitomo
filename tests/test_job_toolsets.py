@@ -18,7 +18,12 @@ from kit.cli.common import load_manifest
 @pytest.fixture
 def companion(tmp_path, monkeypatch):
     monkeypatch.delenv("COMPANION_NO_HERMES_CRON", raising=False)
-    c = cc.Companion(agent="Nova", human="Alex", hermes_root=tmp_path / "home", vault=tmp_path / "vault")
+    c = cc.Companion(
+        agent="Nova",
+        human="Alex",
+        hermes_root=tmp_path / "home",
+        vault=tmp_path / "vault",
+    )
     (c.home / "cron").mkdir(parents=True)
     return c
 
@@ -37,9 +42,14 @@ def run(c, jobs, bridge=None):
 
     def fake(_c, changes):
         calls.append(changes)
-        return bridge(changes) if bridge else [
-            {"id": ch["id"], "ok": True, "toolsets": ch["toolsets"], "unknown": []} for ch in changes
-        ]
+        return (
+            bridge(changes)
+            if bridge
+            else [
+                {"id": ch["id"], "ok": True, "toolsets": ch["toolsets"], "unknown": []}
+                for ch in changes
+            ]
+        )
 
     report = []
     with patch.object(scaffold, "_cron_bridge", side_effect=fake):
@@ -48,30 +58,66 @@ def run(c, jobs, bridge=None):
 
 
 def test_a_job_with_every_tool_is_given_only_its_own(companion):
-    done, calls, report = run(companion, [{"id": "p1", "name": "Nova companion pulse", "enabled_toolsets": None}])
+    done, calls, report = run(
+        companion,
+        [{"id": "p1", "name": "Nova companion pulse", "enabled_toolsets": None}],
+    )
     assert done
-    assert calls == [[{"id": "p1", "name": "Nova companion pulse", "toolsets": spec(companion, "pulse")["toolsets"]}]]
+    assert calls == [
+        [
+            {
+                "id": "p1",
+                "name": "Nova companion pulse",
+                "toolsets": spec(companion, "pulse")["toolsets"],
+            }
+        ]
+    ]
     assert any("tools limited to file, terminal" in line for line in report)
 
 
 def test_a_job_already_limited_is_left_alone(companion):
     done, calls, _ = run(
         companion,
-        [{"id": "p1", "name": "Nova companion pulse", "enabled_toolsets": list(reversed(spec(companion, "pulse")["toolsets"]))}],
+        [
+            {
+                "id": "p1",
+                "name": "Nova companion pulse",
+                "enabled_toolsets": list(
+                    reversed(spec(companion, "pulse")["toolsets"])
+                ),
+            }
+        ],
     )
     assert done and calls == []
 
 
 def test_scripted_jobs_are_not_given_tools(companion):
-    done, calls, _ = run(companion, [{"id": "d1", "name": "Nova outbox dispatcher", "enabled_toolsets": None, "no_agent": True}])
+    done, calls, _ = run(
+        companion,
+        [
+            {
+                "id": "d1",
+                "name": "Nova outbox dispatcher",
+                "enabled_toolsets": None,
+                "no_agent": True,
+            }
+        ],
+    )
     assert done and calls == []
 
 
 def test_a_failure_is_reported_and_not_counted_as_done(companion):
-    failing = lambda changes: [{"id": ch["id"], "ok": False, "error": "locked"} for ch in changes]
-    done, _, report = run(companion, [{"id": "p1", "name": "Nova companion pulse"}], bridge=failing)
+    failing = lambda changes: [
+        {"id": ch["id"], "ok": False, "error": "locked"} for ch in changes
+    ]
+    done, _, report = run(
+        companion, [{"id": "p1", "name": "Nova companion pulse"}], bridge=failing
+    )
     assert not done
-    assert any("could not set the tools for Nova companion pulse: locked" in line for line in report)
+    assert any(
+        "could not set the tools for Nova companion pulse: locked" in line
+        for line in report
+    )
 
 
 def test_research_gets_the_web_toolset_not_a_tool_name(companion):

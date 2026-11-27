@@ -1,3 +1,16 @@
+## 3.36.1 — Clean and portable (2026-11-27)
+
+- **Windows: text is UTF-8 everywhere.** 300 reads, writes and subprocess decodes that relied on the platform
+  default (cp1252 on Windows) now say `encoding="utf-8"` (subprocess output also `errors="replace"`); a curly
+  quote or an emoji in her files no longer breaks a Windows install. CI's Linux job now runs the suite with
+  `-X warn_default_encoding -W error::EncodingWarning`, so a new one fails before it ships.
+- **Windows: dates.** `strftime("%-d")` is glibc-only; Windows refused it, so every day of a month was skipped
+  when a chapter's material was gathered (no chapter was ever due there) and on-this-day could not name a date.
+  Both format the day number portably now.
+- **macOS:** a test compared a home path with the app's resolved one (`/var` is a link to `/private/var`).
+- **The whole tree is Black and Ruff clean**, tests and tools included, and CI checks them; the Windows and
+  macOS smoke jobs report failing tests as annotations like the Linux job.
+
 ## 3.36.0 — Her far memory (2026-11-27)
 
 - **Recall reaches the far past again.** `companion_transcript` search ORed the query words and read the 200

@@ -42,6 +42,8 @@ def bridge(rt, home, mode, payload):
         capture_output=True,
         text=True,
         timeout=660,
+        encoding="utf-8",
+        errors="replace",
     )
     try:
         result = json.loads(

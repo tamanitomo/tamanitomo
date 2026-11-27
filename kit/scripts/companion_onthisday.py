@@ -282,9 +282,9 @@ def render(c, now=None):
     for row in found:
         day = dt.date.fromisoformat(row["date"])
         when = (
-            day.strftime("%-d %B %Y")
+            f"{day.day} {day:%B %Y}"
             if day.year != dt.datetime.now(tz).year
-            else day.strftime("%-d %B")
+            else f"{day.day} {day:%B}"
         )
         rows.append(
             f"- {row['label']} today ({when}): " + "; ".join(row["lines"]) + "."

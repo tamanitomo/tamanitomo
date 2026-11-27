@@ -68,7 +68,12 @@ elif args[:2] == ["cron", "edit"]:
     if "--schedule" in args:
         job["schedule"]["expr"] = args[args.index("--schedule") + 1]
     # Like Hermes: an empty value clears that pin.
-    for flag, key in (("--model", "model"), ("--provider", "provider"), ("--reasoning-effort", "reasoning_effort"), ("--base-url", "base_url")):
+    for flag, key in (
+        ("--model", "model"),
+        ("--provider", "provider"),
+        ("--reasoning-effort", "reasoning_effort"),
+        ("--base-url", "base_url"),
+    ):
         if flag in args:
             job[key] = args[args.index(flag) + 1].strip() or None
     path.write_text(json.dumps(data), encoding="utf-8")

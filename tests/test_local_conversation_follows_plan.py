@@ -25,7 +25,11 @@ def policy(model, provider, default=None):
     return json.dumps(
         {
             "session_id": "x",
-            "policy": {"model": model, "config_json": json.dumps(config), "source": "oneshot"},
+            "policy": {
+                "model": model,
+                "config_json": json.dumps(config),
+                "source": "oneshot",
+            },
         }
     )
 
@@ -49,8 +53,7 @@ def workspace(tmp_path):
         encoding="utf-8",
     )
     with sqlite3.connect(c.home / "state.db") as db:
-        db.executescript(
-            """
+        db.executescript("""
             CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, started_at REAL,
                 profile_name TEXT, user_id TEXT, chat_id TEXT, chat_type TEXT);
             CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT,
@@ -58,23 +61,39 @@ def workspace(tmp_path):
                 _compressed_summary INTEGER DEFAULT 0, active INTEGER DEFAULT 1,
                 compacted INTEGER DEFAULT 0);
             CREATE TABLE state_meta (key TEXT PRIMARY KEY, value TEXT);
-            """
-        )
+            """)
         db.executemany(
             "INSERT INTO sessions VALUES (?,?,?,?,?,?,?)",
             [
                 ("web", "oneshot", 1, "nova", "uid:1000", "web", "dm"),
                 ("older", "oneshot", 2, "nova", "uid:1000", "older", "dm"),
                 ("unrecorded", "oneshot", 3, "nova", "uid:1000", "unrecorded", "dm"),
-                ("other-profile", "oneshot", 4, "rowan", "uid:1000", "other-profile", "dm"),
+                (
+                    "other-profile",
+                    "oneshot",
+                    4,
+                    "rowan",
+                    "uid:1000",
+                    "other-profile",
+                    "dm",
+                ),
             ],
         )
         db.executemany(
             "INSERT INTO state_meta VALUES (?,?)",
             [
-                (transcript.LOCAL_POLICY_PREFIX + "web", policy("model-b", "provider-b")),
-                (transcript.LOCAL_POLICY_PREFIX + "older", policy("model-a", "provider-a")),
-                (transcript.LOCAL_POLICY_PREFIX + "other-profile", policy("model-a", "provider-a")),
+                (
+                    transcript.LOCAL_POLICY_PREFIX + "web",
+                    policy("model-b", "provider-b"),
+                ),
+                (
+                    transcript.LOCAL_POLICY_PREFIX + "older",
+                    policy("model-a", "provider-a"),
+                ),
+                (
+                    transcript.LOCAL_POLICY_PREFIX + "other-profile",
+                    policy("model-a", "provider-a"),
+                ),
             ],
         )
     app = build(home=c.home, state_dir=tmp_path / "app")

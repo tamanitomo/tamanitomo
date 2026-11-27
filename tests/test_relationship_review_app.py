@@ -127,7 +127,7 @@ class RelationshipReviewApiTests(WorkspaceFixture):
 
     def test_missing_provenance_and_bad_json_do_not_offer_a_review(self):
         (self.c.home / ".permanent-friend.json").write_text(
-            json.dumps({"permanent_friend": True, "violations": 2})
+            json.dumps({"permanent_friend": True, "violations": 2}), encoding="utf-8"
         )
         report = self.get("/api/relationship/review").json()
         self.assertFalse(report["restriction"]["eligible"])

@@ -252,7 +252,7 @@ def photo_standing(c, state=None):
 def load(c):
     path = c.home / CONFIG
     if path.exists():
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     return {
         "version": 1,
         "identity_override": None,
@@ -369,6 +369,8 @@ def hermes_bridge(c, command, payload=None):
         capture_output=True,
         text=True,
         timeout=timeout,
+        encoding="utf-8",
+        errors="replace",
     )
     try:
         reply = json.loads(
@@ -631,7 +633,7 @@ def save(c, data, expected):
                 c.home
                 / "companion-config-backups"
                 / ("images-" + uuid.uuid4().hex + ".json"),
-                path.read_text(),
+                path.read_text(encoding="utf-8"),
             )
         atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False))
 
@@ -1018,7 +1020,9 @@ def generate(
             )
             + " Trying one clothed replacement; keeping the blurred original."
         )
-        original = json.loads(held.path.with_suffix(".json").read_text())
+        original = json.loads(
+            held.path.with_suffix(".json").read_text(encoding="utf-8")
+        )
         retry = dict(overrides or {})
         retry["scene"] = (
             original.get("parts", {}).get("scene", "")

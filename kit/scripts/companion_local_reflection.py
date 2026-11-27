@@ -1277,7 +1277,7 @@ def reflect(
             ]
         )
         path = folder / (key + ".json")
-        saved = json.loads(path.read_text()) if path.exists() else None
+        saved = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
         if saved and saved.get("complete"):
             return {
                 "status": "skipped",

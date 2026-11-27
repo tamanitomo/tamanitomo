@@ -237,6 +237,8 @@ def install(rt, provider, report):
             text=True,
             stdin=subprocess.DEVNULL,
             timeout=timeout,
+            encoding="utf-8",
+            errors="replace",
         )
         if r.returncode:
             raise ValueError(redact(r.stderr or r.stdout)[-4000:])

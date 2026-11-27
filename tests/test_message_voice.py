@@ -252,7 +252,13 @@ class MessageVoiceApiTests(WorkspaceFixture):
                 result = self.wait(response, profile)
                 assert result["status"] == "complete"
                 assert result["profile"] == profile
-                assert seen[-1] == (companion.home, "speak", text)
+                home, mode, said = seen[-1]
+                # resolved: macOS's temp dir is /var, a link to /private/var, and the app resolves its homes
+                assert (Path(home).resolve(), mode, said) == (
+                    companion.home.resolve(),
+                    "speak",
+                    text,
+                )
                 audio = result["result"]["audio"]
                 assert (
                     self.client.get(

@@ -1,5 +1,3 @@
-
-
 def test_summary_puts_earlier_categories_before_other(tmp_path):
     import datetime as dt
     import companion_self as s
@@ -10,7 +8,10 @@ def test_summary_puts_earlier_categories_before_other(tmp_path):
     root.mkdir()
     s.record_fact(root, "Likes tea.", "said so", now, category="other")
     s.record_fact(
-        root, "Lives in Ohio.", "said so", now + dt.timedelta(minutes=1),
+        root,
+        "Lives in Ohio.",
+        "said so",
+        now + dt.timedelta(minutes=1),
         category=s.CATEGORIES[0],
     )
     c = SimpleNamespace(

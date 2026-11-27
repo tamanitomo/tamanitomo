@@ -1031,7 +1031,9 @@ class ModelChainTests(unittest.TestCase):
     def test_a_chain_is_refused_when_hermes_could_not_use_all_of_it(self):
         from kit.app import model_chain as mc
 
-        too_long = [{"provider": "p", "model": f"m{i}"} for i in range(mc.MAX_ROUTES + 1)]
+        too_long = [
+            {"provider": "p", "model": f"m{i}"} for i in range(mc.MAX_ROUTES + 1)
+        ]
         for bad in ([], [{"provider": "p"}], [{"bundle": "nope"}], too_long):
             with self.assertRaises(ValueError):
                 mc.flatten(bad, self.BUNDLES)
@@ -1057,9 +1059,15 @@ class ModelChainTests(unittest.TestCase):
         )
         self.assertEqual(
             cfg["model"],
-            {"provider": "openai-codex", "default": "gpt-5.6-sol", "context_length": 65536},
+            {
+                "provider": "openai-codex",
+                "default": "gpt-5.6-sol",
+                "context_length": 65536,
+            },
         )
-        self.assertEqual(cfg["fallback_providers"], [{"provider": "xai-oauth", "model": "grok-4.6"}])
+        self.assertEqual(
+            cfg["fallback_providers"], [{"provider": "xai-oauth", "model": "grok-4.6"}]
+        )
 
     def test_free_models_are_chosen_live_keeping_known_good_ones(self):
         from kit.app import model_chain as mc
@@ -1067,27 +1075,58 @@ class ModelChainTests(unittest.TestCase):
         picks = mc.pick_free_models(
             FREE_LISTING, ["gone/model:free", "nvidia/nemotron-3-super-120b-a12b:free"]
         )
-        self.assertEqual(picks, ["nvidia/nemotron-3-super-120b-a12b:free", "big/new-model:free"])
+        self.assertEqual(
+            picks, ["nvidia/nemotron-3-super-120b-a12b:free", "big/new-model:free"]
+        )
 
     def test_a_job_follows_only_when_pinned_to_the_first_model(self):
         from kit.app import model_chain as mc
 
         primary = {"provider": "xai-oauth", "model": "grok-4.6", "base_url": ""}
-        self.assertEqual(mc.job_state({"provider": "xai-oauth", "model": "Grok-4.6"}, primary), "follows")
-        self.assertEqual(mc.job_state({"provider": "openai-codex", "model": "gpt-5.5"}, primary), "pinned")
+        self.assertEqual(
+            mc.job_state({"provider": "xai-oauth", "model": "Grok-4.6"}, primary),
+            "follows",
+        )
+        self.assertEqual(
+            mc.job_state({"provider": "openai-codex", "model": "gpt-5.5"}, primary),
+            "pinned",
+        )
         self.assertEqual(mc.job_state({}, primary), "unpinned")
         # An endpoint spelled out on one side only is still the provider's own.
         spelled = {**primary, "base_url": "https://api.x.ai/v1"}
-        self.assertEqual(mc.job_state({"provider": "xai-oauth", "model": "grok-4.6"}, spelled), "follows")
-        other = {"provider": "xai-oauth", "model": "grok-4.6", "base_url": "http://proxy.local/v1"}
+        self.assertEqual(
+            mc.job_state({"provider": "xai-oauth", "model": "grok-4.6"}, spelled),
+            "follows",
+        )
+        other = {
+            "provider": "xai-oauth",
+            "model": "grok-4.6",
+            "base_url": "http://proxy.local/v1",
+        }
         self.assertEqual(mc.job_state(other, spelled), "pinned")
 
 
 FREE_LISTING = [
-    {"id": "openrouter/free", "supported_parameters": ["tools"], "context_length": 200000},
-    {"id": "nvidia/nemotron-3-super-120b-a12b:free", "supported_parameters": ["tools"], "context_length": 262144},
-    {"id": "big/new-model:free", "supported_parameters": ["tools"], "context_length": 1000000},
-    {"id": "nvidia/nemotron-3.5-content-safety:free", "supported_parameters": ["tools"], "context_length": 900000},
+    {
+        "id": "openrouter/free",
+        "supported_parameters": ["tools"],
+        "context_length": 200000,
+    },
+    {
+        "id": "nvidia/nemotron-3-super-120b-a12b:free",
+        "supported_parameters": ["tools"],
+        "context_length": 262144,
+    },
+    {
+        "id": "big/new-model:free",
+        "supported_parameters": ["tools"],
+        "context_length": 1000000,
+    },
+    {
+        "id": "nvidia/nemotron-3.5-content-safety:free",
+        "supported_parameters": ["tools"],
+        "context_length": 900000,
+    },
     {"id": "tiny/no-tools:free", "supported_parameters": [], "context_length": 999999},
     {"id": "paid/model", "supported_parameters": ["tools"], "context_length": 2000000},
 ]
@@ -1111,9 +1150,20 @@ class ModelChainApiTests(WorkspaceFixture):
             json.dumps(
                 {
                     "jobs": [
-                        {"id": "a", "name": "Nova pulse", "provider": "xai-oauth", "model": "grok-4.6"},
-                        {"id": "b", "name": "My scanner", "provider": "openai-codex", "model": "gpt-5.5",
-                         "last_status": "error", "last_error": "model at capacity"},
+                        {
+                            "id": "a",
+                            "name": "Nova pulse",
+                            "provider": "xai-oauth",
+                            "model": "grok-4.6",
+                        },
+                        {
+                            "id": "b",
+                            "name": "My scanner",
+                            "provider": "openai-codex",
+                            "model": "gpt-5.5",
+                            "last_status": "error",
+                            "last_error": "model at capacity",
+                        },
                         {"id": "c", "name": "Nova vault commit", "no_agent": True},
                     ]
                 }
@@ -1125,11 +1175,18 @@ class ModelChainApiTests(WorkspaceFixture):
         self.c.save()
 
     def jobs(self):
-        return {j["id"]: j for j in json.loads((self.c.home / "cron/jobs.json").read_text())["jobs"]}
+        return {
+            j["id"]: j
+            for j in json.loads(
+                (self.c.home / "cron/jobs.json").read_text(encoding="utf-8")
+            )["jobs"]
+        }
 
     def test_the_chain_reports_which_jobs_are_on_it(self):
         body = self.get("/api/models/chain").json()
-        self.assertEqual(body["links"], [{"provider": "xai-oauth", "model": "grok-4.6"}])
+        self.assertEqual(
+            body["links"], [{"provider": "xai-oauth", "model": "grok-4.6"}]
+        )
         states = {j["id"]: j["state"] for j in body["jobs"]}
         self.assertEqual(states, {"a": "follows", "b": "pinned"})
         self.assertEqual(set(body["tier_overrides"]), {"loops"})
@@ -1142,14 +1199,22 @@ class ModelChainApiTests(WorkspaceFixture):
         ]
         row = self.wait(self.post("/api/models/chain", {"links": chain}))
         self.assertEqual(row["status"], "complete", row)
-        saved = yaml.safe_load((self.c.home / "config.yaml").read_text(encoding="utf-8"))
+        saved = yaml.safe_load(
+            (self.c.home / "config.yaml").read_text(encoding="utf-8")
+        )
         self.assertEqual(saved["model"]["default"], "gpt-5.6-sol")
         self.assertEqual(saved["fallback_providers"][0]["model"], "grok-4.6")
         self.assertEqual(saved["fallback_providers"][1]["model"], "openrouter/free")
-        self.assertEqual(cc.load(self.c.home).models, {"fallbacks": saved["fallback_providers"]})
+        self.assertEqual(
+            cc.load(self.c.home).models, {"fallbacks": saved["fallback_providers"]}
+        )
         jobs = self.jobs()
-        self.assertEqual((jobs["a"]["provider"], jobs["a"]["model"]), ("openai-codex", "gpt-5.6-sol"))
-        self.assertEqual((jobs["b"]["provider"], jobs["b"]["model"]), ("openai-codex", "gpt-5.6-sol"))
+        self.assertEqual(
+            (jobs["a"]["provider"], jobs["a"]["model"]), ("openai-codex", "gpt-5.6-sol")
+        )
+        self.assertEqual(
+            (jobs["b"]["provider"], jobs["b"]["model"]), ("openai-codex", "gpt-5.6-sol")
+        )
         self.assertNotIn("model", jobs["c"])
         body = self.get("/api/models/chain").json()
         self.assertEqual(body["links"][2]["bundle"], "openrouter-free")
@@ -1159,14 +1224,25 @@ class ModelChainApiTests(WorkspaceFixture):
         row = self.wait(
             self.post(
                 "/api/models/chain",
-                {"links": [{"provider": "xai-oauth", "model": "grok-4.3"}, {"bundle": "openrouter-free"}]},
+                {
+                    "links": [
+                        {"provider": "xai-oauth", "model": "grok-4.3"},
+                        {"bundle": "openrouter-free"},
+                    ]
+                },
             )
         )
         self.assertEqual(row["status"], "complete", row)
-        saved = yaml.safe_load((self.c.home / "config.yaml").read_text(encoding="utf-8"))
+        saved = yaml.safe_load(
+            (self.c.home / "config.yaml").read_text(encoding="utf-8")
+        )
         self.assertEqual(
             [f["model"] for f in saved["fallback_providers"]],
-            ["openrouter/free", "nvidia/nemotron-3-super-120b-a12b:free", "big/new-model:free"],
+            [
+                "openrouter/free",
+                "nvidia/nemotron-3-super-120b-a12b:free",
+                "big/new-model:free",
+            ],
         )
         # A model OpenRouter later retires is named, and the saved cascade still
         # reads as the cascade even though its members differ from today's picks.
@@ -1182,30 +1258,44 @@ class ModelChainApiTests(WorkspaceFixture):
         row = self.wait(
             self.post(
                 "/api/models/chain",
-                {"links": [{"provider": "xai-oauth", "model": "grok-4.6"}], "jobs": ["b"]},
+                {
+                    "links": [{"provider": "xai-oauth", "model": "grok-4.6"}],
+                    "jobs": ["b"],
+                },
             )
         )
         self.assertEqual(row["status"], "complete", row)
         self.assertEqual(self.jobs()["b"]["model"], "grok-4.6")
-        self.assertEqual((self.c.home / "config.yaml").read_text(encoding="utf-8"), before)
+        self.assertEqual(
+            (self.c.home / "config.yaml").read_text(encoding="utf-8"), before
+        )
 
 
 def test_the_model_page_never_waits_on_openrouter_unless_asked(tmp_path):
     from kit.app import manage
 
     (tmp_path / "companion-free-models.json").write_text(
-        json.dumps({"ok": True, "checked_at": 1, "data": [{"id": "saved:free"}]})
+        json.dumps({"ok": True, "checked_at": 1, "data": [{"id": "saved:free"}]}),
+        encoding="utf-8",
     )
     started = []
     fetched = []
-    with patch.dict(
-        manage._openrouter_listing, {"at": 0.0, "data": None, "refreshing": False}
-    ), patch.object(
-        manage, "_fetch_openrouter_listing", side_effect=lambda: fetched.append(1) or []
-    ), patch.object(
-        manage.threading, "Thread", side_effect=lambda **kw: types.SimpleNamespace(
-            start=lambda: started.append(kw["target"])
-        )
+    with (
+        patch.dict(
+            manage._openrouter_listing, {"at": 0.0, "data": None, "refreshing": False}
+        ),
+        patch.object(
+            manage,
+            "_fetch_openrouter_listing",
+            side_effect=lambda: fetched.append(1) or [],
+        ),
+        patch.object(
+            manage.threading,
+            "Thread",
+            side_effect=lambda **kw: types.SimpleNamespace(
+                start=lambda: started.append(kw["target"])
+            ),
+        ),
     ):
         # A cold app answers from the copy the workers keep, and refreshes behind it.
         assert manage.openrouter_listing(home=tmp_path) == [{"id": "saved:free"}]
@@ -1229,7 +1319,9 @@ class ModelPlanApiTests(WorkspaceFixture):
         listing.start()
         self.addCleanup(listing.stop)
         specs = json.loads(
-            (Path(__file__).resolve().parents[1] / "kit/templates/cron/manifest.json").read_text()
+            (
+                Path(__file__).resolve().parents[1] / "kit/templates/cron/manifest.json"
+            ).read_text(encoding="utf-8")
         )["jobs"]
         for comp, provider_name, model in (
             (self.c, "xai-oauth", "grok-4.6"),
@@ -1265,15 +1357,36 @@ class ModelPlanApiTests(WorkspaceFixture):
                 }
                 for s in specs
             ]
-            jobs.append({"id": f"{comp.profile}-mine", "name": "My scanner",
-                         "provider": "xai-oauth", "model": "grok-4.6", "enabled": True})
-            jobs.append({"id": f"{comp.profile}-kept", "name": "My digest",
-                         "provider": "openai-codex", "model": "gpt-5.4-mini", "enabled": True})
+            jobs.append(
+                {
+                    "id": f"{comp.profile}-mine",
+                    "name": "My scanner",
+                    "provider": "xai-oauth",
+                    "model": "grok-4.6",
+                    "enabled": True,
+                }
+            )
+            jobs.append(
+                {
+                    "id": f"{comp.profile}-kept",
+                    "name": "My digest",
+                    "provider": "openai-codex",
+                    "model": "gpt-5.4-mini",
+                    "enabled": True,
+                }
+            )
             (comp.home / "cron").mkdir(exist_ok=True)
-            (comp.home / "cron/jobs.json").write_text(json.dumps({"jobs": jobs}), encoding="utf-8")
+            (comp.home / "cron/jobs.json").write_text(
+                json.dumps({"jobs": jobs}), encoding="utf-8"
+            )
 
     def jobs(self, comp):
-        return {j["id"]: j for j in json.loads((comp.home / "cron/jobs.json").read_text())["jobs"]}
+        return {
+            j["id"]: j
+            for j in json.loads(
+                (comp.home / "cron/jobs.json").read_text(encoding="utf-8")
+            )["jobs"]
+        }
 
     def test_the_plan_shows_every_companion_and_what_points_elsewhere(self):
         body = self.get("/api/models/plan").json()
@@ -1282,17 +1395,29 @@ class ModelPlanApiTests(WorkspaceFixture):
         self.assertFalse(body["same"])
         self.assertTrue(by["nova"]["selected"])
         self.assertEqual(by["nova"]["plan"]["chat"]["model"], "grok-4.6")
-        vision = next(h for h in by["nova"]["helpers"] if h["key"] == "auxiliary.vision")
+        vision = next(
+            h for h in by["nova"]["helpers"] if h["key"] == "auxiliary.vision"
+        )
         self.assertTrue(vision["stranded"])
-        self.assertEqual([h["key"] for h in by["nova"]["helpers"]], ["auxiliary.vision", "cron"])
+        self.assertEqual(
+            [h["key"] for h in by["nova"]["helpers"]], ["auxiliary.vision", "cron"]
+        )
 
     def test_one_plan_moves_both_companions_and_everything_left_behind(self):
         row = self.wait(
             self.post(
                 "/api/models/plan",
                 {
-                    "chat": {"provider": "openai-codex", "model": "gpt-5.6-sol", "reasoning_effort": "none"},
-                    "loops": {"provider": "openai-codex", "model": "gpt-5.6-luna", "reasoning_effort": "none"},
+                    "chat": {
+                        "provider": "openai-codex",
+                        "model": "gpt-5.6-sol",
+                        "reasoning_effort": "none",
+                    },
+                    "loops": {
+                        "provider": "openai-codex",
+                        "model": "gpt-5.6-luna",
+                        "reasoning_effort": "none",
+                    },
                     "reflection": None,
                     "fallbacks": [{"bundle": "openrouter-free"}],
                     "profiles": ["nova", "rowan"],
@@ -1302,9 +1427,12 @@ class ModelPlanApiTests(WorkspaceFixture):
         self.assertEqual(row["status"], "complete", row)
         self.assertEqual(row["result"]["failed"], [])
         for comp in (self.c, self.other):
-            cfg = yaml.safe_load((comp.home / "config.yaml").read_text(encoding="utf-8"))
+            cfg = yaml.safe_load(
+                (comp.home / "config.yaml").read_text(encoding="utf-8")
+            )
             self.assertEqual(
-                (cfg["model"]["provider"], cfg["model"]["default"]), ("openai-codex", "gpt-5.6-sol")
+                (cfg["model"]["provider"], cfg["model"]["default"]),
+                ("openai-codex", "gpt-5.6-sol"),
             )
             self.assertEqual(cfg["fallback_providers"][0]["model"], "openrouter/free")
             self.assertEqual(cfg["agent"]["reasoning_effort"], "none")
@@ -1312,9 +1440,12 @@ class ModelPlanApiTests(WorkspaceFixture):
             # without the local server's request extras.
             self.assertEqual(cfg["auxiliary"]["vision"]["provider"], "auto")
             self.assertNotIn("base_url", cfg["auxiliary"]["vision"])
-            self.assertEqual(cfg["auxiliary"]["vision"]["extra_body"], {"max_tokens": 2048})
             self.assertEqual(
-                (cfg["cron"]["model_provider"], cfg["cron"]["model"]), ("openai-codex", "gpt-5.6-luna")
+                cfg["auxiliary"]["vision"]["extra_body"], {"max_tokens": 2048}
+            )
+            self.assertEqual(
+                (cfg["cron"]["model_provider"], cfg["cron"]["model"]),
+                ("openai-codex", "gpt-5.6-luna"),
             )
             self.assertEqual(cfg["context"]["engine"], "tamanitomo-context")
             saved = cc.load(comp.home).models
@@ -1322,9 +1453,13 @@ class ModelPlanApiTests(WorkspaceFixture):
             self.assertNotIn("reflection", saved)
             jobs = self.jobs(comp)
             pulse = jobs[f"{comp.profile}-pulse"]
-            self.assertEqual((pulse["provider"], pulse["model"]), ("openai-codex", "gpt-5.6-luna"))
+            self.assertEqual(
+                (pulse["provider"], pulse["model"]), ("openai-codex", "gpt-5.6-luna")
+            )
             daily = jobs[f"{comp.profile}-daily"]
-            self.assertEqual((daily["provider"], daily["model"]), ("openai-codex", "gpt-5.6-sol"))
+            self.assertEqual(
+                (daily["provider"], daily["model"]), ("openai-codex", "gpt-5.6-sol")
+            )
             # Your own job on an account the plan left is moved; one on an account it uses is yours.
             self.assertEqual(jobs[f"{comp.profile}-mine"]["model"], "gpt-5.6-luna")
             self.assertEqual(jobs[f"{comp.profile}-kept"]["model"], "gpt-5.4-mini")
@@ -1336,7 +1471,7 @@ class ModelPlanApiTests(WorkspaceFixture):
 
     def test_a_routine_set_by_hand_keeps_its_model_unless_reset(self):
         jobs_path = self.c.home / "cron/jobs.json"
-        data = json.loads(jobs_path.read_text())
+        data = json.loads(jobs_path.read_text(encoding="utf-8"))
         for job in data["jobs"]:
             if job["id"] == "nova-pulse":
                 job.update(provider="openai-codex", model="gpt-5.4-mini")
@@ -1364,11 +1499,19 @@ class ModelPlanApiTests(WorkspaceFixture):
         row = self.wait(
             self.post(
                 "/api/models/plan",
-                {"chat": {"provider": "openai-codex", "model": "gpt-5.6-sol"}, "profiles": ["rowan"]},
+                {
+                    "chat": {"provider": "openai-codex", "model": "gpt-5.6-sol"},
+                    "profiles": ["rowan"],
+                },
             )
         )
         self.assertEqual(row["status"], "complete", row)
         nova = yaml.safe_load((self.c.home / "config.yaml").read_text(encoding="utf-8"))
         self.assertEqual(nova["model"]["default"], "grok-4.6")
         with self.assertRaisesRegex(AssertionError, "400"):
-            self.wait(self.post("/api/models/plan", {"chat": {"provider": "x", "model": "y"}, "profiles": []}))
+            self.wait(
+                self.post(
+                    "/api/models/plan",
+                    {"chat": {"provider": "x", "model": "y"}, "profiles": []},
+                )
+            )

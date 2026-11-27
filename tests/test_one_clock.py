@@ -86,7 +86,16 @@ class ClockFixture(unittest.TestCase):
         )
 
     def insert(self, ident, source, user, started, columns):
-        names = ["id", "source", "started_at", "profile_name", "user_id", "chat_id", "chat_type", *columns]
+        names = [
+            "id",
+            "source",
+            "started_at",
+            "profile_name",
+            "user_id",
+            "chat_id",
+            "chat_type",
+            *columns,
+        ]
         values = [ident, source, started, "nova", user, ident, "dm", *columns.values()]
         with self.store.db() as db:
             db.execute(
@@ -106,11 +115,23 @@ class ClockFixture(unittest.TestCase):
             db.execute(
                 "CREATE TABLE responses (response_id TEXT PRIMARY KEY, data TEXT NOT NULL, accessed_at REAL NOT NULL)"
             )
-            db.execute("CREATE TABLE conversations (name TEXT PRIMARY KEY, response_id TEXT NOT NULL)")
+            db.execute(
+                "CREATE TABLE conversations (name TEXT PRIMARY KEY, response_id TEXT NOT NULL)"
+            )
             for i, (name, session) in enumerate(latest.items()):
-                record = {"response": {}, "conversation_history": [], "instructions": "", "session_id": session}
-                db.execute("INSERT INTO responses VALUES (?,?,?)", (f"resp_{i}", json.dumps(record), 1.0))
-                db.execute("INSERT INTO conversations VALUES (?,?)", (name, f"resp_{i}"))
+                record = {
+                    "response": {},
+                    "conversation_history": [],
+                    "instructions": "",
+                    "session_id": session,
+                }
+                db.execute(
+                    "INSERT INTO responses VALUES (?,?,?)",
+                    (f"resp_{i}", json.dumps(record), 1.0),
+                )
+                db.execute(
+                    "INSERT INTO conversations VALUES (?,?)", (name, f"resp_{i}")
+                )
 
 
 class OneClockTests(ClockFixture):
@@ -164,11 +185,20 @@ class AutomaticContextTests(ClockFixture):
     def test_other_conversations_quote_the_words(self):
         import companion_context as ctx
 
-        payload = {"session_id": "tg", "extra": {"user_message": "hi", "platform": "telegram", "is_first_turn": False}}
+        payload = {
+            "session_id": "tg",
+            "extra": {
+                "user_message": "hi",
+                "platform": "telegram",
+                "is_first_turn": False,
+            },
+        }
         out = ctx.build(self.c, payload, now=NOW)
         self.assertIn('the game · Robin: "Race you to the inn?"', out)
         self.assertNotIn("added automatically", out)
 
     def test_context_alone_is_kept_rather_than_emptied(self):
-        alone = "[Game, added automatically by the game add-on]\nonly context\n[/Game]\n"
+        alone = (
+            "[Game, added automatically by the game add-on]\nonly context\n[/Game]\n"
+        )
         self.assertEqual(transcript.spoken(alone), alone)

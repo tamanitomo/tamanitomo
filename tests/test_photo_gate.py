@@ -163,7 +163,12 @@ class PhotoGateTests(unittest.TestCase):
         path = scaffold.write_preread_script(self.c, spec, "gate")
         self.assertEqual(path.name, "companion-timeline-gate.py")
         run = subprocess.run(
-            [sys.executable, str(path)], capture_output=True, text=True, timeout=60
+            [sys.executable, str(path)],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            encoding="utf-8",
+            errors="replace",
         )
         self.assertEqual(run.returncode, 0, run.stderr)
         # Hermes skips the agent only when the last non-empty line is this JSON.
@@ -178,7 +183,9 @@ class PhotoGateTests(unittest.TestCase):
         out = io.StringIO()
         with (
             patch.object(
-                sys, "argv", ["companion_timeline.py", "--home", str(self.c.home), "gate"]
+                sys,
+                "argv",
+                ["companion_timeline.py", "--home", str(self.c.home), "gate"],
             ),
             patch.object(tl, "gate", return_value=None),
             redirect_stdout(out),
@@ -188,9 +195,9 @@ class PhotoGateTests(unittest.TestCase):
         self.assertEqual(json.loads(last), {"wakeAgent": True})
 
     def test_the_photo_job_is_gated_in_place_of_a_pre_read(self):
-        specs = json.loads((ROOT / "kit/templates/cron/manifest.json").read_text())[
-            "jobs"
-        ]
+        specs = json.loads(
+            (ROOT / "kit/templates/cron/manifest.json").read_text(encoding="utf-8")
+        )["jobs"]
         timeline = next(s for s in specs if s["key"] == "timeline")
         self.assertTrue(timeline["gate"])
         self.assertFalse(timeline.get("preread"))

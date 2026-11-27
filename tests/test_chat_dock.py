@@ -247,7 +247,9 @@ def test_feed_sync_paginates_equal_timestamps_and_revoked_owner_binding(workspac
     assert [r["id"] for r in first["messages"] + second["messages"]] == [
         str(i) for i in range(30, 235)
     ]
-    (c.home / ".tamanitomo-chat-owner.json").write_text('{"telegram": []}')
+    (c.home / ".tamanitomo-chat-owner.json").write_text(
+        '{"telegram": []}', encoding="utf-8"
+    )
     revoked = client.post(
         "/api/feed/sync", json={"after": second["after"], "known": {"3": "old"}}
     ).json()
@@ -659,6 +661,8 @@ class StreamProcessTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 check=True,
+                encoding="utf-8",
+                errors="replace",
             )
             events = [json.loads(line) for line in result.stdout.splitlines()]
             self.assertEqual(
@@ -705,6 +709,8 @@ class WarmBridgeTests(unittest.TestCase):
             capture_output=True,
             text=True,
             check=True,
+            encoding="utf-8",
+            errors="replace",
         )
         events = [json.loads(line) for line in bridge.stdout.splitlines()]
         self.assertEqual(events[0], {"event": "session", "id": "s1"})
@@ -717,6 +723,8 @@ class WarmBridgeTests(unittest.TestCase):
             env=self.env,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         self.assertEqual((bridge.returncode, bridge.stdout), (0, ""))
 
@@ -853,9 +861,9 @@ class WorkspaceAssetPerformanceTests(WorkspaceFixture):
         revisit = self.client.get("/", headers={"if-none-match": page.headers["etag"]})
         assert revisit.status_code == 304
         asset = Path(self.tmp.name) / "asset.js"
-        asset.write_text("old")
+        asset.write_text("old", encoding="utf-8")
         old_version = asset_version(asset)
-        asset.write_text("new")
+        asset.write_text("new", encoding="utf-8")
         assert asset_version(asset) != old_version
         # Private API responses are still uncached and uncompressed.
         api = self.get("/api/profiles")

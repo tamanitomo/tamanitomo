@@ -45,7 +45,9 @@ def test_how_many_may_wait_follows_the_ladder(companion):
         with pytest.raises(ValueError, match="too early"):
             asks.ask(companion, "pick tonight's film", "this_evening", now=NOON)
     with at_stage(1):
-        first = asks.ask(companion, "pick tonight's film", "this_evening", "choose", now=NOON)
+        first = asks.ask(
+            companion, "pick tonight's film", "this_evening", "choose", now=NOON
+        )
         assert first["ask"]["status"] == "open" and first["written"]
         with pytest.raises(ValueError, match="already waiting"):
             asks.ask(companion, "send the sunset photo", "+3h", now=NOON)
@@ -63,13 +65,22 @@ def test_how_many_may_wait_follows_the_ladder(companion):
 def test_a_kept_ask_is_a_connection_a_miss_a_small_hurt_and_a_no_nothing(companion):
     with at_stage(3):
         film = asks.ask(companion, "pick tonight's film", "+2h", now=NOON)["ask"]["id"]
-        photo = asks.ask(companion, "send the sunset photo", "+3h", now=NOON)["ask"]["id"]
+        photo = asks.ask(companion, "send the sunset photo", "+3h", now=NOON)["ask"][
+            "id"
+        ]
     later = NOON + dt.timedelta(hours=5)
-    kept = asks.settle(companion, film, "done", "Robin: ok, Paddington 2 it is", now=later)
+    kept = asks.settle(
+        companion, film, "done", "Robin: ok, Paddington 2 it is", now=later
+    )
     assert kept["ask"]["status"] == "done"
     assert [r["topic"] for r in feelings.experiences(companion)] == ["came through"]
     missed = asks.settle(
-        companion, photo, "missed", "No photo came; Robin went quiet", felt=0.9, now=later
+        companion,
+        photo,
+        "missed",
+        "No photo came; Robin went quiet",
+        felt=0.9,
+        now=later,
     )
     rows = feelings.experiences(companion)
     hurt = next(r for r in rows if r["kind"] == "rupture")
@@ -78,9 +89,13 @@ def test_a_kept_ask_is_a_connection_a_miss_a_small_hurt_and_a_no_nothing(compani
     assert not asks.asks(companion, "open")
     tomorrow = later + dt.timedelta(days=1)
     with at_stage(3):
-        third = asks.ask(companion, "call me after work", "+4h", now=tomorrow)["ask"]["id"]
+        third = asks.ask(companion, "call me after work", "+4h", now=tomorrow)["ask"][
+            "id"
+        ]
     before = len(feelings.experiences(companion))
-    asks.settle(companion, third, "declined", "Robin: can't tonight, tomorrow?", now=tomorrow)
+    asks.settle(
+        companion, third, "declined", "Robin: can't tonight, tomorrow?", now=tomorrow
+    )
     assert len(feelings.experiences(companion)) == before
     with pytest.raises(ValueError, match="already settled"):
         asks.settle(companion, third, "done", "x", now=tomorrow)

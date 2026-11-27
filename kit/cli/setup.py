@@ -51,7 +51,15 @@ def hermes_create_profile(name, hermes_root, report, description=""):
     # the profile under the real ~/.hermes no matter which home we were given.
     env = {**os.environ, "HERMES_HOME": str(hermes_root)}
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=180, env=env)
+        r = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            env=env,
+            encoding="utf-8",
+            errors="replace",
+        )
     except (OSError, subprocess.SubprocessError) as e:
         report.append(f"  ! could not run `hermes profile create` ({e}); setup stopped")
         return False

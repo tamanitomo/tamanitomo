@@ -76,6 +76,8 @@ def scan(c, path):
             capture_output=True,
             text=True,
             timeout=60,
+            encoding="utf-8",
+            errors="replace",
         )
     if result.returncode:
         raise ValueError("Local NSFW scanner failed; image remains unreviewed")

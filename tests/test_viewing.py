@@ -100,7 +100,7 @@ def companion(tmp_path):
 def connect(c, url, kind="plex", user=""):
     token = c.home / "secrets" / "media.token"
     token.parent.mkdir(parents=True, exist_ok=True)
-    token.write_text(TOKEN + "\n")
+    token.write_text(TOKEN + "\n", encoding="utf-8")
     c.media_server, c.media_kind, c.media_user = url, kind, user
     c.media_token_file = str(token)
     c.sensors = ["viewing"]
@@ -132,7 +132,7 @@ def plex(now_playing=(), history=(), accounts=None):
 
 def ambient(c):
     path = c.soul_dir / "ambient/viewing.md"
-    return path.read_text() if path.exists() else None
+    return path.read_text(encoding="utf-8") if path.exists() else None
 
 
 class TestPlex:
@@ -218,7 +218,9 @@ class TestPlex:
         for request in FakeServer.seen:
             assert TOKEN not in request["path"]
             assert request["headers"]["X-Plex-Token"] == TOKEN
-        assert TOKEN not in (companion.home / cc.CONFIG_NAME).read_text()
+        assert TOKEN not in (companion.home / cc.CONFIG_NAME).read_text(
+            encoding="utf-8"
+        )
 
     def test_finished_viewing_is_kept_once_and_outlasts_the_server(
         self, companion, server
@@ -255,7 +257,7 @@ class TestPlex:
 
     def test_a_refused_token_is_said_plainly(self, companion, server):
         connect(companion, server)
-        pathlib.Path(companion.media_token_file).write_text("wrong")
+        pathlib.Path(companion.media_token_file).write_text("wrong", encoding="utf-8")
         plex()
         with pytest.raises(ValueError, match="Plex refused the token"):
             viewing.check(companion, NIGHT)
@@ -492,11 +494,13 @@ class ViewingSettingsApiTests(AppFixture):
         self.assertNotIn("s3cret-token", r.text)
         c = cc.load(self.c.home)
         token = pathlib.Path(c.media_token_file)
-        self.assertEqual(token.read_text().strip(), "s3cret-token")
+        self.assertEqual(token.read_text(encoding="utf-8").strip(), "s3cret-token")
         self.assertEqual(token.parent.name, "secrets")
         if os.name != "nt":
             self.assertEqual(token.stat().st_mode & 0o777, 0o600)
-        self.assertNotIn("s3cret-token", (c.home / cc.CONFIG_NAME).read_text())
+        self.assertNotIn(
+            "s3cret-token", (c.home / cc.CONFIG_NAME).read_text(encoding="utf-8")
+        )
         got = self.client.get("/api/settings").json()
         self.assertIs(got["media_token_set"], True)
         self.assertEqual(got["media_server"], "http://192.0.2.10:32400")
