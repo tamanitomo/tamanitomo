@@ -1,16 +1,17 @@
-/* Journal: an archive of days, read two ways.
+/* Journal: an archive of days, read three ways.
 
    Day shows what was recorded on a date -- her scenes, the photos whose capture
    names that scene, a plan if one was written for it, and a shared moment only
    when one was recorded with that exact date. Reflection is the nightly entry
-   for the same date, drawn the way the reader always drew it.
+   for the same date, drawn the way the reader always drew it. Story is the
+   chapter of her memoir of your life together that holds the day's month.
 
    The selected date and view live in the address (#journals/<date>/<view>), so
    refresh, back/forward and a shared link all land on the same page. Opening,
    switching or refreshing reads records and nothing else: no model, no job, no
    write. A day with nothing on record says so instead of being filled in. */
 
-const JOURNAL_VIEWS=['day','reflection'];
+const JOURNAL_VIEWS=['day','reflection','story'];
 /* Real calendar dates only; 2026-02-30 is not a day to navigate to. */
 function journalValidDay(value){
   if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
@@ -49,6 +50,7 @@ workspaceHandlers.journals=async()=>{
       <div class="segmented journal-views" role="tablist" aria-label="Journal view">
         <button role="tab" id="journal-view-day" data-view="day" aria-controls="journal-page" aria-selected="false">Day</button>
         <button role="tab" id="journal-view-reflection" data-view="reflection" aria-controls="journal-page" aria-selected="false">Reflection</button>
+        <button role="tab" id="journal-view-story" data-view="story" aria-controls="journal-page" aria-selected="false">Story</button>
       </div>
       <div class="journal-nav-bar">
         <button class="journal-nav-btn" id="journal-older-btn" disabled>${icon('arrow_left')}<span class="nav-word">Older</span></button>
@@ -76,12 +78,15 @@ workspaceHandlers.journals=async()=>{
     <article id="journal-page" role="tabpanel" aria-live="polite"><p class="dim" role="status">Opening the journal…</p></article>`;
 
   let entries=[],warnings=[],index={days:{}},today=companionToday(),results=null,searchTimer=null,pickerMonth='';
+  let story={chapters:[],so_far:'',agent:''};
   const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
   const dayFormat=day=>new Intl.DateTimeFormat(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric',timeZone:'UTC'}).format(new Date(day+'T12:00:00Z'));
   const shortDay=day=>new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}).format(new Date(day+'T12:00:00Z'));
   const clock=t=>stamp(t,{hour:'numeric',minute:'2-digit',month:undefined,day:undefined});
   const reflectionDays=()=>entries.map(x=>x.day);
   const recordDays=()=>Object.keys(index.days||{});
+  // A chapter is reached from the first day of the first month it covers ("May to August" from May 1).
+  const storyDays=()=>(story.chapters||[]).filter(x=>x.kind==='month').map(x=>((x.covers||[])[0]||x.id)+'-01');
 
   /* ------------------------------------------------------------ routing */
   const setHash=(push)=>{
@@ -106,10 +111,10 @@ workspaceHandlers.journals=async()=>{
     }
     $('journal-browse-label').textContent=shortDay(day)+(day===today?' · Today':'');
     pickerMonth=day.slice(0,7);
-    const near=journalNeighbours(view==='reflection'?reflectionDays():[...recordDays(),...reflectionDays()],day);
+    const near=journalNeighbours(view==='reflection'?reflectionDays():view==='story'?storyDays():[...recordDays(),...reflectionDays()],day);
     const olderBtn=$('journal-older-btn'),newerBtn=$('journal-newer-btn');
     olderBtn.disabled=!near.older;newerBtn.disabled=!near.newer;
-    const noun=view==='reflection'?'reflection':'day on record';
+    const noun=view==='reflection'?'reflection':view==='story'?'chapter':'day on record';
     olderBtn.title=near.older?'Older: '+shortDay(near.older):`No older ${noun}`;
     newerBtn.title=near.newer?'Newer: '+shortDay(near.newer):`No newer ${noun}`;
     olderBtn.onclick=near.older?()=>go(near.older,view):null;
@@ -118,6 +123,7 @@ workspaceHandlers.journals=async()=>{
     const fresh=()=>alive()&&token===journalRequest&&journalState.day===day&&journalState.view===view;
     $('journal-page').innerHTML='<p class="dim" role="status">Opening '+esc(shortDay(day))+'…</p>';
     if(view==='day')await drawDay(day,fresh);
+    else if(view==='story')await drawStory(day,fresh);
     else await drawReflection(day,fresh);
   };
   journalApply=route=>go(route.day||journalState.day||today,route.view||journalState.view||'day',{push:false});
@@ -207,6 +213,50 @@ workspaceHandlers.journals=async()=>{
       b.onclick=()=>{const i=+b.dataset.archivePhoto;openPhotoViewer(allPhotos[i],allPhotos,i);};
     if($('journal-to-reflection'))$('journal-to-reflection').onclick=()=>go(day,'reflection',{entry:entry.id});
     wireRoutes($('journal-page'));
+  };
+
+  /* -------------------------------------------------------- story view */
+  // Her chapters of your story (companion_chapters): the chapter that holds this day's month, the year's chapter
+  // when there is one, and "Our story so far" above them. Reading files only; nothing is written from here.
+  const drawStory=async(day,fresh)=>{
+    const month=day.slice(0,7),chapters=story.chapters||[];
+    const chapter=chapters.find(x=>x.kind==='month'&&(x.covers&&x.covers.length?x.covers:[x.id]).includes(month));
+    const yearly=chapters.find(x=>x.kind==='year'&&x.id===day.slice(0,4));
+    const who=esc(story.agent||'Your companion');
+    const soFar=story.so_far?`<details class="paper story-so-far"${chapter?'':' open'} style="margin-bottom:18px">
+        <summary><span class="eyebrow">Our story so far</span></summary>
+        <div class="prose">${richText(story.so_far)}</div></details>`:'';
+    const body=text=>String(text||'').replace(/^# [^\n]*\n+/,'');
+    const paper=(item,piece,eyebrow,foot)=>`<div class="paper">
+        <div class="paper-head">
+          <span class="eyebrow" style="color:var(--faint)">${eyebrow} · ${Math.max(1,Math.ceil((item.words||0)/220))} min read</span>
+          <span class="pill" style="border-color:color-mix(in srgb,var(--surface-2) 30%,transparent);color:var(--faint)">${esc(item.label)}</span>
+        </div>
+        <h2>${esc(item.title||item.label)}</h2>
+        <div class="prose">${richText(body(piece.text))}</div>
+        <div class="paper-foot">
+          <span style="font-family:Georgia,serif;font-style:italic;color:var(--faint);font-size:14px">${foot}</span>
+          <span class="dim small">${(item.words||0).toLocaleString()} words · story/${esc(item.id.slice(0,4))}/${esc(item.id)}.md</span>
+        </div></div>`;
+    if(!chapter){
+      const name=new Intl.DateTimeFormat(undefined,{month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(month+'-15T12:00:00Z'));
+      const now=month===today.slice(0,7);
+      $('journal-page').innerHTML=soFar+(now
+        ?empty('journals','This month is still being lived',`${story.agent||'She'} writes it as a chapter of your story after it ends.`)
+        :chapters.length
+          ?empty('journals','No chapter for '+name,'Nothing was written for this month; a quiet month folds into the next chapter.')
+          :empty('journals','Your story has not started yet',`${story.agent||'She'} writes the first chapter after your first month together ends.`));
+      return;
+    }
+    let piece,year=null;
+    try{
+      piece=await api('/story/'+encodeURIComponent(chapter.id));
+      if(yearly)year=await api('/story/'+encodeURIComponent(yearly.id)).catch(()=>null);
+    }catch(error){if(fresh())$('journal-page').innerHTML=`<p class="bad">The chapter could not be opened: ${esc(error.message)}</p>`;return;}
+    if(!fresh())return;
+    $('journal-page').innerHTML=soFar
+      +paper(chapter,piece,'A chapter of your story',`Written by ${who} when the month was over`)
+      +(year?`<div style="margin-top:18px">${paper(yearly,year,'The year',`Written by ${who} when the year was over`)}</div>`:'');
   };
 
   /* --------------------------------------------------- reflection view */
@@ -329,7 +379,8 @@ workspaceHandlers.journals=async()=>{
     b.onclick=()=>go(journalState.day||today,b.dataset.view);
     b.onkeydown=event=>{
       if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
-      const next=b.dataset.view==='day'?'reflection':'day';
+      const at=JOURNAL_VIEWS.indexOf(b.dataset.view),step=event.key==='ArrowRight'?1:-1;
+      const next=JOURNAL_VIEWS[(at+step+JOURNAL_VIEWS.length)%JOURNAL_VIEWS.length];
       go(journalState.day||today,next);$('journal-view-'+next).focus();
     };
   }
@@ -372,12 +423,13 @@ workspaceHandlers.journals=async()=>{
   // address afterwards so a newer date/view selection remains authoritative.
   const asked=selectedJournal;
   try{
-    const [list,archive]=await Promise.all([api('/journals?limit=1000'),
-      api('/journal/archive').catch(error=>({days:{},error:error.message}))]);
+    const [list,archive,chapters]=await Promise.all([api('/journals?limit=1000'),
+      api('/journal/archive').catch(error=>({days:{},error:error.message})),
+      api('/story').catch(()=>({chapters:[],so_far:'',agent:''}))]);
     if(!alive())return;
     const route=journalRouteParse(location.hash);
     profileTimezone=list.timezone;
-    entries=list.entries;warnings=list.warnings||[];index=archive;
+    entries=list.entries;warnings=list.warnings||[];index=archive;story=chapters;
     today=archive.today||companionToday();
     const notes=[...warnings];
     if(archive.error)notes.push('The list of recorded days could not be read: '+archive.error);

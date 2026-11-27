@@ -1,4 +1,11 @@
-Tamanitomo 3.28.1: one distinctive word is enough.
+Tamanitomo 3.29.0: read your story.
+
+- **Read the story she is writing of your life together**: Journal → Story shows each month's chapter, each
+  year's, and "Our story so far".
+
+From 3.24.0, no Repair is needed. Updating from 3.23 or earlier, run Repair once.
+
+Previous: 3.28.1 one distinctive word is enough.
 
 - Asking "when did we watch ...?" finds the month in her chapters from the title alone.
 

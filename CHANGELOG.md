@@ -1,3 +1,12 @@
+## 3.29.0 — Read your story (2026-11-27)
+
+- **Journal → Story.** A third view in the Journal shows the chapter of her memoir that holds the selected day's
+  month (a chapter that folded quiet months in, "May to August", answers for each of them), the year's chapter
+  when there is one, and "Our story so far" above them; Older and Newer step from chapter to chapter. A month
+  still being lived, or one too quiet for a chapter, says so. `GET /api/story` (each chapter's id, label, title,
+  the months it covers, its length) and `GET /api/story/{id}` (a chapter or `so-far`, without its signature).
+  Read-only.
+
 ## 3.28.1 — One distinctive word is enough (2026-11-27)
 
 - A chapter line now answers with one distinctive word of the question (a word on three of her chapter

@@ -1184,6 +1184,23 @@ def build(home=None, token="", state_dir=None):
             }
         return {"ok": True, "reached": reached}
 
+    @app.get("/api/story")
+    def story_listing():
+        """Her chapters of their story, for the Journal's Story view. Reads files only."""
+        import companion_chapters as chapters
+
+        return chapters.listing(load())
+
+    @app.get("/api/story/{ident}")
+    def story_piece(ident: str):
+        """One chapter, or "so-far", to read."""
+        import companion_chapters as chapters
+
+        piece = chapters.read_piece(load(), ident)
+        if piece is None:
+            raise HTTPException(status_code=404, detail="no such chapter")
+        return piece
+
     @app.get("/api/realism/story")
     def story_status():
         """Her chapters of their story (companion_chapters): what is written and what is next."""

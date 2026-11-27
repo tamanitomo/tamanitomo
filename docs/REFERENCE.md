@@ -445,7 +445,7 @@ but its pre-read prints nothing unless a piece is due, and Hermes skips a run wi
 most days cost nothing. She saves each piece with her file tools and runs `check`, which signs it
 with the date and names what is next (up to three pieces a run, so a long history catches up in a
 few days). The kit never rewrites a chapter. `companion_chapters.py status` shows what exists and
-what is next; `material YYYY-MM` prints what a month would be written from.
+what is next; `material YYYY-MM` prints what a month would be written from. In the app, Journal → Story reads them.
 
 The weekly hygiene job runs all of these. Rotation dates an entry by the ISO date in its `##`
 heading — which is why the daily journal is told to head every entry exactly `## YYYY-MM-DD` —

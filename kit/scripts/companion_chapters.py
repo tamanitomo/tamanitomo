@@ -440,6 +440,82 @@ def check(c, path, now=None):
     return {"ok": True, "next": f"{nxt['kind']} {nxt['label']}" if nxt else None}
 
 
+def _heading(text):
+    """("May to August 2026", "Small checks") from a chapter's first line ("# May to August 2026: Small checks")."""
+    first = (text or "").strip().splitlines()[0] if (text or "").strip() else ""
+    if not first.startswith("# "):
+        return "", ""
+    label, _, title = first[2:].partition(":")
+    return label.strip(), title.strip()
+
+
+def covers(label, month):
+    """The months a month's chapter covers: its own, and back to the start of "May to August 2026"."""
+    end = dt.date(int(month[:4]), int(month[5:7]), 1)
+    start = end
+    if " to " in label:
+        first = label.split(" to ", 1)[0].strip()
+        for text in (first, f"{first} {end.year}"):
+            try:
+                start = dt.datetime.strptime(text, "%B %Y").date()
+                break
+            except ValueError:
+                continue
+        if start > end:
+            start = start.replace(year=start.year - 1)  # "December to January 2027"
+    out, day = [], start
+    while day <= end and len(out) < 24:
+        out.append(day.strftime("%Y-%m"))
+        day = (day.replace(day=28) + dt.timedelta(days=4)).replace(day=1)
+    return out or [month]
+
+
+def listing(c):
+    """Every chapter for the app's Story view: id, kind, label, title, the months it covers, words; and "so far"."""
+    rows = []
+    for path in sorted(folder(c).glob("[0-9][0-9][0-9][0-9]/*.md")):
+        stem = path.stem
+        if not re.fullmatch(r"\d{4}(-\d{2})?", stem):
+            continue
+        text = _read(path, 200000)
+        label, title = _heading(text)
+        kind = "year" if len(stem) == 4 else "month"
+        rows.append(
+            {
+                "id": stem,
+                "kind": kind,
+                "label": label or (stem if kind == "year" else _label(stem)),
+                "title": title,
+                "covers": covers(label, stem) if kind == "month" else [],
+                "words": len(re.sub(r"<!--.*?-->", "", text, flags=re.S).split()),
+            }
+        )
+    return {
+        "agent": c.agent,
+        "chapters": rows,
+        "so_far": so_far(c, 8000),
+        "folder": str(folder(c)),
+    }
+
+
+def read_piece(c, ident):
+    """One chapter (or "so-far") to read, without its signature; None when there is no such chapter."""
+    if ident == "so-far":
+        path = so_far_path(c)
+    elif re.fullmatch(r"\d{4}", ident or ""):
+        path = year_path(c, ident)
+    elif re.fullmatch(r"\d{4}-\d{2}", ident or ""):
+        path = month_path(c, ident)
+    else:
+        return None
+    text = _read(path, 200000)
+    if not text.strip():
+        return None
+    body = re.sub(r"<!--.*?-->", "", text, flags=re.S).strip()
+    label, title = _heading(body)
+    return {"id": ident, "label": label, "title": title, "text": body}
+
+
 def so_far(c, limit=SO_FAR_CHARS):
     """The short version for her context: "" until there is one."""
     text = _read(so_far_path(c), 20000)

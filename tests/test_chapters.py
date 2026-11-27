@@ -234,6 +234,54 @@ class ChapterTests(unittest.TestCase):
             "<!-- written", out
         )  # the signature is for the file, not for her
 
+    def test_the_app_reads_her_story(self):
+        self.store.say(
+            "tg",
+            "user",
+            "Hi! So happy to finally meet you, I love this already",
+            at(2026, 10, 20),
+        )
+        self.month_of_talk(2026, 12)
+        archive.update(self.c, now=NOW)
+        self.save(chapters.next_piece(self.c, NOW))  # October to December 2026
+        listed = chapters.listing(self.c)
+        self.assertEqual(listed["agent"], "Nova")
+        row = listed["chapters"][0]
+        self.assertEqual(
+            (row["id"], row["kind"], row["label"], row["title"], row["covers"]),
+            ("2026-12", "month", "October to December 2026", "Lanterns and long walks",
+             ["2026-10", "2026-11", "2026-12"]),
+        )  # fmt: skip
+        self.assertGreater(row["words"], 100)
+        piece = chapters.read_piece(self.c, "2026-12")
+        self.assertTrue(
+            piece["text"].startswith(
+                "# October to December 2026: Lanterns and long walks"
+            )
+        )
+        self.assertNotIn("<!-- written", piece["text"])
+        for bad in ("../secret", "2026-12/../../x", "so-far-x", ""):
+            self.assertIsNone(chapters.read_piece(self.c, bad))
+        self.assertIsNone(
+            chapters.read_piece(self.c, "2026-11")
+        )  # folded into December's
+
+    def test_what_a_chapter_covers(self):
+        self.assertEqual(
+            chapters.covers("May to August 2026", "2026-08"),
+            ["2026-05", "2026-06", "2026-07", "2026-08"],
+        )
+        self.assertEqual(
+            chapters.covers("December to January 2027", "2027-01"),
+            ["2026-12", "2027-01"],
+        )
+        self.assertEqual(
+            chapters.covers("December 2026 to January 2027", "2027-01"),
+            ["2026-12", "2027-01"],
+        )
+        self.assertEqual(chapters.covers("January 2027", "2027-01"), ["2027-01"])
+        self.assertEqual(chapters.covers("", "2027-01"), ["2027-01"])
+
     def test_the_story_job(self):
         import companion_render as cr
 
