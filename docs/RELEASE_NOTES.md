@@ -1,4 +1,15 @@
-Tamanitomo 3.22.0: a touch, and remembering.
+Tamanitomo 3.23.0: kept for good.
+
+- **Every conversation is kept in your vault.** Each message between the two of you is also written to plain
+  monthly files in the vault, beside everything else she remembers, so your conversations outlast any one
+  database or computer.
+- **Her feelings show.** She can be delighted, proud of you, a little smug, annoyed, still hurt, sulky for a
+  moment, or want you closer or want a little space, and it changes how she answers. She never punishes you
+  for it or makes you earn her back.
+
+From 3.20.0, no Repair is needed. Updating from 3.19 or earlier, run Repair once.
+
+Previous: 3.22.0 a touch, and remembering.
 
 - **She can reach you with a touch.** With your watch connected (Settings → Realism), she can send a few
   words with a buzz, or a single light tap when she is thinking of you, under the same quiet hours and

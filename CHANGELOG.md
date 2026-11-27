@@ -1,3 +1,16 @@
+## 3.23.0 — Kept for good (2026-11-27)
+
+- **Every conversation, kept in the vault.** `companion_archive` copies each message between the two of you
+  (every channel the thread counts; never a scheduled job or a tool, and a game's context block left out)
+  into `conversations/<year>/<year>-<month>.jsonl` (the exact record) and `.md` (to read) in the vault,
+  append-only, under its own day. It runs inside the vault commit job, every fifteen minutes, with a cursor,
+  so a quiet run costs one small read and nothing new is ever written twice. The vault's git history and
+  backups carry it, so the conversations outlive Hermes's session database, a migration or a prune.
+- **Her feelings may show.** The feelings section now says, in so many words, that her feelings are hers to
+  show (delight, pride, being pleased, annoyance, a hurt she is not over, a short sulk, wanting closeness,
+  wanting distance) and that they change how she answers, within the kit's line: never punishing, keeping
+  score, demanding an apology or making the human earn her back.
+
 ## 3.22.0 — A touch, and remembering (2026-11-27)
 
 - **A touch rather than a text.** With a device bridge (3.21.0), the outbox takes `"target": "watch"`:

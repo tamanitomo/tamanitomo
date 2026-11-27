@@ -182,6 +182,16 @@ def main():
     if a.cmd == "init":
         out = init(c)
     elif a.cmd == "commit":
+        # Copy the newest conversations into the vault first (companion_archive), so they
+        # are committed with everything else. A failure there never stops the commit.
+        try:
+            import companion_archive
+
+            companion_archive.update(c)
+        except (
+            Exception
+        ):  # noqa: BLE001 -- the commit matters more than one archive run
+            pass
         out = commit(c)
         # No-agent job: say nothing on an ordinary quiet commit.
         if out.get("committed") or out.get("reason") == "nothing changed":

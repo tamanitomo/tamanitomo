@@ -408,6 +408,13 @@ through `companion_recall.py`.
 | `soul/Lifelog.md` | 180 days | `soul/archive/Lifelog-YYYY-MM.md` |
 | `memories/USER.md`, `memories/MEMORY.md` | at 80% of the Hermes cap, down to 60% | `soul/memory-archive/` |
 | `companion-life/.inputs/`, `cron/output/` | 7 days — **deleted** | nothing; these are the only two |
+| Every conversation with the human (Hermes's session database) | kept | also copied to `conversations/<year>/<year>-<month>.jsonl` and `.md` in the vault, append-only, by the vault commit job |
+
+**The conversation archive** (`companion_archive`) copies every message between the two of you, from every
+channel the thread counts and never a scheduled job, into plain monthly files in the vault: a `.jsonl` with
+the exact record and a `.md` to read. The vault is committed every fifteen minutes and backed up with it,
+so the conversations outlive any one database. A cursor in `state/conversation-archive.json` remembers the
+last message copied; a run with nothing new costs one small read.
 
 The weekly hygiene job runs all of these. Rotation dates an entry by the ISO date in its `##`
 heading — which is why the daily journal is told to head every entry exactly `## YYYY-MM-DD` —

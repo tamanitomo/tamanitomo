@@ -141,6 +141,7 @@
   "kit/plugins/tamanitomo-reader/plugin.yaml",
   "kit/plugins/tamanitomo-routing/__init__.py",
   "kit/plugins/tamanitomo-routing/plugin.yaml",
+  "kit/scripts/companion_archive.py",
   "kit/scripts/companion_active.py",
   "kit/scripts/companion_arcs.py",
   "kit/scripts/companion_backup.py",
