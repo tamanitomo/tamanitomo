@@ -1,4 +1,10 @@
-Tamanitomo 3.28.0: recall that outlasts the database.
+Tamanitomo 3.28.1: one distinctive word is enough.
+
+- Asking "when did we watch ...?" finds the month in her chapters from the title alone.
+
+From 3.24.0, no Repair is needed. Updating from 3.23 or earlier, run Repair once.
+
+Previous: 3.28.0 recall that outlasts the database.
 
 - **Ask her "when did we...?" and she can find the month**, from the chapters she writes of your story.
 - **Your conversations stay findable even if her database is lost**: she can search the copy kept in your

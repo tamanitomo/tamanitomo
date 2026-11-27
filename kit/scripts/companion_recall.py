@@ -165,13 +165,13 @@ def _retired_evidence(c, active, deadline):
 
 
 def _chapter_hits(c, words, deadline):
-    """[(score, row)] from her chapters: lines where at least two of the words meet (or the only word)."""
+    """[(score, row)] from her chapters: lines where two of the words meet, or one that is rare there (on three
+    lines or fewer: "coraline", not "watch")."""
     try:
         import companion_chapters as chapters
     except ImportError:
         return []
-    need = min(2, len(words))
-    hits = []
+    lines = []
     files = sorted(chapters.folder(c).glob("*/*.md")) + [chapters.so_far_path(c)]
     for p in files:
         if time.monotonic() > deadline:
@@ -180,23 +180,30 @@ def _chapter_hits(c, words, deadline):
             with p.open(encoding="utf-8") as f:
                 for n, line in enumerate(f, 1):
                     stripped = line.strip()
-                    if not stripped or stripped.startswith("<!--"):
-                        continue
-                    score = _overlap(stripped, words)
-                    if score >= need:
-                        hits.append(
-                            (
-                                score + 0.05,
-                                {
-                                    "source": str(p),
-                                    "line": n,
-                                    "kind": "her_chapter_summary",
-                                    "excerpt": snippet(stripped, words),
-                                },
-                            )
-                        )
+                    if stripped and not stripped.startswith("<!--"):
+                        lines.append((p, n, stripped, _matched(stripped, words)))
         except (OSError, UnicodeError):
             continue
+    counts = {}
+    for _p, _n, _text, matched in lines:
+        for word in matched:
+            counts[word] = counts.get(word, 0) + 1
+    rare = {w for w, k in counts.items() if k <= 3 and w not in ARCHIVE_STOP}
+    need = min(2, len(words))
+    hits = []
+    for p, n, text, matched in lines:
+        if len(matched) >= need or matched & rare:
+            hits.append(
+                (
+                    len(matched) + (0.5 if matched & rare else 0) + 0.05,
+                    {
+                        "source": str(p),
+                        "line": n,
+                        "kind": "her_chapter_summary",
+                        "excerpt": snippet(text, words),
+                    },
+                )
+            )
     hits.sort(key=lambda x: -x[0])
     return hits
 

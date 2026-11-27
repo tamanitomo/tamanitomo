@@ -1,3 +1,9 @@
+## 3.28.1 — One distinctive word is enough (2026-11-27)
+
+- A chapter line now answers with one distinctive word of the question (a word on three of her chapter
+  lines or fewer, and not an everyday one like "watch"), so "when did we watch Coraline" finds the month
+  that says "Coraline on the couch".
+
 ## 3.28.0 — Recall that outlasts the database (2026-11-27)
 
 - **"When did we...?" finds the month.** `companion_recall` reads her chapters for an explicit question about

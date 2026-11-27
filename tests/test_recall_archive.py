@@ -36,6 +36,13 @@ class RecallArchiveTests(unittest.TestCase):
         self.assertEqual(len(chapter), 1)
         self.assertIn("Harbor Lights on a rainy night", chapter[0]["excerpt"])
         self.assertTrue(chapter[0]["source"].endswith("2027-01.md"))
+        one = recall.search(self.c, "what did robin fix in the porch?", seconds=2)
+        lines = [
+            r["excerpt"] for r in one["results"] if r["kind"] == "her_chapter_summary"
+        ]
+        self.assertTrue(
+            any("porch swing" in x for x in lines), lines
+        )  # one rare word is enough
         quiet = recall.search(self.c, "harbor lights", seconds=2, implicit=True)
         self.assertFalse(
             [r for r in quiet["results"] if r["kind"] == "her_chapter_summary"]
