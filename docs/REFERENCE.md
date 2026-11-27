@@ -285,6 +285,7 @@ Optional, cheap, silent when they have nothing. Chosen at setup, changeable in t
 | `durations` | "married 13 years", counted from the date | dated lines in `dates.md` |
 | `thread` | How long since either of you wrote, and what that gap means | nothing |
 | `viewing` | What you watch on your own Plex or Jellyfin: what is on, what you finished lately, what you watch together | the server's address and token, set in Settings → Awareness |
+| `onthisday` | What the two of you had on today's date a month, three and six months, and each year ago: something you said, a film you watched together, a moment she kept, a time she felt close. Furthest back first, at most four lines; she may bring one up, once and lightly | nothing; read from her own records |
 
 **A sensor that cannot report writes nothing and deletes its old file.** Not knowing the weather is
 fine; yesterday's weather presented as today's is not.
@@ -353,10 +354,16 @@ one message off the queue and decides whether it leaves, from the clock and a co
 | --- | --- |
 | Past its `ttl_hours` | **Dropped.** Never sent late. An evening thought is not worth saying at 2am, and a backlog delivered at once is the most alarming thing a companion can do |
 | Before its `not_before` | Held |
-| Inside quiet hours | Held — unless you wrote in the last 45 minutes, in which case you are visibly awake and the window steps aside. That does not raise the daily cap |
+| Inside quiet hours | Held — unless you wrote in the last 45 minutes (the `thread` sensor says when), in which case you are visibly awake and the window steps aside. That does not raise the daily cap |
 | Content permission | `yes` sends, `ask` withholds with a reason she can act on ("offer it in words, do not attach it unasked"), `no` never sends |
 | Daily cap | Held. The counter is on disk, checked and reserved atomically under a sidecar lock, including on Windows |
 | Delivery failed or unconfirmed | The slot is kept and it is **never retried**. A double message is worse than a missing one. Only a confirmed success is `sent`; anything Hermes did not confirm (an error it reports, a timeout, unreadable output) is `unknown`, because it may have arrived |
+
+**A touch rather than a text.** With a device bridge set (Settings → Realism), a message can have
+`"target": "watch"`: up to 160 characters, words only, and a `"buzz"` of `tap` (a light touch, the
+wordless kind of thinking of you), `message` or `nudge` (playful). It goes through the bridge instead
+of Hermes and through every check above, daily cap included. Her outreach policy mentions it only when
+a bridge exists, and a good morning or a goodnight may be one.
 
 One message per run, deliberately.
 

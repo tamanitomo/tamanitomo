@@ -183,6 +183,7 @@
   "kit/scripts/companion_music.py",
   "kit/scripts/companion_needs.py",
   "kit/scripts/companion_notes.py",
+  "kit/scripts/companion_onthisday.py",
   "kit/scripts/companion_nsfw.py",
   "kit/scripts/companion_outbox.py",
   "kit/scripts/companion_outreach.py",

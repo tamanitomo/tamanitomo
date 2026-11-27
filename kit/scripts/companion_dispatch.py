@@ -65,16 +65,24 @@ def _tz(c):
 def recently_active(c, now, minutes=None):
     """Did the human write in the last few minutes?
 
-    Read from the relationship-thread sensor when one is installed. Absent, the
-    honest answer is "we do not know", which means the sleep window stands.
+    Read from the thread sensor (`ambient/thread.json`) when it is on. Absent, the
+    honest answer is "we do not know", which means the sleep window stands. Until
+    3.22 this read `relationship-thread.json`, a name nothing writes, so being
+    visibly awake never lifted the window.
     """
     minutes = c.sleep_grace_minutes if minutes is None else minutes
     if not minutes:
         return False
-    path = c.soul_dir / "ambient/relationship-thread.json"
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    data = None
+    for name in ("thread.json", "relationship-thread.json"):
+        try:
+            data = json.loads(
+                (c.soul_dir / "ambient" / name).read_text(encoding="utf-8")
+            )
+            break
+        except (OSError, ValueError):
+            continue
+    if not isinstance(data, dict):
         return False
     last = data.get("last_from_human")
     if not last:
@@ -177,7 +185,28 @@ def deliver(c, entry):
                     "detail": "image held: pre-delivery review did not pass; inspect it in Photos",
                 }
         body = f"MEDIA:{entry['media_path']}\n{body}"
+    if (entry.get("target") or "") == "watch":
+        return device_send_result(c, entry)
     return hermes_send_result(c, body, entry.get("target") or "telegram")
+
+
+def device_send_result(c, entry):
+    """The human's watch, through the device bridge: a confirmed delivery is `sent`, a
+    bridge that did not take it is `failed` (nothing was shown), never a guess."""
+    import companion_watchalong as watchalong
+
+    if not getattr(c, "device_bridge_url", ""):
+        return {
+            "outcome": "failed",
+            "detail": "no device bridge is set up",
+            "not_dispatched": True,
+        }
+    reached = watchalong.to_device(
+        c, entry["body"], entry.get("buzz") or "message", "auto", entry.get("id") or ""
+    )
+    if reached:
+        return {"outcome": "sent", "detail": f"reached {reached}"}
+    return {"outcome": "failed", "detail": "the device bridge did not take it"}
 
 
 def _env(c):

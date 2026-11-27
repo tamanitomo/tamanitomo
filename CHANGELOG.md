@@ -1,3 +1,27 @@
+## 3.22.0 — A touch, and remembering (2026-11-27)
+
+- **A touch rather than a text.** With a device bridge (3.21.0), the outbox takes `"target": "watch"`:
+  up to 160 characters, words only, with a `"buzz"` of `tap` (a light touch, the wordless kind of
+  thinking of you), `message` or `nudge` (playful). The dispatcher hands it to the bridge instead of
+  Hermes, under every rule a message has (quiet hours, the daily cap, the closeness gates); a bridge
+  that does not take it is a failure, never a guess. Her outreach policy says so only when a bridge is
+  set (and is refreshed when it is), and a good morning or a goodnight may be one.
+- **On this day.** A new sense, `onthisday`: what the two of you had on today's date a month, three and
+  six months, and each year ago, from her own records (the human's most memorable line of that day,
+  films finished together, moments she wrote down, times she felt close, what she said while watching).
+  Furthest back first, at most four lines, file paths and setup talk left out, nothing at all on a day
+  with nothing true to say. Her context gives it a short section of its own; she may bring one up, once
+  and lightly.
+- **Being visibly awake lifts the quiet hours again.** The dispatcher looked for the human's last message
+  in `ambient/relationship-thread.json`, a name nothing writes (the thread sensor writes `thread.json`),
+  so a reply in the middle of the night was always held until morning; the scheduled jobs' "The thread"
+  section read the same missing name. Both read the real file now, the old name still counts, and the
+  tests write the file the sensor writes instead of the one that hid this.
+- **A game's context stays in the game.** A client may put context it gathered before the human's words
+  (a game add-on: the character, the zone, the quest log) in a "[Game, added automatically ...]" block.
+  Her other conversations, the feed, her memory and the thread now quote only the words; the conversation
+  it came in keeps the block.
+
 ## 3.21.0 — Watching together, live (2026-11-27)
 
 - **She follows what you are watching, line by line.** While you play a film or an episode on your own

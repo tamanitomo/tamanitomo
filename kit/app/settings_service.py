@@ -87,6 +87,8 @@ def synchronize(app, runtime, old, updated):
         "outreach",
         "outreach_per_day",
         "timezone",
+        # The outreach policy her prompts quote says whether she can reach a watch.
+        "device_bridge_url",
     }
     if not any(getattr(old, key) != getattr(updated, key) for key in cadence):
         return None

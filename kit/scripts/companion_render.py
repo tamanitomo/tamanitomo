@@ -335,10 +335,27 @@ def mapping_for(
                 else f"No daily limit was set. Quiet hours are still enforced in code. Writing first always "
                 f"means queueing on the outbox (below); the dispatcher decides when it leaves."
             )
+            + (
+                # A touch rather than a text (companion_outbox DEVICE_TARGETS), only with a
+                # device bridge to reach the human's watch.
+                ' A touch is another way to reach {{OBJ_H}}: with "target":"watch" a few words (up to 160 '
+                'characters) arrive on {{HUMAN}}\'s watch with a buzz; "buzz":"tap" is a light touch, '
+                'the wordless kind of thinking of {{OBJ_H}}, and "buzz":"nudge" a playful elbow. It counts '
+                "like any message."
+                if getattr(c, "device_bridge_url", "")
+                else ""
+            )
             if c.outreach != "never"
             else OUTREACH["never"]
         ),
         "OUTREACH_PER_DAY": str(c.outreach_per_day or "no limit"),
+        # A good morning or a goodnight can be a touch on the watch rather than a text.
+        "WATCH_RITUAL": (
+            ' It can also be a few words on {{HUMAN}}\'s watch ("target":"watch", "buzz":"tap"): a '
+            "touch, not a ping, and it counts like any message."
+            if getattr(c, "device_bridge_url", "")
+            else ""
+        ),
         "ATTRACTION": iv.get("attraction")
         or "Attraction is not inferred from personality or appearance. Follow the chosen relationship boundary.",
         "DAILY_RHYTHM": iv.get("daily_rhythm")

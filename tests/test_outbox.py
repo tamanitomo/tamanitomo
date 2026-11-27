@@ -133,7 +133,7 @@ class DispatcherTests(OutboxFixture):
         self.q(body="me too", now=self.evening)
         thread = self.c.soul_dir / "ambient"
         thread.mkdir(parents=True, exist_ok=True)
-        (thread / "relationship-thread.json").write_text(
+        (thread / "thread.json").write_text(
             json.dumps(
                 {"last_from_human": (self.night - dt.timedelta(minutes=5)).isoformat()}
             ),
@@ -145,7 +145,7 @@ class DispatcherTests(OutboxFixture):
     def test_being_awake_does_not_raise_the_daily_cap(self):
         thread = self.c.soul_dir / "ambient"
         thread.mkdir(parents=True, exist_ok=True)
-        (thread / "relationship-thread.json").write_text(
+        (thread / "thread.json").write_text(
             json.dumps(
                 {"last_from_human": (self.night - dt.timedelta(minutes=5)).isoformat()}
             ),
@@ -159,11 +159,42 @@ class DispatcherTests(OutboxFixture):
         self.assertEqual(result["handled"][0]["action"], "hold")
         self.assertIn("Daily limit", result["handled"][0]["reason"])
 
-    def test_an_old_message_from_the_human_does_not_count_as_awake(self):
+    def test_the_older_file_name_still_counts(self):
+        """Before 3.22 the dispatcher read a name nothing wrote; a file of that name
+        written by hand (as these tests once did) still reads the same."""
         self.q(body="me too", now=self.evening)
         thread = self.c.soul_dir / "ambient"
         thread.mkdir(parents=True, exist_ok=True)
         (thread / "relationship-thread.json").write_text(
+            json.dumps(
+                {"last_from_human": (self.night - dt.timedelta(minutes=5)).isoformat()}
+            ),
+            encoding="utf-8",
+        )
+        result, _ = self.dispatch(self.night)
+        self.assertEqual(result["handled"][0]["action"], "sent")
+
+    def test_the_thread_sensor_itself_lifts_the_window(self):
+        """The real thing: the thread sensor's own file, as the senses job writes it."""
+        import companion_sensors
+
+        self.q(body="me too", now=self.evening)
+        thread = self.c.soul_dir / "ambient"
+        thread.mkdir(parents=True, exist_ok=True)
+        stamp = (self.night - dt.timedelta(minutes=5)).isoformat()
+        (thread / "thread.json").write_text(
+            json.dumps({"checked_at": stamp, "available": True, "last_from_human": stamp}),
+            encoding="utf-8",
+        )
+        self.assertIn("thread", companion_sensors.REGISTRY)
+        result, _ = self.dispatch(self.night)
+        self.assertEqual(result["handled"][0]["action"], "sent")
+
+    def test_an_old_message_from_the_human_does_not_count_as_awake(self):
+        self.q(body="me too", now=self.evening)
+        thread = self.c.soul_dir / "ambient"
+        thread.mkdir(parents=True, exist_ok=True)
+        (thread / "thread.json").write_text(
             json.dumps(
                 {"last_from_human": (self.night - dt.timedelta(hours=5)).isoformat()}
             ),
@@ -814,3 +845,54 @@ class UnconfirmedPhotoTests(unittest.TestCase):
             outbox.render_sent(c, now),
             "- Mon 14:45 image: Here it is." + outbox.UNCONFIRMED,
         )
+
+
+class WatchTests(OutboxFixture):
+    """A touch rather than a text: a few words and a buzz on the human's watch, through the device bridge, under the
+    same dispatcher (quiet hours, the daily limit) as any message."""
+
+    def test_no_bridge_no_watch(self):
+        with self.assertRaises(ValueError) as said:
+            self.q(target="watch", body="hi")
+        self.assertIn("device bridge", str(said.exception))
+
+    def test_what_the_watch_takes(self):
+        self.c.device_bridge_url = "http://127.0.0.1:9/knock"
+        entry = self.q(target="watch", body="thinking of you")
+        self.assertEqual((entry["target"], entry["buzz"]), ("watch", "message"))
+        self.assertEqual(self.q(target="watch", body="here", buzz="tap")["buzz"], "tap")
+        for bad in ({"body": "x" * 161}, {"buzz": "earthquake"}, {"kind": "voice", "media_path": "/tmp/a.ogg"}):
+            with self.assertRaises(ValueError):
+                self.q(target="watch", **{"body": "short", **bad})
+        with self.assertRaises(ValueError):
+            self.q(body="a normal message", buzz="tap")  # a buzz needs the watch
+
+    def test_the_dispatcher_hands_it_to_the_bridge(self):
+        self.c.device_bridge_url = "http://127.0.0.1:9/knock"
+        self.q(target="watch", body="here", buzz="tap")
+        calls = []
+
+        def to_device(c, text, buzz, surface, ident):
+            calls.append((text, buzz, surface, ident))
+            return "watch"
+
+        with patch("companion_watchalong.to_device", side_effect=to_device):
+            result = dispatch.run(self.c, self.day)
+        self.assertEqual(result["handled"][0]["action"], "sent")
+        self.assertEqual(calls[0][:3], ("here", "tap", "auto"))
+        self.assertTrue(calls[0][3].startswith("msg-"))
+
+    def test_a_bridge_that_does_not_take_it_is_a_failure_not_a_guess(self):
+        self.c.device_bridge_url = "http://127.0.0.1:9/knock"
+        self.q(target="watch", body="here")
+        with patch("companion_watchalong.to_device", return_value=""):
+            result = dispatch.run(self.c, self.day)
+        self.assertNotEqual(result["handled"][0]["action"], "sent")
+
+    def test_quiet_hours_hold_a_touch_too(self):
+        self.c.device_bridge_url = "http://127.0.0.1:9/knock"
+        self.q(target="watch", body="you up?", now=self.evening)
+        with patch("companion_watchalong.to_device", return_value="watch") as bridge:
+            result = dispatch.run(self.c, self.night)
+        self.assertEqual(result["handled"][0]["action"], "hold")
+        bridge.assert_not_called()

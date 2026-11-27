@@ -70,12 +70,20 @@ PLATFORMS = (
     "email",
     "sms",
 )
+# Not a Hermes platform: the human's own watch (or something they wear), through the
+# device bridge (companion_config.device_bridge_url). A few words and a buzz: a touch
+# rather than a text, so it is short, text-only, and it may say how it buzzes.
+DEVICE_TARGETS = ("watch",)
+DEVICE_CHARS = 160
+BUZZES = ("tap", "message", "nudge")
 
 
 def check_target(value, human="the human"):
     """'telegram' when absent; a platform or platform:chat_id when given; else refused."""
     target = str(value or "").strip() or "telegram"
     platform = target.split(":", 1)[0].lower()
+    if target.lower() in DEVICE_TARGETS:
+        return target.lower()
     if platform not in PLATFORMS or len(target) > 80:
         raise ValueError(
             f'target must be a delivery platform such as "telegram", not a person. '
@@ -144,6 +152,25 @@ def queue(c, entry, now=None):
     ttl = entry.get("ttl_hours", DEFAULT_TTL_HOURS)
     if not isinstance(ttl, (int, float)) or not 0 < ttl <= 168:
         raise ValueError("ttl_hours must be a positive number of hours, at most a week")
+    target = check_target(entry.get("target"), getattr(c, "human", "the human"))
+    buzz = str(entry.get("buzz") or "").lower()
+    if target in DEVICE_TARGETS:
+        if not getattr(c, "device_bridge_url", ""):
+            raise ValueError(
+                "there is no device bridge to reach the watch with (Settings, Realism); "
+                "leave target out to send it as a message"
+            )
+        if kind != "text":
+            raise ValueError("the watch takes words only: kind text")
+        if len(body) > DEVICE_CHARS:
+            raise ValueError(
+                f"a watch shows up to {DEVICE_CHARS} characters; say it shorter or send it as a message"
+            )
+        buzz = buzz or "message"
+        if buzz not in BUZZES:
+            raise ValueError(f"buzz must be one of {BUZZES}")
+    elif buzz:
+        raise ValueError("buzz is for target watch only")
     with file_lock(path_for(c).with_suffix(".jsonl.lock")):
         history = fold(c)
         waiting = [e for e in history if e["status"] == "queued"]
@@ -175,9 +202,8 @@ def queue(c, entry, now=None):
             "reason": (entry.get("reason") or "")[:200],
             "not_before": _iso(entry.get("not_before"), tz, "not_before"),
             "expires_at": (now + dt.timedelta(hours=ttl)).isoformat(),
-            "target": check_target(
-                entry.get("target"), getattr(c, "human", "the human")
-            ),
+            "target": target,
+            **({"buzz": buzz} if buzz else {}),
             "status": "queued",
             "queued_at": now.isoformat(),
         }

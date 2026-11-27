@@ -143,6 +143,13 @@ def _owner_conversations(c, resolved):
     return found
 
 
+def _spoken(text):
+    """A message's own words, without a client's automatic context block (a game's)."""
+    import companion_transcript as transcript
+
+    return transcript.spoken(text)
+
+
 def _store_version(db):
     out = []
     for path in (db, db.with_name(db.name + "-wal")):
@@ -477,7 +484,7 @@ def read(c, now=None, tail=4):
         {
             "who": ("them" if role == "user" else "you"),
             "at": (stamp(t).isoformat(timespec="minutes") if stamp(t) else ""),
-            "text": (text or "")[:200],
+            "text": _spoken(text or "")[:200],
             "asks": last_question(text) if role != "user" else "",
         }
         for role, text, t in reversed(rows[:tail])

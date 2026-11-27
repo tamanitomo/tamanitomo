@@ -1173,6 +1173,24 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
     except (OSError, ValueError, ImportError):
         pass
 
+    # On this day (companion_onthisday): a few true memories from this date, kept by the
+    # senses job. Today's file only; a short slot of its own, the first to give way.
+    if "onthisday" in (c.sensors or []):
+        try:
+            memory_file = c.soul_dir / "ambient/onthisday.md"
+            checked = json.loads(read(c.soul_dir / "ambient/onthisday.json", 20000))
+            written = (
+                dt.datetime.fromisoformat(checked["checked_at"]).astimezone(tz).date()
+            )
+            if written == now.astimezone(tz).date():
+                memories = read(memory_file, 900).strip()
+                if memories:
+                    parts.append(
+                        (3, "[" + memories.replace("On this day:", "On this day]", 1))
+                    )
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+
     watching_together = False
     if "viewing" in (c.sensors or []):
         # While the two of them are watching something together, what is on moves by
@@ -1225,7 +1243,7 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
             if (c.soul_dir / "ambient").is_dir()
             else []
         ):
-            if p.stem in ("viewing", "scene"):  # each has its own section
+            if p.stem in ("viewing", "scene", "onthisday"):  # each has its own section
                 continue
             t = read(p, 1000).strip()
             if t:

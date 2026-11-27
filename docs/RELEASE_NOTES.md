@@ -1,4 +1,17 @@
-Tamanitomo 3.21.0: watching together, live.
+Tamanitomo 3.22.0: a touch, and remembering.
+
+- **She can reach you with a touch.** With your watch connected (Settings → Realism), she can send a few
+  words with a buzz, or a single light tap when she is thinking of you, under the same quiet hours and
+  daily limit as her messages. A good morning or a goodnight can be one.
+- **On this day.** She remembers what the two of you had on today's date a month, a season or years ago:
+  something you said, a film you watched together, a moment she kept. Turn it on under Settings →
+  Awareness → Sensors.
+- **Replies in the middle of the night are no longer held until morning** when you are clearly awake and
+  talking to her: a file-name mix-up had kept that from ever working.
+
+From 3.20.0, no Repair is needed. Updating from 3.19 or earlier, run Repair once.
+
+Previous: 3.21.0 watching together, live.
 
 - **She watches with you.** While you play something on your own Plex or Jellyfin, she follows the
   dialogue as it is spoken: from its subtitles, from the subtitles inside the file, or, when it has

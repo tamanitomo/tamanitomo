@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import json
+import re
 import os
 from pathlib import Path
 import sqlite3
@@ -42,6 +43,24 @@ BINDING_FILE = ".tamanitomo-chat-owner.json"
 # conversation starts and keeps it in state_meta under this key plus the session id.
 # `--resume` runs that policy, so a model plan applied later never reaches it.
 LOCAL_POLICY_PREFIX = "gateway.local_policy.v1:"
+
+
+# A client may put context it gathered itself before the human's words (a game add-on:
+# the character, the zone, the quest log) as a "[Label, added automatically ...]" block
+# closed by "[/Label]". It is not what the human said; quoted into another conversation,
+# the feed or her memory it would crowd out what they did say. The conversation it came
+# in keeps it whole.
+AUTO_BLOCK = re.compile(
+    r"\A\s*\[([^\],\n]{1,40}),\s*added automatically[^\]\n]*\]\n.*?\n\[/\1\]\s*", re.S
+)
+
+
+def spoken(text):
+    """The human's own words, without a client's automatic context block."""
+    if not isinstance(text, str):
+        return text
+    stripped = AUTO_BLOCK.sub("", text, count=1)
+    return stripped if stripped.strip() else text
 
 
 class SourceUnavailable(ValueError):
@@ -500,6 +519,7 @@ class Transcript:
         content = row["content"]
         if not isinstance(content, str):
             content = json.dumps(content, ensure_ascii=False)
+        content = spoken(content)
         return Record(
             str(row["id"]),
             str(row["session_id"]),

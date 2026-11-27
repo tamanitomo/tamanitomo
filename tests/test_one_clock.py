@@ -38,7 +38,7 @@ def stamp(minutes_ago):
     return dt.datetime.fromtimestamp(at(minutes_ago), TZ).isoformat()
 
 
-class OneClockTests(unittest.TestCase):
+class ClockFixture(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp())
         self.c = self.companion({"game-chat": "the game"})
@@ -112,6 +112,8 @@ class OneClockTests(unittest.TestCase):
                 db.execute("INSERT INTO responses VALUES (?,?,?)", (f"resp_{i}", json.dumps(record), 1.0))
                 db.execute("INSERT INTO conversations VALUES (?,?)", (name, f"resp_{i}"))
 
+
+class OneClockTests(ClockFixture):
     def test_the_radio_was_the_last_thing_the_human_said(self):
         data = thread.read(self.c, NOW, tail=6)
         self.assertEqual(data["last_from_human"], stamp(3))
@@ -142,3 +144,31 @@ class OneClockTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AutomaticContextTests(ClockFixture):
+    """A game add-on puts what it gathered (the character, the zone) before the human's words. Quoted anywhere
+    else, only the words come along: the block is not what they said."""
+
+    BLOCK = "[Game, added automatically by the game add-on]\nRobin: level 16 Human Mage\nWhere: Goldshire\n[/Game]\n\n"
+
+    def setUp(self):
+        super().setUp()
+        self.store.say("game-now", "user", self.BLOCK + "Race you to the inn?", at(1.5))
+
+    def test_the_thread_keeps_the_words(self):
+        said = [row["text"] for row in thread.read(self.c, NOW, tail=8)["tail"]]
+        self.assertIn("Race you to the inn?", said)
+        self.assertFalse(any("added automatically" in text for text in said))
+
+    def test_other_conversations_quote_the_words(self):
+        import companion_context as ctx
+
+        payload = {"session_id": "tg", "extra": {"user_message": "hi", "platform": "telegram", "is_first_turn": False}}
+        out = ctx.build(self.c, payload, now=NOW)
+        self.assertIn('the game · Robin: "Race you to the inn?"', out)
+        self.assertNotIn("added automatically", out)
+
+    def test_context_alone_is_kept_rather_than_emptied(self):
+        alone = "[Game, added automatically by the game add-on]\nonly context\n[/Game]\n"
+        self.assertEqual(transcript.spoken(alone), alone)

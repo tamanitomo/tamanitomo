@@ -116,11 +116,15 @@ def _read(path, limit=1500):
 
 
 def thread(c):
-    """The relationship-thread sensor. Absent until Phase 2 installs one."""
-    return _read(c.soul_dir / "ambient/relationship-thread.md")
+    """The thread sensor (`ambient/thread.md`): the gap and the last few messages."""
+    for name in ("thread.md", "relationship-thread.md"):
+        text = _read(c.soul_dir / "ambient" / name)
+        if text:
+            return text
+    return ""
 
 
-def ambient(c, skip=("relationship-thread", "bars")):
+def ambient(c, skip=("thread", "relationship-thread", "bars")):
     folder = c.soul_dir / "ambient"
     if not folder.is_dir():
         return ""
