@@ -1,3 +1,18 @@
+## 3.20.1 — Every place by its name (2026-11-26)
+
+- **A device or app talking through the app's chat names its place.** Hermes files every chat sent
+  through `/api/chat` as a local session, so a voice front end keeping its own conversation there
+  and the app's own window were both "the app". `/api/chat` now takes `place`, one line of up to
+  60 characters ("the kitchen radio"). The app records it for that conversation before the turn
+  runs (`.tamanitomo-session-places.json` beside the session list, the newest hundred kept;
+  compression continuations keep the name). Her turn there is told where it is instead of being
+  called a terminal session, her other conversations quote those messages under that name, the
+  chat feed and search show it, and the app's window no longer picks that conversation up as its
+  latest.
+- **Named API conversations show their names on chat bubbles.** 3.20.0 put the name on search
+  results only; the bubbles of a conversation named in `owner_api_conversations` still read
+  "api_server".
+
 ## 3.20.0 — One conversation, wherever you talk (2026-11-26)
 
 - **A conversation through the Hermes API can be yours.** A game add-on or a voice front end

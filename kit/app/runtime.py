@@ -1178,8 +1178,9 @@ def _feed_message(view, record):
         "cursor": _encode_cursor(record.occurred_at, int(record.source_message)),
     }
     if record.channel:
-        # An owner API conversation: what to call the place ("the game"). Added only
-        # there, so every other row keeps the revision it already had.
+        # What to call the place: an owner API conversation ("the game") or a client
+        # of the app that named its own. Added only there, so every other row keeps
+        # the revision it already had.
         row["channel_label"] = record.channel
     row["revision"] = hashlib.sha256(
         json.dumps(row, sort_keys=True, ensure_ascii=False).encode()
@@ -1440,16 +1441,76 @@ def read_workspace_sessions(c):
         return set()
 
 
-def note_workspace_session(c, session):
+def note_workspace_session(c, session, place=""):
     """Remember one, keeping the file small enough to read on every feed page."""
     if not session:
         return
+    if place:
+        note_place(c, session, place)
     known = read_workspace_sessions(c)
     if session in known:
         return
     rows = [*sorted(known), str(session)][-400:]
     try:
         cp.atomic_write(workspace_sessions_path(c), json.dumps(rows))
+    except OSError:
+        pass
+
+
+# A device or another app can hold its own conversation through the app's chat (a
+# voice front end, a car, a watch), and it is a place of its own to the human. It
+# says what to call that place with `place` on /api/chat; her other conversations
+# then quote those messages under that name, and the feed shows it. Quoted into her
+# context, so one short line of plain text. The newest names are kept.
+PLACE_CHARS = 60
+PLACES_KEPT = 100
+
+
+def place_name(value):
+    """A client's name for where its conversation happens, "" for none, or ValueError."""
+    if value is None or value == "":
+        return ""
+    if isinstance(value, str):
+        name = " ".join(value.split())
+        if name and len(name) <= PLACE_CHARS and name.isprintable():
+            return name
+    raise ValueError(
+        f"place names where this conversation happens: one line of up to {PLACE_CHARS} characters"
+    )
+
+
+def workspace_places_path(c):
+    return Path(c.home) / ".tamanitomo-session-places.json"
+
+
+def read_workspace_places(c):
+    """{session id: place} for the app conversations a client named."""
+    try:
+        rows = json.loads(workspace_places_path(c).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    places = {}
+    for session, place in rows.items() if isinstance(rows, dict) else ():
+        try:
+            name = place_name(place)
+        except ValueError:
+            continue
+        if name and str(session).strip():
+            places[str(session)] = name
+    return places
+
+
+def note_place(c, session, place):
+    places = read_workspace_places(c)
+    if not session or places.get(str(session)) == place:
+        return
+    places.pop(str(session), None)
+    places[str(session)] = place  # newest last, so the oldest are dropped first
+    try:
+        cp.atomic_write(
+            workspace_places_path(c),
+            json.dumps(dict(list(places.items())[-PLACES_KEPT:]), ensure_ascii=False),
+        )
     except OSError:
         pass
 
@@ -1533,7 +1594,11 @@ def latest_session(c):
             view.params,
         )
         for row in rows:
-            if view.owner_session(row["id"]) in ("workspace", "terminal"):
+            # A conversation a device or another app keeps going is that place's.
+            if view.owner_session(row["id"]) in (
+                "workspace",
+                "terminal",
+            ) and not view.channel_label(row["id"]):
                 return row["id"]
         return None
 

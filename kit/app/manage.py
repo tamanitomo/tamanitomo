@@ -3866,12 +3866,16 @@ def register(app, select, load, operations):
         if not isinstance(message, str) or not message.strip() or len(message) > 30000:
             raise ValueError("Write a message (up to 30,000 characters)")
         session = payload.get("session")
+        # A device or another app holding its own conversation here names its place.
+        place = hr.place_name(payload.get("place"))
         c = load()
         if session:
             hr.resumable_session(c, text(session, "session", 200))
 
         def run(rt, p, h, report):
             report("Waiting for " + c.agent)
+            if session and place:
+                hr.note_place(c, session, place)  # before the turn, so she knows it
             # Hermes keeps a resumed conversation on the model it started with. When the
             # model plan has moved on since, continue in a fresh conversation on the
             # plan: its continuity carries the recent messages over (the cross-channel
@@ -3910,7 +3914,7 @@ def register(app, select, load, operations):
             )
             # Hermes files this as a cli session; the feed should still be able
             # to say it happened here rather than at a terminal.
-            hr.note_workspace_session(c, new)
+            hr.note_workspace_session(c, new, place)
             result = {
                 "response": ANSI_TEXT(r.stdout),
                 "interrupted": bool(getattr(r, "interrupted", False)),

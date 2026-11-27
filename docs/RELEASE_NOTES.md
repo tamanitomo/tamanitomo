@@ -1,4 +1,16 @@
-Tamanitomo 3.20.0: one conversation, wherever you talk.
+Tamanitomo 3.20.1: every place by its name.
+
+- **Devices that talk through the app go by their own names.** A voice front end or any other
+  device that keeps its own conversation through the app can say what it is. Your other
+  conversations and the chat window then call those messages by that name instead of "the app",
+  and she knows where she is when you talk to her there.
+- **Apps on Hermes's API show their names in the chat window.** Messages from a conversation you
+  named in companion.json read "api_server" on their bubbles; they now show the name you gave it.
+
+Updating from 3.19 or earlier, run Repair once (3.20.0's longer handoff needs the room). From
+3.20.0, no Repair is needed.
+
+Previous: 3.20.0 one conversation, wherever you talk.
 
 - **She knows what you said elsewhere.** Telegram, the app, and now apps that talk to her through
   Hermes's API (a game add-on, a voice front end) share one conversation: wherever you pick it up,

@@ -962,3 +962,33 @@ const requestApi = () => {count++; return new Promise(done=>{resolve=done;});};
 })();
 """
     )
+
+
+def test_a_bubble_from_a_named_place_shows_its_name():
+    """An app on the Hermes API or a device talking through the app is shown by the
+    name its place was given, not as "api_server" or as the app itself."""
+    source = (ROOT / "kit/app/static/workspace.js").read_text(encoding="utf-8")
+    section = (
+        "const CHANNELS={"
+        + source.split("const CHANNELS={", 1)[1].split("\nfunction inlineMedia(", 1)[0]
+    )
+    run_browser_contract(
+        r"""
+const assert = require('node:assert/strict');
+const esc = s => String(s);
+const richText = s => s;
+const faceHtml = () => '';
+const chatName = () => 'Nova';
+const inlineMedia = () => '';
+"""
+        + section
+        + r"""
+const html = chatMessagesHtml([
+  {role:'user', content:'Turn it up', timestamp:1000, source:'tamanitomo', channel_label:'the kitchen radio'},
+  {role:'user', content:'From my desk', timestamp:1010, source:'tamanitomo'},
+  {role:'user', content:'Which quest?', timestamp:1020, source:'api_server', channel_label:'the game'},
+]);
+const badges = [...html.matchAll(/<span class="bubble-channel">([^<]*)<\/span>/g)].map(m => m[1]);
+assert.deepEqual(badges, ['◈ the kitchen radio', '◈ Tamanitomo', '○ the game']);
+"""
+    )

@@ -14,6 +14,11 @@ final and error events. Other clients can keep using the JSON operation response
 and `/api/operations/{id}` polling. A disconnected browser must inspect the
 operation or reload history before retrying; it must never resubmit automatically.
 
+A device or another app that keeps its own conversation here sends `place`, a
+short name for where the human is talking from ("the kitchen radio"): one line of
+up to 60 characters. Her other conversations and the feed then call those messages
+by that name instead of the app's.
+
 Hermes remains the transcript authority. Read-only history excludes other
 profiles, groups, unknown platform participants, background jobs and tool output.
 A resumed turn must belong to an eligible local conversation in the selected

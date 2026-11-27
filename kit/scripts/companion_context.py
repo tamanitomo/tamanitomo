@@ -309,10 +309,10 @@ def _latest(events, tz):
 # The last messages from the human's other conversations, quoted into each turn.
 # A conversation starts fresh every morning so replies stay quick, and each
 # channel (Telegram, the app, a terminal, an app the human talks through on the
-# Hermes API) is its own conversation; without this a companion would not know
-# what was said last night, or an hour ago in the app. To the human it is one
-# conversation that moves between places, so this carries enough of it to pick up
-# mid-thread, not only the last few lines.
+# Hermes API, a device talking through the app's chat) is its own conversation;
+# without this a companion would not know what was said last night, or an hour
+# ago in the app. To the human it is one conversation that moves between places,
+# so this carries enough of it to pick up mid-thread, not only the last few lines.
 # Deterministic and model-free: owner-verified records only, newest first, within
 # a window and the size the budget reserves for it (companion_config).
 HANDOFF_WINDOW = dt.timedelta(hours=36)
@@ -372,7 +372,9 @@ def cross_channel_handoff(c, payload, now, cap):
             records, complete = view.recent(
                 since, view.lineage(session), HANDOFF_ITEMS + 1
             )
-            here = view.channel_label(session) or CHANNEL_LABELS.get(kind, kind)
+            here = _quoted(view.channel_label(session), 80) or CHANNEL_LABELS.get(
+                kind, kind
+            )
             return "ok", (here, records, complete)
 
         status, found = sources.owner_evidence(c, read)
@@ -399,7 +401,9 @@ def cross_channel_handoff(c, payload, now, cap):
             else when.strftime("%a %H:%M")
         )
         speaker = c.human if r.speaker == "owner" else f"{c.agent} (you)"
-        place = r.channel or CHANNEL_LABELS.get(r.source_kind, r.source_kind)
+        place = _quoted(r.channel, 80) or CHANNEL_LABELS.get(
+            r.source_kind, r.source_kind
+        )
         line = (
             f'{stamp} · {place} · {speaker}: "{_quoted(r.content,HANDOFF_ITEM_CHARS)}"'
         )
@@ -586,9 +590,24 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
     # Where this conversation is happening changes what is appropriate, and
     # Hermes already knows. A first turn is where a gap gets acknowledged; a
     # continuing one is where re-greeting reads as a reset.
-    if platform or first_turn:
+    # Hermes files a device or app talking through the app's chat as a terminal; one
+    # that named its place (runtime.place_name) is that place instead.
+    place = ""
+    session = (payload or {}).get("session_id") if isinstance(payload, dict) else None
+    if isinstance(session, str) and session:
+        try:
+            import companion_transcript as sources
+
+            place = _quoted(sources.app_place(c, session), 80)
+        except Exception:
+            place = ""
+    if platform or first_turn or place:
         note = []
-        if platform:
+        if place:
+            note.append(
+                f'This conversation is on "{place}", which reaches you through the app.'
+            )
+        elif platform:
             note.append(
                 PLATFORM_NOTES.get(
                     platform.lower(),

@@ -124,6 +124,15 @@ the client declares with `X-Hermes-Session-Key`. Those conversations are then
 read like Telegram and the app: quoted into the others, the others quoted into
 them, shown in the app's chat feed, and kept as the human's own words.
 
+A device or another app can also keep its own conversation going through the
+app's chat (a voice front end, a car, a kitchen radio). Hermes files those as
+local sessions like the app's own window, so the client names its place with
+`place` on `POST /api/chat`. The app records it for that conversation
+(`.tamanitomo-session-places.json` beside the session list, the newest hundred
+kept) before the turn runs: the companion's own turn there says where it is,
+her other conversations quote those messages under that name, the feed shows
+it, and the app's own window does not take that conversation over.
+
 These jobs need no language-model completion. They can maintain records and
 enforce policy during provider outages without paying for an agent turn that
 only checks a clock or moves a file. They still depend on the files, devices,

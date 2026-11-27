@@ -66,7 +66,8 @@ class Record:
     speaker: str
     occurred_at: float
     content: str
-    # What to call the place for an "api" record ("the game"); "" for every other kind.
+    # What to call the place: an "api" record's ("the game"), or a "workspace" record's
+    # when the client holding that conversation named it; "" for every other record.
     channel: str = ""
 
 
@@ -242,13 +243,24 @@ def shared_store(c):
         return True
 
 
-def owner_evidence(c, callback, binding=None):
-    """Read one profile in one read-only connection, without copying its history."""
+def _runtime():
     root = str(Path(__file__).resolve().parents[2])
     if root not in sys.path:
         sys.path.append(root)
     from kit.app import runtime
 
+    return runtime
+
+
+def app_place(c, session):
+    """What the client holding this app conversation named its place, or "". A file
+    read, no transcript: the app records it before the client's turn runs."""
+    return _runtime().read_workspace_places(c).get(str(session or ""), "")
+
+
+def owner_evidence(c, callback, binding=None):
+    """Read one profile in one read-only connection, without copying its history."""
+    runtime = _runtime()
     binding = binding or owner_binding(c)
     try:
         with runtime.session_db(c) as state:
@@ -281,6 +293,7 @@ def owner_evidence(c, callback, binding=None):
                     binding,
                     runtime.read_workspace_sessions(c),
                     api_sessions(c, binding),
+                    runtime.read_workspace_places(c),
                 )
             )
     except (ValueError, sqlite3.Error, OSError) as exc:
@@ -300,6 +313,7 @@ class Transcript:
         binding,
         workspace,
         api=None,
+        places=None,
     ):
         self.con = connection
         self.session_columns = session_columns
@@ -328,6 +342,12 @@ class Transcript:
         for session, label in (api or {}).items():
             for ident in self.lineage(session):
                 self.api.setdefault(ident, label)
+        # The same for the app conversations a client named (runtime.note_place),
+        # newest name first.
+        self.places = {}
+        for session, label in reversed(list((places or {}).items())):
+            for ident in self.lineage(session):
+                self.places.setdefault(ident, label)
 
     def session(self, ident):
         ident = str(ident)
@@ -361,11 +381,17 @@ class Transcript:
         )
 
     def channel_label(self, ident):
-        """What to call the place an owner API conversation happens, or ""."""
+        """What to call the place an owner API conversation, or an app conversation a
+        client named, happens, or ""."""
         ident = str(ident)
         if ident in self.api:
             return self.api[ident]
         row = self.session(ident) or {}
+        if str(row.get("source") or "").lower() != API_SOURCE:
+            # A compression continuation is still where its conversation was.
+            return next(
+                (self.places[i] for i in self.lineage(ident) if i in self.places), ""
+            )
         declared = str(row.get("session_key") or "").strip()
         return dict(self.binding.api).get(declared, "") if declared else ""
 
@@ -481,7 +507,11 @@ class Transcript:
             "owner" if row["role"] == "user" else "companion",
             float(row["timestamp"]),
             content,
-            self.channel_label(row["session_id"]) if kind == "api" else "",
+            (
+                self.channel_label(row["session_id"])
+                if kind in ("api", "workspace")
+                else ""
+            ),
         )
 
     def forward(self, after_stamp, after_id, end_stamp, end_inclusive=True):

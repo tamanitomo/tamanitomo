@@ -255,9 +255,11 @@ function chatMessagesHtml(messages){
     const divider=day!==chatLastDay?`<div class="chat-day">${esc(day)}</div>`:'';
     const newDay=day!==chatLastDay;
     chatLastDay=day;
-    const channel=channelOf(m.source);
+    // A named place (an app on the Hermes API, a device talking through this app) by its name.
+    const channel={...channelOf(m.source),...(m.channel_label?{label:m.channel_label}:{})};
     const prev=messages[i-1],next=messages[i+1];
     const sameRun=(a,b)=>a&&b&&a.role===b.role&&String(a.source||'')===String(b.source||'')
+      &&String(a.channel_label||'')===String(b.channel_label||'')
       &&Math.abs((b.timestamp||0)-(a.timestamp||0))<=GROUP_WINDOW;
     const startsRun=newDay||!sameRun(prev,m);
     const endsRun=!sameRun(m,next)||
