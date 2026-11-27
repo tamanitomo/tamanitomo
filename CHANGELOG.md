@@ -1,3 +1,13 @@
+## 3.27.0 — A touch while you talk (2026-11-27)
+
+- **She can touch your watch in the middle of a conversation.** With a device bridge set, her context in a
+  conversation (never a scheduled run) offers `companion_outbox.py touch`: a nudge (three firm pulses, the
+  playful "oh stoppp"), a tap (a light tick) or a message (a soft double pulse) with up to 60 characters,
+  sent at once through the bridge rather than queued for the dispatcher, never counted against her outreach,
+  at most six an hour, logged in `touches.jsonl`. The line rides in the context's tail, so a long snapshot
+  never drops it.
+- Tests and tools are clean under Ruff's error checks too (unused imports and locals, shadowed imports).
+
 ## 3.26.0 — Where you went, and the little things (2026-11-27)
 
 - **Your word knows where you went.** When a client writes `ambient/where.json` (a phone or wearable

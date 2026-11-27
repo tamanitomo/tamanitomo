@@ -847,6 +847,68 @@ class UnconfirmedPhotoTests(unittest.TestCase):
         )
 
 
+class TouchTests(OutboxFixture):
+    """A touch in the middle of a conversation ("oh stoppp" with a nudge): straight to the watch, never queued, never
+    counted against her outreach, a few words only, at most six an hour, and offered only while they are talking."""
+
+    def bridge(self):
+        self.c.device_bridge_url = "http://127.0.0.1:9/knock"
+        token = self.c.home / "secrets" / "device-bridge.token"
+        token.parent.mkdir(parents=True, exist_ok=True)
+        token.write_text("t0k", encoding="utf-8")
+        self.c.device_bridge_token_file = str(token)
+
+    def test_no_bridge_no_touch(self):
+        with self.assertRaises(ValueError) as said:
+            outbox.touch(self.c, "oh stoppp", "nudge", now=self.day, send=lambda *a: "watch")
+        self.assertIn("device bridge", str(said.exception))
+
+    def test_a_nudge_goes_now_and_never_into_the_queue(self):
+        self.bridge()
+        calls = []
+
+        def send(c, text, buzz, surface, ident):
+            calls.append((text, buzz, surface))
+            return "watch"
+
+        out_ = outbox.touch(self.c, "oh stoppp", "nudge", now=self.day, send=send)
+        self.assertEqual(out_, {"sent": True, "reached": "watch"})
+        self.assertEqual(calls, [("oh stoppp", "nudge", "auto")])
+        self.assertEqual(outbox.fold(self.c), [])  # not her outreach: the daily limit is untouched
+        logged = [json.loads(line) for line in outbox.touches_path(self.c).read_text().splitlines()]
+        self.assertEqual((logged[0]["text"], logged[0]["buzz"], logged[0]["reached"]), ("oh stoppp", "nudge", "watch"))
+
+    def test_a_few_words_and_not_too_often(self):
+        self.bridge()
+        send = lambda *a: "watch"  # noqa: E731
+        for bad in (("", "tap"), ("x" * 61, "tap"), ("hi", "earthquake")):
+            with self.assertRaises(ValueError):
+                outbox.touch(self.c, *bad, now=self.day, send=send)
+        for minute in range(6):
+            outbox.touch(self.c, f"hey {minute}", "tap", now=self.day + dt.timedelta(minutes=minute), send=send)
+        with self.assertRaises(ValueError) as said:
+            outbox.touch(self.c, "one more", "tap", now=self.day + dt.timedelta(minutes=7), send=send)
+        self.assertIn("enough touches", str(said.exception))
+        later = self.day + dt.timedelta(minutes=61)
+        self.assertTrue(outbox.touch(self.c, "later", "tap", now=later, send=send)["sent"])
+
+    def test_a_bridge_that_does_not_answer_says_so(self):
+        self.bridge()
+        out_ = outbox.touch(self.c, "psst over here", "tap", now=self.day, send=lambda *a: "")
+        self.assertFalse(out_["sent"])
+        self.assertIn("in words", out_["detail"])
+
+    def test_offered_in_a_conversation_never_in_a_scheduled_run(self):
+        import companion_context as ctx
+
+        self.bridge()
+        talk = ctx.build(self.c, {"extra": {"user_message": "that hat is a lot", "platform": "telegram"}}, now=self.day)
+        self.assertIn("To touch their watch right now:", talk)
+        self.assertIn("companion_outbox.py", talk)
+        job = ctx.build(self.c, {"extra": {"user_message": "[Scheduled run]", "platform": "cron"}}, now=self.day)
+        self.assertNotIn("To touch their watch right now", job)
+
+
 class WatchTests(OutboxFixture):
     """A touch rather than a text: a few words and a buzz on the human's watch, through the device bridge, under the
     same dispatcher (quiet hours, the daily limit) as any message."""

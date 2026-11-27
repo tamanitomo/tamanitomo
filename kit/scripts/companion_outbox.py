@@ -76,6 +76,9 @@ PLATFORMS = (
 DEVICE_TARGETS = ("watch",)
 DEVICE_CHARS = 160
 BUZZES = ("tap", "message", "nudge")
+# A touch in the middle of a conversation ("oh stoppp" with a nudge): straight to the watch, not queued.
+TOUCH_CHARS = 60
+TOUCH_PER_HOUR = 6
 
 
 def check_target(value, human="the human"):
@@ -208,6 +211,70 @@ def queue(c, entry, now=None):
             "queued_at": now.isoformat(),
         }
         return slf._append(path_for(c), row)
+
+
+def touches_path(c):
+    return c.life / "touches.jsonl"
+
+
+def touch(c, text, buzz="tap", now=None, send=None):
+    """Touch their watch right now, while the two of them are talking: a playful nudge, a light tap of affection,
+    with a few words. Straight through the device bridge rather than the queue (a nudge five minutes late is not
+    a nudge), never counted against her outreach, at most TOUCH_PER_HOUR an hour. `send` is for tests.
+    """
+    now = now or dt.datetime.now(_tz(c))
+    text = " ".join(str(text or "").split())
+    if not text:
+        raise ValueError("a touch needs a few words to show with it")
+    if len(text) > TOUCH_CHARS:
+        raise ValueError(
+            f"a touch shows up to {TOUCH_CHARS} characters; say the rest in your reply"
+        )
+    buzz = str(buzz or "tap").lower()
+    if buzz not in BUZZES:
+        raise ValueError(f"buzz must be one of {BUZZES}")
+    if not getattr(c, "device_bridge_url", "") or not getattr(
+        c, "device_bridge_token_file", ""
+    ):
+        raise ValueError(
+            "there is no device bridge to reach the watch with (Settings, Realism)"
+        )
+    if send is None:
+        import companion_watchalong as watchalong
+
+        send = watchalong.to_device
+    with file_lock(touches_path(c).with_suffix(".jsonl.lock")):
+        recent = 0
+        for row in slf._read(touches_path(c)):
+            try:
+                at = dt.datetime.fromisoformat(row.get("at"))
+            except (TypeError, ValueError):
+                continue
+            if 0 <= (now - at).total_seconds() < 3600:
+                recent += 1
+        if recent >= TOUCH_PER_HOUR:
+            raise ValueError("that is enough touches for one hour; say it in words")
+        ident = (
+            "touch-"
+            + hashlib.sha256((text + now.isoformat()).encode()).hexdigest()[:12]
+        )
+        reached = send(c, text, buzz, "auto", ident)
+        slf._append(
+            touches_path(c),
+            {
+                "id": ident,
+                "at": now.isoformat(),
+                "text": text,
+                "buzz": buzz,
+                "reached": reached or "",
+            },
+        )
+    if not reached:
+        return {
+            "sent": False,
+            "detail": "the device bridge did not answer; say it in words instead",
+        }
+    return {"sent": True, "reached": reached}
 
 
 def _opener(body):
@@ -528,10 +595,15 @@ def main():
     l.add_argument("--status", choices=list(ALL_STATUSES) + ["all"], default="queued")
     d = s.add_parser("drop", help="withdraw a queued message")
     d.add_argument("--id", required=True)
+    t = s.add_parser("touch", help="touch their watch right now, during a conversation")
+    t.add_argument("--text", required=True)
+    t.add_argument("--buzz", choices=BUZZES, default="tap")
     a = p.parse_args()
     c = cc.load(a.home)
     if a.cmd == "queue":
         out = batch(c, a.file)
+    elif a.cmd == "touch":
+        out = touch(c, a.text, a.buzz)
     elif a.cmd == "drop":
         out = mark(c, a.id, "withheld", "withdrawn by hand")
     else:

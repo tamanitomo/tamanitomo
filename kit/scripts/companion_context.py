@@ -1307,6 +1307,32 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
             f"[Lookups] companion_life.py history | companion_self.py profile|pref-history|wonder|soul "
             f"| companion_recall.py 'subject'. Absence of records is not proof of never."
         )
+    # A touch, in a conversation only (a scheduled run reaches them through the outbox, with its quiet hours):
+    # rides in the tail like the photo command, so a long snapshot never takes it away mid-tease.
+    if (
+        getattr(c, "device_bridge_url", "")
+        and getattr(c, "device_bridge_token_file", "")
+        and platform
+        and platform.lower() != "cron"
+    ):
+        from companion_platform import terminal_python_command
+
+        touch_command = terminal_python_command(
+            pathlib.Path(__file__).with_name("companion_outbox.py"),
+            "--home",
+            c.home,
+            "touch",
+        )
+        tail += (
+            f'\nTo touch their watch right now: {touch_command} --buzz nudge|tap|message --text "a few words". '
+            + (
+                "Rarely, when a touch says more than words; on top of your reply, never instead of it."
+                if c.compact
+                else 'A nudge is three firm pulses (teasing, "oh stoppp"), a tap one light tick (affection, '
+                "a smile), a message a soft double pulse. Rarely, only when a touch says more than words, and "
+                "on top of your reply, never instead of it; it reaches them at once, wherever they are."
+            )
+        )
     if photo:
         try:
             now_line = photo_now(c, closeness)

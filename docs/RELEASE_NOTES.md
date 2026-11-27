@@ -1,4 +1,12 @@
-Tamanitomo 3.26.0: where you went, and the little things.
+Tamanitomo 3.27.0: a touch while you talk.
+
+- **Tease her and she can nudge your watch.** With your watch connected (Settings → Realism), in the middle
+  of a conversation she can send a playful nudge ("oh stoppp"), a light tap, or a few words with a buzz,
+  right then. Rarely, on top of what she says, and never more than a few an hour.
+
+From 3.24.0, no Repair is needed. Updating from 3.23 or earlier, run Repair once.
+
+Previous: 3.26.0 where you went, and the little things.
 
 - **Realism → Little things she notices**: turn On this day and Your word on or off right where the rest of
   her realism lives, and see how far she has got with your story.

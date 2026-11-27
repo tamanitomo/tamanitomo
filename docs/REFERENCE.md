@@ -367,6 +367,12 @@ wordless kind of thinking of you), `message` or `nudge` (playful). It goes throu
 of Hermes and through every check above, daily cap included. Her outreach policy mentions it only when
 a bridge exists, and a good morning or a goodnight may be one.
 
+**A touch while you talk.** In a conversation (never a scheduled run) her context offers
+`companion_outbox.py touch --buzz nudge|tap|message --text "..."`: up to 60 characters, straight
+through the bridge at once rather than the queue (a nudge five minutes late is not a nudge), never
+counted against her outreach, at most six an hour, logged in `<life>/touches.jsonl`. The playful
+"oh stoppp" with a nudge, a tap when something lands softly; on top of her reply, never instead of it.
+
 One message per run, deliberately.
 
 **One dispatcher at a time, and crashes.** A run holds `<life>/.dispatch.run.lock`; a
