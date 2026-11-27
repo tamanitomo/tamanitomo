@@ -1,4 +1,12 @@
-Tamanitomo 3.30.1: sturdier.
+Tamanitomo 3.31.0: her memory, watched.
+
+- **If her memory stops being kept, you hear about it**: the hourly health check now notices when the copy of
+  your conversations falls behind, the vault stops being saved, a month's chapter is overdue, or your backup
+  (if it reports itself) fails or goes stale.
+
+From 3.24.0, no Repair is needed. Updating from 3.23 or earlier, run Repair once.
+
+Previous: 3.30.1 sturdier.
 
 - An unusual file or a busy moment can no longer stop her from replying; the part of what she knows that could
   not be read is simply left out for that turn.

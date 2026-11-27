@@ -242,7 +242,10 @@ def touch(c, text, buzz="tap", now=None, send=None):
     if send is None:
         import companion_watchalong as watchalong
 
-        send = watchalong.to_device
+        def send(c, text, buzz, surface, ident):
+            places, why = watchalong.device_send(c, text, buzz, surface, ident)
+            return ",".join(places) or ("" if why == "unreachable" else "nowhere")
+
     with file_lock(touches_path(c).with_suffix(".jsonl.lock")):
         recent = 0
         for row in slf._read(touches_path(c)):
@@ -269,6 +272,11 @@ def touch(c, text, buzz="tap", now=None, send=None):
                 "reached": reached or "",
             },
         )
+    if reached == "nowhere":
+        return {
+            "sent": False,
+            "detail": "nothing of theirs is connected right now (no watch, nothing worn); say it in words",
+        }
     if not reached:
         return {
             "sent": False,

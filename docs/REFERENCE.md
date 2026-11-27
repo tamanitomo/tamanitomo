@@ -433,6 +433,13 @@ bridge may tell her where the human is as a named place and times, never coordin
 `plans` uses it ("they got to the shop at 00:15" after a goodnight; "they left Home"); arriving at a place
 named Home is never a mismatch.
 
+**Her memory, watched** (`companion_watch.check_keeping`, in the hourly health watch, no model): it raises
+a problem when the conversation archive is more than three hours behind the conversations, when the vault
+has had changes waiting twelve hours without a commit, when a month's chapter is five days overdue while
+the story job exists, and when a backup that reports itself in `state/vault-backup-last.json`
+(`{"ok": true|false, "at": ISO time, "error": "..."}`) failed or is 36 hours old. Problems show like any
+other: the banner, Diagnostics, `ambient/health.md`, and the alert you chose.
+
 **Chapters** (`companion_chapters`, the story job): once a month she writes the month just ended
 as a chapter of her memoir of their life together (`story/<year>/<year>-<month>.md`, a few hundred
 words), from the archive's most memorable lines of each day (never a line about a password, a key

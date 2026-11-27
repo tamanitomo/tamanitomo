@@ -1174,12 +1174,14 @@ def _bridge_token(c):
         return ""
 
 
-def to_device(c, text, buzz, surface, ident):
-    """POST {text, kind, surface, id} to the device bridge. Returns where it went, or ""."""
+def device_send(c, text, buzz, surface, ident):
+    """POST {text, kind, surface, id} to the device bridge: (where it went, why not). Where is a list of places
+    ("watch", "wearable"); why is "" when it went, "unreachable" when the bridge did not answer or refused, and
+    "nothing connected" when it answered but had nothing of theirs to show it on."""
     url = getattr(c, "device_bridge_url", "")
     token = _bridge_token(c)
     if not url or not token:
-        return ""
+        return [], "unreachable"
     request = urllib.request.Request(
         url,
         data=json.dumps(
@@ -1195,9 +1197,14 @@ def to_device(c, text, buzz, surface, ident):
         with urllib.request.urlopen(request, timeout=8) as response:
             body = json.loads(response.read(20000) or b"{}")
     except (urllib.error.URLError, OSError, ValueError):
-        return ""
+        return [], "unreachable"
     places = [p for p in body.get("delivered") or [] if p != "nowhere"]
-    return ",".join(places)
+    return places, "" if places else "nothing connected"
+
+
+def to_device(c, text, buzz, surface, ident):
+    """POST {text, kind, surface, id} to the device bridge. Returns where it went, or ""."""
+    return ",".join(device_send(c, text, buzz, surface, ident)[0])
 
 
 def to_chat(c, text, platform="telegram"):

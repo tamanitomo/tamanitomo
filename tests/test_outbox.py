@@ -183,7 +183,9 @@ class DispatcherTests(OutboxFixture):
         thread.mkdir(parents=True, exist_ok=True)
         stamp = (self.night - dt.timedelta(minutes=5)).isoformat()
         (thread / "thread.json").write_text(
-            json.dumps({"checked_at": stamp, "available": True, "last_from_human": stamp}),
+            json.dumps(
+                {"checked_at": stamp, "available": True, "last_from_human": stamp}
+            ),
             encoding="utf-8",
         )
         self.assertIn("thread", companion_sensors.REGISTRY)
@@ -832,15 +834,35 @@ class UnconfirmedPhotoTests(unittest.TestCase):
     def test_she_sees_it_among_what_she_sent(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        c = cc.Companion(agent="Nova", human="Alex", hermes_root=Path(tmp.name) / "home", vault=Path(tmp.name) / "vault", timezone="UTC")
+        c = cc.Companion(
+            agent="Nova",
+            human="Alex",
+            hermes_root=Path(tmp.name) / "home",
+            vault=Path(tmp.name) / "vault",
+            timezone="UTC",
+        )
         now = dt.datetime(2026, 10, 12, 15, 0, tzinfo=dt.timezone.utc)
         outbox.path_for(c).parent.mkdir(parents=True, exist_ok=True)
         rows = [
-            {"kind": "outbox", "id": "m1", "content": "image", "body": "Here it is.", "status": "queued",
-             "priority": "normal", "queued_at": (now - dt.timedelta(minutes=20)).isoformat()},
-            {"kind": "outbox_update", "id": "m1", "status": "unknown", "at": (now - dt.timedelta(minutes=15)).isoformat()},
+            {
+                "kind": "outbox",
+                "id": "m1",
+                "content": "image",
+                "body": "Here it is.",
+                "status": "queued",
+                "priority": "normal",
+                "queued_at": (now - dt.timedelta(minutes=20)).isoformat(),
+            },
+            {
+                "kind": "outbox_update",
+                "id": "m1",
+                "status": "unknown",
+                "at": (now - dt.timedelta(minutes=15)).isoformat(),
+            },
         ]
-        outbox.path_for(c).write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+        outbox.path_for(c).write_text(
+            "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8"
+        )
         self.assertEqual(
             outbox.render_sent(c, now),
             "- Mon 14:45 image: Here it is." + outbox.UNCONFIRMED,
@@ -849,7 +871,8 @@ class UnconfirmedPhotoTests(unittest.TestCase):
 
 class TouchTests(OutboxFixture):
     """A touch in the middle of a conversation ("oh stoppp" with a nudge): straight to the watch, never queued, never
-    counted against her outreach, a few words only, at most six an hour, and offered only while they are talking."""
+    counted against her outreach, a few words only, at most six an hour, and offered only while they are talking.
+    """
 
     def bridge(self):
         self.c.device_bridge_url = "http://127.0.0.1:9/knock"
@@ -860,7 +883,9 @@ class TouchTests(OutboxFixture):
 
     def test_no_bridge_no_touch(self):
         with self.assertRaises(ValueError) as said:
-            outbox.touch(self.c, "oh stoppp", "nudge", now=self.day, send=lambda *a: "watch")
+            outbox.touch(
+                self.c, "oh stoppp", "nudge", now=self.day, send=lambda *a: "watch"
+            )
         self.assertIn("device bridge", str(said.exception))
 
     def test_a_nudge_goes_now_and_never_into_the_queue(self):
@@ -874,9 +899,17 @@ class TouchTests(OutboxFixture):
         out_ = outbox.touch(self.c, "oh stoppp", "nudge", now=self.day, send=send)
         self.assertEqual(out_, {"sent": True, "reached": "watch"})
         self.assertEqual(calls, [("oh stoppp", "nudge", "auto")])
-        self.assertEqual(outbox.fold(self.c), [])  # not her outreach: the daily limit is untouched
-        logged = [json.loads(line) for line in outbox.touches_path(self.c).read_text().splitlines()]
-        self.assertEqual((logged[0]["text"], logged[0]["buzz"], logged[0]["reached"]), ("oh stoppp", "nudge", "watch"))
+        self.assertEqual(
+            outbox.fold(self.c), []
+        )  # not her outreach: the daily limit is untouched
+        logged = [
+            json.loads(line)
+            for line in outbox.touches_path(self.c).read_text().splitlines()
+        ]
+        self.assertEqual(
+            (logged[0]["text"], logged[0]["buzz"], logged[0]["reached"]),
+            ("oh stoppp", "nudge", "watch"),
+        )
 
     def test_a_few_words_and_not_too_often(self):
         self.bridge()
@@ -885,27 +918,100 @@ class TouchTests(OutboxFixture):
             with self.assertRaises(ValueError):
                 outbox.touch(self.c, *bad, now=self.day, send=send)
         for minute in range(6):
-            outbox.touch(self.c, f"hey {minute}", "tap", now=self.day + dt.timedelta(minutes=minute), send=send)
+            outbox.touch(
+                self.c,
+                f"hey {minute}",
+                "tap",
+                now=self.day + dt.timedelta(minutes=minute),
+                send=send,
+            )
         with self.assertRaises(ValueError) as said:
-            outbox.touch(self.c, "one more", "tap", now=self.day + dt.timedelta(minutes=7), send=send)
+            outbox.touch(
+                self.c,
+                "one more",
+                "tap",
+                now=self.day + dt.timedelta(minutes=7),
+                send=send,
+            )
         self.assertIn("enough touches", str(said.exception))
         later = self.day + dt.timedelta(minutes=61)
-        self.assertTrue(outbox.touch(self.c, "later", "tap", now=later, send=send)["sent"])
+        self.assertTrue(
+            outbox.touch(self.c, "later", "tap", now=later, send=send)["sent"]
+        )
 
     def test_a_bridge_that_does_not_answer_says_so(self):
         self.bridge()
-        out_ = outbox.touch(self.c, "psst over here", "tap", now=self.day, send=lambda *a: "")
+        out_ = outbox.touch(
+            self.c, "psst over here", "tap", now=self.day, send=lambda *a: ""
+        )
         self.assertFalse(out_["sent"])
         self.assertIn("in words", out_["detail"])
+
+    def test_nothing_connected_is_said_plainly(self):
+        self.bridge()
+        out_ = outbox.touch(
+            self.c, "psst over here", "tap", now=self.day, send=lambda *a: "nowhere"
+        )
+        self.assertFalse(out_["sent"])
+        self.assertIn("nothing of theirs is connected", out_["detail"])
+
+    def test_the_bridge_answer_is_read_for_where_it_went(self):
+        import companion_watchalong as watchalong
+
+        self.bridge()
+
+        class Answer:
+            def __init__(self, body):
+                self.body = json.dumps(body).encode()
+
+            def read(self, *_):
+                return self.body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+        with patch(
+            "urllib.request.urlopen", return_value=Answer({"delivered": ["nowhere"]})
+        ):
+            self.assertEqual(
+                watchalong.device_send(self.c, "hi", "tap", "auto", "t1"),
+                ([], "nothing connected"),
+            )
+        with patch(
+            "urllib.request.urlopen", return_value=Answer({"delivered": ["wearable"]})
+        ):
+            self.assertEqual(
+                watchalong.device_send(self.c, "hi", "tap", "auto", "t2"),
+                (["wearable"], ""),
+            )
+            self.assertEqual(
+                watchalong.to_device(self.c, "hi", "tap", "auto", "t3"), "wearable"
+            )
+        with patch("urllib.request.urlopen", side_effect=OSError("down")):
+            self.assertEqual(
+                watchalong.device_send(self.c, "hi", "tap", "auto", "t4"),
+                ([], "unreachable"),
+            )
 
     def test_offered_in_a_conversation_never_in_a_scheduled_run(self):
         import companion_context as ctx
 
         self.bridge()
-        talk = ctx.build(self.c, {"extra": {"user_message": "that hat is a lot", "platform": "telegram"}}, now=self.day)
+        talk = ctx.build(
+            self.c,
+            {"extra": {"user_message": "that hat is a lot", "platform": "telegram"}},
+            now=self.day,
+        )
         self.assertIn("To touch their watch right now:", talk)
         self.assertIn("companion_outbox.py", talk)
-        job = ctx.build(self.c, {"extra": {"user_message": "[Scheduled run]", "platform": "cron"}}, now=self.day)
+        job = ctx.build(
+            self.c,
+            {"extra": {"user_message": "[Scheduled run]", "platform": "cron"}},
+            now=self.day,
+        )
         self.assertNotIn("To touch their watch right now", job)
 
 
@@ -923,7 +1029,11 @@ class WatchTests(OutboxFixture):
         entry = self.q(target="watch", body="thinking of you")
         self.assertEqual((entry["target"], entry["buzz"]), ("watch", "message"))
         self.assertEqual(self.q(target="watch", body="here", buzz="tap")["buzz"], "tap")
-        for bad in ({"body": "x" * 161}, {"buzz": "earthquake"}, {"kind": "voice", "media_path": "/tmp/a.ogg"}):
+        for bad in (
+            {"body": "x" * 161},
+            {"buzz": "earthquake"},
+            {"kind": "voice", "media_path": "/tmp/a.ogg"},
+        ):
             with self.assertRaises(ValueError):
                 self.q(target="watch", **{"body": "short", **bad})
         with self.assertRaises(ValueError):

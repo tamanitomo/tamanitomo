@@ -1,3 +1,13 @@
+## 3.31.0 — Her memory, watched (2026-11-27)
+
+- **The health watch checks that her memory is still being kept**, every hour and without a model: the
+  conversation archive keeping up (nothing older than three hours missing), the vault committed (no changes
+  waiting twelve hours), last month's chapter written (five days' grace, when the story job exists), and a
+  backup that reports itself in `state/vault-backup-last.json` succeeding and recent (36 hours). A memory meant
+  to last decades fails quietly; now it says so like any other problem.
+- A touch says why it did not arrive: the bridge did not answer, or nothing of theirs was connected to show it
+  on (`companion_watchalong.device_send` returns where it went and why not).
+
 ## 3.30.1 — Nothing optional can cost her a reply (2026-11-27)
 
 - The newer sections of her context (what is on screen, "Our story so far", Your word) catch anything at all,

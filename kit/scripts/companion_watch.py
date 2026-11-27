@@ -444,6 +444,108 @@ def check_delivery(c, now):
     ]
 
 
+ARCHIVE_BEHIND_HOURS = (
+    3  # messages older than this, not yet in the conversation archive
+)
+VAULT_COMMIT_HOURS = 12  # changes waiting this long without a vault commit
+CHAPTER_LATE_DAYS = (
+    5  # a month over this long without its chapter (when the story job exists)
+)
+BACKUP_STALE_HOURS = (
+    36  # a backup that reports itself (state/vault-backup-last.json) this old
+)
+
+
+def check_keeping(c, now):
+    """Is her memory still being kept? The conversation archive keeping up with the conversations, the vault being
+    committed, last month's chapter written, and a backup that reports itself still succeeding. A memory meant to
+    last decades fails quietly, so these are checked every hour like everything else here.
+    """
+    out = []
+    # The archive: a message from hours ago that it has not copied means the vault commit job has stopped.
+    try:
+        import companion_archive as archive
+        import companion_transcript as transcript
+
+        after_stamp, after_id, _days = archive._cursor(c)
+        cutoff = now.timestamp() - ARCHIVE_BEHIND_HOURS * 3600
+
+        def first_waiting(view):
+            if view is None:
+                return None
+            for record in view.forward(after_stamp, after_id, cutoff):
+                return record
+            return None
+
+        waiting = transcript.owner_evidence(c, first_waiting)
+        if waiting is not None:
+            since = dt.datetime.fromtimestamp(waiting.occurred_at, now.tzinfo)
+            out.append(
+                f"the conversation archive is behind: messages since {since:%Y-%m-%d %H:%M} are not in the vault yet "
+                "(the vault commit job copies them)"
+            )
+    except Exception:  # noqa: BLE001 -- no store yet, or a store this check cannot read
+        pass
+    # The vault's own history: changes sitting uncommitted for half a day.
+    try:
+        import companion_vault as vault
+
+        root = pathlib.Path(c.vault)
+        if vault.is_repo(root):
+            status = vault._git(root, "status", "--porcelain")
+            last = vault._git(root, "log", "-1", "--format=%ct")
+            if (
+                status.returncode == 0
+                and status.stdout.strip()
+                and last.returncode == 0
+                and last.stdout.strip()
+            ):
+                hours = (now.timestamp() - int(last.stdout.strip())) / 3600
+                if hours >= VAULT_COMMIT_HOURS:
+                    out.append(
+                        f"the vault has changes waiting and no commit for {hours:.0f} hours"
+                    )
+    except Exception:  # noqa: BLE001
+        pass
+    # Last month's chapter, when the story job is there to write it.
+    try:
+        import companion_chapters as chapters
+
+        if f"{c.agent} story" in _jobs(c):
+            piece = chapters.next_piece(c, now)
+            if piece and piece["kind"] == "month":
+                year, month = int(piece["what"][:4]), int(piece["what"][5:7])
+                ended = dt.datetime(
+                    year + (month == 12), month % 12 + 1, 1, tzinfo=now.tzinfo
+                )
+                if now - ended >= dt.timedelta(days=CHAPTER_LATE_DAYS):
+                    out.append(
+                        f"her chapter for {piece['label']} is {(now - ended).days} days overdue "
+                        "(the story job writes it; see its last run)"
+                    )
+    except Exception:  # noqa: BLE001
+        pass
+    # A backup script may report itself in state/vault-backup-last.json ({"ok": bool, "at": ISO, "error": ...}).
+    try:
+        report = json.loads(
+            (pathlib.Path(c.home) / "state" / "vault-backup-last.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        at = dt.datetime.fromisoformat(str(report.get("at")))
+        if at.tzinfo is None:
+            at = at.replace(tzinfo=now.tzinfo)
+        if report.get("ok") is False:
+            out.append(
+                f"the last backup failed: {str(report.get('error') or 'no reason given')[:120]}"
+            )
+        elif now - at >= dt.timedelta(hours=BACKUP_STALE_HOURS):
+            out.append(f"no backup for {(now - at).total_seconds() / 3600:.0f} hours")
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    return out
+
+
 def problems(c, now=None):
     now = now or dt.datetime.now(_tz(c))
     found = _jobs(c)
@@ -459,6 +561,7 @@ def problems(c, now=None):
         lambda: check_photos(c),
         lambda: check_senses(c, now),
         lambda: check_delivery(c, now),
+        lambda: check_keeping(c, now),
     ):
         try:
             out += check()
