@@ -26,6 +26,7 @@ wait out quiet hours, and is sent once they end.
 """
 
 from __future__ import annotations
+import contextlib
 import argparse
 import datetime as dt
 import json
@@ -142,7 +143,12 @@ def check_spend(c, now, found=None):
     since = (now - dt.timedelta(days=SPEND_HISTORY_DAYS)).timestamp()
     recent = (now - dt.timedelta(hours=SPEND_LOOKBACK_HOURS)).timestamp()
     runs = {}
-    with sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5) as db:
+    with (
+        contextlib.closing(
+            sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
+        ) as db,
+        db,
+    ):
         for sid, started, model, used_in, cached, used_out in db.execute(
             "select id, started_at, model, input_tokens, cache_read_tokens, output_tokens "
             "from sessions where id like 'cron_%' and started_at >= ? and started_at <= ?",

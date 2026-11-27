@@ -1,6 +1,7 @@
 """Evidence-backed facts, caps, isolation, deduplication, and durable corrections."""
 
 import datetime as dt
+import contextlib
 import hashlib
 import json
 import os
@@ -260,7 +261,7 @@ class IsolationTests(unittest.TestCase):
 
         c = make(pathlib.Path(tempfile.mkdtemp()))
         c.home.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(c.home / "state.db") as db:
+        with contextlib.closing(sqlite3.connect(c.home / "state.db")) as db, db:
             db.executescript(
                 "CREATE TABLE sessions(id TEXT, profile_name TEXT, source TEXT, started_at REAL DEFAULT 0);\n                CREATE TABLE messages(id INTEGER PRIMARY KEY, session_id TEXT, role TEXT,\n                content TEXT, timestamp REAL, _compressed_summary INTEGER);\n                CREATE VIRTUAL TABLE messages_fts USING fts5(content);"
             )
@@ -845,7 +846,7 @@ class RecallScopeTests(unittest.TestCase):
                 ("nova", "Paris archived"),
             ],
         )
-        with sqlite3.connect(c.home / "state.db") as con:
+        with contextlib.closing(sqlite3.connect(c.home / "state.db")) as con, con:
             con.execute("ALTER TABLE messages ADD COLUMN active INTEGER DEFAULT 1")
             con.execute("ALTER TABLE messages ADD COLUMN compacted INTEGER DEFAULT 0")
             con.execute("UPDATE messages SET active=0 WHERE id IN (2,3)")

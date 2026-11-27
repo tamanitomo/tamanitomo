@@ -5,6 +5,7 @@ kept the workspace chat (and any app client that keeps one conversation going) o
 model after a new plan, or on an exhausted account's fallbacks.
 """
 
+import contextlib
 import json
 import sqlite3
 import subprocess
@@ -52,7 +53,7 @@ def workspace(tmp_path):
         yaml.safe_dump({"model": {"default": "model-b", "provider": "provider-b"}}),
         encoding="utf-8",
     )
-    with sqlite3.connect(c.home / "state.db") as db:
+    with contextlib.closing(sqlite3.connect(c.home / "state.db")) as db, db:
         db.executescript("""
             CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, started_at REAL,
                 profile_name TEXT, user_id TEXT, chat_id TEXT, chat_type TEXT);
@@ -117,13 +118,13 @@ def test_reads_the_route_hermes_froze_for_this_profile_only(workspace):
 
 def test_a_store_without_policies_or_with_a_broken_one_reads_as_unknown(workspace):
     c, _ = workspace
-    with sqlite3.connect(c.home / "state.db") as db:
+    with contextlib.closing(sqlite3.connect(c.home / "state.db")) as db, db:
         db.execute(
             "UPDATE state_meta SET value='{not json' WHERE key=?",
             (transcript.LOCAL_POLICY_PREFIX + "older",),
         )
     assert locked(c, "older") is None
-    with sqlite3.connect(c.home / "state.db") as db:
+    with contextlib.closing(sqlite3.connect(c.home / "state.db")) as db, db:
         db.execute("DROP TABLE state_meta")
     assert locked(c, "web") is None
 
@@ -160,7 +161,7 @@ def chat_args(c, client, monkeypatch, session):
             ident = args[args.index("--resume") + 1]
         else:  # Hermes files a new conversation, on config.yaml's model
             ident = "fresh"
-            with sqlite3.connect(c.home / "state.db") as db:
+            with contextlib.closing(sqlite3.connect(c.home / "state.db")) as db, db:
                 db.execute(
                     "INSERT INTO sessions VALUES (?,?,?,?,?,?,?)",
                     (ident, "oneshot", 5, "nova", "uid:1000", ident, "dm"),

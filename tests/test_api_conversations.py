@@ -6,6 +6,7 @@ by default. Named in companion.json, it is quoted into Telegram and the app, and
 into it, as one conversation that moves between places."""
 
 import datetime as dt
+import contextlib
 import json
 import pathlib
 import sqlite3
@@ -105,7 +106,12 @@ class ApiConversationTests(unittest.TestCase):
     def responses(self, latest):
         """Hermes's response store: each conversation name points at its latest
         response, whose record names the session it ran in."""
-        with sqlite3.connect(self.c.home / transcript.RESPONSE_STORE) as db:
+        with (
+            contextlib.closing(
+                sqlite3.connect(self.c.home / transcript.RESPONSE_STORE)
+            ) as db,
+            db,
+        ):
             db.execute(
                 "CREATE TABLE responses (response_id TEXT PRIMARY KEY, data TEXT NOT NULL, accessed_at REAL NOT NULL)"
             )
@@ -187,7 +193,7 @@ class ApiConversationTests(unittest.TestCase):
 
     def test_an_unreadable_response_store_trusts_nothing(self):
         path = self.c.home / transcript.RESPONSE_STORE
-        with sqlite3.connect(path) as db:
+        with contextlib.closing(sqlite3.connect(path)) as db, db:
             db.execute("UPDATE responses SET data='not json'")
         self.assertEqual(self.kinds()["api-now"], (None, ""))
         path.write_bytes(b"this is not a database")

@@ -213,7 +213,12 @@ class ChatEndpointTests(unittest.TestCase):
         self.c.save()
         self.store = HermesStore(self.c.home)
         self.store.session(
-            "radio", "oneshot", user_id=f"uid:{os.getuid()}", chat_id="radio"
+            "radio",
+            "oneshot",
+            user_id=(
+                f"uid:{os.getuid()}" if hasattr(os, "getuid") else ""
+            ),  # Windows has no uid
+            chat_id="radio",
         )
         runtime.note_workspace_session(self.c, "radio")
         self.app = build(home=self.c.home, state_dir=self.tmp / "app")

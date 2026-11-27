@@ -8,6 +8,7 @@ gap fed her missing them and her decisions to reach out on another channel.
 """
 
 import datetime as dt
+import contextlib
 import json
 import os
 import pathlib
@@ -111,7 +112,12 @@ class ClockFixture(unittest.TestCase):
         self.insert(ident, "oneshot", user, started, columns)
 
     def responses(self, latest):
-        with sqlite3.connect(self.c.home / transcript.RESPONSE_STORE) as db:
+        with (
+            contextlib.closing(
+                sqlite3.connect(self.c.home / transcript.RESPONSE_STORE)
+            ) as db,
+            db,
+        ):
             db.execute(
                 "CREATE TABLE responses (response_id TEXT PRIMARY KEY, data TEXT NOT NULL, accessed_at REAL NOT NULL)"
             )

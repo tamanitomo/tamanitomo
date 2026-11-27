@@ -127,7 +127,7 @@ def workspace(tmp_path):
         json.dumps({"telegram": ["4242"]}), encoding="utf-8"
     )
     runtime.note_workspace_session(c, "web")
-    with sqlite3.connect(c.home / "state.db") as db:
+    with contextlib.closing(sqlite3.connect(c.home / "state.db")) as db, db:
         db.executescript(
             "\n            CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, started_at REAL,\n                profile_name TEXT, user_id TEXT, chat_id TEXT, chat_type TEXT);\n            CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT,\n                content TEXT, timestamp REAL, platform_message_id TEXT, display_kind TEXT,\n                _compressed_summary INTEGER DEFAULT 0, active INTEGER DEFAULT 1,\n                compacted INTEGER DEFAULT 0);\n        "
         )
@@ -199,7 +199,7 @@ def test_feed_sync_reports_new_rows_edits_and_removed_visibility(workspace):
     c, _, client = workspace
     page = client.get("/api/feed").json()
     known = {row["id"]: row["revision"] for row in page["messages"]}
-    with sqlite3.connect(c.home / "state.db") as db:
+    with contextlib.closing(sqlite3.connect(c.home / "state.db")) as db, db:
         db.execute("UPDATE messages SET content='corrected owner text' WHERE id=3")
         db.execute("UPDATE messages SET display_kind='internal' WHERE id=2")
         db.execute("DELETE FROM messages WHERE id=1")
@@ -233,7 +233,7 @@ def test_feed_sync_reports_new_rows_edits_and_removed_visibility(workspace):
 def test_feed_sync_paginates_equal_timestamps_and_revoked_owner_binding(workspace):
     c, _, client = workspace
     initial = client.get("/api/feed").json()
-    with sqlite3.connect(c.home / "state.db") as db:
+    with contextlib.closing(sqlite3.connect(c.home / "state.db")) as db, db:
         db.executemany(
             "INSERT INTO messages(id,session_id,role,content,timestamp) VALUES (?,'web','assistant',?,200)",
             [(i, f"message {i}") for i in range(30, 235)],
@@ -259,7 +259,7 @@ def test_feed_sync_paginates_equal_timestamps_and_revoked_owner_binding(workspac
 
 def test_conversation_search_is_literal_unicode_and_owner_scoped(workspace):
     c, _, client = workspace
-    with sqlite3.connect(c.home / "state.db") as db:
+    with contextlib.closing(sqlite3.connect(c.home / "state.db")) as db, db:
         db.execute(
             "UPDATE messages SET content='Straße 100%_ memorable' WHERE id IN (1,3,4,5,8,20,21)"
         )
@@ -295,7 +295,7 @@ def test_search_pages_and_day_filter_use_profile_timezone(workspace):
         dt.datetime(2026, 3, 9, 3, 59, tzinfo=dt.timezone.utc).timestamp(),
         dt.datetime(2026, 3, 9, 4, 0, tzinfo=dt.timezone.utc).timestamp(),
     ]
-    with sqlite3.connect(c.home / "state.db") as db:
+    with contextlib.closing(sqlite3.connect(c.home / "state.db")) as db, db:
         db.executemany(
             "INSERT INTO messages(id,session_id,role,content,timestamp) VALUES (?,'web','assistant','old shared joke',?)",
             [(30 + index, stamp) for index, stamp in enumerate(stamps)],
@@ -311,7 +311,7 @@ def test_search_pages_and_day_filter_use_profile_timezone(workspace):
 
 def test_search_context_shows_only_public_same_session_messages(workspace):
     c, _, client = workspace
-    with sqlite3.connect(c.home / "state.db") as db:
+    with contextlib.closing(sqlite3.connect(c.home / "state.db")) as db, db:
         db.executemany(
             "INSERT INTO messages(id,session_id,role,content,timestamp) VALUES (?,'web',?,?,?)",
             [
