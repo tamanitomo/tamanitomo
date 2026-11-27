@@ -1,4 +1,10 @@
-Tamanitomo 3.29.0: read your story.
+Tamanitomo 3.29.1: story view, tidier.
+
+- Journal → Story: a slimmer "Our story so far", and Older and Newer go from chapter to chapter.
+
+From 3.24.0, no Repair is needed. Updating from 3.23 or earlier, run Repair once.
+
+Previous: 3.29.0 read your story.
 
 - **Read the story she is writing of your life together**: Journal → Story shows each month's chapter, each
   year's, and "Our story so far".

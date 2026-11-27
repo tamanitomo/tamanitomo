@@ -1,3 +1,8 @@
+## 3.29.1 — Story view, tidier (2026-11-27)
+
+- The collapsed "Our story so far" is a slim bar, not a page-sized empty card, and Older and Newer step from the
+  chapter that holds the day (June is in "May to August"), never to the same chapter again.
+
 ## 3.29.0 — Read your story (2026-11-27)
 
 - **Journal → Story.** A third view in the Journal shows the chapter of her memoir that holds the selected day's

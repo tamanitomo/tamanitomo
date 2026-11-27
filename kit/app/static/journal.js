@@ -87,6 +87,11 @@ workspaceHandlers.journals=async()=>{
   const recordDays=()=>Object.keys(index.days||{});
   // A chapter is reached from the first day of the first month it covers ("May to August" from May 1).
   const storyDays=()=>(story.chapters||[]).filter(x=>x.kind==='month').map(x=>((x.covers||[])[0]||x.id)+'-01');
+  // Older and Newer step from the chapter that holds the day, not from the day itself ("June" is in May to August).
+  const storyAnchor=day=>{
+    const hit=(story.chapters||[]).find(x=>x.kind==='month'&&(x.covers&&x.covers.length?x.covers:[x.id]).includes(day.slice(0,7)));
+    return hit?((hit.covers||[])[0]||hit.id)+'-01':day;
+  };
 
   /* ------------------------------------------------------------ routing */
   const setHash=(push)=>{
@@ -111,7 +116,8 @@ workspaceHandlers.journals=async()=>{
     }
     $('journal-browse-label').textContent=shortDay(day)+(day===today?' · Today':'');
     pickerMonth=day.slice(0,7);
-    const near=journalNeighbours(view==='reflection'?reflectionDays():view==='story'?storyDays():[...recordDays(),...reflectionDays()],day);
+    const near=view==='story'?journalNeighbours(storyDays(),storyAnchor(day))
+      :journalNeighbours(view==='reflection'?reflectionDays():[...recordDays(),...reflectionDays()],day);
     const olderBtn=$('journal-older-btn'),newerBtn=$('journal-newer-btn');
     olderBtn.disabled=!near.older;newerBtn.disabled=!near.newer;
     const noun=view==='reflection'?'reflection':view==='story'?'chapter':'day on record';
@@ -223,8 +229,8 @@ workspaceHandlers.journals=async()=>{
     const chapter=chapters.find(x=>x.kind==='month'&&(x.covers&&x.covers.length?x.covers:[x.id]).includes(month));
     const yearly=chapters.find(x=>x.kind==='year'&&x.id===day.slice(0,4));
     const who=esc(story.agent||'Your companion');
-    const soFar=story.so_far?`<details class="paper story-so-far"${chapter?'':' open'} style="margin-bottom:18px">
-        <summary><span class="eyebrow">Our story so far</span></summary>
+    const soFar=story.so_far?`<details class="paper story-so-far"${chapter?'':' open'} style="min-height:0;padding:20px 32px;margin-bottom:18px">
+        <summary style="cursor:pointer"><span class="eyebrow">Our story so far</span></summary>
         <div class="prose">${richText(story.so_far)}</div></details>`:'';
     const body=text=>String(text||'').replace(/^# [^\n]*\n+/,'');
     const paper=(item,piece,eyebrow,foot)=>`<div class="paper">
