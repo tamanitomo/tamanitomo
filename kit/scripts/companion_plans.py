@@ -50,8 +50,9 @@ PLANS = (
             # Words that end a conversation, not where they are going: "heading to work" and then a message
             # from work is an ordinary day.
             _NOT
-            + r"\b(?:heading out|gotta (?:go|run)|have to (?:go|run)|got to go|need to (?:go|run)|"
-            r"talk (?:to you )?(?:later|soon)|ttyl|catch you later)\b",
+            + r"\b(?:heading out|(?:(?:gotta|have to|got to|need to) (?:go|run))(?=\s*(?:$|[.!,;:)~-]|now\b|bye\b|"
+            r"soon\b|babe\b|love\b|ttyl\b|sorry\b|lol\b|haha\b|ok\b|okay\b|tho(?:ugh)?\b|but\b|for (?:now|a bit|a while|"
+            r"the night)\b|real quick\b|unfortunately\b))|talk (?:to you )?(?:later|soon)|ttyl|catch you later)\b",
             re.I,
         ),
     ),

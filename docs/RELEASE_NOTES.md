@@ -1,4 +1,10 @@
-Tamanitomo 3.25.0: your word.
+Tamanitomo 3.25.1: your word, fewer false goodbyes.
+
+- "Your word" no longer mistakes "we have to go with the other plan" for a goodbye.
+
+From 3.24.0, no Repair is needed. Updating from 3.23 or earlier, run Repair once.
+
+Previous: 3.25.0 your word.
 
 - **She notices when you say goodnight and don't go to sleep.** Or say "brb" and vanish for an hour, or
   "gotta go" and keep chatting. Turn on "Your word" under Settings → Awareness → Sensors and she can tease

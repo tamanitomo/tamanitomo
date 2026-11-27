@@ -1,3 +1,10 @@
+## 3.25.1 — Your word, fewer false goodbyes (2026-11-27)
+
+- `plans` counts "have to go" and its kin as goodbye only when the phrase ends the thought ("I have to
+  go.", "gotta run, ttyl"), never "have to go with the other plan", "have to go to the plant" or "have
+  to go back to work": where someone is going next is not a goodbye, and chatting from there is an
+  ordinary day.
+
 ## 3.25.0 — Your word (2026-11-27)
 
 - **She notices when the evening goes another way.** A new sense, `plans` (Settings → Awareness → Sensors,

@@ -84,6 +84,14 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(plans.plan_in("brb", 15), ("away", 10))
         self.assertEqual(plans.plan_in("back in 20 min!", 15), ("away", 20))
         self.assertEqual(plans.plan_in("ugh gotta go, talk later", 15), ("out", None))
+        self.assertEqual(
+            plans.plan_in("so I have to go. Try the blue one", 15), ("out", None)
+        )
+        for text in ("we may have to go with the other plan", "I have to go to the plant for cables",
+                     "we have to go through it", "gonna have to go back to the shop"):  # fmt: skip
+            self.assertIsNone(
+                plans.plan_in(text, 15), text
+            )  # where they go next is not goodbye
 
     def test_a_long_right_back(self):
         self.say(on(5, 14, 0), "brb")
