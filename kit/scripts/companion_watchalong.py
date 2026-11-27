@@ -1669,7 +1669,12 @@ class Runner(threading.Thread):
                         if self.follower is None:
                             self.follower = Follower(c)
                         else:
+                            import companion_viewing as viewing
+
                             self.follower.c = c
+                            self.follower.view = viewing.server_for(
+                                c, self.follower.now or {}
+                            )
                     else:
                         self.follower = None
                 if self.follower is not None:

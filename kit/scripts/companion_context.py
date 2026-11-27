@@ -1170,7 +1170,7 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
                     + scene,
                 )
             )
-    except (OSError, ValueError, ImportError):
+    except Exception:  # noqa: BLE001 -- an optional section never costs her the reply
         pass
 
     # Their story so far (companion_chapters): the shape of their whole life together, in her
@@ -1189,7 +1189,7 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
                     + story,
                 )
             )
-    except (OSError, ValueError, ImportError):
+    except Exception:  # noqa: BLE001 -- an optional section never costs her the reply
         pass
 
     # Their word (companion_plans): read live, because "you said goodnight twenty minutes ago"
@@ -1201,7 +1201,9 @@ def build(c, payload=None, now=None, maintenance_notice="", seen=None, sent=None
             word, _data = companion_plans.render(c, now)
             if word:
                 parts.append((5, "[" + word.replace("Their word:", "Their word]", 1)))
-        except (OSError, ValueError, ImportError):
+        except (
+            Exception
+        ):  # noqa: BLE001 -- an optional section never costs her the reply
             pass
 
     # On this day (companion_onthisday): a few true memories from this date, kept by the

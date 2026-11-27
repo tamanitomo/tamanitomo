@@ -1,4 +1,11 @@
-Tamanitomo 3.30.0: Plex and Jellyfin, both.
+Tamanitomo 3.30.1: sturdier.
+
+- An unusual file or a busy moment can no longer stop her from replying; the part of what she knows that could
+  not be read is simply left out for that turn.
+
+From 3.24.0, no Repair is needed. Updating from 3.23 or earlier, run Repair once.
+
+Previous: 3.30.0 Plex and Jellyfin, both.
 
 - **Watch on Plex and Jellyfin? She follows both.** Add the second server under Settings → Awareness → Also
   follow, and watching together works on whichever one is playing (including her words on the TV with

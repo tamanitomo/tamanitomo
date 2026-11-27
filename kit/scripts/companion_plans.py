@@ -192,7 +192,7 @@ def _where_since(c, after, until):
             (c.soul_dir / "ambient" / "where.json").read_text(encoding="utf-8")
         )
         since = dt.datetime.fromisoformat(str(data.get("since"))).timestamp()
-    except (OSError, ValueError, TypeError):
+    except (OSError, ValueError, TypeError, AttributeError):
         return {}
     if not (after < since <= until):
         return {}
@@ -293,7 +293,12 @@ def read(c, now=None):
 def render(c, now=None):
     """(text, data) for the senses job and her context: nothing at all when their word and the evening agree."""
     now = now or dt.datetime.now(_tz(c))
-    data = read(c, now)
+    try:
+        data = read(c, now)
+    except (
+        Exception
+    ):  # noqa: BLE001 -- odd records mean nothing to say, never a broken turn
+        data = {}
     if not data:
         return "", {}
     who, at = c.human, _clock(c, data["at"])

@@ -1,3 +1,10 @@
+## 3.30.1 — Nothing optional can cost her a reply (2026-11-27)
+
+- The newer sections of her context (what is on screen, "Our story so far", Your word) catch anything at all,
+  so an odd file or a busy database leaves a section out rather than failing her reply; Your word treats an
+  unreadable `where.json` or an unexpected error as nothing to say.
+- Watching together picks up changed settings (where her words reach you) mid-film, not only at the next title.
+
 ## 3.30.0 — Plex and Jellyfin, both (2026-11-27)
 
 - **Follow two media servers at once.** Settings → Awareness → "Also follow" adds a second server (a Jellyfin

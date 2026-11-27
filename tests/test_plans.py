@@ -11,6 +11,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -182,6 +183,21 @@ class PlanTests(unittest.TestCase):
         self.assertIn("So still around, then.", text)
         self.say(on(5, 21, 0), "hey I'm home")  # hours later is just a new conversation
         self.assertEqual(plans.render(self.c, on(5, 21, 5)), ("", {}))
+
+    def test_odd_records_are_nothing_to_say_never_a_broken_turn(self):
+        self.say(on(5, 23, 40), "ok going to bed, night")
+        (self.c.soul_dir / "ambient/where.json").write_text(
+            "[1, 2, 3]"
+        )  # a list, not an object
+        self.assertEqual(plans.render(self.c, on(6, 0, 20)), ("", {}))
+        with patch("companion_plans.read", side_effect=KeyError("boom")):
+            self.assertEqual(plans.render(self.c, on(6, 0, 20)), ("", {}))
+            out = ctx.build(
+                self.c,
+                {"extra": {"user_message": "hey", "platform": "telegram"}},
+                now=on(6, 0, 21),
+            )
+            self.assertNotIn("Their word", out)
 
     def test_her_context_reads_it_live(self):
         self.say(on(5, 23, 40), "night night")
