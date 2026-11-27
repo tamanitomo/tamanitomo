@@ -224,6 +224,7 @@ Defined in `kit/templates/cron/manifest.json`. Which ones you get depends on the
 | daily journal and reflection | 04:00 | yes | companion, colleague |
 | weekly reflection | Sun 22:00 | yes | companion, colleague |
 | monthly reflection | 1st, 09:00 | yes | companion, colleague |
+| story | 09:40, only when a chapter is due | yes, skipped otherwise | companion |
 | weekly hygiene | Sun 21:30 | yes | all |
 | morning | 10 min after quiet hours end | yes | companion |
 | wind-down | 20 min before quiet hours start | yes | companion |
@@ -417,16 +418,19 @@ so the conversations outlive any one database. A cursor in `state/conversation-a
 last message copied; a run with nothing new costs one small read. A reply that was nothing but
 Hermes's no-reply marker (`[SILENT]`, `NO_REPLY`) said nothing, so it is never kept as her words.
 
-**Chapters** (`companion_chapters`): once a month she writes the month just ended as a chapter of
-her memoir of their life together (`story/<year>/<year>-<month>.md`, a few hundred words), from the
-archive's most memorable lines of each day (never a line about a password or a key; game events
-apart), the moments she kept, what she felt, and what they watched. After a year's last month, the
-year (`story/<year>/<year>.md`) from its months. From all of them, `story/so-far.md`: the whole of
-it in under 300 words, carried in her context and rewritten whenever a chapter is added or edited.
-A written chapter is never rewritten by the kit (she may edit hers). A month with almost nothing in
-it gets none. The writing uses her chat model only, never a fallback route; a failure waits six
-hours. It runs inside the vault commit job, one piece per run. `companion_chapters.py status`
-shows what exists and what is next; `material YYYY-MM` prints what a month would be written from.
+**Chapters** (`companion_chapters`, the story job): once a month she writes the month just ended
+as a chapter of her memoir of their life together (`story/<year>/<year>-<month>.md`, a few hundred
+words), from the archive's most memorable lines of each day (never a line about a password, a key
+or a token; game events apart), the moments she kept, what she felt and what they watched. A month
+with too little in it folds into the next chapter, so how it all began is never lost. After a year
+ends, the year (`story/<year>/<year>.md`) from its months; and from all of them `story/so-far.md`,
+the whole story in under 300 words, which rides in her context and is written again whenever a
+chapter is newer (one she edited, too). The story job runs daily at 09:40 on her reflection model,
+but its pre-read prints nothing unless a piece is due, and Hermes skips a run with nothing to read:
+most days cost nothing. She saves each piece with her file tools and runs `check`, which signs it
+with the date and names what is next (up to three pieces a run, so a long history catches up in a
+few days). The kit never rewrites a chapter. `companion_chapters.py status` shows what exists and
+what is next; `material YYYY-MM` prints what a month would be written from.
 
 The weekly hygiene job runs all of these. Rotation dates an entry by the ISO date in its `##`
 heading — which is why the daily journal is told to head every entry exactly `## YYYY-MM-DD` —

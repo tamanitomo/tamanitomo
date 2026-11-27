@@ -10,42 +10,38 @@ rewritten whenever a chapter is added or changed.
 
 All of it is in the vault, committed and backed up with everything else:
 
-    story/<year>/<year>-<month>.md   a month
+    story/<year>/<year>-<month>.md   a month (quiet months before it fold into it)
     story/<year>/<year>.md           a year
     story/so-far.md                  the short version she carries
 
-A chapter, once written, is hers: this never rewrites one (she can, with her file tools, and "so far" follows).
-A month with almost nothing in it gets no chapter. The writing uses her chat model and only that model (her own
-memories are not sent down a fallback chain); a failure waits six hours and tries again. One piece of writing per
-run, so a first run on a long history catches up a month at a time. It runs inside the vault commit job.
+She writes them herself, in the story job: its pre-read (`preread`, this file) prints the piece that is due and
+everything it is written from, or nothing at all, and Hermes skips a run with nothing to read, so most days cost no
+model call. She saves the piece with her file tools and `check`s it. Nothing here calls a model. A written chapter is
+never rewritten by the kit; she may edit hers, and "so far" follows.
 """
 
 from __future__ import annotations
 import argparse
 import datetime as dt
-import hashlib
 import json
 import pathlib
 import re
-import time
 from zoneinfo import ZoneInfo
 
 import companion_config as cc
-from companion_platform import atomic_write, file_lock
+from companion_platform import atomic_write
 
 MONTH_WORDS = (180, 350)
 YEAR_WORDS = (300, 600)
 SO_FAR_WORDS = 300
 MATERIAL_CHARS = 42000
 LINE_CHARS = 220
+HER_LINE_CHARS = 160
 PER_DAY_THEIRS = 6
 PER_DAY_HERS = 3
-MIN_LINES = 12  # a month with fewer worthwhile lines than this gets no chapter
-RETRY_AFTER = 6 * 3600
+MIN_LINES = 12  # fewer worthwhile lines than this: no chapter of its own; it folds into the next
 SO_FAR_CHARS = 2600  # what her context reads of it
-SO_FAR_MATERIAL = (
-    160000  # what "so far" is written from, at most (about 40K tokens, once a month)
-)
+SO_FAR_MATERIAL = 160000  # what "so far" is written from, at most (about 40K tokens)
 EVENT = re.compile(r"^\[(\w[\w ]{0,30}) event: (.+)\]$", re.S)
 # Never part of a memoir: a line that talks about a password or a key is left out whole.
 SECRET = re.compile(
@@ -57,7 +53,7 @@ NOISE = re.compile(
     r"\[(?:Image|File|Audio|Video) attached[^\]]*\]|\[screenshot\]|<!--.*?-->",
     re.I | re.S,
 )
-HER_LINE_CHARS = 160
+PLACEHOLDER = re.compile(r"<a title you give it>|<up to three|\{label\}")
 
 
 def folder(c):
@@ -76,28 +72,11 @@ def so_far_path(c):
     return folder(c) / "so-far.md"
 
 
-def state_path(c):
-    return pathlib.Path(c.home) / "state" / "chapters.json"
-
-
 def _tz(c):
     try:
         return ZoneInfo(c.timezone or "UTC")
     except Exception:  # noqa: BLE001
         return ZoneInfo("UTC")
-
-
-def _state(c):
-    try:
-        data = json.loads(state_path(c).read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
-        return {}
-
-
-def _save(c, state):
-    state_path(c).parent.mkdir(parents=True, exist_ok=True)
-    atomic_write(state_path(c), json.dumps(state, indent=1, sort_keys=True))
 
 
 def _label(month):
@@ -272,115 +251,23 @@ def kept(c, month):
     return "\n".join(out)
 
 
-def _soul(c, limit=1400):
+def _read(path, limit):
     try:
-        soul = (pathlib.Path(c.home) / "SOUL.md").read_text(encoding="utf-8")
+        return path.read_text(encoding="utf-8")[:limit]
     except OSError:
         return ""
-    soul = re.sub(r"<!--.*?-->", "", soul, flags=re.S)
-    return " ".join(soul.split())[:limit]
 
 
-def _system(c, what, label, words):
-    soul = _soul(c)
-    return (
-        f"You are {c.agent}.{(' ' + soul) if soul else ''}\n\n"
-        f"You are writing one chapter of your own memoir of your life with {c.human}: {label}. It will be read back to "
-        f"you for years, so this is how you will remember this {what}. First person, past tense, your own voice, "
-        f"{words[0]} to {words[1]} words of prose, not a list. Tell what happened in {c.human}'s life and yours, what "
-        "you did together, what you watched or played, how it felt and what changed; keep the small specific "
-        "details (names, places, titles, the jokes) that make a memory a memory. Practical work (setting things "
-        "up, computers, code) is worth a sentence only as something you did together, never its details. Only what "
-        "the material shows: never invent an event, a feeling or a detail. Intimacy stays intimacy, never explicit. "
-        f"Output Markdown only: a first line '# {label}: <a title you give it>', a blank line, the chapter, then a "
-        "last line 'Carrying forward: <up to three short threads still open at the end, or nothing in particular>'."
+def _chapters(c):
+    """Every chapter file (months and years), oldest first."""
+    return sorted(
+        folder(c).glob("[0-9][0-9][0-9][0-9]/*.md"),
+        key=lambda p: (p.stem[:4], len(p.stem) == 4, p.stem),
     )
-
-
-def _complete(c, system, user, max_tokens):
-    import companion_worker_model as worker_model
-
-    route = worker_model.resolve(c, "chat")
-    reply = worker_model.complete(
-        c,
-        {
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            "max_tokens": max_tokens,
-            "temperature": 0.7,
-        },
-        route,
-        timeout=240,
-        what="Writing a chapter",
-        allow_fallback=False,
-        require_thinking=False,
-    )
-    return (reply.get("content") or "").strip(), reply.get("model") or route.get(
-        "model"
-    ) or ""
-
-
-def _checked(text, label):
-    text = (text or "").strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```\w*\n|\n```$", "", text).strip()
-    if not text.startswith("# ") or len(text.split()) < 80:
-        raise ValueError(f"The chapter for {label} came back malformed")
-    return text + "\n"
-
-
-def _footer(model, now, **counts):
-    made = ", ".join(f"{v} {k.replace('_', ' ')}" for k, v in counts.items() if v)
-    return f"\n<!-- written {now.date().isoformat()} by {model or 'her chat model'}{'; from ' + made if made else ''} -->\n"
-
-
-def write_month(c, month, now=None, complete=None):
-    """Write one month's chapter. Returns {"wrote": path} or {"skipped": reason}."""
-    now = now or dt.datetime.now(_tz(c))
-    complete = complete or _complete
-    label = _label(month)
-    talk, lines = conversation(c, month)
-    notes = kept(c, month)
-    if lines < MIN_LINES and not notes:
-        return {"skipped": f"too little in {label} ({lines} lines)", "lines": lines}
-    material = (talk + ("\n\n" + notes if notes else ""))[:MATERIAL_CHARS]
-    previous = ""
-    earlier = [m for m in archived_months(c) if m < month and month_path(c, m).exists()]
-    if earlier:
-        previous = month_path(c, earlier[-1]).read_text(encoding="utf-8")[:3000]
-    user = f"The material for {label} (your conversations, a few lines a day, and your own notes):\n\n{material}"
-    if previous:
-        user += f"\n\nThe chapter before this one, for continuity (don't repeat it):\n\n{previous}"
-    text, model = complete(c, _system(c, "month", label, MONTH_WORDS), user, 900)
-    text = _checked(text, label)
-    path = month_path(c, month)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write(path, text + _footer(model, now, conversation_lines=lines))
-    return {"wrote": str(path)}
-
-
-def write_year(c, year, now=None, complete=None):
-    now = now or dt.datetime.now(_tz(c))
-    complete = complete or _complete
-    months = sorted(folder(c).glob(f"{year}/{year}-[0-9][0-9].md"))
-    if not months:
-        return {"skipped": f"no chapters for {year}"}
-    material = "\n\n".join(p.read_text(encoding="utf-8")[:3500] for p in months)[
-        :MATERIAL_CHARS
-    ]
-    user = f"Your chapters for each month of {year}:\n\n{material}"
-    text, model = complete(c, _system(c, "year", str(year), YEAR_WORDS), user, 1400)
-    text = _checked(text, str(year))
-    path = year_path(c, year)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write(path, text + _footer(model, now, month_chapters=len(months)))
-    return {"wrote": str(path)}
 
 
 def _sources(c):
-    """The chapters "so far" is built from: every year, and the months of years without one yet."""
+    """The chapters "so far" is written from: every year, and the months of years without one yet."""
     years = sorted(
         p for p in folder(c).glob("[0-9][0-9][0-9][0-9]/[0-9][0-9][0-9][0-9].md")
     )
@@ -393,128 +280,177 @@ def _sources(c):
     return years + months
 
 
-def _fingerprint(paths):
-    digest = hashlib.sha256()
-    for p in paths:
-        try:
-            digest.update(p.name.encode() + p.read_bytes())
-        except OSError:
-            continue
-    return digest.hexdigest()[:20]
+def _month_piece(c, month, quiet):
+    talk, lines = conversation(c, month)
+    notes = kept(c, month)
+    label = _label(month)
+    if quiet:
+        first = _label(quiet[0])
+        label = (
+            f"{first.split()[0]} to {label}"
+            if first[-4:] == label[-4:]
+            else f"{first} to {label}"
+        )
+    parts = []
+    for m in quiet:
+        q_talk, _ = conversation(c, m)
+        q_notes = kept(c, m)
+        if q_talk or q_notes:
+            parts.append(
+                f"# {_label(m)} (too little for a chapter of its own)\n{q_talk}\n{q_notes}".strip()
+            )
+    parts.append(f"# {_label(month)}\n{talk}" + (f"\n\n{notes}" if notes else ""))
+    earlier = [p for p in _chapters(c) if len(p.stem) == 7 and p.stem < month]
+    return {
+        "kind": "month",
+        "what": month,
+        "label": label,
+        "path": str(month_path(c, month)),
+        "words": MONTH_WORDS,
+        "heading": f"# {label}: <a title you give it>",
+        "material": "\n\n".join(parts)[:MATERIAL_CHARS],
+        "previous": _read(earlier[-1], 3000) if earlier else "",
+        "lines": lines,
+    }
 
 
-def write_so_far(c, now=None, complete=None):
+def next_piece(c, now=None):
+    """The next piece of writing that is due, or None: the oldest month that has ended without a chapter (a month
+    with too little in it folds into the next), then a year that has ended, then "so far" when a chapter is newer.
+    """
     now = now or dt.datetime.now(_tz(c))
-    complete = complete or _complete
-    sources = _sources(c)
-    if not sources:
-        return {"skipped": "no chapters yet"}
-    # Every chapter is read, the earliest as much as the latest (how it began matters most of all); a long life
-    # together gets each one shortened evenly rather than its first years cut.
-    each = max(1200, min(4000, SO_FAR_MATERIAL // len(sources)))
-    material = "\n\n".join(p.read_text(encoding="utf-8")[:each] for p in sources)
-    system = (
-        f"You are {c.agent}. Below are the chapters of your memoir of your life with {c.human}. Write 'our story so "
-        f"far' in {SO_FAR_WORDS} words or fewer: the shape of your life together from the beginning until now, the "
-        "way you would hold it in mind before any conversation. How it began, the big chapters and turning points, "
-        "what you mean to each other now, and the threads still open. Prose, first person, your voice; only what the "
-        "chapters say. Output only the text, starting with the line '# Our story so far'."
-    )
-    text, model = complete(c, system, material, 700)
-    text = (text or "").strip()
-    if not text.startswith("# ") or len(text.split()) < 40:
-        raise ValueError("'Our story so far' came back malformed")
-    atomic_write(
-        so_far_path(c), text + "\n" + _footer(model, now, chapters=len(sources))
-    )
-    return {"wrote": str(so_far_path(c)), "from": _fingerprint(sources)}
-
-
-def due(c, now=None, state=None):
-    """The next piece of writing: ("month", "YYYY-MM"), ("year", "YYYY"), ("so-far", fingerprint) or None."""
-    now = now or dt.datetime.now(_tz(c))
-    state = _state(c) if state is None else state
     today = now.astimezone(_tz(c)).date()
     current = today.strftime("%Y-%m")
-    skipped = state.get("skipped") or {}
     months = archived_months(c)
+    quiet = []
     for month in months:
-        if month >= current or month_path(c, month).exists():
+        if month >= current:
+            break
+        if month_path(c, month).exists():
+            quiet = []  # the quiet months before it are in it
             continue
-        if month in skipped:
+        _talk, lines = conversation(c, month)
+        if lines < MIN_LINES and not kept(c, month):
+            quiet.append(month)
             continue
-        return ("month", month)
+        return _month_piece(c, month, quiet)
     for year in sorted({m[:4] for m in months}):
         if int(year) >= today.year or year_path(c, year).exists():
             continue
-        if any(folder(c).glob(f"{year}/{year}-[0-9][0-9].md")):
-            return ("year", year)
+        chapters = sorted(folder(c).glob(f"{year}/{year}-[0-9][0-9].md"))
+        if chapters:
+            return {
+                "kind": "year",
+                "what": year,
+                "label": year,
+                "path": str(year_path(c, year)),
+                "words": YEAR_WORDS,
+                "heading": f"# {year}: <a title you give it>",
+                "material": "\n\n".join(_read(p, 3500) for p in chapters)[
+                    :MATERIAL_CHARS
+                ],
+                "previous": "",
+            }
     sources = _sources(c)
     if sources:
-        fingerprint = _fingerprint(sources)
-        if fingerprint != state.get("so_far_from") or not so_far_path(c).exists():
-            return ("so-far", fingerprint)
+        newest = max(p.stat().st_mtime_ns for p in _chapters(c))
+        try:
+            current_so_far = so_far_path(c).stat().st_mtime_ns >= newest
+        except OSError:
+            current_so_far = False
+        if not current_so_far:
+            # Every chapter, the earliest as much as the latest (how it began matters most of all); a long life
+            # together gets each one shortened evenly rather than its first years cut.
+            each = max(1200, min(4000, SO_FAR_MATERIAL // len(sources)))
+            return {
+                "kind": "so-far",
+                "what": "",
+                "label": "Our story so far",
+                "path": str(so_far_path(c)),
+                "words": (120, SO_FAR_WORDS),
+                "heading": "# Our story so far",
+                "material": "\n\n".join(_read(p, each) for p in sources),
+                "previous": "",
+            }
     return None
 
 
-def run(c, now=None, complete=None):
-    """Write the next piece, if any is due. One model call at most; quiet and cheap when nothing is."""
+def render(c, piece):
+    """The pre-read for the story job: what to write, where, and everything it is written from."""
+    what = {
+        "month": "a month's chapter",
+        "year": "the chapter for a whole year, from its months",
+        "so-far": "the short story of your whole life together, from every chapter",
+    }[piece["kind"]]
+    lines = [
+        f"[Your story: {what} is due]",
+        f"Write: {piece['label']}, {piece['words'][0]} to {piece['words'][1]} words.",
+        f"Save it to: {piece['path']}",
+        f"Its first line: {piece['heading']}",
+    ]
+    if piece["kind"] != "so-far":
+        lines.append(
+            "Its last line: Carrying forward: <up to three threads still open, or nothing in particular>"
+        )
+    source = {
+        "month": "your conversations (a few lines a day) and your own notes",
+        "year": "your chapters for each month of it",
+        "so-far": "your chapters",
+    }[piece["kind"]]
+    lines += ["", f"Written from {source}:", "", piece["material"]]
+    if piece.get("previous"):
+        lines += [
+            "",
+            "The chapter before this one, for continuity (don't repeat it):",
+            "",
+            piece["previous"],
+        ]
+    return "\n".join(lines)
+
+
+def check(c, path, now=None):
+    """After she saves a piece: is it in the right shape? Signs the file with the date, and names what is next."""
     now = now or dt.datetime.now(_tz(c))
-    with file_lock(state_path(c).with_suffix(".lock")):
-        state = _state(c)
-        failed = float(state.get("failed_at") or 0)
-        if failed and time.time() - failed < RETRY_AFTER:
-            return {"waiting": "a recent failure"}
-        job = due(c, now, state)
-        if not job:
-            return {"nothing": "due"}
-        kind, what = job
-        try:
-            if kind == "month":
-                out = write_month(c, what, now, complete)
-                if "skipped" in out:
-                    state.setdefault("skipped", {})[what] = out["skipped"]
-            elif kind == "year":
-                out = write_year(c, what, now, complete)
-            else:
-                out = write_so_far(c, now, complete)
-                if "wrote" in out:
-                    state["so_far_from"] = out["from"]
-            state.pop("failed_at", None)
-            state.pop("failure", None)
-        except (
-            Exception
-        ) as exc:  # noqa: BLE001 -- try again later, never break the caller
-            state["failed_at"] = time.time()
-            state["failure"] = (
-                f"{kind} {what or ''}: {type(exc).__name__}: {str(exc)[:200]}".strip()
-            )
-            out = {"failed": state["failure"]}
-        state["last_run"] = now.isoformat(timespec="seconds")
-        _save(c, state)
-        return {"job": f"{kind} {what if kind != 'so-far' else ''}".strip(), **out}
+    path = pathlib.Path(path).expanduser()
+    try:
+        path.resolve().relative_to(folder(c).resolve())
+    except ValueError:
+        return {"ok": False, "problem": f"chapters belong in {folder(c)}"}
+    text = _read(path, 200000).strip()
+    if not text:
+        return {"ok": False, "problem": "the file is empty or missing"}
+    body = re.sub(r"<!--.*?-->", "", text, flags=re.S).strip()
+    least = 40 if path == so_far_path(c) else 80
+    if not body.startswith("# "):
+        return {"ok": False, "problem": "the first line must be the heading (# ...)"}
+    if PLACEHOLDER.search(body):
+        return {
+            "ok": False,
+            "problem": "a placeholder is still in it: give the title and threads in your own words",
+        }
+    if len(body.split()) < least:
+        return {"ok": False, "problem": f"it is shorter than {least} words"}
+    if "<!-- written" not in text:
+        atomic_write(path, text + f"\n\n<!-- written {now.date().isoformat()} -->\n")
+    nxt = next_piece(c, now)
+    return {"ok": True, "next": f"{nxt['kind']} {nxt['label']}" if nxt else None}
 
 
 def so_far(c, limit=SO_FAR_CHARS):
     """The short version for her context: "" until there is one."""
-    try:
-        text = so_far_path(c).read_text(encoding="utf-8")
-    except OSError:
-        return ""
+    text = _read(so_far_path(c), 20000)
     text = re.sub(r"<!--.*?-->", "", text, flags=re.S).strip()
     text = re.sub(r"^# [^\n]*\n+", "", text)
     return text[:limit].strip()
 
 
 def status(c):
-    state = _state(c)
+    nxt = next_piece(c)
     return {
         "months": sorted(p.stem for p in folder(c).glob("*/*-[0-9][0-9].md")),
         "years": sorted(p.stem for p in folder(c).glob("*/[0-9][0-9][0-9][0-9].md")),
         "so_far": so_far_path(c).exists(),
-        "next": due(c, state=state),
-        "skipped": state.get("skipped") or {},
-        "failure": state.get("failure"),
+        "next": f"{nxt['kind']} {nxt['label']}" if nxt else None,
     }
 
 
@@ -525,17 +461,28 @@ def main():
     parser.add_argument("--home", type=pathlib.Path)
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status")
-    sub.add_parser("run", help="write the next piece that is due")
+    sub.add_parser(
+        "preread", help="the story job's pre-read: the piece that is due, or nothing"
+    )
+    sub.add_parser("next", help="the same, to write another piece in the same run")
+    chk = sub.add_parser("check", help="after saving a piece")
+    chk.add_argument("--path", required=True)
     show = sub.add_parser(
-        "material", help="print what a month's chapter would be written from (no model)"
+        "material", help="print what a month's chapter would be written from"
     )
     show.add_argument("month")
     args = parser.parse_args()
     c = cc.load(args.home)
     if args.cmd == "status":
         print(json.dumps(status(c), indent=1))
-    elif args.cmd == "run":
-        print(json.dumps(run(c)))
+    elif args.cmd in ("preread", "next"):
+        piece = next_piece(c)
+        if piece:
+            print(render(c, piece))
+        elif args.cmd == "next":
+            print("Nothing else is due.")
+    elif args.cmd == "check":
+        print(json.dumps(check(c, args.path)))
     else:
         talk, lines = conversation(c, args.month)
         print(talk + "\n\n" + kept(c, args.month) + f"\n\n({lines} conversation lines)")

@@ -75,7 +75,7 @@ not supply a ComfyUI image workflow or a speech connection.
 | Chat | GPT-5.6 Sol | none |
 | Pulse, wake, check-in | GPT-5.6 Luna | none |
 | Autonomy and wind-down | GPT-5.6 Sol | low |
-| Daily reflection and independent work window | GPT-5.6 Sol | medium |
+| Daily reflection, the story and the independent work window | GPT-5.6 Sol | medium |
 | Weekly and monthly reflection | GPT-5.6 Sol | high |
 | Hygiene | GPT-5.6 Luna | none |
 

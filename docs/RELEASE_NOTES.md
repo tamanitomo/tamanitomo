@@ -7,7 +7,7 @@ Tamanitomo 3.24.0: chapters.
   else she remembers.
 - Moments when she chose not to reply are no longer kept as if she had said something.
 
-From 3.20.0, no Repair is needed. Updating from 3.19 or earlier, run Repair once.
+Run Repair once after updating, to add the story job.
 
 Previous: 3.23.0 kept for good.
 

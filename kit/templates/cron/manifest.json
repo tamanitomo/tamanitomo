@@ -95,6 +95,24 @@
    "sends": "Long-horizon reflection over months of history."
   },
   {
+   "key": "story",
+   "name": "{{AGENT}} story",
+   "file": "story.md.tmpl",
+   "expr": "40 9 * * *",
+   "toolsets": [
+    "file",
+    "terminal"
+   ],
+   "tier": "reflection",
+   "preread": true,
+   "preread_module": "companion_chapters",
+   "types": [
+    "companion"
+   ],
+   "sensitivity": "sensitive",
+   "sends": "A month of your conversations (a few lines a day) and her notes, once a month, to write it as a chapter of your story."
+  },
+  {
    "key": "hygiene",
    "name": "{{AGENT}} weekly hygiene",
    "file": "hygiene.md.tmpl",
