@@ -1,3 +1,10 @@
+## 3.33.1 — Comings and goings, built (2026-11-27)
+
+- **The release build passes where ffmpeg is absent.** `test_reading_is_refused_when_it_would_crowd_the_network`
+  now pins ffmpeg both ways (present: the bitrate and speech-model refusals; absent: the ffmpeg refusal) instead
+  of depending on the test machine, which failed the v3.33.0 build on the runner. The suite was rerun with
+  ffmpeg hidden from PATH. No code change.
+
 ## 3.33.0 — Comings and goings (2026-11-27)
 
 - **She knows when you get home.** When a client's `where.json` says where the human came from (`from`,

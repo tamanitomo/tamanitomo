@@ -555,6 +555,8 @@ def test_the_real_speech_model_hears_nothing_in_a_tone(companion, ranged):
 
 def test_reading_is_refused_when_it_would_crowd_the_network(companion, server, monkeypatch):
     c = connect(companion, server)
+    # ffmpeg is pinned both ways, so the answer never depends on what the test machine has installed.
+    monkeypatch.setattr(wa.shutil, "which", lambda name, *a, **k: f"/usr/bin/{name}")
     ok, why = wa.can_read(c, {"why": "it has no text subtitles", "read": {"path": "/x", "index": 2, "kbps": 60_000}})
     assert not ok and "too heavy" in why
     ok, _ = wa.can_read(c, {"why": "", "read": {"path": "/x", "index": 2, "kbps": 8_000}})
@@ -562,3 +564,6 @@ def test_reading_is_refused_when_it_would_crowd_the_network(companion, server, m
     monkeypatch.setattr(wa, "listen_python", lambda _c: "")
     ok, why = wa.can_read(c, {"why": "it has no text subtitles", "read": {"path": "/x", "index": None, "kbps": 8000}})
     assert not ok and "speech model" in why
+    monkeypatch.setattr(wa.shutil, "which", lambda name, *a, **k: None)
+    ok, why = wa.can_read(c, {"why": "it has no text subtitles", "read": {"path": "/x", "index": 2, "kbps": 8000}})
+    assert not ok and "ffmpeg is not installed" in why
